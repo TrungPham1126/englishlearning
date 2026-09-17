@@ -1,22 +1,63 @@
-# 1. Các file chứa biến môi trường, secret key, mật khẩu
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.p12
+# ==============================================================================
+# Git Attributes Configuration for Java / Web Projects
+# ==============================================================================
 
-# 2. File cấu hình cục bộ cá nhân
-application-secret.properties
-secrets.properties
+# Tự động nhận diện file text và chuẩn hóa line ending về LF
+* text=auto
 
-# 3. File cấu hình của IDE / Trình biên dịch (chứa thông tin máy cá nhân)
-.idea/
-.vscode/
-*.iml
+# ------------------------------------------------------------------------------
+# Source Code & Text Files (Ép chuẩn LF để tránh lỗi khác biệt Windows/Linux)
+# ------------------------------------------------------------------------------
+*.java          text eol=lf diff=java
+*.kt            text eol=lf
+*.groovy        text eol=lf
+*.scala         text eol=lf
 
-# 4. Thư mục build và dependencies (tránh làm nặng repo)
-node_modules/
-target/
-build/
-bin/
+*.html          text eol=lf diff=html
+*.css           text eol=lf diff=css
+*.scss          text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.json          text eol=lf
+*.xml           text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.properties    text eol=lf
+*.sql           text eol=lf
+*.md            text eol=lf
+*.txt           text eol=lf
+
+# ------------------------------------------------------------------------------
+# Shell Scripts & Executables
+# ------------------------------------------------------------------------------
+# Script Linux/macOS bắt buộc dùng LF
+*.sh            text eol=lf
+gradlew         text eol=lf
+mvnw            text eol=lf
+
+# Script Windows bắt buộc dùng CRLF
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+gradlew.bat     text eol=crlf
+mvnw.cmd        text eol=crlf
+
+# ------------------------------------------------------------------------------
+# Binary Files (Không bao giờ thay đổi định dạng byte)
+# ------------------------------------------------------------------------------
+*.jar           binary
+*.war           binary
+*.class         binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.svg           text
+*.pdf           binary
+*.zip           binary
+*.tar.gz        binary
+*.ttf           binary
+*.woff          binary
+*.woff2         binary

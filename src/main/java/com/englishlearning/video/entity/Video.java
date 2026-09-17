@@ -69,10 +69,3 @@ public class Video {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 }
-
-enum VideoStatus {
-    DRAFT,
-    PROCESSING,
-    READY,
-    REJECTED
-}
