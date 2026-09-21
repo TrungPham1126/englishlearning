@@ -15,16 +15,16 @@ import java.net.URI;
 @Configuration
 public class StorageConfig {
 
-    @Value("${cloud.aws.credentials.access-key:mock-access-key}")
+    @Value("${cloud.aws.credentials.access-key}")
     private String accessKey;
 
-    @Value("${cloud.aws.credentials.secret-key:mock-secret-key}")
+    @Value("${cloud.aws.credentials.secret-key}")
     private String secretKey;
 
-    @Value("${cloud.aws.region.static:us-east-1}")
+    @Value("${cloud.aws.region.static:auto}")
     private String region;
 
-    @Value("${cloud.aws.s3.endpoint:}")
+    @Value("${cloud.aws.s3.endpoint}")
     private String endpoint;
 
     @Bean
