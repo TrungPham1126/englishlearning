@@ -187,7 +187,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <encoding>UTF-8</encoding>
                     <mainClass>com.englishlearning.EnglishLearningApplication</mainClass>
                     <excludes>
                         <exclude>
