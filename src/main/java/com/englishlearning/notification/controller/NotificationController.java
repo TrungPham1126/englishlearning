@@ -6,6 +6,9 @@ import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,5 +36,18 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<String>> broadcastNotification(@RequestBody NotificationDto dto) {
         notificationService.dispatchNotification(dto);
         return ResponseEntity.ok(ApiResponse.success("Đã đưa thông báo vào hàng đợi xử lý"));
+    }
+
+    @PatchMapping("/{id}/read")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        notificationService.markAsRead(id, userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã đọc", null));
+    }
+
+    @PatchMapping("/read-all")
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        notificationService.markAllAsRead(userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã đọc tất cả", null));
     }
 }

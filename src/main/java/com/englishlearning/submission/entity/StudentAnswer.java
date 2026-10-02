@@ -3,6 +3,8 @@ package com.englishlearning.submission.entity;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.UUID;
 
@@ -17,6 +19,9 @@ public class StudentAnswer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    // Bổ sung 2 dòng này để ép kiểu hiển thị chuỗi VARCHAR 36 ký tự
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "id", columnDefinition = "VARCHAR(36)", updatable = false, nullable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -15,16 +15,17 @@ import java.net.URI;
 @Configuration
 public class StorageConfig {
 
-    @Value("${cloud.aws.credentials.access-key}")
+    // Đã đổi sang đọc từ app.secrets.storage.*
+    @Value("${app.secrets.storage.access-key}")
     private String accessKey;
 
-    @Value("${cloud.aws.credentials.secret-key}")
+    @Value("${app.secrets.storage.secret-key}")
     private String secretKey;
 
-    @Value("${cloud.aws.region.static:auto}")
+    @Value("${app.secrets.storage.region:us-east-1}")
     private String region;
 
-    @Value("${cloud.aws.s3.endpoint}")
+    @Value("${app.secrets.storage.endpoint}")
     private String endpoint;
 
     @Bean

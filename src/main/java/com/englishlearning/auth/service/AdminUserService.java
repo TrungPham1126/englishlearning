@@ -25,7 +25,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class AdminUserService {
-
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final StudentRepository studentRepository;
@@ -68,7 +67,6 @@ public class AdminUserService {
                 .isActive(true)
                 .roles(roles)
                 .build();
-
         User savedUser = userRepository.save(user);
 
         // Tạo profile tương ứng theo role
@@ -91,6 +89,7 @@ public class AdminUserService {
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setPhone(request.getPhone());
+
         if (request.getIsActive() != null) {
             user.setIsActive(request.getIsActive());
         }
@@ -103,6 +102,25 @@ public class AdminUserService {
                 roles.add(role);
             }
             user.setRoles(roles);
+
+            // ĐỒNG BỘ PROFILE STUDENT: Thêm mới nếu chưa có, xóa đi nếu bị hạ quyền
+            if (request.getRoles().contains(RoleName.ROLE_STUDENT)) {
+                if (!studentRepository.existsById(userId)) {
+                    studentRepository.save(Student.builder().user(user).currentLevel("A1").targetCefr("B2").build());
+                }
+            } else {
+                studentRepository.findById(userId).ifPresent(studentRepository::delete);
+            }
+
+            // ĐỒNG BỘ PROFILE TEACHER: Thêm mới nếu chưa có, xóa đi nếu bị hạ quyền
+            if (request.getRoles().contains(RoleName.ROLE_TEACHER)) {
+                if (!teacherRepository.existsById(userId)) {
+                    teacherRepository
+                            .save(Teacher.builder().user(user).yearsOfExperience(0).specialization("General").build());
+                }
+            } else {
+                teacherRepository.findById(userId).ifPresent(teacherRepository::delete);
+            }
         }
 
         return mapToUserSummaryDto(userRepository.save(user));
@@ -121,9 +139,10 @@ public class AdminUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + userId));
 
-        // Xóa profiles phụ trước
-        studentRepository.deleteById(userId);
-        teacherRepository.deleteById(userId);
+        // SỬA LỖI SẬP API: Chỉ xóa profile phụ khi nó thực sự tồn tại
+        studentRepository.findById(userId).ifPresent(studentRepository::delete);
+        teacherRepository.findById(userId).ifPresent(teacherRepository::delete);
+
         userRepository.delete(user);
     }
 

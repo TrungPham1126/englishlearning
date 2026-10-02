@@ -1,6 +1,7 @@
 package com.englishlearning.curriculum.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,12 +14,17 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentStorageService {
 
     private final S3Client s3Client;
 
-    @Value("${cloud.aws.s3.bucket:englishlearning-bucket}")
+    // Đã đổi sang đọc từ app.secrets.storage.*
+    @Value("${app.secrets.storage.bucket-name}")
     private String bucketName;
+
+    @Value("${app.secrets.storage.public-url}")
+    private String publicUrl;
 
     public String uploadFile(MultipartFile file) {
         if (file.isEmpty()) {
@@ -40,11 +46,19 @@ public class DocumentStorageService {
                     .contentType(file.getContentType())
                     .build();
 
+            log.info("Đang upload tài liệu lên bucket: {} với key: {}", bucketName, uniqueFileName);
             s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            log.info("Upload tài liệu thành công: {}", uniqueFileName);
 
-            return uniqueFileName;
+            // Trả về full URL để frontend dùng luôn
+            return publicUrl + "/" + uniqueFileName;
+
         } catch (IOException e) {
-            throw new RuntimeException("Lỗi khi đọc file để tải lên Cloud Storage: " + e.getMessage(), e);
+            log.error("Lỗi đọc luồng file khi upload lên R2: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi IO khi upload tài liệu lên Cloud: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Lỗi S3 Client khi upload lên R2: {}", e.getMessage(), e);
+            throw new RuntimeException("Không thể upload tài liệu lên Cloud Storage: " + e.getMessage(), e);
         }
     }
 }

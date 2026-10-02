@@ -65,4 +65,18 @@ public class AppProperties {
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
         private String model = "gemini-2.5-flash";
     }
+
+    private Groq groq = new Groq();
+
+    @Getter
+    @Setter
+    public static class Groq {
+        private String apiKey;
+        private String chatUrl = "https://api.groq.com/openai/v1/chat/completions";
+        private String audioUrl = "https://api.groq.com/openai/v1/audio/transcriptions";
+
+        // Đồng bộ model đang active
+        private String chatModel = "openai/gpt-oss-120b";
+        private String whisperModel = "whisper-large-v3-turbo";
+    }
 }

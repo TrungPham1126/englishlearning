@@ -33,7 +33,7 @@ public class VideoTranscodeConsumer {
     @Value("${app.storage.upload-dir:uploads/videos}")
     private String uploadBaseDir;
 
-    @Value("${cloud.aws.s3.public-url:}")
+    @Value("${app.secrets.storage.public-url}")
     private String publicCloudUrl;
 
     @RabbitListener(queues = "${app.rabbitmq.queues.video-transcode:video.transcode.queue}")

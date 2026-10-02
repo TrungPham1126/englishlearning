@@ -84,4 +84,20 @@ public class NotificationService {
     public Page<Notification> getMyNotifications(UUID userId, int page, int size) {
         return notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
     }
+
+    @Transactional
+    public void markAsRead(UUID notificationId, UUID userId) {
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông báo"));
+        if (!notification.getRecipient().getId().equals(userId)) {
+            throw new RuntimeException("Không có quyền truy cập");
+        }
+        notification.setIsRead(true);
+        notificationRepository.save(notification);
+    }
+
+    @Transactional
+    public void markAllAsRead(UUID userId) {
+        notificationRepository.markAllAsReadByUserId(userId);
+    }
 }

@@ -145,4 +145,43 @@ public class VideoService {
         }
         watchHistoryRepository.save(history);
     }
+
+    public Video getVideoByLessonId(UUID lessonId) {
+        return videoRepository.findByLessonId(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bài học này chưa có video"));
+    }
+
+    // 2. Lấy tiến độ xem video của học sinh hiện tại
+    public VideoWatchHistory getWatchProgress(UUID studentId, UUID videoId) {
+        return watchHistoryRepository.findByStudentIdAndVideoId(studentId, videoId)
+                .orElse(VideoWatchHistory.builder()
+                        .watchedSeconds(0)
+                        .completionPercentage(0.0f)
+                        .isCompleted(false)
+                        .build());
+    }
+
+    // 3. Phê duyệt hoặc từ chối video (Admin / Teacher)
+    @Transactional
+    public Video reviewVideo(UUID videoId, UUID reviewerId, boolean isApproved, String rejectionReason) {
+        Video video = getVideoById(videoId);
+        User reviewer = entityManager.getReference(User.class, reviewerId);
+
+        video.setReviewedBy(reviewer);
+        if (isApproved) {
+            video.setStatus(VideoStatus.APPROVED);
+            video.setRejectionReason(null);
+        } else {
+            video.setStatus(VideoStatus.REJECTED);
+            video.setRejectionReason(rejectionReason);
+        }
+        return videoRepository.save(video);
+    }
+
+    // 4. Xóa video
+    @Transactional
+    public void deleteVideo(UUID videoId) {
+        Video video = getVideoById(videoId);
+        videoRepository.delete(video);
+    }
 }

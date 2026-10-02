@@ -69,7 +69,8 @@ public class ClassroomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp học"));
 
         classroom.setStatus(req.getStatus());
-        return mapToResponse(classroomRepository.save(classroom), classStudentRepository.countByClassroomIdAndIsActiveTrue(classId));
+        return mapToResponse(classroomRepository.save(classroom),
+                classStudentRepository.countByClassroomIdAndIsActiveTrue(classId));
     }
 
     @Transactional
@@ -81,7 +82,8 @@ public class ClassroomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giảng viên"));
 
         classroom.setTeacher(teacher);
-        return mapToResponse(classroomRepository.save(classroom), classStudentRepository.countByClassroomIdAndIsActiveTrue(classId));
+        return mapToResponse(classroomRepository.save(classroom),
+                classStudentRepository.countByClassroomIdAndIsActiveTrue(classId));
     }
 
     @Transactional
@@ -90,7 +92,8 @@ public class ClassroomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp học"));
 
         if (classroom.getStatus() != ClassStatus.OPEN && classroom.getStatus() != ClassStatus.PLANNING) {
-            throw new BadRequestException("Lớp học hiện không nhận thêm học viên (trạng thái: " + classroom.getStatus() + ")");
+            throw new BadRequestException(
+                    "Lớp học hiện không nhận thêm học viên (trạng thái: " + classroom.getStatus() + ")");
         }
 
         long currentCount = classStudentRepository.countByClassroomIdAndIsActiveTrue(classId);
@@ -100,7 +103,8 @@ public class ClassroomService {
 
         User user = userRepository.findByEmail(req.getStudentIdentifier())
                 .or(() -> userRepository.findByPhone(req.getStudentIdentifier()))
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản với email/SĐT: " + req.getStudentIdentifier()));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy tài khoản với email/SĐT: " + req.getStudentIdentifier()));
 
         Student student = studentRepository.findById(user.getId())
                 .orElseGet(() -> studentRepository.save(Student.builder().user(user).build()));
@@ -155,9 +159,8 @@ public class ClassroomService {
                 ? classroomRepository.findByStatus(status, pageable)
                 : classroomRepository.findAll(pageable);
 
-        Page<ClassroomResponse> mappedPage = page.map(c ->
-                mapToResponse(c, classStudentRepository.countByClassroomIdAndIsActiveTrue(c.getId()))
-        );
+        Page<ClassroomResponse> mappedPage = page
+                .map(c -> mapToResponse(c, classStudentRepository.countByClassroomIdAndIsActiveTrue(c.getId())));
 
         return PageResponse.from(mappedPage);
     }
@@ -186,5 +189,14 @@ public class ClassroomService {
                 .teacherName(teacherName)
                 .createdAt(c.getCreatedAt())
                 .build();
+    }
+
+    @Transactional
+    public void leaveClass(UUID classId, UUID studentId) {
+        com.englishlearning.classroom.entity.ClassStudent enrollment = classStudentRepository
+                .findByClassroomIdAndStudentId(classId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin ghi danh"));
+        enrollment.setIsActive(false);
+        classStudentRepository.save(enrollment);
     }
 }

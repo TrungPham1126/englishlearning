@@ -18,10 +18,11 @@ public class R2StorageService {
 
     private final S3Client s3Client;
 
-    @Value("${cloud.aws.s3.bucket}")
+    // Đã đổi sang đọc từ app.secrets.storage.*
+    @Value("${app.secrets.storage.bucket-name}")
     private String bucketName;
 
-    @Value("${cloud.aws.s3.public-url:}")
+    @Value("${app.secrets.storage.public-url}")
     private String publicUrl;
 
     /**

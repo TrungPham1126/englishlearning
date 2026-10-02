@@ -1,5 +1,6 @@
 package com.englishlearning.curriculum.controller;
 
+import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.curriculum.dto.VocabularyRequest;
 import com.englishlearning.curriculum.dto.VocabularyResponse;
 import com.englishlearning.curriculum.service.VocabularyService;
@@ -9,31 +10,58 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/curriculum/lessons/{lessonId}/vocabularies")
+@RequestMapping("/api/curriculum")
 @RequiredArgsConstructor
-@Tag(name = "Vocabulary Management", description = "Các API Quản lý Từ vựng trong Bài học")
+@Tag(name = "Vocabulary", description = "Quản lý từ vựng của bài học")
 public class VocabularyController {
 
     private final VocabularyService vocabularyService;
 
-    @PostMapping
-    @Operation(summary = "Thêm từ vựng mới vào bài học")
-    public ResponseEntity<VocabularyResponse> addVocabulary(
+    @GetMapping("/lessons/{lessonId}/vocabularies")
+    @Operation(summary = "Lấy danh sách từ vựng của bài học")
+    public ResponseEntity<ApiResponse<List<VocabularyResponse>>> getVocabulariesByLesson(
+            @PathVariable UUID lessonId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy danh sách từ vựng thành công",
+                vocabularyService.getVocabulariesByLesson(lessonId)));
+    }
+
+    @PostMapping("/lessons/{lessonId}/vocabularies")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Thêm từ vựng mới vào bài học (Tự động crawl Audio/IPA)")
+    public ResponseEntity<ApiResponse<VocabularyResponse>> addVocabulary(
             @PathVariable UUID lessonId,
             @Valid @RequestBody VocabularyRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(vocabularyService.addVocabulary(lessonId, request));
+                .body(ApiResponse.success(
+                        "Thêm từ vựng thành công",
+                        vocabularyService.addVocabulary(lessonId, request)));
     }
 
-    @GetMapping
-    @Operation(summary = "Lấy danh sách từ vựng của một bài học")
-    public ResponseEntity<List<VocabularyResponse>> getVocabularies(@PathVariable UUID lessonId) {
-        return ResponseEntity.ok(vocabularyService.getVocabulariesByLesson(lessonId));
+    @PutMapping("/vocabularies/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Cập nhật từ vựng")
+    public ResponseEntity<ApiResponse<VocabularyResponse>> updateVocabulary(
+            @PathVariable UUID id,
+            @Valid @RequestBody VocabularyRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Cập nhật từ vựng thành công",
+                vocabularyService.updateVocabulary(id, request)));
+    }
+
+    @DeleteMapping("/vocabularies/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Xóa từ vựng")
+    public ResponseEntity<ApiResponse<Void>> deleteVocabulary(
+            @PathVariable UUID id) {
+        vocabularyService.deleteVocabulary(id);
+        return ResponseEntity.ok(ApiResponse.success("Xóa từ vựng thành công", null));
     }
 }

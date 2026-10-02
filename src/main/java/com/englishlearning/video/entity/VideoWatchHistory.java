@@ -4,7 +4,9 @@ import com.englishlearning.auth.entity.Student;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,6 +23,8 @@ import java.util.UUID;
 public class VideoWatchHistory {
 
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "id", columnDefinition = "VARCHAR(36)", updatable = false, nullable = false)
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
@@ -41,7 +45,7 @@ public class VideoWatchHistory {
     private Float completionPercentage = 0.0f;
 
     @Column(name = "is_completed", nullable = false)
-        @Builder.Default
+    @Builder.Default
     private Boolean isCompleted = false;
 
     @CreationTimestamp

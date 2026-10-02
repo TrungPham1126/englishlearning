@@ -28,7 +28,7 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Value("${jwt.refresh-token-expiration-ms:604800000}")
+    @Value("${jwt.refresh-token-expiration-ms:60480000000}")
     private long refreshTokenDurationMs;
 
     @PostMapping("/register")

@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity
 @Table(name = "question_options")
 @Getter
@@ -20,6 +22,7 @@ public class QuestionOption {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "question_id", nullable = false)
+    @JsonIgnore
     private AssignmentQuestion question;
 
     @Column(name = "option_label", length = 10, nullable = false)

@@ -5,6 +5,7 @@ import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.video.dto.VideoUploadResponse;
 import com.englishlearning.video.dto.WatchProgressRequest;
 import com.englishlearning.video.entity.Video;
+import com.englishlearning.video.entity.VideoWatchHistory;
 import com.englishlearning.video.service.VideoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -71,5 +72,39 @@ public class VideoController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                 .contentType(MediaType.parseMediaType(contentType))
                 .body(new FileSystemResource(file));
+    }
+
+    @GetMapping("/lesson/{lessonId}")
+    public ResponseEntity<ApiResponse<Video>> getVideoByLesson(@PathVariable UUID lessonId) {
+        return ResponseEntity.ok(ApiResponse.success(videoService.getVideoByLessonId(lessonId)));
+    }
+
+    // 2. Lấy tiến độ học sinh đang xem dở để tua tiếp
+    @GetMapping("/{id}/progress")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<VideoWatchHistory>> getMyProgress(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(videoService.getWatchProgress(userDetails.getId(), id)));
+    }
+
+    // 3. Phê duyệt / Từ chối video
+    @PatchMapping("/{id}/review")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<Video>> reviewVideo(
+            @PathVariable UUID id,
+            @RequestParam("approved") boolean approved,
+            @RequestParam(value = "reason", required = false) String reason,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Video reviewed = videoService.reviewVideo(id, userDetails.getId(), approved, reason);
+        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật trạng thái kiểm duyệt", reviewed));
+    }
+
+    // 4. Xóa video
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<Void>> deleteVideo(@PathVariable UUID id) {
+        videoService.deleteVideo(id);
+        return ResponseEntity.ok(ApiResponse.success("Xóa video thành công", null));
     }
 }

@@ -3,7 +3,9 @@ package com.englishlearning.analytics.entity;
 import com.englishlearning.auth.entity.Student;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -18,11 +20,13 @@ import java.util.UUID;
 public class StudentSkillProfile {
 
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "id", columnDefinition = "VARCHAR(36)")
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "id", columnDefinition = "VARCHAR(36)")
     private Student student;
 
     @Column(name = "listening_score")

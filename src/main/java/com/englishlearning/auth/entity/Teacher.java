@@ -2,6 +2,8 @@ package com.englishlearning.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.UUID;
 
@@ -15,11 +17,13 @@ import java.util.UUID;
 public class Teacher {
 
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "id", columnDefinition = "VARCHAR(36)")
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
-    @JoinColumn(name = "id")
+    @JoinColumn(name = "id", columnDefinition = "VARCHAR(36)")
     private User user;
 
     @Column(length = 255)
