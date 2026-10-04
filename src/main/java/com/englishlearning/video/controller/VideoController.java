@@ -5,6 +5,7 @@ import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.video.dto.VideoUploadResponse;
 import com.englishlearning.video.dto.WatchProgressRequest;
 import com.englishlearning.video.entity.Video;
+import com.englishlearning.video.entity.VideoStatus;
 import com.englishlearning.video.entity.VideoWatchHistory;
 import com.englishlearning.video.service.VideoService;
 import jakarta.validation.Valid;
@@ -22,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -53,7 +55,7 @@ public class VideoController {
             @RequestBody @Valid WatchProgressRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         videoService.updateWatchProgress(userDetails.getId(), id, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật tiến độ học thành công"));
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật tiến độ xem thành công"));
     }
 
     @GetMapping("/{id}/hls/{fileName:.+}")
@@ -63,7 +65,6 @@ public class VideoController {
             @RequestParam(value = "uploadDir", defaultValue = "uploads/videos") String uploadBaseDir) {
         Path filePath = Paths.get(uploadBaseDir, "hls", id.toString(), fileName);
         File file = filePath.toFile();
-
         if (!file.exists())
             return ResponseEntity.notFound().build();
 
@@ -79,7 +80,6 @@ public class VideoController {
         return ResponseEntity.ok(ApiResponse.success(videoService.getVideoByLessonId(lessonId)));
     }
 
-    // 2. Lấy tiến độ học sinh đang xem dở để tua tiếp
     @GetMapping("/{id}/progress")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ApiResponse<VideoWatchHistory>> getMyProgress(
@@ -88,7 +88,6 @@ public class VideoController {
         return ResponseEntity.ok(ApiResponse.success(videoService.getWatchProgress(userDetails.getId(), id)));
     }
 
-    // 3. Phê duyệt / Từ chối video
     @PatchMapping("/{id}/review")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<Video>> reviewVideo(
@@ -97,14 +96,21 @@ public class VideoController {
             @RequestParam(value = "reason", required = false) String reason,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Video reviewed = videoService.reviewVideo(id, userDetails.getId(), approved, reason);
-        return ResponseEntity.ok(ApiResponse.success("Đã cập nhật trạng thái kiểm duyệt", reviewed));
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái kiểm duyệt thành công", reviewed));
     }
 
-    // 4. Xóa video
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<Void>> deleteVideo(@PathVariable UUID id) {
         videoService.deleteVideo(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa video thành công", null));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<List<Video>>> getVideosByStatus(
+            @RequestParam(required = false) VideoStatus status) {
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách video thành công",
+                videoService.getVideosByStatus(status)));
     }
 }

@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -48,7 +49,7 @@ public class VideoService {
     @Transactional
     public VideoUploadResponse uploadOriginalVideo(UUID lessonId, MultipartFile file, UUID uploadedByUserId) {
         if (file.isEmpty()) {
-            throw new BadRequestException("File upload không được để trống");
+            throw new BadRequestException("File upload không được trống");
         }
 
         String originalFilename = file.getOriginalFilename();
@@ -66,21 +67,17 @@ public class VideoService {
             User uploader = entityManager.getReference(User.class, uploadedByUserId);
             Lesson lesson = entityManager.getReference(Lesson.class, lessonId);
 
-            // Kiểm tra xem Lesson này đã có Video chưa
             Video video = videoRepository.findByLessonId(lessonId).orElse(null);
-
             if (video != null) {
-                // Nếu đã có: Cập nhật thông tin file mới để tái sử dụng bản ghi cũ
                 video.setOriginalFileName(originalFilename);
                 video.setRawStorageUrl(targetPath.toAbsolutePath().toString());
                 video.setSizeBytes(file.getSize());
                 video.setStatus(VideoStatus.DRAFT);
                 video.setUploadedBy(uploader);
-                video.setHlsPlaylistUrl(null); // Reset lại URL cũ
+                video.setHlsPlaylistUrl(null);
                 video.setRejectionReason(null);
                 video.setDurationSeconds(null);
             } else {
-                // Nếu chưa có: Tạo bản ghi mới hoàn toàn
                 video = Video.builder()
                         .originalFileName(originalFilename)
                         .rawStorageUrl(targetPath.toAbsolutePath().toString())
@@ -91,15 +88,11 @@ public class VideoService {
                         .build();
             }
 
-            // Dùng saveAndFlush để ép Hibernate xả câu lệnh xuống DB ngay lập tức,
-            // đảm bảo video ID tồn tại trước khi message bay sang RabbitMQ
             Video saved = videoRepository.saveAndFlush(video);
-
             VideoTranscodeMessage message = VideoTranscodeMessage.builder()
                     .videoId(saved.getId())
                     .build();
             rabbitTemplate.convertAndSend(videoTranscodeQueue, message);
-
             log.info("Đã gửi message transcode cho video ID: {}", saved.getId());
 
             return VideoUploadResponse.builder()
@@ -110,7 +103,7 @@ public class VideoService {
                     .build();
 
         } catch (IOException e) {
-            throw new BadRequestException("Lưu file video thất bại: " + e.getMessage());
+            throw new BadRequestException("Lỗi lưu file video: " + e.getMessage());
         }
     }
 
@@ -143,15 +136,15 @@ public class VideoService {
         if (Boolean.TRUE.equals(request.getCompleted()) || percentage >= 80.0f) {
             history.setIsCompleted(true);
         }
+
         watchHistoryRepository.save(history);
     }
 
     public Video getVideoByLessonId(UUID lessonId) {
         return videoRepository.findByLessonId(lessonId)
-                .orElseThrow(() -> new ResourceNotFoundException("Bài học này chưa có video"));
+                .orElseThrow(() -> new ResourceNotFoundException("Bài giảng này chưa có video"));
     }
 
-    // 2. Lấy tiến độ xem video của học sinh hiện tại
     public VideoWatchHistory getWatchProgress(UUID studentId, UUID videoId) {
         return watchHistoryRepository.findByStudentIdAndVideoId(studentId, videoId)
                 .orElse(VideoWatchHistory.builder()
@@ -161,13 +154,12 @@ public class VideoService {
                         .build());
     }
 
-    // 3. Phê duyệt hoặc từ chối video (Admin / Teacher)
     @Transactional
     public Video reviewVideo(UUID videoId, UUID reviewerId, boolean isApproved, String rejectionReason) {
         Video video = getVideoById(videoId);
         User reviewer = entityManager.getReference(User.class, reviewerId);
-
         video.setReviewedBy(reviewer);
+
         if (isApproved) {
             video.setStatus(VideoStatus.APPROVED);
             video.setRejectionReason(null);
@@ -175,13 +167,21 @@ public class VideoService {
             video.setStatus(VideoStatus.REJECTED);
             video.setRejectionReason(rejectionReason);
         }
+
         return videoRepository.save(video);
     }
 
-    // 4. Xóa video
     @Transactional
     public void deleteVideo(UUID videoId) {
         Video video = getVideoById(videoId);
         videoRepository.delete(video);
+    }
+
+    // THÊM MỚI: Lấy danh sách video (Có thể lọc theo trạng thái)
+    public List<Video> getVideosByStatus(VideoStatus status) {
+        if (status != null) {
+            return videoRepository.findByStatus(status);
+        }
+        return videoRepository.findAll();
     }
 }

@@ -1,0 +1,14 @@
+// src/main/java/com/englishlearning/curriculum/repository/GlobalResourceRepository.java
+package com.englishlearning.curriculum.repository;
+
+import com.englishlearning.curriculum.entity.GlobalResource;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface GlobalResourceRepository extends JpaRepository<GlobalResource, UUID> {
+    List<GlobalResource> findByResourceTypeOrderByCreatedAtDesc(GlobalResource.ResourceType type);
+}
