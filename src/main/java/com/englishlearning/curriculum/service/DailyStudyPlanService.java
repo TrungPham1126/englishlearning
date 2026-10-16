@@ -33,6 +33,7 @@ public class DailyStudyPlanService {
     private final DailyPlanItemRepository dailyPlanItemRepository;
     private final StudentDailyProgressRepository progressRepository;
     private final EntityManager entityManager;
+    private final com.englishlearning.classroom.repository.ClassStudentRepository classStudentRepository;
 
     private static final DateTimeFormatter DATE_SUMMARY_FORMATTER = DateTimeFormatter.ofPattern("EEE dd-MM-yyyy",
             Locale.ENGLISH);
@@ -45,6 +46,10 @@ public class DailyStudyPlanService {
      */
     @Transactional(readOnly = true)
     public DailyHomeworkOverviewResponse getStudentDailyOverview(UUID classroomId, UUID studentId, UUID selectedDayId) {
+        if (studentId != null && !classStudentRepository.existsByClassroomIdAndStudentId(classroomId, studentId)) {
+            throw new com.englishlearning.common.exception.ForbiddenException("Học viên không thuộc lớp học này");
+        }
+
         List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
 
         if (plans.isEmpty()) {
@@ -69,14 +74,16 @@ public class DailyStudyPlanService {
                     plan.getId());
             boolean isCompleted = progressOpt.map(StudentDailyProgress::getIsCompleted).orElse(false);
 
-            if (Boolean.TRUE.equals(plan.getIsUnlocked())) {
+            boolean isCurrentDay = today.isEqual(plan.getScheduledDate());
+            boolean isTodayOrPast = !plan.getScheduledDate().isAfter(today);
+            boolean isUnlocked = Boolean.TRUE.equals(plan.getIsUnlocked()) || isTodayOrPast;
+
+            if (isUnlocked) {
                 unlockedCount++;
                 if (isCompleted) {
                     completedCount++;
                 }
             }
-
-            boolean isCurrentDay = today.isEqual(plan.getScheduledDate());
 
             if (selectedDayId != null && plan.getId().equals(selectedDayId)) {
                 targetPlan = plan;
@@ -93,13 +100,13 @@ public class DailyStudyPlanService {
                     .estimatedMinutes(plan.getEstimatedMinutes())
                     .isCompleted(isCompleted)
                     .isCurrentDay(isCurrentDay)
-                    .isUnlocked(plan.getIsUnlocked())
+                    .isUnlocked(isUnlocked)
                     .build());
         }
 
-        // Nếu chưa chọn được DAY cụ thể, mặc định lấy DAY mới nhất
+        // Nếu chưa chọn được DAY cụ thể, ưu tiên DAY hôm nay, hoặc DAY mới nhất đã unlock
         if (targetPlan == null) {
-            targetPlan = plans.get(0);
+            targetPlan = plans.stream().filter(p -> !p.getScheduledDate().isAfter(today)).findFirst().orElse(plans.get(0));
         }
 
         int percentage = unlockedCount > 0 ? Math.round(((float) completedCount / unlockedCount) * 100) : 100;
@@ -165,7 +172,10 @@ public class DailyStudyPlanService {
      */
     @Transactional
     public DailyStudyPlan createDailyPlan(CreateDailyPlanRequest request) {
-        Classroom classroom = entityManager.getReference(Classroom.class, request.getClassroomId());
+        Classroom classroom = entityManager.find(Classroom.class, request.getClassroomId());
+        if (classroom == null) {
+            throw new ResourceNotFoundException("Không tìm thấy lớp học với ID: " + request.getClassroomId());
+        }
 
         String title = request.getTitle();
         if (title == null || title.isBlank()) {
@@ -206,6 +216,27 @@ public class DailyStudyPlanService {
             plan.setIsUnlocked(request.getIsUnlocked());
 
         return dailyStudyPlanRepository.save(plan);
+    }
+
+    /**
+     * Dành cho Giáo viên: Lấy tất cả các DAY của lớp học
+     */
+    @Transactional(readOnly = true)
+    public List<DailyStudyPlan> getPlansByClassroom(UUID classroomId) {
+        List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
+        plans.sort(Comparator.comparing(DailyStudyPlan::getDayNumber));
+        return plans;
+    }
+
+    /**
+     * Dành cho Giáo viên: Xóa kế hoạch DAY
+     */
+    @Transactional
+    public void deleteDailyPlan(UUID planId) {
+        if (!dailyStudyPlanRepository.existsById(planId)) {
+            throw new ResourceNotFoundException("Không tìm thấy ngày học: " + planId);
+        }
+        dailyStudyPlanRepository.deleteById(planId);
     }
 
     /**
@@ -263,5 +294,113 @@ public class DailyStudyPlanService {
         progress.setCompletedItemsCount(plan.getItems().size());
         progress.setCompletedAt(Instant.now());
         progressRepository.save(progress);
+    }
+
+    /**
+     * Dành cho Giáo viên: Lấy Ma trận tiến độ hoàn thành theo từng ngày của toàn bộ
+     * học viên trong lớp
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse> getDailyProgressStatsMatrix(
+            UUID classroomId) {
+        // 1. Lấy danh sách học sinh đang học trong lớp
+        java.util.List<com.englishlearning.classroom.entity.ClassStudent> enrollments = entityManager.createQuery(
+                "SELECT cs FROM ClassStudent cs JOIN FETCH cs.student s JOIN FETCH s.user u WHERE cs.classroom.id = :classId AND cs.isActive = true",
+                com.englishlearning.classroom.entity.ClassStudent.class)
+                .setParameter("classId", classroomId)
+                .getResultList();
+
+        // 2. Lấy danh sách các lộ trình (Day 1, Day 2...) của lớp
+        java.util.List<DailyStudyPlan> plans = dailyStudyPlanRepository
+                .findByClassroomIdOrderByDayNumberDesc(classroomId);
+        plans.sort(java.util.Comparator.comparing(DailyStudyPlan::getDayNumber));
+
+        java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse> responseList = new java.util.ArrayList<>();
+
+        if (enrollments.isEmpty()) {
+            return responseList;
+        }
+
+        java.util.List<UUID> studentIds = enrollments.stream().map(cs -> cs.getStudent().getId()).collect(Collectors.toList());
+
+        java.util.List<com.englishlearning.submission.entity.AssignmentAttempt> allAttempts = entityManager.createQuery(
+                "SELECT a FROM AssignmentAttempt a JOIN FETCH a.student s JOIN FETCH a.assignment assign WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')",
+                com.englishlearning.submission.entity.AssignmentAttempt.class)
+                .setParameter("studentIds", studentIds)
+                .getResultList();
+
+        for (com.englishlearning.classroom.entity.ClassStudent cs : enrollments) {
+            com.englishlearning.auth.entity.Student student = cs.getStudent();
+            com.englishlearning.auth.entity.User user = student.getUser();
+
+            java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse.DayStat> dayStats = new java.util.ArrayList<>();
+            int totalCompletedDays = 0;
+
+            for (DailyStudyPlan plan : plans) {
+                java.util.Optional<StudentDailyProgress> progressOpt = progressRepository
+                        .findByStudentIdAndDailyPlanId(student.getId(), plan.getId());
+
+                int rate = 0;
+                int minutes = 0;
+
+                if (progressOpt.isPresent() && Boolean.TRUE.equals(progressOpt.get().getIsCompleted())) {
+                    rate = 100;
+                    totalCompletedDays++;
+                    minutes = plan.getEstimatedMinutes() != null ? plan.getEstimatedMinutes() : 30;
+                } else {
+                    List<DailyPlanItem> items = plan.getItems();
+                    if (items != null && !items.isEmpty()) {
+                        int completedItemsCount = 0;
+                        int totalDurationSec = 0;
+
+                        for (DailyPlanItem item : items) {
+                            if (item.getAssignment() != null) {
+                                UUID assignId = item.getAssignment().getId();
+                                Optional<com.englishlearning.submission.entity.AssignmentAttempt> attemptOpt = allAttempts.stream()
+                                        .filter(att -> att.getStudent().getId().equals(student.getId()) && att.getAssignment().getId().equals(assignId))
+                                        .findFirst();
+                                if (attemptOpt.isPresent()) {
+                                    completedItemsCount++;
+                                    if (attemptOpt.get().getDurationSeconds() != null) {
+                                        totalDurationSec += attemptOpt.get().getDurationSeconds();
+                                    }
+                                }
+                            } else {
+                                if (progressOpt.isPresent() && progressOpt.get().getCompletedItemsCount() != null && progressOpt.get().getCompletedItemsCount() > 0) {
+                                    completedItemsCount++;
+                                }
+                            }
+                        }
+
+                        rate = Math.round(((float) completedItemsCount / items.size()) * 100);
+                        minutes = totalDurationSec > 0 ? Math.max(1, totalDurationSec / 60) : (rate > 0 ? 15 : 0);
+                        if (rate >= 100) {
+                            rate = 100;
+                            totalCompletedDays++;
+                        }
+                    }
+                }
+
+                dayStats.add(com.englishlearning.curriculum.dto.DailyProgressStatResponse.DayStat.builder()
+                        .dayNumber(plan.getDayNumber())
+                        .rate(rate)
+                        .minutes(minutes)
+                        .build());
+            }
+
+            int overallRate = plans.isEmpty() ? 0 : Math.round(((float) totalCompletedDays / plans.size()) * 100);
+
+            String fullName = ((user.getFirstName() != null ? user.getFirstName() : "") + " " + (user.getLastName() != null ? user.getLastName() : "")).trim();
+            if (fullName.isEmpty()) fullName = user.getEmail();
+
+            responseList.add(com.englishlearning.curriculum.dto.DailyProgressStatResponse.builder()
+                    .studentId(student.getId().toString())
+                    .studentName(fullName)
+                    .overallRate(overallRate)
+                    .days(dayStats)
+                    .build());
+        }
+
+        return responseList;
     }
 }

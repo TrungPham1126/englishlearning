@@ -34,6 +34,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final AuthenticationManager authenticationManager;
+    private final com.englishlearning.classroom.repository.ClassStudentRepository classStudentRepository;
 
     @Transactional
     public UserSummaryDto register(RegistrationRequest request) {
@@ -143,8 +144,30 @@ public class AuthService {
         return mapToUserSummaryDto(user);
     }
 
+    @Transactional
+    public UserSummaryDto updateProfile(UUID userId, com.englishlearning.auth.dto.UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Not found"));
+        if (request.getFirstName() != null)
+            user.setFirstName(request.getFirstName());
+        if (request.getLastName() != null)
+            user.setLastName(request.getLastName());
+        if (request.getPhone() != null)
+            user.setPhone(request.getPhone());
+        userRepository.save(user);
+
+        if (user.getRoles().stream().anyMatch(r -> r.getName().name().equals("ROLE_STUDENT"))) {
+            studentRepository.findById(userId).ifPresent(student -> {
+                if (request.getTargetCefr() != null)
+                    student.setTargetCefr(request.getTargetCefr());
+                studentRepository.save(student);
+            });
+        }
+        return mapToUserSummaryDto(user);
+    }
+
     private UserSummaryDto mapToUserSummaryDto(User user) {
-        return UserSummaryDto.builder()
+        UserSummaryDto dto = UserSummaryDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
@@ -153,5 +176,28 @@ public class AuthService {
                 .avatarUrl(user.getAvatarUrl())
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).toList())
                 .build();
+                
+        if (dto.getRoles().contains("ROLE_STUDENT")) {
+            java.util.List<com.englishlearning.classroom.entity.ClassStudent> activeEnrollments =
+                    classStudentRepository.findActiveEnrollmentsWithClassroom(user.getId());
+            String classLevel = null;
+            if (!activeEnrollments.isEmpty()) {
+                com.englishlearning.classroom.entity.Classroom c = activeEnrollments.get(0).getClassroom();
+                if (c != null && c.getLevel() != null) {
+                    classLevel = c.getLevel().name();
+                }
+            }
+            dto.setCurrentLevel(classLevel);
+            final String finalClassLevel = classLevel;
+            studentRepository.findById(user.getId()).ifPresent(student -> {
+                dto.setTargetCefr(student.getTargetCefr());
+                if ((finalClassLevel == null && student.getCurrentLevel() != null) ||
+                    (finalClassLevel != null && !finalClassLevel.equals(student.getCurrentLevel()))) {
+                    student.setCurrentLevel(finalClassLevel);
+                    studentRepository.save(student);
+                }
+            });
+        }
+        return dto;
     }
 }

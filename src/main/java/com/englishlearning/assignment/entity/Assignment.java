@@ -57,6 +57,12 @@ public class Assignment {
     @Column(name = "due_date")
     private Instant dueDate;
 
+    @Column(name = "audio_url", length = 1000)
+    private String audioUrl;
+
+    @Column(name = "listening_script", columnDefinition = "TEXT")
+    private String listeningScript;
+
     @OneToMany(mappedBy = "assignment", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
     @Builder.Default

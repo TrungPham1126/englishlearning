@@ -1,0 +1,101 @@
+{
+  "overallScore": 84.6,
+  "pronunciationScore": 76.6,
+  "fluencyScore": 95.1,
+  "speedScore": 96.0,
+  "articulationRate": 2.94,
+  "words": [
+    {
+      "word": "out",
+      "startTime": 0.142,
+      "endTime": 0.46,
+      "score": 76.6,
+      "phonemes": [
+        {
+          "symbol": "aʊ",
+          "type": "vowel",
+          "score": 63.0,
+          "feedback": "Hạ hàm thấp hơn một chút (khẩu hình mở hơi rộng); Kéo lưỡi về phía sau hơn",
+          "measuredF1": 1031.6,
+          "measuredF2": 1671.4,
+          "targetF1": 802.4,
+          "targetF2": 1392.0,
+          "confidence": 0.51,
+          "status": "OK"
+        },
+        {
+          "symbol": "t",
+          "type": "consonant",
+          "score": 91.4,
+          "feedback": "Phát âm rõ ràng, chuẩn xác.",
+          "measuredF1": null,
+          "measuredF2": null,
+          "targetF1": null,
+          "targetF2": null,
+          "confidence": 0.68,
+          "status": "OK"
+        }
+      ],
+      "confidence": 0.49,
+      "status": "MATCH"
+    }
+  ],
+  "fluencyFeedback": [
+    {
+      "type": "speaking_rate",
+      "severity": "info",
+      "message": "Tốc độ phát âm rất tốt và tự nhiên (2.9 âm tiết/giây).",
+      "timestamp": null
+    }
+  ],
+  "evaluationStatus": "LOW_CONFIDENCE",
+  "overallConfidence": 0.42,
+  "audioQuality": {
+    "duration": 0.648,
+    "rms": 0.13659,
+    "peak": 0.9504,
+    "clippingRatio": 0.0,
+    "silenceRatio": 0.254,
+    "speechRatio": 0.746,
+    "estimatedSnr": 82.0,
+    "dynamicRange": 82.0,
+    "isAcceptable": true,
+    "warnings": []
+  },
+  "isPassed": false,
+  "passScore": 80,
+  "statusMessage": "Chưa đạt yêu cầu. Có từ phát âm chưa chuẩn hoặc khẩu hình F1/F2 bị lệch.",
+  "kpi": {
+    "pronunciation": 77,
+    "fluency": 95,
+    "completeness": 100,
+    "prosody": 96,
+    "wordsPerMinute": 118
+  },
+  "sentenceTokens": [
+    {
+      "word": "out",
+      "color": "YELLOW",
+      "hasPauseAfter": false,
+      "hasLinkingAfter": false
+    }
+  ],
+  "wordRows": [
+    {
+      "word": "out",
+      "score": 77,
+      "phonemes": [
+        {
+          "ipa": "aʊ",
+          "score": 63,
+          "note": "Hạ hàm thấp hơn một chút (khẩu hình mở hơi rộng); Kéo lưỡi về phía sau hơn"
+        },
+        {
+          "ipa": "t",
+          "score": 91,
+          "note": "Phát âm rõ ràng, chuẩn xác."
+        }
+      ]
+    }
+  ]
+}

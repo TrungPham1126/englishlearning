@@ -1,10 +1,30 @@
 HELP.md
 target/
+build/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+!**/src/main/**/build/
+!**/src/test/**/build/
 
-### STS ###
+### Logs & Temp ###
+*.log
+*.tmp
+dummy_audio.wav
+
+### Secrets ###
+secrets.properties
+src/main/resources/secrets.properties
+.env
+.env.local
+.env.*.local
+
+### IDE & Editors ###
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
 .apt_generated
 .classpath
 .factorypath
@@ -12,24 +32,44 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-### VS Code ###
-.vscode/
-secrets.properties
-src/main/resources/secrets.properties
+### Frontend (React / Vite / Node) ###
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/cache/
+node_modules/
+dist/
+
+### Python AI (Phonetics Service) ###
+phonetics-service/.venv/
+phonetics-service/venv/
+phonetics-service/ENV/
+phonetics-service/__pycache__/
+phonetics-service/.pytest_cache/
+phonetics-service/cache/
+phonetics-service/test_audio_cache/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+cache/
+test_audio_cache/

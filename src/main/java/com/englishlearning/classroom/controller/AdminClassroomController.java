@@ -16,13 +16,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/classrooms")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+
 @Tag(name = "Classroom - Admin", description = "Quản lý lớp học, phân công giảng viên & duyệt học viên")
 public class AdminClassroomController {
 
@@ -30,7 +31,8 @@ public class AdminClassroomController {
 
     @PostMapping
     @Operation(summary = "Tạo lớp học mới")
-    public ResponseEntity<ApiResponse<ClassroomResponse>> createClassroom(@Valid @RequestBody CreateClassroomRequest req) {
+    public ResponseEntity<ApiResponse<ClassroomResponse>> createClassroom(
+            @Valid @RequestBody CreateClassroomRequest req) {
         return ResponseEntity.ok(ApiResponse.success("Tạo lớp học thành công", classroomService.createClassroom(req)));
     }
 
@@ -42,12 +44,34 @@ public class AdminClassroomController {
         return ResponseEntity.ok(ApiResponse.success(classroomService.getAllClassrooms(status, pageable)));
     }
 
+    @GetMapping("/{id}")
+    @Operation(summary = "Lấy chi tiết lớp học theo ID")
+    public ResponseEntity<ApiResponse<ClassroomResponse>> getClassDetail(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(classroomService.getClassroomById(id)));
+    }
+
+    @GetMapping("/{id}/students")
+    @Operation(summary = "Lấy danh sách học viên trong lớp")
+    public ResponseEntity<ApiResponse<List<StudentProgressResponse>>> getClassStudents(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(classroomService.getClassStudentsProgress(id)));
+    }
+
+    @DeleteMapping("/{id}/students/{studentId}")
+    @Operation(summary = "Xóa học viên khỏi lớp học")
+    public ResponseEntity<ApiResponse<Void>> removeStudentFromClass(
+            @PathVariable UUID id,
+            @PathVariable UUID studentId) {
+        classroomService.leaveClass(id, studentId);
+        return ResponseEntity.ok(ApiResponse.success("Đã xóa học viên khỏi lớp học", null));
+    }
+
     @PutMapping("/{id}/status")
     @Operation(summary = "Duyệt mở lớp, đóng lớp hoặc đổi trạng thái lớp")
     public ResponseEntity<ApiResponse<ClassroomResponse>> updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateClassStatusRequest req) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái lớp thành công", classroomService.updateClassStatus(id, req)));
+        return ResponseEntity.ok(
+                ApiResponse.success("Cập nhật trạng thái lớp thành công", classroomService.updateClassStatus(id, req)));
     }
 
     @PutMapping("/{id}/assign-teacher")
@@ -55,7 +79,8 @@ public class AdminClassroomController {
     public ResponseEntity<ApiResponse<ClassroomResponse>> assignTeacher(
             @PathVariable UUID id,
             @Valid @RequestBody AssignTeacherRequest req) {
-        return ResponseEntity.ok(ApiResponse.success("Phân công giảng viên thành công", classroomService.assignTeacher(id, req)));
+        return ResponseEntity
+                .ok(ApiResponse.success("Phân công giảng viên thành công", classroomService.assignTeacher(id, req)));
     }
 
     @PostMapping("/{id}/enroll")

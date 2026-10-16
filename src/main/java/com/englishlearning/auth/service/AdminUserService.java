@@ -11,6 +11,8 @@ import com.englishlearning.auth.repository.UserRepository;
 import com.englishlearning.common.dto.PageResponse;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.classroom.entity.Classroom;
+import com.englishlearning.classroom.repository.ClassroomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -29,13 +32,21 @@ public class AdminUserService {
     private final RoleRepository roleRepository;
     private final StudentRepository studentRepository;
     private final TeacherRepository teacherRepository;
+    private final ClassroomRepository classroomRepository;
+    private final com.englishlearning.classroom.repository.ClassStudentRepository classStudentRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
-    public PageResponse<UserSummaryDto> getAllUsers(Pageable pageable) {
-        Page<UserSummaryDto> usersPage = userRepository.findAll(pageable)
+    public PageResponse<UserSummaryDto> getAllUsers(RoleName role, String keyword, Pageable pageable) {
+        String safeKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        Page<UserSummaryDto> usersPage = userRepository.searchUsers(role, safeKeyword, pageable)
                 .map(this::mapToUserSummaryDto);
         return PageResponse.from(usersPage);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<UserSummaryDto> getAllUsers(Pageable pageable) {
+        return getAllUsers(null, null, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -106,7 +117,7 @@ public class AdminUserService {
             // ĐỒNG BỘ PROFILE STUDENT: Thêm mới nếu chưa có, xóa đi nếu bị hạ quyền
             if (request.getRoles().contains(RoleName.ROLE_STUDENT)) {
                 if (!studentRepository.existsById(userId)) {
-                    studentRepository.save(Student.builder().user(user).currentLevel("A1").targetCefr("B2").build());
+                    studentRepository.save(Student.builder().user(user).currentLevel(null).targetCefr("B2").build());
                 }
             } else {
                 studentRepository.findById(userId).ifPresent(studentRepository::delete);
@@ -139,8 +150,19 @@ public class AdminUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + userId));
 
-        // SỬA LỖI SẬP API: Chỉ xóa profile phụ khi nó thực sự tồn tại
-        studentRepository.findById(userId).ifPresent(studentRepository::delete);
+        // Kiểm tra an toàn: Nếu là giảng viên đang được gán phụ trách lớp học thì không cho xóa trực tiếp
+        if (teacherRepository.existsById(userId)) {
+            List<Classroom> assignedClasses = classroomRepository.findByTeacherId(userId);
+            if (!assignedClasses.isEmpty()) {
+                throw new BadRequestException("Không thể xóa giảng viên đang phụ trách " + assignedClasses.size() + " lớp học. Vui lòng phân công giảng viên khác trước khi xóa.");
+            }
+        }
+
+        // SỬA LỖI SẬP API: Dọn dẹp bản ghi ghi danh lớp học và profile phụ trước khi xóa user
+        if (studentRepository.existsById(userId)) {
+            classStudentRepository.deleteByStudentId(userId);
+            studentRepository.deleteById(userId);
+        }
         teacherRepository.findById(userId).ifPresent(teacherRepository::delete);
 
         userRepository.delete(user);
@@ -154,6 +176,7 @@ public class AdminUserService {
                 .lastName(user.getLastName())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
+                .isActive(user.getIsActive() != null ? user.getIsActive() : true)
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).toList())
                 .build();
     }

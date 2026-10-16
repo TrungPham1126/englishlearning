@@ -26,6 +26,8 @@ public class AssignmentRequest {
     private Instant dueDate;
     private Integer maxAttempts;
     private Double passScore;
+    private String audioUrl;
+    private String listeningScript;
 
     private List<QuestionRequest> questions;
 
@@ -46,6 +48,24 @@ public class AssignmentRequest {
     public static class OptionRequest {
         @NotBlank
         private String optionText;
-        private boolean isCorrect;
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("isCorrect")
+        private Boolean isCorrect;
+
+        public Boolean getIsCorrect() {
+            return isCorrect != null && isCorrect;
+        }
+
+        public boolean isCorrect() {
+            return isCorrect != null && isCorrect;
+        }
+
+        public void setIsCorrect(Boolean isCorrect) {
+            this.isCorrect = isCorrect;
+        }
+
+        public void setCorrect(boolean correct) {
+            this.isCorrect = correct;
+        }
     }
 }

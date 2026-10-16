@@ -1,6 +1,8 @@
 package com.englishlearning.curriculum.entity;
 
 import com.englishlearning.classroom.entity.Classroom;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,27 +18,29 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DailyStudyPlan {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "classroom_id", nullable = false)
     private Classroom classroom;
 
     @Column(nullable = false)
-    private Integer dayNumber; // Ví dụ: 20
+    private Integer dayNumber;
 
     @Column(nullable = false)
-    private LocalDate scheduledDate; // Ngày được mở khóa (VD: 2026-10-02)
+    private LocalDate scheduledDate;
 
-    private String title; // "DAY 20"
-    private Integer estimatedMinutes; // Thời lượng dự kiến (VD: 40 min)
+    private String title;
+    private Integer estimatedMinutes;
 
     @Builder.Default
-    private Boolean isUnlocked = false; // Tự động bật true vào 00:00
+    private Boolean isUnlocked = false;
 
     @OneToMany(mappedBy = "dailyPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")

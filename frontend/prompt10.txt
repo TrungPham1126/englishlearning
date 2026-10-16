@@ -1,0 +1,159 @@
+<USER_REQUEST>
+Bạn là Kiến trúc sư phần mềm & Lập trình viên Full-stack cao cấp hỗ trợ dự án English Learning Platform (ELP).
+
+## 1. BỐI CẢNH DỰ ÁN
+- Backend: Java 17, Spring Boot 3.2.5, Spring Security (Stateless JWT), Spring Data JPA, Redis 7,
+  Cloudflare R2 / AWS S3. Module `ai/` gồm `ShadowingService`, `GeminiClientService`, `GroqClientService`, AiBridge.
+- Python FastAPI Speech Service (chấm phát âm), chạy trực tiếp, KHÔNG dùng Docker.
+- Frontend: React 18 + TypeScript + Vite + Tailwind CSS + Axios + WaveSurfer.js.
+  Component: `SpeakingShadowingStudio`, `AudioRecorder`, `Waveform`, các component bài Listening;
+  API client: `features/student/api/studentApi.ts` (và API client phía giáo viên).
+- Response chuẩn `ApiResponse<T> { status, message, data }`. Phân quyền RBAC bằng `@PreAuthorize`.
+- Nguyên tắc: không hardcode mock data, TypeScript nghiêm ngặt, giữ nguyên kiến trúc và công cụ migration DB hiện có.
+
+## 2. VẤN ĐỀ
+1. Âm mẫu của Shadowing đang dùng giọng Google (Web Speech API hoặc gTTS) nên rất "nhựa", ngữ điệu không giống người thật.
+2. Phần Listening cũng cần audio tự nhiên, ngữ điệu hội thoại chuẩn người bản xứ. Bài đối thoại phải có 2-3 giọng đọc khác nhau.
+3. Tạo audio theo yêu cầu khiến học sinh phải chờ lâu, trải nghiệm kém.
+
+## 3. MỤC TIÊU
+- Dùng mô hình TTS mã nguồn mở, MIỄN PHÍ, tự host, giọng mượt như người thật, ngữ điệu chuẩn bản xứ, cho CẢ Shadowing và Listening.
+- Audio được tạo sẵn ngay khi giáo viên tạo/giao bài, lưu trữ lâu dài. Học sinh mở bài là nghe ngay, không chờ.
+- Có cơ chế tự phục hồi: nếu audio của bài bị lỗi, học sinh có thể bấm tạo lại, và audio mới tự động thay thế
+  audio lỗi cho bài đó.
+
+## 4. RÀNG BUỘC
+- KHÔNG dùng Docker. Chạy mô hình trực tiếp bằng Python.
+- Không dùng dịch vụ trả phí hay API key bên thứ ba cho TTS.
+- Không cho client gửi văn bản tùy ý để sinh audio ở luồng bài tập (xem mục 8, chống lạm dụng).
+
+## 5. MÔ HÌNH ĐÃ CHỌN: Kokoro-82M
+- Apache 2.0, 82M tham số, chạy được trên CPU, đầu ra 24 kHz mono.
+- Nhúng vào FastAPI Python Speech Service HIỆN CÓ, thêm endpoint TTS. Không tạo thêm service riêng nếu không cần thiết.
+- Cài đặt: `pip install kokoro soundfile` (kiểm tra phiên bản Python tương thích theo README) và `espeak-ng` ở mức hệ điều hành
+  (Windows: bản cài .msi; Linux: `apt install espeak-ng`). espeak-ng là GPL-3.0, chỉ dùng như thư viện/tiến trình hệ thống.
+- `KPipeline(lang_code='a')` cho English Mỹ, `'b'` cho English Anh. Giọng đề xuất: Mỹ `af_heart`, `af_bella`, `am_michael`;
+  Anh `bf_emma`, `bm_george`. Phương án dự phòng nếu máy yếu: `kokoro-onnx`.
+- QUAN TRỌNG: đối chiếu cú pháp, tên giọng, tham số với README chính thức (Hugging Face hexgrad/Kokoro-82M và GitHub)
+  trước khi viết code. Điểm nào không chắc thì nói rõ, không đoán.
+- Giới hạn cần biết: Kokoro không có tag cảm xúc tường minh. Ngữ điệu hội thoại đạt được qua việc chọn giọng, giữ dấu câu,
+  chia lượt thoại hợp lý và điều chỉnh khoảng nghỉ. Nếu thấy chất lượng hội thoại chưa đạt, hãy nêu giới hạn và đề xuất
+  hướng khác thay vì hứa quá mức.
+
+## 6. KIẾN TRÚC TỔNG QUAN
+Browser KHÔNG gọi thẳng Python service. Luồng:
+React -> Spring Boot (`/api/v1/ai/tts/...`) -> Redis/R2 -> FastAPI Python Service (`/tts`, `/tts/dialogue`)
+
+### 6.1. Python FastAPI Service
+- Load model và pipeline MỘT LẦN khi startup, chạy warm-up ngay sau khi load.
+- `POST /tts`: một giọng. Nhận `{ text, voice, speed }`, trả audio.
+- `POST /tts/dialogue`: nhiều giọng. Nhận danh sách lượt thoại
+  `[{ speaker, text }]` và bảng ánh xạ `speaker -> { voice, speed }`. Trả MỘT file audio đã ghép, kèm metadata từng lượt
+  (`speaker`, `startMs`, `endMs`) để frontend đồng bộ transcript.
+- Ghép đối thoại: sinh từng lượt bằng giọng của người nói, nối bằng khoảng nghỉ tự nhiên (khoảng 300-700 ms, có thể
+  đổi theo dấu câu/loại lượt, cấu hình được), chuẩn hóa âm lượng giữa các giọng để không có giọng to/nhỏ chênh lệch, cùng sample rate,
+  không có tiếng click ở chỗ nối (fade ngắn nếu cần).
+- Hỗ trợ 2-3 người nói trong một bài. Mỗi người nói gán một giọng cố định và KHÁC nhau (ví dụ nam/nữ hoặc Mỹ/Anh theo cấu hình bài).
+- Chạy inference trong threadpool, giới hạn số tác vụ song song để không chặn bộ chấm phát âm. Dùng `torch.inference_mode()`,
+  đặt số thread hợp lý. Nếu có GPU NVIDIA thì chạy CUDA; nếu chỉ CPU thì đánh giá `kokoro-onnx` và so sánh tốc độ/chất lượng.
+- Cập nhật `requirements.txt`, hướng dẫn chạy bằng `uvicorn`.
+
+### 6.2. Mô hình dữ liệu audio (theo công cụ migration hiện có)
+Thiết kế bảng/entity lưu audio của bài tập (ví dụ `exercise_audio`), tối thiểu gồm:
+- `id`, loại bài (SHADOWING | LISTENING), khóa tham chiếu tới bài tập/câu hỏi/đoạn nghe.
+- `content_hash` (hash của script đã chuẩn hóa + cấu hình giọng + model_version), dùng phát hiện khi nội dung thay đổi.
+- `voice_config` (JSON: người nói -> giọng/tốc độ), `status` (PENDING | PROCESSING | READY | FAILED | BROKEN),
+  `url` (R2/S3), `duration_ms`, `segments` (JSON: lượt thoại + mốc thời gian), `version`,
+  `generated_by` (SYSTEM | STUDENT_REPAIR), `error_message`, `created_at`, `updated_at`.
+- Chỉ có MỘT audio "đang hoạt động" cho mỗi bài. Audio cũ giữ lại (đánh dấu thay thế) cho đến khi bản mới READY.
+
+## 7. SINH AUDIO KHI GIÁO VIÊN TẠO/GIAO BÀI
+- Khi giáo viên tạo/cập nhật/giao bài Shadowing hoặc Listening: tự động đưa job sinh audio vào hàng đợi chạy nền
+  (bất đồng bộ, có giới hạn số job song song, retry có backoff khi lỗi tạm thời).
+- Bài Shadowing: một giọng cho câu mẫu. Bài Listening độc thoại: một giọng. Bài Listening đối thoại: script gồm các lượt thoại
+  với nhãn người nói; giáo viên chọn hoặc hệ thống tự gán giọng cho từng người nói (mặc định hợp lý, giáo viên có thể đổi).
+- Nếu script đối thoại đang là văn bản thường, thiết kế định dạng nhãn người nói rõ ràng (ví dụ `A: ...` / `B: ...`) và bộ phân tích
+  (parser) có validate, báo lỗi dễ hiểu khi sai định dạng.
+- Theo dõi trạng thái: giáo viên thấy trạng thái từng audio (đang tạo / sẵn sàng / lỗi) và có nút "Tạo lại" khi lỗi. Chỉ cho phép phát hành bài
+  khi audio READY, hoặc cho giáo viên phát hành kèm cảnh báo rõ ràng (chọn một hướng hợp lý và nêu lý do).
+- Khi giáo viên sửa script/giọng: `content_hash` đổi thì tự tạo lại. Giữ audio cũ dùng được cho tới khi bản mới READY, rồi thay nguyên tử.
+- Backfill: lệnh/job sinh audio cho các bài đã tồn tại chưa có audio.
+- Cung cấp endpoint/SSE hoặc polling để frontend theo dõi trạng thái.
+
+## 8. TỰ PHỤC HỒI KHI AUDIO LỖI (học sinh tạo lại)
+Khi audio của bài bị lỗi (file không tải được/404, lỗi giải mã, `duration = 0`, status FAILED/BROKEN, phát hiện im lặng bất thường):
+1. Frontend nhận biết lỗi (sự kiện `error` của audio, kiểm tra response) và hiển thị thông báo + nút "Tạo lại audio"
+   (có thể tự thử tải lại một lần trước khi hiện nút).
+2. Học sinh bấm nút -> gọi endpoint kiểu `POST /api/v1/ai/tts/exercises/{exerciseId}/repair`. Backend:
+   - KIỂM TRA QUYỀN: học sinh phải thuộc lớp/được giao bài này (RBAC `@PreAuthorize` + kiểm tra sở hữu). Script và cấu hình giọng
+     lấy từ DỮ LIỆU BÀI TẬP LƯU SERVER, KHÔNG nhận văn bản từ client. Nhờ vậy không thể lạm dụng để sinh audio tùy ý.
+   - Chống lạm dụng: Rate Limiter theo user + theo bài, cooldown giữa các lần tạo lại.
+   - Khóa chống trùng (lock theo bài): nhiều học sinh cùng báo lỗi một lúc chỉ sinh MỘT lần, các request còn lại chờ kết quả đó.
+   - Sinh audio mới, rồi VALIDATE (file không rỗng, giải mã được, thời lượng hợp lý so với độ dài text, không phải toàn im lặng).
+     Chỉ khi hợp lệ mới thay thế nguyên tử audio đang hoạt động của bài (version + 1, đánh dấu bản cũ là BROKEN/superseded,
+     `generated_by = STUDENT_REPAIR`). Nếu không hợp lệ thì giữ nguyên trạng thái và trả lỗi rõ ràng.
+   - Sau khi thay thế, MỌI học sinh và giáo viên của bài đó đều dùng audio mới. Làm mới cache (Redis, URL, HTTP cache) tương ứng.
+3. Frontend hiển thị tiến trình ("Đang tạo lại..."), khi xong tự tải audio mới và phát, không cần tải lại trang.
+4. Ghi log/audit mỗi lần repair (ai, bài nào, kết quả) để giáo viên/quản trị theo dõi các bài hay lỗi.
+
+## 9. TỐI ƯU TỐC ĐỘ PHẢN HỒI
+Vì audio được sinh sẵn nên trường hợp bình thường là phát file có sẵn. Mục tiêu đo thực tế (báo cáo số liệu, không đoán):
+- Mở bài/bấm nghe với audio đã READY: bắt đầu phát < 300 ms (CDN/R2 + cache header).
+- Repair hoặc câu mới (không có sẵn): bắt đầu phát sớm nhất có thể nhờ chia theo câu/lượt thoại và trả dần (streaming) khi khả thi.
+
+Thực hiện:
+1. Bước đo/profile trước tối ưu: thời gian từng chặng (frontend -> Spring -> Python: phonemize, inference, encode -> trả về),
+   thiết bị (CPU/GPU, số core), kích thước text, độ dài audio, real-time factor. Xác định nút thắt chính rồi ưu tiên sửa.
+2. Phát file sinh sẵn qua URL (R2/S3) với `Cache-Control`/`ETag`; frontend prefetch audio của bài khi mở màn hình và của bài kế tiếp.
+3. Cache nhiều tầng cho các câu sinh động (Python LRU, Redis, R2); key theo `content_hash`; chống cache stampede.
+4. Với repair/sinh mới: chia theo câu/lượt, Spring stream trực tiếp (không buffer toàn bộ), frontend phát khi có dữ liệu đầu.
+5. Python: load/khởi tạo một lần, warm-up, tránh tạo phonemizer mỗi request, cache phoneme của câu đã gặp, chọn định dạng encode nhẹ nhất.
+6. Kết nối giữa các tầng dùng connection pool/keep-alive, timeout hợp lý.
+7. Trải nghiệm khi chờ: trạng thái rõ ràng ngay khi bấm, chặn bấm trùng, hủy request cũ khi đổi giọng/tốc độ. Chỉ dùng giọng trình duyệt làm
+   fallback khi Kokoro lỗi/timeout (kèm cảnh báo), không dùng để "chạy trước" trong lúc chờ.
+8. Tốc độ 0.75x / 1x / 1.25x dùng `playbackRate` với `preservesPitch = true` trên cùng một file, không sinh lại khi đổi tốc độ.
+
+## 10. FRONTEND
+- Shadowing: nút "Nghe âm mẫu" phát audio sinh sẵn, giữ điều khiển tốc độ, loading/lỗi/nút "Tạo lại audio" như mục 8.
+- Listening: trình phát có thanh tiến trình, tua, đổi tốc độ, và với đối thoại hiển thị transcript theo lượt có nhãn người nói,
+  tô sáng lượt đang phát nhờ `segments` (chế độ ẩn/hiện transcript tùy bài, đừng lộ đáp án khi bài yêu cầu ẩn).
+- Giáo viên: màn hình tạo bài hiển thị trạng thái audio, chọn/đổi giọng cho từng người nói, nút nghe thử và "Tạo lại".
+- Bỏ hoàn toàn phần phát âm mẫu bằng Google/Web Speech API (giữ lại chỉ làm fallback lỗi như mục 9.7).
+
+## 11. ĐIỀU TRA TRƯỚC KHI SỬA (chưa viết code vội)
+- Tìm trong frontend/backend xem Shadowing đang phát âm mẫu bằng cách nào (`speechSynthesis`, gTTS, URL Google TTS...).
+- Xem phần Listening hiện đang lấy audio từ đâu (upload thủ công, TTS, URL ngoài) và cấu trúc dữ liệu bài nghe/đối thoại/câu hỏi.
+- Xem luồng giáo viên tạo/giao bài hiện tại để xác định điểm móc (hook) kích hoạt job sinh audio.
+- Đọc cấu trúc FastAPI Python service (file chính, cách load model, cách Spring gọi) và công cụ migration DB đang dùng.
+- Kiểm tra bộ chấm phát âm có dùng audio mẫu làm tham chiếu không, và tác động của việc đổi giọng lên bộ chấm.
+- Báo cáo ngắn kết quả điều tra trước khi viết code.
+
+## 12. YÊU CẦU CHẤT LƯỢNG
+- Tiền xử lý text: giữ nguyên dấu câu (quyết định ngắt nghỉ và ngữ điệu), chuẩn hóa khoảng trắng, xử lý số/viết tắt thông dụng sao cho đọc tự nhiên.
+- Câu/lượt dài được chia hợp lý, audio không bị cắt cụt. Hội thoại nghe liền mạch (khoảng nghỉ tự nhiên, âm lượng đồng đều).
+- Cấu hình (kích thước cache, TTL, số job song song, khoảng nghỉ giữa lượt, cooldown repair, giọng mặc định, URL service) đưa vào
+  `application.yml`/biến môi trường, không hardcode.
+- Test: sinh audio khi tạo bài, tạo lại khi nội dung đổi, parser đối thoại, ghép nhiều giọng và `segments` đúng mốc, repair (đúng quyền, rate limit,
+  chống trùng, validate rồi thay thế nguyên tử, giữ bản cũ khi bản mới lỗi), Python service lỗi/timeout. Mock chỉ dùng trong test.
+- Không thêm thư viện trả phí hay API key bên thứ ba.
+
+## 13. ĐẦU RA YÊU CẦU
+1. Báo cáo điều tra (mục 11) và bảng profile tốc độ trước tối ưu.
+2. Thiết kế dữ liệu (migration) và sơ đồ luồng: giao bài -> sinh audio -> lưu trữ -> phát; luồng repair.
+3. Danh sách file thay đổi/tạo mới và code đầy đủ cho từng file (Python, Java, TypeScript, yml, migration).
+4. Bảng so sánh thời gian trước/sau cho: audio sinh sẵn, câu mới (cache miss), repair; và so sánh PyTorch với ONNX hoặc CPU với GPU nếu thực hiện.
+5. Hướng dẫn cài đặt và chạy trực tiếp (không Docker) trên máy dev Windows, lệnh backfill audio cho bài cũ, cách kiểm tra bằng curl.
+6. Đề xuất 2-3 cặp giọng cho đối thoại (ví dụ `af_heart` + `am_michael`, `bf_emma` + `bm_george`) để tôi chọn mặc định, kèm nhận xét chất lượng.
+7. Nêu rõ giới hạn còn lại (ví dụ ngữ điệu hội thoại của Kokoro, thời gian sinh khi chỉ có CPU) và đề xuất bước tiếp theo.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-16T00:46:50+07:00.
+
+The user's current state is as follows:
+Other open documents:
+- d:\codes\doanchuyennganh\englishlearning\src\test\java\com\englishlearning\ai\service\KokoroTtsClientServiceTest.java (LANGUAGE_UNSPECIFIED)
+- d:\codes\doanchuyennganh\englishlearning\src\main\java\com\englishlearning\ai\service\KokoroTtsClientService.java (LANGUAGE_UNSPECIFIED)
+- d:\codes\doanchuyennganh\englishlearning\src\main\java\com\englishlearning\ai\dto\TtsRequest.java (LANGUAGE_UNSPECIFIED)
+- d:\codes\doanchuyennganh\englishlearning\src\main\java\com\englishlearning\curriculum\service\DocumentStorageService.java (LANGUAGE_UNSPECIFIED)
+- d:\codes\doanchuyennganh\phonetics-service\test_benchmark_kokoro.py (LANGUAGE_UNSPECIFIED)
+</ADDITIONAL_METADATA>

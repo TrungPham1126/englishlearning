@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  phonetics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phonetics-service
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_NAME=facebook/wav2vec2-xlsr-53-espeak-cv-ft
+      - MODEL_DEVICE=cpu
+      - MODEL_CACHE_DIR=/app/cache/huggingface
+      - SAMPLE_RATE=16000
+      - MIN_AUDIO_DURATION=0.4
+      - MAX_AUDIO_DURATION=45.0
+      - PAUSE_THRESHOLD_MS=250.0
+      - PRONUNCIATION_WEIGHT=0.50
+      - FLUENCY_WEIGHT=0.30
+      - SPEED_WEIGHT=0.20
+      - SPEED_TARGET_MIN=3.5
+      - SPEED_TARGET_MAX=5.0
+      - MIN_ALIGNMENT_CONFIDENCE=0.40
+      - MIN_AUDIO_CONFIDENCE=0.45
+    volumes:
+      - hf_cache:/app/cache/huggingface
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1.5G
+
+volumes:
+  hf_cache:
+    name: phonetics_hf_cache

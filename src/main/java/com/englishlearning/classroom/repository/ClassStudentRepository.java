@@ -20,4 +20,9 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, UUID
 
     @Query("SELECT cs FROM ClassStudent cs JOIN FETCH cs.classroom c WHERE cs.student.id = :studentId AND cs.isActive = true")
     List<ClassStudent> findActiveEnrollmentsWithClassroom(@Param("studentId") UUID studentId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("DELETE FROM ClassStudent cs WHERE cs.student.id = :studentId")
+    void deleteByStudentId(@Param("studentId") UUID studentId);
 }

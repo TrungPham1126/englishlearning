@@ -65,6 +65,9 @@ public class AiEvaluation {
     @Column(name = "tokens_used")
     private Integer tokensUsed;
 
+    @Column(name = "evaluation_engine", length = 50)
+    private String evaluationEngine;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

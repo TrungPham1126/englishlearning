@@ -87,6 +87,15 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(user));
     }
 
+    @PutMapping("/me")
+    @Operation(summary = "Cập nhật thông tin tài khoản hiện tại")
+    public ResponseEntity<ApiResponse<UserSummaryDto>> updateProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody com.englishlearning.auth.dto.UpdateProfileRequest request) {
+        UserSummaryDto user = authService.updateProfile(userDetails.getId(), request);
+        return ResponseEntity.ok(ApiResponse.success(user));
+    }
+
     // Helper cài đặt cookie HttpOnly an toàn
     private void setRefreshTokenCookie(HttpServletResponse response, String token, long maxAgeSeconds) {
         ResponseCookie cookie = ResponseCookie.from("refreshToken", token)

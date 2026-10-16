@@ -13,6 +13,7 @@ import java.util.UUID;
 @Repository
 public interface ClassroomRepository extends JpaRepository<Classroom, UUID> {
     Page<Classroom> findByStatus(ClassStatus status, Pageable pageable);
+    long countByStatus(ClassStatus status);
     List<Classroom> findByTeacherId(UUID teacherId);
     boolean existsByNameIgnoreCase(String name);
 }

@@ -24,7 +24,7 @@ public class AiGeneratedExercise {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lesson_id", nullable = false)
+    @JoinColumn(name = "lesson_id")
     private Lesson lesson;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -1,6 +1,8 @@
 package com.englishlearning.notification.service;
 
 import com.englishlearning.auth.entity.User;
+import com.englishlearning.classroom.entity.ClassStudent;
+import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.entity.NotificationType;
@@ -17,6 +19,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,6 +29,7 @@ public class NotificationService {
 
     private final RabbitTemplate rabbitTemplate;
     private final NotificationRepository notificationRepository;
+    private final ClassStudentRepository classStudentRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final EntityManager entityManager;
 
@@ -54,21 +58,74 @@ public class NotificationService {
         sendSystemNotification(null, title, message, type, redirectUrl);
     }
 
+    private NotificationType resolveNotificationType(String typeStr) {
+        if (typeStr == null || typeStr.isBlank()) {
+            return NotificationType.SYSTEM_ALERT;
+        }
+        try {
+            return NotificationType.valueOf(typeStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return NotificationType.SYSTEM_ALERT;
+        }
+    }
+
     @RabbitListener(queues = "${app.rabbitmq.queues.notification:notification.queue}")
     @Transactional
     public void processNotificationMessage(NotificationDto dto) {
-        // Kiểm tra an toàn: Bảng notifications yêu cầu recipient_id NOT NULL
-        if (dto == null || dto.getRecipientUserId() == null) {
-            log.warn("Bỏ qua lưu DB thông báo vì recipientUserId bị null: title={}",
-                    dto != null ? dto.getTitle() : "null");
+        if (dto == null) {
+            return;
+        }
+
+        NotificationType type = resolveNotificationType(dto.getNotificationType());
+
+        // Trường hợp 1: Phát thông báo lớp học (classroom broadcast)
+        if (dto.getClassroomId() != null && dto.getRecipientUserId() == null) {
+            Notification classroomAnn = Notification.builder()
+                    .title(dto.getTitle())
+                    .message(dto.getMessage())
+                    .type(type)
+                    .targetUrl(dto.getRedirectUrl())
+                    .classroomId(dto.getClassroomId())
+                    .isRead(false)
+                    .build();
+            notificationRepository.save(classroomAnn);
+
+            // Gửi tới từng học viên trong lớp
+            List<ClassStudent> classStudents = classStudentRepository.findByClassroomId(dto.getClassroomId());
+            for (ClassStudent cs : classStudents) {
+                if (cs.getIsActive() == null || cs.getIsActive()) {
+                    Notification studentNotif = Notification.builder()
+                            .title(dto.getTitle())
+                            .message(dto.getMessage())
+                            .type(type)
+                            .targetUrl(dto.getRedirectUrl())
+                            .recipient(cs.getStudent().getUser())
+                            .isRead(false)
+                            .build();
+                    Notification savedStudentNotif = notificationRepository.save(studentNotif);
+                    messagingTemplate.convertAndSendToUser(
+                            cs.getStudent().getId().toString(),
+                            "/queue/notifications",
+                            savedStudentNotif
+                    );
+                }
+            }
+            messagingTemplate.convertAndSend("/topic/classroom." + dto.getClassroomId(), classroomAnn);
+            return;
+        }
+
+        // Trường hợp 2: Thông báo đích danh cho 1 user
+        if (dto.getRecipientUserId() == null) {
+            log.warn("Bỏ qua lưu DB thông báo vì recipientUserId bị null: title={}", dto.getTitle());
             return;
         }
 
         Notification notification = Notification.builder()
                 .title(dto.getTitle())
                 .message(dto.getMessage())
-                .type(NotificationType.valueOf(dto.getNotificationType()))
+                .type(type)
                 .targetUrl(dto.getRedirectUrl())
+                .classroomId(dto.getClassroomId())
                 .isRead(false)
                 .build();
 
@@ -83,6 +140,10 @@ public class NotificationService {
 
     public Page<Notification> getMyNotifications(UUID userId, int page, int size) {
         return notificationRepository.findByRecipientIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
+    }
+
+    public Page<Notification> getClassroomAnnouncements(UUID classroomId, int page, int size) {
+        return notificationRepository.findByClassroomIdOrderByCreatedAtDesc(classroomId, PageRequest.of(page, size));
     }
 
     @Transactional

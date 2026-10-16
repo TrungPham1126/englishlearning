@@ -1,6 +1,7 @@
 package com.englishlearning.submission.repository;
 
 import com.englishlearning.submission.entity.AssignmentAttempt;
+import com.englishlearning.submission.entity.AttemptStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 @Repository
 public interface AssignmentAttemptRepository extends JpaRepository<AssignmentAttempt, UUID> {
+    long countByStatus(AttemptStatus status);
     List<AssignmentAttempt> findByStudentIdAndAssignmentId(UUID studentId, UUID assignmentId);
 
     Optional<AssignmentAttempt> findByIdAndStudentId(UUID id, UUID studentId);

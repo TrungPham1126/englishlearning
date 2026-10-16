@@ -26,13 +26,27 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Page<Notification>>> getNotifications(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) UUID classId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (classId != null) {
+            return ResponseEntity.ok(ApiResponse.success(
+                    notificationService.getClassroomAnnouncements(classId, page, size)));
+        }
         return ResponseEntity.ok(ApiResponse.success(
                 notificationService.getMyNotifications(userDetails.getId(), page, size)));
     }
 
+    @GetMapping("/classrooms/{classId}")
+    public ResponseEntity<ApiResponse<Page<Notification>>> getClassroomAnnouncements(
+            @PathVariable UUID classId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                notificationService.getClassroomAnnouncements(classId, page, size)));
+    }
+
     @PostMapping("/broadcast")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<String>> broadcastNotification(@RequestBody NotificationDto dto) {
         notificationService.dispatchNotification(dto);
         return ResponseEntity.ok(ApiResponse.success("Đã đưa thông báo vào hàng đợi xử lý"));

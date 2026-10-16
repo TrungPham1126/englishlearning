@@ -1,0 +1,1192 @@
+{
+  "_metadata": {
+    "version": "2.0.0",
+    "description": "Dual-gender reference vowel profiles (Male and Female norms derived from Hillenbrand et al. 1995)",
+    "supported_accents": [
+      "en-US",
+      "en-US-male",
+      "en-US-female"
+    ],
+    "default_accent": "en-US"
+  },
+  "en-US": {
+    "iː": {
+      "name": "High front tense unrounded vowel (fleece)",
+      "mean": [
+        300.0,
+        2300.0
+      ],
+      "std": [
+        45.0,
+        150.0
+      ],
+      "covariance": [
+        [
+          2025.0,
+          -1350.0
+        ],
+        [
+          -1350.0,
+          22500.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Acoustic norms derived from Hillenbrand et al. (1995) adult speaker dataset"
+    },
+    "ɪ": {
+      "name": "Near-high near-front lax unrounded vowel (kit)",
+      "mean": [
+        400.0,
+        1920.0
+      ],
+      "std": [
+        50.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          -800.0
+        ],
+        [
+          -800.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "e": {
+      "name": "Mid front lax unrounded vowel (dress)",
+      "mean": [
+        550.0,
+        1800.0
+      ],
+      "std": [
+        60.0,
+        150.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          -1200.0
+        ],
+        [
+          -1200.0,
+          22500.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "æ": {
+      "name": "Near-low front unrounded vowel (trap)",
+      "mean": [
+        690.0,
+        1660.0
+      ],
+      "std": [
+        70.0,
+        140.0
+      ],
+      "covariance": [
+        [
+          4900.0,
+          -980.0
+        ],
+        [
+          -980.0,
+          19600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɑː": {
+      "name": "Low back unrounded vowel (palm/father)",
+      "mean": [
+        730.0,
+        1090.0
+      ],
+      "std": [
+        65.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          715.0
+        ],
+        [
+          715.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɒ": {
+      "name": "Low back rounded vowel (lot)",
+      "mean": [
+        680.0,
+        1050.0
+      ],
+      "std": [
+        60.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          660.0
+        ],
+        [
+          660.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Reference corpus demonstration"
+    },
+    "ɔː": {
+      "name": "Mid-low back rounded vowel (thought)",
+      "mean": [
+        590.0,
+        880.0
+      ],
+      "std": [
+        55.0,
+        95.0
+      ],
+      "covariance": [
+        [
+          3025.0,
+          520.0
+        ],
+        [
+          520.0,
+          9025.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ʊ": {
+      "name": "Near-high near-back rounded vowel (foot)",
+      "mean": [
+        450.0,
+        1030.0
+      ],
+      "std": [
+        50.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          550.0
+        ],
+        [
+          550.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "uː": {
+      "name": "High back tense rounded vowel (goose)",
+      "mean": [
+        320.0,
+        920.0
+      ],
+      "std": [
+        45.0,
+        120.0
+      ],
+      "covariance": [
+        [
+          2025.0,
+          540.0
+        ],
+        [
+          540.0,
+          14400.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ʌ": {
+      "name": "Mid-low back-central unrounded vowel (strut)",
+      "mean": [
+        640.0,
+        1220.0
+      ],
+      "std": [
+        60.0,
+        115.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          690.0
+        ],
+        [
+          690.0,
+          13225.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ə": {
+      "name": "Mid-central neutral unrounded vowel (schwa / comma)",
+      "mean": [
+        500.0,
+        1500.0
+      ],
+      "std": [
+        60.0,
+        130.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          0.0
+        ],
+        [
+          0.0,
+          16900.0
+        ]
+      ],
+      "sample_count": 600,
+      "source": "Neutral vocal tract geometric model (L = 17.5cm)"
+    },
+    "ɜː": {
+      "name": "Mid-central r-colored unrounded vowel (nurse)",
+      "mean": [
+        490.0,
+        1350.0
+      ],
+      "std": [
+        50.0,
+        120.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          300.0
+        ],
+        [
+          300.0,
+          14400.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "eɪ": {
+      "name": "Closing diphthong (face)",
+      "mean": [
+        510.0,
+        2050.0
+      ],
+      "std": [
+        65.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          -1500.0
+        ],
+        [
+          -1500.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "aɪ": {
+      "name": "Closing diphthong (price)",
+      "mean": [
+        720.0,
+        1550.0
+      ],
+      "std": [
+        70.0,
+        170.0
+      ],
+      "covariance": [
+        [
+          4900.0,
+          -1800.0
+        ],
+        [
+          -1800.0,
+          28900.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɔɪ": {
+      "name": "Closing diphthong (choice)",
+      "mean": [
+        550.0,
+        1400.0
+      ],
+      "std": [
+        60.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          -1000.0
+        ],
+        [
+          -1000.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "aʊ": {
+      "name": "Closing diphthong (mouth)",
+      "mean": [
+        680.0,
+        1200.0
+      ],
+      "std": [
+        65.0,
+        140.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          900.0
+        ],
+        [
+          900.0,
+          19600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "oʊ": {
+      "name": "Closing diphthong (goat)",
+      "mean": [
+        520.0,
+        1150.0
+      ],
+      "std": [
+        55.0,
+        130.0
+      ],
+      "covariance": [
+        [
+          3025.0,
+          700.0
+        ],
+        [
+          700.0,
+          16900.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    }
+  },
+  "en-US-male": {
+    "iː": {
+      "name": "High front tense unrounded vowel (fleece)",
+      "mean": [
+        300.0,
+        2300.0
+      ],
+      "std": [
+        45.0,
+        150.0
+      ],
+      "covariance": [
+        [
+          2025.0,
+          -1350.0
+        ],
+        [
+          -1350.0,
+          22500.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Acoustic norms derived from Hillenbrand et al. (1995) adult speaker dataset"
+    },
+    "ɪ": {
+      "name": "Near-high near-front lax unrounded vowel (kit)",
+      "mean": [
+        400.0,
+        1920.0
+      ],
+      "std": [
+        50.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          -800.0
+        ],
+        [
+          -800.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "e": {
+      "name": "Mid front lax unrounded vowel (dress)",
+      "mean": [
+        550.0,
+        1800.0
+      ],
+      "std": [
+        60.0,
+        150.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          -1200.0
+        ],
+        [
+          -1200.0,
+          22500.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "æ": {
+      "name": "Near-low front unrounded vowel (trap)",
+      "mean": [
+        690.0,
+        1660.0
+      ],
+      "std": [
+        70.0,
+        140.0
+      ],
+      "covariance": [
+        [
+          4900.0,
+          -980.0
+        ],
+        [
+          -980.0,
+          19600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɑː": {
+      "name": "Low back unrounded vowel (palm/father)",
+      "mean": [
+        730.0,
+        1090.0
+      ],
+      "std": [
+        65.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          715.0
+        ],
+        [
+          715.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɒ": {
+      "name": "Low back rounded vowel (lot)",
+      "mean": [
+        680.0,
+        1050.0
+      ],
+      "std": [
+        60.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          660.0
+        ],
+        [
+          660.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Reference corpus demonstration"
+    },
+    "ɔː": {
+      "name": "Mid-low back rounded vowel (thought)",
+      "mean": [
+        590.0,
+        880.0
+      ],
+      "std": [
+        55.0,
+        95.0
+      ],
+      "covariance": [
+        [
+          3025.0,
+          520.0
+        ],
+        [
+          520.0,
+          9025.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ʊ": {
+      "name": "Near-high near-back rounded vowel (foot)",
+      "mean": [
+        450.0,
+        1030.0
+      ],
+      "std": [
+        50.0,
+        110.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          550.0
+        ],
+        [
+          550.0,
+          12100.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "uː": {
+      "name": "High back tense rounded vowel (goose)",
+      "mean": [
+        320.0,
+        920.0
+      ],
+      "std": [
+        45.0,
+        120.0
+      ],
+      "covariance": [
+        [
+          2025.0,
+          540.0
+        ],
+        [
+          540.0,
+          14400.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ʌ": {
+      "name": "Mid-low back-central unrounded vowel (strut)",
+      "mean": [
+        640.0,
+        1220.0
+      ],
+      "std": [
+        60.0,
+        115.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          690.0
+        ],
+        [
+          690.0,
+          13225.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ə": {
+      "name": "Mid-central neutral unrounded vowel (schwa / comma)",
+      "mean": [
+        500.0,
+        1500.0
+      ],
+      "std": [
+        60.0,
+        130.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          0.0
+        ],
+        [
+          0.0,
+          16900.0
+        ]
+      ],
+      "sample_count": 600,
+      "source": "Neutral vocal tract geometric model (L = 17.5cm)"
+    },
+    "ɜː": {
+      "name": "Mid-central r-colored unrounded vowel (nurse)",
+      "mean": [
+        490.0,
+        1350.0
+      ],
+      "std": [
+        50.0,
+        120.0
+      ],
+      "covariance": [
+        [
+          2500.0,
+          300.0
+        ],
+        [
+          300.0,
+          14400.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "eɪ": {
+      "name": "Closing diphthong (face)",
+      "mean": [
+        510.0,
+        2050.0
+      ],
+      "std": [
+        65.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          -1500.0
+        ],
+        [
+          -1500.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "aɪ": {
+      "name": "Closing diphthong (price)",
+      "mean": [
+        720.0,
+        1550.0
+      ],
+      "std": [
+        70.0,
+        170.0
+      ],
+      "covariance": [
+        [
+          4900.0,
+          -1800.0
+        ],
+        [
+          -1800.0,
+          28900.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "ɔɪ": {
+      "name": "Closing diphthong (choice)",
+      "mean": [
+        550.0,
+        1400.0
+      ],
+      "std": [
+        60.0,
+        160.0
+      ],
+      "covariance": [
+        [
+          3600.0,
+          -1000.0
+        ],
+        [
+          -1000.0,
+          25600.0
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "aʊ": {
+      "name": "Closing diphthong (mouth)",
+      "mean": [
+        680.0,
+        1200.0
+      ],
+      "std": [
+        65.0,
+        140.0
+      ],
+      "covariance": [
+        [
+          4225.0,
+          900.0
+        ],
+        [
+          900.0,
+          19600.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    },
+    "oʊ": {
+      "name": "Closing diphthong (goat)",
+      "mean": [
+        520.0,
+        1150.0
+      ],
+      "std": [
+        55.0,
+        130.0
+      ],
+      "covariance": [
+        [
+          3025.0,
+          700.0
+        ],
+        [
+          700.0,
+          16900.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Hillenbrand et al. (1995)"
+    }
+  },
+  "en-US-female": {
+    "iː": {
+      "name": "High front tense unrounded vowel (fleece)",
+      "mean": [
+        354.0,
+        2668.0
+      ],
+      "std": [
+        53.1,
+        174.0
+      ],
+      "covariance": [
+        [
+          2819.6,
+          -1847.9
+        ],
+        [
+          -1847.9,
+          30276.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɪ": {
+      "name": "Near-high near-front lax unrounded vowel (kit)",
+      "mean": [
+        472.0,
+        2227.2
+      ],
+      "std": [
+        59.0,
+        185.6
+      ],
+      "covariance": [
+        [
+          3481.0,
+          -1095.0
+        ],
+        [
+          -1095.0,
+          34447.4
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "e": {
+      "name": "Mid front lax unrounded vowel (dress)",
+      "mean": [
+        649.0,
+        2088.0
+      ],
+      "std": [
+        70.8,
+        174.0
+      ],
+      "covariance": [
+        [
+          5012.6,
+          -1642.6
+        ],
+        [
+          -1642.6,
+          30276.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "æ": {
+      "name": "Near-low front unrounded vowel (trap)",
+      "mean": [
+        814.2,
+        1925.6
+      ],
+      "std": [
+        82.6,
+        162.4
+      ],
+      "covariance": [
+        [
+          6822.8,
+          -1341.4
+        ],
+        [
+          -1341.4,
+          26373.8
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɑː": {
+      "name": "Low back unrounded vowel (palm/father)",
+      "mean": [
+        861.4,
+        1264.4
+      ],
+      "std": [
+        76.7,
+        127.6
+      ],
+      "covariance": [
+        [
+          5882.9,
+          978.7
+        ],
+        [
+          978.7,
+          16281.8
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɒ": {
+      "name": "Low back rounded vowel (lot)",
+      "mean": [
+        802.4,
+        1218.0
+      ],
+      "std": [
+        70.8,
+        127.6
+      ],
+      "covariance": [
+        [
+          5012.6,
+          903.4
+        ],
+        [
+          903.4,
+          16281.8
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɔː": {
+      "name": "Mid-low back rounded vowel (thought)",
+      "mean": [
+        696.2,
+        1020.8
+      ],
+      "std": [
+        64.9,
+        110.2
+      ],
+      "covariance": [
+        [
+          4212.0,
+          711.8
+        ],
+        [
+          711.8,
+          12144.0
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ʊ": {
+      "name": "Near-high near-back rounded vowel (foot)",
+      "mean": [
+        531.0,
+        1194.8
+      ],
+      "std": [
+        59.0,
+        127.6
+      ],
+      "covariance": [
+        [
+          3481.0,
+          752.8
+        ],
+        [
+          752.8,
+          16281.8
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "uː": {
+      "name": "High back tense rounded vowel (goose)",
+      "mean": [
+        377.6,
+        1067.2
+      ],
+      "std": [
+        53.1,
+        139.2
+      ],
+      "covariance": [
+        [
+          2819.6,
+          739.2
+        ],
+        [
+          739.2,
+          19376.6
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ʌ": {
+      "name": "Mid-low back-central unrounded vowel (strut)",
+      "mean": [
+        755.2,
+        1415.2
+      ],
+      "std": [
+        70.8,
+        133.4
+      ],
+      "covariance": [
+        [
+          5012.6,
+          944.5
+        ],
+        [
+          944.5,
+          17795.6
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ə": {
+      "name": "Mid-central neutral unrounded vowel (schwa / comma)",
+      "mean": [
+        590.0,
+        1740.0
+      ],
+      "std": [
+        70.8,
+        150.8
+      ],
+      "covariance": [
+        [
+          5012.6,
+          0.0
+        ],
+        [
+          0.0,
+          22740.6
+        ]
+      ],
+      "sample_count": 600,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɜː": {
+      "name": "Mid-central r-colored unrounded vowel (nurse)",
+      "mean": [
+        578.2,
+        1566.0
+      ],
+      "std": [
+        59.0,
+        139.2
+      ],
+      "covariance": [
+        [
+          3481.0,
+          410.6
+        ],
+        [
+          410.6,
+          19376.6
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "eɪ": {
+      "name": "Closing diphthong (face)",
+      "mean": [
+        601.8,
+        2378.0
+      ],
+      "std": [
+        76.7,
+        185.6
+      ],
+      "covariance": [
+        [
+          5882.9,
+          -2053.2
+        ],
+        [
+          -2053.2,
+          34447.4
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "aɪ": {
+      "name": "Closing diphthong (price)",
+      "mean": [
+        849.6,
+        1798.0
+      ],
+      "std": [
+        82.6,
+        197.2
+      ],
+      "covariance": [
+        [
+          6822.8,
+          -2463.8
+        ],
+        [
+          -2463.8,
+          38887.8
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "ɔɪ": {
+      "name": "Closing diphthong (choice)",
+      "mean": [
+        649.0,
+        1624.0
+      ],
+      "std": [
+        70.8,
+        185.6
+      ],
+      "covariance": [
+        [
+          5012.6,
+          -1368.8
+        ],
+        [
+          -1368.8,
+          34447.4
+        ]
+      ],
+      "sample_count": 450,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "aʊ": {
+      "name": "Closing diphthong (mouth)",
+      "mean": [
+        802.4,
+        1392.0
+      ],
+      "std": [
+        76.7,
+        162.4
+      ],
+      "covariance": [
+        [
+          5882.9,
+          1231.9
+        ],
+        [
+          1231.9,
+          26373.8
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    },
+    "oʊ": {
+      "name": "Closing diphthong (goat)",
+      "mean": [
+        613.6,
+        1334.0
+      ],
+      "std": [
+        64.9,
+        150.8
+      ],
+      "covariance": [
+        [
+          4212.0,
+          958.2
+        ],
+        [
+          958.2,
+          22740.6
+        ]
+      ],
+      "sample_count": 500,
+      "source": "Female acoustic norms (Hillenbrand et al. 1995 & Peterson-Barney 1952 scaled)"
+    }
+  }
+}
+

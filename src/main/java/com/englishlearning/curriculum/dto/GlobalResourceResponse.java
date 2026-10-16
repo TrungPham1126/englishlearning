@@ -1,9 +1,7 @@
-// src/main/java/com/englishlearning/curriculum/dto/GlobalResourceResponse.java
 package com.englishlearning.curriculum.dto;
 
 import lombok.Builder;
 import lombok.Data;
-import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -11,7 +9,8 @@ import java.util.UUID;
 public class GlobalResourceResponse {
     private UUID id;
     private String name;
-    private String size; // Đã format (vd: 12MB)
+    private String size;
     private Integer usedCount;
     private String uploadedAt;
+    private String url;
 }

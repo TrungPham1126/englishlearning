@@ -1,4 +1,3 @@
-// src/main/java/com/englishlearning/curriculum/service/GlobalResourceService.java
 package com.englishlearning.curriculum.service;
 
 import com.englishlearning.auth.entity.User;
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GlobalResourceService {
     private final GlobalResourceRepository repository;
-    private final DocumentStorageService storageService; // Service có sẵn của bạn để gọi S3/R2
+    private final DocumentStorageService storageService;
     private final EntityManager entityManager;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")
@@ -30,7 +29,11 @@ public class GlobalResourceService {
 
     @Transactional(readOnly = true)
     public List<GlobalResourceResponse> getResourcesByType(String type) {
-        GlobalResource.ResourceType resourceType = GlobalResource.ResourceType.valueOf(type.toUpperCase());
+        String normalized = (type != null) ? type.trim().toUpperCase() : "DOC";
+        if ("DOCUMENT".equals(normalized)) {
+            normalized = "DOC";
+        }
+        GlobalResource.ResourceType resourceType = GlobalResource.ResourceType.valueOf(normalized);
         return repository.findByResourceTypeOrderByCreatedAtDesc(resourceType).stream()
                 .map(res -> GlobalResourceResponse.builder()
                         .id(res.getId())
@@ -38,13 +41,14 @@ public class GlobalResourceService {
                         .size(formatSize(res.getSizeBytes()))
                         .usedCount(res.getUsedCount())
                         .uploadedAt(FORMATTER.format(res.getCreatedAt()))
+                        .url(res.getStorageUrl())
                         .build())
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public void uploadResource(MultipartFile file, String type, UUID adminId) {
-        String url = storageService.uploadFile(file); // Gọi R2
+        String url = storageService.uploadFile(file);
         User admin = entityManager.getReference(User.class, adminId);
 
         GlobalResource resource = GlobalResource.builder()

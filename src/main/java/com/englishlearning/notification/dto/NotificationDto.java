@@ -13,6 +13,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class NotificationDto implements Serializable {
     private UUID recipientUserId;
+    private UUID classroomId;
     private String title;
     private String message;
     private String notificationType;

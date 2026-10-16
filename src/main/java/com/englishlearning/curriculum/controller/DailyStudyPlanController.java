@@ -33,8 +33,8 @@ public class DailyStudyPlanController {
     // ==================== API DÀNH CHO STUDENT ====================
 
     @GetMapping("/classrooms/{classroomId}/student-overview")
-    @PreAuthorize("hasRole('STUDENT')")
-    @Operation(summary = "Lấy tổng quan tiến trình Daily Plan cho Học viên")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
+    @Operation(summary = "Lấy tổng quan tiến trình Daily Plan cho Học viên / Giáo viên")
     public ResponseEntity<ApiResponse<DailyHomeworkOverviewResponse>> getStudentOverview(
             @PathVariable UUID classroomId,
             @RequestParam(required = false) UUID selectedDayId,
@@ -60,6 +60,13 @@ public class DailyStudyPlanController {
 
     // ==================== API DÀNH CHO TEACHER / ADMIN ====================
 
+    @GetMapping("/classrooms/{classroomId}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
+    @Operation(summary = "Lấy danh sách lộ trình Ngày học của lớp dành cho Giáo viên")
+    public ResponseEntity<ApiResponse<java.util.List<DailyStudyPlan>>> getPlansByClassroom(@PathVariable UUID classroomId) {
+        return ResponseEntity.ok(ApiResponse.success("Lấy lộ trình thành công", dailyStudyPlanService.getPlansByClassroom(classroomId)));
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     @Operation(summary = "Tạo một Ngày học mới (DAY)")
@@ -78,6 +85,14 @@ public class DailyStudyPlanController {
         return ResponseEntity.ok(ApiResponse.success(
                 "Cập nhật ngày học thành công",
                 dailyStudyPlanService.updateDailyPlan(planId, request)));
+    }
+
+    @DeleteMapping("/{planId}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Xóa một Ngày học khỏi lộ trình")
+    public ResponseEntity<ApiResponse<Void>> deleteDailyPlan(@PathVariable UUID planId) {
+        dailyStudyPlanService.deleteDailyPlan(planId);
+        return ResponseEntity.ok(ApiResponse.success("Xóa ngày học thành công", null));
     }
 
     @PostMapping("/{planId}/items")
@@ -99,5 +114,16 @@ public class DailyStudyPlanController {
             @PathVariable UUID itemId) {
         dailyStudyPlanService.deletePlanItem(itemId);
         return ResponseEntity.ok(ApiResponse.success("Xóa bài tập thành công", null));
+    }
+
+    @GetMapping("/classrooms/{classroomId}/progress-stats")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Lấy ma trận tiến độ hoàn thành theo từng ngày của toàn bộ học viên trong lớp")
+    public ResponseEntity<ApiResponse<java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse>>> getDailyProgressStats(
+            @PathVariable UUID classroomId) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy ma trận tiến độ thành công",
+                dailyStudyPlanService.getDailyProgressStatsMatrix(classroomId)));
     }
 }

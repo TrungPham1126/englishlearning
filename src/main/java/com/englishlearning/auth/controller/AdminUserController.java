@@ -4,6 +4,7 @@ import com.englishlearning.auth.dto.UserCreateByAdminRequest;
 import com.englishlearning.auth.dto.UserSummaryDto;
 import com.englishlearning.auth.dto.UserUpdateRequest;
 import com.englishlearning.auth.service.AdminUserService;
+import com.englishlearning.auth.entity.RoleName;
 import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.common.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,8 +31,10 @@ public class AdminUserController {
     private final AdminUserService adminUserService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách người dùng phân trang")
+    @Operation(summary = "Lấy danh sách người dùng phân trang và lọc theo role/keyword")
     public ResponseEntity<ApiResponse<PageResponse<UserSummaryDto>>> getAllUsers(
+            @RequestParam(required = false) RoleName role,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -40,7 +43,7 @@ public class AdminUserController {
         Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        return ResponseEntity.ok(ApiResponse.success(adminUserService.getAllUsers(pageable)));
+        return ResponseEntity.ok(ApiResponse.success(adminUserService.getAllUsers(role, keyword, pageable)));
     }
 
     @GetMapping("/{id}")

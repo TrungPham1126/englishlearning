@@ -18,4 +18,7 @@ public class UserSummaryDto {
     private String phone;
     private String avatarUrl;
     private List<String> roles;
+    private String targetCefr;
+    private String currentLevel;
+    private Boolean isActive;
 }

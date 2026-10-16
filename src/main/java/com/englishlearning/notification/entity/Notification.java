@@ -22,8 +22,11 @@ public class Notification {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "recipient_id", nullable = false)
+    @JoinColumn(name = "recipient_id", nullable = true)
     private User recipient;
+
+    @Column(name = "classroom_id")
+    private UUID classroomId;
 
     @Column(nullable = false, length = 200)
     private String title;

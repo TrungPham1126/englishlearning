@@ -17,6 +17,8 @@ public class AttemptResponse {
     private UUID attemptId;
     private UUID assignmentId;
     private String assignmentTitle;
+    private String assignmentDescription;
+    private String skillType;
     private Integer attemptNumber;
     private String status;
     private Double score;
@@ -24,6 +26,9 @@ public class AttemptResponse {
     private String teacherFeedback;
     private Instant startedAt;
     private Instant submittedAt;
+    private String audioUrl;
+    private String listeningScript;
+    private String passage;
     private List<QuestionResultDetail> questions;
 
     @Data
@@ -58,5 +63,6 @@ public class AttemptResponse {
         private String correctAnswer;
         private String explanation;
         private Boolean isCorrect;
+        private String evalFeedback;
     }
 }

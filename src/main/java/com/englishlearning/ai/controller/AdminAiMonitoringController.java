@@ -17,7 +17,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/ai-monitoring")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
 public class AdminAiMonitoringController {
     private final AiMonitoringService monitoringService;
 
@@ -36,5 +36,12 @@ public class AdminAiMonitoringController {
             @RequestBody UpdateQuotaRequest request) {
         monitoringService.updateQuota(studentId, request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", null));
+    }
+
+    @PostMapping("/kill-switch/toggle")
+    public ResponseEntity<ApiResponse<Boolean>> toggleKillSwitch() {
+        boolean active = monitoringService.toggleGlobalKillSwitch();
+        String msg = active ? "Đã kích hoạt ngắt AI khẩn cấp toàn hệ thống" : "Đã mở lại hoạt động AI toàn hệ thống";
+        return ResponseEntity.ok(ApiResponse.success(msg, active));
     }
 }

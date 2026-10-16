@@ -16,4 +16,19 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);
+
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT DISTINCT u FROM User u LEFT JOIN u.roles r WHERE " +
+        "(:role IS NULL OR r.name = :role) AND " +
+        "(:keyword IS NULL OR :keyword = '' OR " +
+        "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+        "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+        "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+        "LOWER(u.phone) LIKE LOWER(CONCAT('%', :keyword, '%')))"
+    )
+    org.springframework.data.domain.Page<User> searchUsers(
+        @org.springframework.data.repository.query.Param("role") com.englishlearning.auth.entity.RoleName role,
+        @org.springframework.data.repository.query.Param("keyword") String keyword,
+        org.springframework.data.domain.Pageable pageable
+    );
 }

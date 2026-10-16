@@ -43,4 +43,25 @@ public class StudentAiQuota {
     @Column(name = "is_blocked", nullable = false)
     @Builder.Default
     private Boolean isBlocked = false;
+
+    @Column(name = "prompt_tokens_used", nullable = false)
+    @Builder.Default
+    private Long promptTokensUsed = 0L;
+
+    @Column(name = "completion_tokens_used", nullable = false)
+    @Builder.Default
+    private Long completionTokensUsed = 0L;
+
+    @Column(name = "estimated_cost_usd", nullable = false)
+    @Builder.Default
+    private Double estimatedCostUsd = 0.0;
+
+    public void addUsage(long promptTokens, long completionTokens, double cost) {
+        if (this.promptTokensUsed == null) this.promptTokensUsed = 0L;
+        if (this.completionTokensUsed == null) this.completionTokensUsed = 0L;
+        if (this.estimatedCostUsd == null) this.estimatedCostUsd = 0.0;
+        this.promptTokensUsed += promptTokens;
+        this.completionTokensUsed += completionTokens;
+        this.estimatedCostUsd += cost;
+    }
 }
