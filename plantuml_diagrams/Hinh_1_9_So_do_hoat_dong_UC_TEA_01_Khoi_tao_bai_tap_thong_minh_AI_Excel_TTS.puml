@@ -1,0 +1,38 @@
+@startuml Hinh_1_9_So_do_hoat_dong_UC_TEA_01_Khoi_tao_bai_tap_thong_minh_AI_Excel_TTS
+title Hình 1.9: Sơ đồ hoạt động UC Khởi tạo bài tập thông minh AI / Excel / TTS (UC-TEA-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Giảng viên mở CreateAssignmentModal trên giao diện;
+
+if (Phương thức khởi tạo bài tập?) then (Nhập từ tệp Excel)
+    :Tải lên tệp .xlsx / .xls;
+    :Thư viện SheetJS parse cấu trúc câu hỏi, đáp án, điểm;
+elseif (Sinh tự động bằng Gemini AI)
+    :Chọn cấp độ CEFR (A1-C2) và chủ đề bài học;
+    :Gemini 2.5 Flash sinh danh sách câu hỏi chuẩn JSON;
+    :Lưu ai_generated_exercises ở trạng thái READY_FOR_REVIEW;
+else (Nhập tay thủ công)
+    :Điền tiêu đề, thời gian làm bài, điểm đạt và câu hỏi;
+endif
+
+:Giảng viên xem trước, chỉnh sửa câu hỏi và đáp án;
+
+if (Yêu cầu sinh giọng nói mẫu bản ngữ?) then (Có)
+    :Gọi vi dịch vụ Kokoro-82M Neural TTS (/tts);
+    :Sinh tệp âm thanh giọng Mỹ (af_heart) hoặc Anh-Anh;
+    :Lưu tệp âm thanh lên Cloudflare R2;
+    :Lưu bản ghi vào bảng exercise_audios (MySQL);
+endif
+
+:Lưu bài tập vào bảng assignments và assignment_questions;
+:Gắn bài tập vào lộ trình học ngày (daily_plan_items);
+:Gửi thông báo có bài tập mới cho học viên trong lớp;
+stop
+@enduml

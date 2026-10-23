@@ -29,18 +29,19 @@ export default function ClassLessonsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      {/* Clean Open Header */}
+      <div className="flex items-center gap-3.5 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <button
           onClick={() => navigate("/student/courses")}
-          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-sm cursor-pointer"
         >
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Lộ Trình Bài Học
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Lựa chọn bài học để phát video HLS và tài liệu đi kèm
           </p>
         </div>
@@ -51,20 +52,20 @@ export default function ClassLessonsPage() {
           <div
             key={lesson.id}
             onClick={() => navigate(`/student/lessons/${lesson.id}`)}
-            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-300 hover:shadow-md cursor-pointer"
+            className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 shadow-sm transition hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md cursor-pointer"
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 font-bold text-indigo-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-950/50 font-bold text-indigo-600 dark:text-indigo-400">
                 {idx + 1}
               </div>
               <div>
-                <h3 className="font-bold text-slate-800">{lesson.title}</h3>
-                <p className="text-xs text-slate-500 line-clamp-1">
+                <h3 className="font-bold text-slate-900 dark:text-white">{lesson.title}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">
                   {lesson.objectives || "Xem video bài giảng và từ vựng"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
               <PlayCircle size={18} /> Vào học
             </div>
           </div>

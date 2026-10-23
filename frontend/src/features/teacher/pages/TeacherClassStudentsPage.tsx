@@ -95,13 +95,13 @@ export default function TeacherClassStudentsPage() {
         activeTab="students"
         actions={
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Tìm tên hoặc email học viên..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-xl border border-slate-700/60 bg-slate-800/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:bg-slate-800 transition"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-800/80 pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-indigo-500 transition shadow-sm"
             />
           </div>
         }

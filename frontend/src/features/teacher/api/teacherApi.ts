@@ -217,7 +217,7 @@ export const teacherApi = {
     }),
 
   getClassAnnouncements: (classId: string) =>
-    axiosClient.get(`/api/v1/notifications?classId=${classId}`),
+    axiosClient.get(`/api/v1/notifications/classrooms/${classId}`),
 
   // 8. Tổng hợp Neural Audio TTS
   synthesizeAudio: (data: { text: string; voice?: string; speed?: string }) =>

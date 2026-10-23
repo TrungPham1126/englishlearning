@@ -3490,20 +3490,20 @@ export default function CreateAssignmentModal({
                   {questions.map((q, idx) => (
                     <div
                       key={q.id}
-                      className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3 relative group"
+                      className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-4 space-y-3 relative group"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-indigo-400">
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                             Câu {idx + 1} ({q.questionType})
                           </span>
                           {q.targetWord && (
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-bold text-[11px] border border-emerald-500/20">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] border border-emerald-500/20">
                               Từ: {q.targetWord}
                             </span>
                           )}
                           {q.ipa && (
-                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-mono text-[11px] font-bold border border-indigo-500/20">
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-mono text-[11px] font-bold border border-indigo-500/20">
                               IPA: {q.ipa}
                             </span>
                           )}
@@ -3515,8 +3515,8 @@ export default function CreateAssignmentModal({
                                 playingPreviewId === q.id
                                   ? "bg-amber-400 text-slate-950 border-amber-400"
                                   : q.referenceAudioUrl
-                                  ? "bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20"
-                                  : "bg-indigo-500/10 text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20"
+                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 hover:bg-amber-500/20"
+                                  : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20"
                               }`}
                               title="Nghe thử phát âm mẫu"
                             >
@@ -3532,7 +3532,7 @@ export default function CreateAssignmentModal({
                         <button
                           type="button"
                           onClick={() => handleDeleteQuestion(q.id)}
-                          className="text-slate-500 hover:text-rose-400 p-1 transition"
+                          className="text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 p-1 transition"
                           title="Xóa câu này"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -3540,7 +3540,7 @@ export default function CreateAssignmentModal({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                           {assignmentType === "SPEAKING"
                             ? speakingMode === "QA"
                               ? "Câu hỏi phỏng vấn Speaking (Question Prompt in English):"
@@ -3564,7 +3564,7 @@ export default function CreateAssignmentModal({
                               ? "Vd: Sắp xếp các từ sau thành câu hoàn chỉnh: always / to school / by bus / She / goes"
                               : "Nhập nội dung câu hỏi..."
                           }
-                          className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                         />
                       </div>
 
@@ -3572,8 +3572,8 @@ export default function CreateAssignmentModal({
                       {assignmentType === "SPEAKING" && speakingMode === "QA" && (
                         <div className="space-y-3 pt-1">
                           <div>
-                            <label className="block text-[11px] font-semibold text-amber-400 mb-1 flex items-center gap-1.5">
-                              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                            <label className="block text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
                               Ý chính cần trả lời (AI đối chiếu chấm Task Response - Đúng trọng tâm / Lạc đề):
                             </label>
                             <textarea
@@ -3583,12 +3583,12 @@ export default function CreateAssignmentModal({
                                 handleUpdateQuestion(q.id, "correctAnswer", e.target.value)
                               }
                               placeholder="Vd: Nêu ít nhất 2 lợi ích: mở rộng cơ hội việc làm, hiểu biết văn hoá thế giới, rèn luyện tư duy não bộ..."
-                              className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
+                              className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-semibold text-indigo-400 mb-1">
+                            <label className="block text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
                               💡 Gợi ý trả lời & Dàn ý / Từ vựng cho học sinh (Hint & Vocabulary):
                             </label>
                             <textarea
@@ -3598,7 +3598,7 @@ export default function CreateAssignmentModal({
                                 handleUpdateQuestion(q.id, "explanation", e.target.value)
                               }
                               placeholder="Vd: Từ vựng gợi ý: cognitive skills, global perspective, career advancement..."
-                              className="w-full rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5 text-xs text-white outline-none focus:border-indigo-400 placeholder:text-slate-500"
+                              className="w-full rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400 placeholder:text-slate-500"
                             />
                           </div>
                         </div>
@@ -3607,7 +3607,7 @@ export default function CreateAssignmentModal({
                       {/* SPEAKING SHADOWING: Dịch nghĩa & hướng dẫn phát âm */}
                       {assignmentType === "SPEAKING" && speakingMode === "SHADOWING" && (
                         <div className="space-y-2 pt-1">
-                          <label className="block text-[11px] font-semibold text-indigo-300 mb-1">
+                          <label className="block text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mb-1">
                             Dịch nghĩa tiếng Việt & Ghi chú phát âm (Linking / Stress notes):
                           </label>
                           <textarea
@@ -3617,7 +3617,7 @@ export default function CreateAssignmentModal({
                               handleUpdateQuestion(q.id, "explanation", e.target.value)
                             }
                             placeholder="Vd: Dịch nghĩa và lưu ý nối âm..."
-                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-950/30 p-2.5 text-xs text-indigo-200 outline-none focus:border-indigo-400"
+                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/30 p-2.5 text-xs text-indigo-900 dark:text-indigo-200 outline-none focus:border-indigo-400"
                           />
                         </div>
                       )}
@@ -3625,7 +3625,7 @@ export default function CreateAssignmentModal({
                       {/* WRITING: Bài mẫu & Tiêu chí chấm (Chỉ hiển thị cho ESSAY) */}
                       {assignmentType === "WRITING" && q.questionType === "ESSAY" && (
                         <div className="space-y-2 pt-1">
-                          <label className="block text-[11px] font-semibold text-amber-400 mb-1">
+                          <label className="block text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
                             Bài mẫu tham khảo / Dàn ý & Tiêu chí chấm (AI đối chiếu chấm Task Response):
                           </label>
                           <textarea
@@ -3635,14 +3635,14 @@ export default function CreateAssignmentModal({
                               handleUpdateQuestion(q.id, "correctAnswer", e.target.value)
                             }
                             placeholder="Vd: Đoạn văn mẫu, luận điểm 1, luận điểm 2, kết luận..."
-                            className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
+                            className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
                           />
                         </div>
                       )}
 
                       {q.questionType === "MULTIPLE_CHOICE" && (
                         <div className="space-y-2 pt-1">
-                          <label className="block text-[11px] font-semibold text-slate-400">
+                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                             Các lựa chọn đáp án (nhấn nút chữ cái để đánh dấu đáp án đúng):
                           </label>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -3654,7 +3654,7 @@ export default function CreateAssignmentModal({
                                   className={`flex items-center space-x-2 rounded-lg border p-1.5 transition ${
                                     isCorrect
                                       ? "border-emerald-500/50 bg-emerald-500/10"
-                                      : "border-slate-800 bg-slate-900"
+                                      : "border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900"
                                   }`}
                                 >
                                   <button
@@ -3666,7 +3666,7 @@ export default function CreateAssignmentModal({
                                     className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold transition shrink-0 ${
                                       isCorrect
                                         ? "bg-emerald-500 text-slate-950 shadow-sm"
-                                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                                        : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
                                     }`}
                                   >
                                     {String.fromCharCode(65 + oIdx)}
@@ -3687,7 +3687,7 @@ export default function CreateAssignmentModal({
                                         );
                                       }
                                     }}
-                                    className="w-full bg-transparent text-xs text-slate-200 outline-none"
+                                    className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 outline-none"
                                   />
                                 </div>
                               );
@@ -3698,7 +3698,7 @@ export default function CreateAssignmentModal({
 
                       {q.questionType === "FILL_IN_BLANK" && (
                         <div className="space-y-1.5 pt-1">
-                          <label className="block text-[11px] font-semibold text-emerald-400">
+                          <label className="block text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                             {assignmentType === "WRITING"
                               ? "Câu hoàn chỉnh mẫu / Đáp án chính xác (Model Sentence):"
                               : "Đáp án chính xác cần điền (Correct word / phrase):"}
@@ -3714,14 +3714,14 @@ export default function CreateAssignmentModal({
                                 ? "Nhập câu tiếng Anh hoàn chỉnh mẫu (Vd: She always goes to school by bus.)..."
                                 : "Nhập từ hoặc cụm từ đáp án chính xác..."
                             }
-                            className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-white outline-none focus:border-emerald-500 placeholder:text-slate-500"
+                            className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500 placeholder:text-slate-500"
                           />
                         </div>
                       )}
 
                       {q.questionType === "TRUE_FALSE" && (
                         <div className="space-y-1.5 pt-1">
-                          <label className="block text-[11px] font-semibold text-sky-400">
+                          <label className="block text-[11px] font-semibold text-sky-600 dark:text-sky-400">
                             Đáp án đúng (TRUE / FALSE / NOT GIVEN):
                           </label>
                           <div className="flex gap-2">
@@ -3733,7 +3733,7 @@ export default function CreateAssignmentModal({
                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold border transition ${
                                   q.correctAnswer?.toUpperCase() === val
                                     ? "bg-sky-500 text-slate-950 border-sky-400 shadow-sm"
-                                    : "bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700"
+                                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700"
                                 }`}
                               >
                                 {val}
@@ -3744,8 +3744,8 @@ export default function CreateAssignmentModal({
                       )}
 
                       {q.explanation && assignmentType !== "SPEAKING" && (
-                        <div className="rounded-lg bg-indigo-950/40 border border-indigo-500/20 p-2.5 text-xs text-indigo-300">
-                          <span className="font-semibold text-indigo-200">
+                        <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/20 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">
+                          <span className="font-semibold text-indigo-900 dark:text-indigo-200">
                             💡 Gợi ý / Giải thích AI:{" "}
                           </span>
                           {q.explanation}
@@ -3756,8 +3756,8 @@ export default function CreateAssignmentModal({
                       {assignmentType === "VOCABULARY" && (
                         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                              <Volume2 className="h-3.5 w-3.5 text-amber-400" />
+                            <label className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                              <Volume2 className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
                               Audio phát âm từ vựng chuẩn (Native US Voice / Youdao CDN):
                             </label>
                             <button
@@ -3780,7 +3780,7 @@ export default function CreateAssignmentModal({
                               handleUpdateQuestion(q.id, "referenceAudioUrl", e.target.value)
                             }
                             placeholder="Link audio MP3 từ điển (Vd: https://dict.youdao.com/dictvoice?...)"
-                            className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2 text-xs text-amber-200 outline-none focus:border-amber-400 font-mono"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-amber-700 dark:text-amber-200 outline-none focus:border-amber-400 font-mono"
                           />
                         </div>
                       )}
@@ -3796,7 +3796,7 @@ export default function CreateAssignmentModal({
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Tiêu Đề Bài Tập:
                   </label>
                   <input
@@ -3804,19 +3804,19 @@ export default function CreateAssignmentModal({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Nhập tiêu đề bài tập..."
-                    className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Mức Độ Khó:
                   </label>
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                   >
                     <option value="EASY">Dễ (Easy)</option>
                     <option value="MEDIUM">Trung bình (Medium)</option>
@@ -3826,7 +3826,7 @@ export default function CreateAssignmentModal({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Mô Tả / Hướng Dẫn Học Sinh:
                 </label>
                 <textarea
@@ -3834,15 +3834,15 @@ export default function CreateAssignmentModal({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Nhập hướng dẫn làm bài cho học viên..."
-                  className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                 />
               </div>
 
               {/* Lộ Trình Ngày Học (Daily Study Plan) & Deadline */}
-              <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/20 space-y-3">
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-indigo-300 mb-1 flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-indigo-400" /> Gán vào Ngày Học (Daily Study Plan trong Lộ Trình Lớp):
+                  <label className="block text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-1 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Gán vào Ngày Học (Daily Study Plan trong Lộ Trình Lớp):
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <select
@@ -3855,7 +3855,7 @@ export default function CreateAssignmentModal({
                           if (plan) setScheduledDate(plan.scheduledDate);
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                     >
                       {dailyPlans.map((p: any) => (
                         <option key={p.id} value={p.id}>
@@ -3869,7 +3869,7 @@ export default function CreateAssignmentModal({
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
-                      className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                       required
                     />
                   </div>
@@ -3877,20 +3877,20 @@ export default function CreateAssignmentModal({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-amber-400" /> Hạn Nộp (Deadline):
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Hạn Nộp (Deadline):
                     </label>
                     <input
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2 text-xs text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
                       Thời Lượng Dự Kiến (Phút):
                     </label>
                     <input
@@ -3898,7 +3898,7 @@ export default function CreateAssignmentModal({
                       min={5}
                       value={estimatedMinutes}
                       onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
-                      className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2 text-xs text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                     />
                   </div>
                 </div>
@@ -3907,13 +3907,13 @@ export default function CreateAssignmentModal({
               {/* Đối tượng & Trạng thái */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
-                    <Users className="h-3.5 w-3.5 text-sky-400" /> Giao Cho Đối Tượng:
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                    <Users className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" /> Giao Cho Đối Tượng:
                   </label>
                   <select
                     value={targetStudents}
                     onChange={(e) => setTargetStudents(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                   >
                     <option value="ALL">Tất cả học sinh trong lớp</option>
                     <option value="WEAK_STUDENTS">Chỉ học sinh cần cải thiện (Cảnh báo AI)</option>
@@ -3921,13 +3921,13 @@ export default function CreateAssignmentModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Trạng Thái Bài Tập:
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                   >
                     <option value="PUBLISHED">Công khai & Mở bài đúng hạn (PUBLISHED)</option>
                     <option value="DRAFT">Lưu nháp (DRAFT)</option>

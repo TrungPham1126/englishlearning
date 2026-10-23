@@ -1,0 +1,42 @@
+@startuml Hinh_2_8_Sequence_UC_SYS_01_Chuyen_doi_Video_HLS_RabbitMQ
+title Hình 2.8: Biểu đồ tuần tự Tải lên & Chuyển đổi Video HLS qua RabbitMQ (UC-SYS-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+skinparam maxMessageSize 120
+
+actor "Giảng viên" as Teacher
+participant "VideoController" as VideoCtrl
+participant "MySQL DB\n(videos)" as DB
+queue "RabbitMQ\n(queue)" as RabbitMQ
+participant "VideoConsumer" as Consumer
+participant "FFmpeg" as FFmpeg
+participant "Cloudflare R2" as R2
+actor "Admin" as Admin
+
+Teacher -> VideoCtrl: POST /api/v1/videos/upload\n(Tệp video MP4)
+VideoCtrl -> VideoCtrl: Lưu tạm MP4 vào uploads/videos
+VideoCtrl -> DB: INSERT videos (status: DRAFT)
+VideoCtrl -> RabbitMQ: push(VideoTranscodeMessage)
+VideoCtrl --> Teacher: HTTP 202 Accepted {videoId}
+
+RabbitMQ -> Consumer: @RabbitListener nhận message
+Consumer -> DB: UPDATE videos SET status = PROCESSING
+Consumer -> FFmpeg: Chạy lệnh FFmpeg HLS (-hls_time 6)
+FFmpeg -> FFmpeg: Sinh master.m3u8 và các phân đoạn .ts
+FFmpeg --> Consumer: Phân đoạn hoàn tất (Exit code 0)
+
+Consumer -> R2: uploadHlsFolder("hls/{videoId}")
+Consumer -> R2: uploadFile("raw/{videoId}/video.mp4")
+Consumer -> Consumer: Xóa file tạm nội bộ giải phóng ổ cứng
+Consumer -> DB: UPDATE status = PENDING_REVIEW\n(Lưu hls_playlist_url & raw_storage_url)
+Consumer -> Admin: notifyAdmin("Video mới chờ phê duyệt")
+
+Admin -> VideoCtrl: POST /api/v1/videos/{id}/approve
+VideoCtrl -> DB: UPDATE videos SET status = APPROVED
+VideoCtrl --> Admin: HTTP 200 OK (Sẵn sàng phát luồng HLS)
+@enduml

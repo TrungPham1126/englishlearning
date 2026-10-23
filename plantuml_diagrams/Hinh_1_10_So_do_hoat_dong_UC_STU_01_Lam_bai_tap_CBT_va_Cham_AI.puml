@@ -1,0 +1,41 @@
+@startuml Hinh_1_10_So_do_hoat_dong_UC_STU_01_Lam_bai_tap_CBT_va_Cham_AI
+title Hình 1.10: Sơ đồ hoạt động UC Làm bài tập CBT và Chấm bài bằng AI (UC-STU-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Học viên chọn bài tập từ lộ trình ngày (DailyHomeworkPage);
+:Nhấn "Bắt đầu làm bài";
+:Khởi tạo bản ghi assignment_attempts (status: IN_PROGRESS);
+:Hiển thị giao diện khảo thí CBT (trắc nghiệm, điền từ, nói, viết);
+
+repeat
+    :Học viên trả lời câu hỏi hiện tại;
+    if (Câu hỏi yêu cầu phát âm / nói?) then (Có)
+        :Thu âm câu trả lời qua Web Audio API;
+        :Tải audio WAV lên Cloudflare R2;
+        :Lưu audio_response_url vào bảng student_answers;
+    else (Trắc nghiệm / Tự luận)
+        :Lưu text_response vào student_answers;
+    endif
+repeat while (Còn câu hỏi tiếp theo?) is (Còn)
+
+:Học viên nhấn nút "Nộp bài";
+:Hệ thống tự động chấm câu hỏi trắc nghiệm khách quan;
+
+if (Có câu hỏi phát âm Speaking hoặc viết luận Writing?) then (Có)
+    :Kích hoạt chấm điểm tự động qua AI (AiLabService);
+    :Lưu kết quả chi tiết vào bảng ai_evaluations (MySQL);
+endif
+
+:Tính tổng điểm total_score và cập nhật trạng thái COMPLETED;
+:Cập nhật tiến độ ngày vào bảng student_daily_progress;
+:Cập nhật biểu đồ Radar 6 kỹ năng (student_skill_profiles);
+:Hiển thị trang xem lại kết quả chi tiết (Review Mode);
+stop
+@enduml

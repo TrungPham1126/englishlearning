@@ -1,0 +1,46 @@
+@startuml Hinh_1_8_So_do_hoat_dong_UC_AI_01_Luyen_phat_am_Shadowing_Fallback_3_tang
+title Hình 1.8: Sơ đồ hoạt động UC Luyện phát âm Shadowing qua dịch vụ âm học Python và AI (UC-AI-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Học viên thu âm câu mẫu tại Shadowing Studio;
+:Gửi audio WAV lên Backend (/api/v1/ai/speaking/shadowing-evaluate);
+
+partition "Tầng 1: Python Acoustic Engine (Local FastAPI :8000)" {
+    :VAD lọc khoảng lặng và kiểm tra SNR >= 12dB;
+    :Wav2Vec2 CTC căn chỉnh mốc thời gian âm vị IPA;
+    :Praat đo Formant F1/F2 và tính khoảng cách Euclid;
+    :Tính điểm GOP phụ âm và nhịp điệu WPM;
+}
+
+if (Python phản hồi thành công trong <= 1.0s?) then (Có)
+    :EvaluatedBy = "PYTHON_ACOUSTIC_ENGINE";
+else (Không / Lỗi / Timeout)
+    partition "Tầng 2: Fallback Groq Whisper + Gemini 2.5 Flash" {
+        :Groq Whisper STT bóc băng giọng nói (< 800ms);
+        :Gemini 2.5 Flash đối chiếu câu mẫu (Cambridge Phonetics);
+        :Phát hiện từ sai/thiếu và sinh nhận xét tiếng Việt;
+    }
+    if (Gemini phản hồi thành công?) then (Có)
+        :EvaluatedBy = "GEMINI_AI_FALLBACK";
+    else (Lỗi HTTP 429 Quota Exceeded)
+        partition "Tầng 3: Tertiary Fallback Groq LLaMA / OSS 120B" {
+            :Groq Chat Completion JSON mode;
+            :So khớp khoảng cách chuỗi ký tự Levenshtein;
+            :EvaluatedBy = "GROQ_AI_FALLBACK";
+        }
+    endif
+endif
+
+:Lưu bản ghi vào bảng ai_evaluations (MySQL);
+:Cập nhật điểm Speaking vào bảng student_skill_profiles (Radar);
+:Bắn WebSocket STOMP (/topic/student/{userId}/evaluation);
+:Frontend React hiển thị Review Mode (tô màu từ, âm vị IPA, Formant);
+stop
+@enduml

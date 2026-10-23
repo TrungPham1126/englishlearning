@@ -1,0 +1,40 @@
+@startuml Hinh_1_2_Phan_ra_UC_Xac_thuc_va_Quan_ly_tai_khoan_Muc_1
+title Hình 1.2: Sơ đồ phân rã Use Case Xác thực và Quản lý tài khoản - Mức 1
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Người dùng\n(User)" as User
+actor "Quản trị viên\n(Admin)" as Admin
+actor "Redis Cache &\nMySQL DB" as DB <<Service>>
+
+rectangle "Phân hệ Xác thực & Quản lý Tài khoản (UC-AUTH)" {
+    usecase "UC-AUTH-01: Đăng nhập hệ thống\n(Email & Password)" as UC_LOGIN
+    usecase "UC-AUTH-02: Làm mới phiên xác thực\n(Refresh Token)" as UC_REFRESH
+    usecase "UC-AUTH-03: Đăng xuất &\nThu hồi Token" as UC_LOGOUT
+    usecase "UC-AUTH-04: Cập nhật hồ sơ\ncá nhân (Profile)" as UC_PROFILE
+    usecase "UC-AUTH-05: Đổi mật khẩu\n(BCrypt Encoder)" as UC_CHANGE_PW
+    usecase "UC-AUTH-06: Quản lý danh sách\n& Khóa tài khoản" as UC_MANAGE_USERS
+    usecase "Ghi nhận phiên học\n(learning_sessions)" as UC_SESSION
+}
+
+User --> UC_LOGIN
+User --> UC_REFRESH
+User --> UC_LOGOUT
+User --> UC_PROFILE
+User --> UC_CHANGE_PW
+
+Admin --> UC_MANAGE_USERS
+Admin --|> User
+
+UC_LOGIN ..> UC_SESSION : <<include>>
+UC_LOGIN --> DB : Kiểm tra BCrypt & Lưu Token
+UC_REFRESH --> DB : Xác minh refresh_tokens
+UC_LOGOUT --> DB : Revoke token & Hủy Redis session
+@enduml

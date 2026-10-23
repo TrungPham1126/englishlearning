@@ -29,10 +29,27 @@ export const studentApi = {
     phone?: string;
     currentLevel?: string;
     targetCefr?: string;
+    avatarUrl?: string;
   }) => {
     const res = await axiosClient.put("/api/v1/auth/me", data);
     return res.data.data;
   },
+
+  updateAvatar: async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await axiosClient.post("/api/v1/users/avatar", formData);
+    return res.data.data;
+  },
+
+  uploadAvatar: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await axiosClient.post("/api/v1/users/avatar", formData);
+    return res.data.data;
+  },
+
+
 
 
   // ================= 1. LỚP HỌC (CLASSROOMS) =================
@@ -303,6 +320,46 @@ export const studentApi = {
     );
     return res.data.data;
   },
+
+  // 10. THÔNG BÁO HỆ THỐNG & LỚP HỌC (NOTIFICATIONS)
+  getMyNotifications: async (page: number = 0, size: number = 30): Promise<any[]> => {
+    const res: any = await axiosClient.get(`/api/v1/notifications?page=${page}&size=${size}`);
+    const rawData = res.data?.data ?? res.data;
+    const rawList = Array.isArray(rawData)
+      ? rawData
+      : Array.isArray(rawData?.content)
+      ? rawData.content
+      : [];
+
+    const dedupMap = new Map<string, any>();
+    for (const item of rawList) {
+      const text = (item.message || item.content || "").trim();
+      const key = `${(item.title || "").trim()}||${text}`;
+      if (!dedupMap.has(key)) {
+        dedupMap.set(key, item);
+      } else {
+        const existing = dedupMap.get(key)!;
+        if ((!existing.isRead && item.isRead) || (!existing.recipientUserId && item.recipientUserId)) {
+          dedupMap.set(key, { ...item, isRead: Boolean(existing.isRead || item.isRead) });
+        }
+      }
+    }
+    return Array.from(dedupMap.values());
+  },
+
+  markNotificationAsRead: async (id: string): Promise<void> => {
+    try {
+      await axiosClient.put(`/api/v1/notifications/${id}/read`);
+    } catch {
+      await axiosClient.patch(`/api/v1/notifications/${id}/read`);
+    }
+  },
+
+  markAllNotificationsAsRead: async (): Promise<void> => {
+    try {
+      await axiosClient.put("/api/v1/notifications/read-all");
+    } catch {
+      await axiosClient.patch("/api/v1/notifications/read-all");
+    }
+  },
 };
-
-

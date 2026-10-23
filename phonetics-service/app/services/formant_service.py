@@ -33,10 +33,11 @@ class FormantService:
         "ai": "a\u026a", "a\u026a": "a\u026a",
         "ei": "e\u026a", "e\u026a": "e\u026a",
         "oi": "\u0254\u026a", "ɔɪ": "\u0254\u026a", "\u0254\u026a": "\u0254\u026a", "o\u026a": "\u0254\u026a",
-        "ou": "o\u028a", "o\u028a": "o\u028a", "\u0259\u028a": "o\u028a",
-        "i": "i\u02d0", "i\u02d0": "i\u02d0",
-        "u": "u\u02d0", "u\u02d0": "u\u02d0",
-        "\u0251": "\u0251\u02d0", "\u0251\u02d0": "\u0251\u02d0",
+        "ou": "o\u028a", "o\u028a": "o\u028a", "oʊ": "o\u028a", "\u0259\u028a": "o\u028a",
+        "i": "i\u02d0", "i\u02d0": "i\u02d0", "iː": "i\u02d0",
+        "u": "u\u02d0", "u\u02d0": "u\u02d0", "uː": "u\u02d0",
+        "ʊ": "\u028a", "\u028a": "\u028a",
+        "\u0251": "\u0251\u02d0", "\u0251\u02d0": "\u0251\u02d0", "ɑː": "\u0251\u02d0",
         "\u0254": "\u0254\u02d0", "\u0254\u02d0": "\u0254\u02d0", "ɔː": "\u0254\u02d0",
         "\u025c": "\u025c\u02d0", "\u025c\u02d0": "\u025c\u02d0", "ɜː": "\u025c\u02d0",
         "\u025a": "\u025a", "ɚ": "\u025a",
@@ -188,6 +189,39 @@ class FormantService:
                 {"name": "Schwa High/Front assimilated", "mean": [420.0, 2100.0], "std": [100.0, 280.0], "cov": [[10000.0, 0.0], [0.0, 78400.0]]},
                 {"name": "Schwa Low/Open assimilated", "mean": [720.0, 1500.0], "std": [105.0, 260.0], "cov": [[11025.0, 0.0], [0.0, 67600.0]]}
             ]
+        },
+        # ── 14. FLEECE (/iː/ - see, fundamentally, reshaped, methodologies) ─────
+        "i\u02d0": {
+            "MALE": [
+                {"name": "FLEECE Standard [iː]", "mean": [280.0, 2250.0], "std": [55.0, 220.0], "cov": [[3025.0, 0.0], [0.0, 48400.0]]},
+                {"name": "FLEECE Fronted/High [iː] (be, he, see)", "mean": [240.0, 2350.0], "std": [50.0, 220.0], "cov": [[2500.0, 0.0], [0.0, 48400.0]]},
+                {"name": "happY Weak/Coda [i] (fundamentally, reshaped)", "mean": [300.0, 1950.0], "std": [65.0, 260.0], "cov": [[4225.0, 0.0], [0.0, 67600.0]]}
+            ],
+            "FEMALE": [
+                {"name": "FLEECE Standard [iː]", "mean": [330.0, 2750.0], "std": [65.0, 240.0], "cov": [[4225.0, 0.0], [0.0, 57600.0]]},
+                {"name": "FLEECE Fronted/High [iː] (be, he, see)", "mean": [280.0, 2850.0], "std": [60.0, 240.0], "cov": [[3600.0, 0.0], [0.0, 57600.0]]},
+                {"name": "happY Weak/Coda [i] (fundamentally, reshaped)", "mean": [360.0, 2450.0], "std": [75.0, 280.0], "cov": [[5625.0, 0.0], [0.0, 78400.0]]}
+            ]
+        },
+        # ── 15. GOAT (/oʊ/ - no, go, methodologies) ──────────────────────────
+        "o\u028a": {
+            "MALE": [
+                {"name": "GOAT Standard Onset [oʊ]", "mean": [470.0, 1050.0], "std": [70.0, 190.0], "cov": [[4900.0, 0.0], [0.0, 36100.0]]},
+                {"name": "GOAT Reduced/Mid [o] (methodologies)", "mean": [430.0, 1350.0], "std": [85.0, 250.0], "cov": [[7225.0, 0.0], [0.0, 62500.0]]}
+            ],
+            "FEMALE": [
+                {"name": "GOAT Standard Onset [oʊ]", "mean": [540.0, 1200.0], "std": [80.0, 210.0], "cov": [[6400.0, 0.0], [0.0, 44100.0]]},
+                {"name": "GOAT Reduced/Mid [o] (methodologies)", "mean": [500.0, 1500.0], "std": [95.0, 260.0], "cov": [[9025.0, 0.0], [0.0, 67600.0]]}
+            ]
+        },
+        # ── 16. FOOT (/ʊ/ - book, put, good) ─────────────────────────────────
+        "\u028a": {
+            "MALE": [
+                {"name": "FOOT Standard [ʊ]", "mean": [440.0, 1150.0], "std": [65.0, 180.0], "cov": [[4225.0, 0.0], [0.0, 32400.0]]}
+            ],
+            "FEMALE": [
+                {"name": "FOOT Standard [ʊ]", "mean": [470.0, 1350.0], "std": [75.0, 200.0], "cov": [[5625.0, 0.0], [0.0, 40000.0]]}
+            ]
         }
     }
 
@@ -297,19 +331,29 @@ class FormantService:
                 f2_samples = []
                 curr_t = mid_start
                 while curr_t <= mid_end:
-                    v1 = formants.get_value_at_time(1, curr_t)
-                    v2 = formants.get_value_at_time(2, curr_t)
-                    if v1 and not np.isnan(v1) and not np.isinf(v1) and 180.0 <= v1 <= 1450.0:
-                        f1_samples.append(v1)
-                    if v2 and not np.isnan(v2) and not np.isinf(v2) and 450.0 <= v2 <= 3300.0:
-                        f2_samples.append(v2)
+                    try:
+                        v1 = formants.get_value_at_time(1, curr_t)
+                        v2 = formants.get_value_at_time(2, curr_t)
+                        if v1 and not np.isnan(v1) and not np.isinf(v1) and 180.0 <= v1 <= 1450.0:
+                            f1_samples.append(float(v1))
+                        if v2 and not np.isnan(v2) and not np.isinf(v2) and 450.0 <= v2 <= 3300.0:
+                            f2_samples.append(float(v2))
+                    except Exception:
+                        pass
                     curr_t += 0.008
 
-                if not f1_samples or not f2_samples:
-                    return (None, None, default_t_f1, default_t_f2, None, "Không phát hiện thấy cộng hưởng formant ổn định.", "FORMANT_NOT_RELIABLE")
+                valid_f1 = [v for v in f1_samples if v is not None and not np.isnan(v) and not np.isinf(v)]
+                valid_f2 = [v for v in f2_samples if v is not None and not np.isnan(v) and not np.isinf(v)]
 
-                measured_f1 = float(np.median(f1_samples))
-                measured_f2 = float(np.median(f2_samples))
+                if not valid_f1 or not valid_f2:
+                    return (
+                        None, None, default_t_f1, default_t_f2, 45.0,
+                        "Chất lượng âm thanh chưa rõ hoặc lẫn nhiều tiếng ồn. Hãy thử thu âm lại.",
+                        "FORMANT_NOT_RELIABLE"
+                    )
+
+                measured_f1 = float(np.median(valid_f1))
+                measured_f2 = float(np.median(valid_f2))
 
                 best_score = -1.0
                 best_feedback = ""
@@ -347,7 +391,7 @@ class FormantService:
 
             except Exception as ex:
                 logger.warning("Formant analysis failed: %s", ex)
-                return (None, None, default_t_f1, default_t_f2, None, "Không thể phân tích formant cho đoạn âm này.", "FORMANT_NOT_RELIABLE")
+                return (None, None, default_t_f1, default_t_f2, 45.0, "Không thể phân tích formant cho đoạn âm này.", "FORMANT_NOT_RELIABLE")
 
     def _score_mahalanobis(
         self,
@@ -358,8 +402,10 @@ class FormantService:
         ref: dict,
         is_flexible_vowel: bool = False
     ) -> Tuple[float, Optional[str]]:
-        diff_f1_ratio = abs(f1 - t_f1) / max(1.0, t_f1)
-        diff_f2_ratio = abs(f2 - t_f2) / max(1.0, t_f2)
+        t_f1_safe = max(1.0, float(t_f1))
+        t_f2_safe = max(1.0, float(t_f2))
+        diff_f1_ratio = abs(f1 - t_f1_safe) / t_f1_safe
+        diff_f2_ratio = abs(f2 - t_f2_safe) / t_f2_safe
         max_rel_dev = max(diff_f1_ratio, diff_f2_ratio)
 
         x = np.array([f1, f2], dtype=np.float64)
@@ -372,9 +418,12 @@ class FormantService:
             dist_sq = float(diff.T @ inv_cov @ diff)
             dist = np.sqrt(max(0.0, dist_sq))
         except Exception:
-            std1 = ref.get("std", [75.0, 170.0])[0]
-            std2 = ref.get("std", [75.0, 170.0])[1]
-            dist = np.sqrt(((f1 - t_f1) / std1)**2 + ((f2 - t_f2) / std2)**2)
+            std1 = max(1.0, float(ref.get("std", [75.0, 170.0])[0]))
+            std2 = max(1.0, float(ref.get("std", [75.0, 170.0])[1]))
+            dist = np.sqrt(((f1 - t_f1_safe) / std1)**2 + ((f2 - t_f2_safe) / std2)**2)
+
+        if np.isnan(dist) or np.isinf(dist):
+            dist = 1.0
 
         d_tol = 1.95 if is_flexible_vowel else 1.25
         beta = 0.20 if is_flexible_vowel else 0.35
@@ -431,12 +480,15 @@ class FormantService:
 
         try:
             sound = parselmouth.Sound(audio_data, sampling_frequency=float(sample_rate))
+            if sound.get_total_duration() < 0.2:
+                return 20.0
             pitch = sound.to_pitch(time_step=0.01, pitch_floor=75.0, pitch_ceiling=500.0)
             pitch_values = pitch.selected_array['frequency']
-            voiced = pitch_values[pitch_values > 0]
+            voiced = [float(v) for v in pitch_values if v is not None and not np.isnan(v) and not np.isinf(v) and v > 0]
             if len(voiced) < 5:
                 return 20.0
-            return float(np.std(voiced))
+            std_val = float(np.std(voiced))
+            return 25.0 if (np.isnan(std_val) or np.isinf(std_val)) else std_val
         except Exception as ex:
             logger.warning("F0 variation extraction failed: %s", ex)
             return 25.0

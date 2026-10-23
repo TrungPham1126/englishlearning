@@ -227,14 +227,16 @@ export default function TeacherClassDetailPage() {
   // Gửi thông báo lớp
   const handleSendAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!annTitle.trim() || !annContent.trim()) return;
+    const title = annTitle.trim();
+    const content = annContent.trim();
+    if (!title || !content) return;
 
     try {
       setSendingAnn(true);
       setAnnFeedback(null);
       await teacherApi.createClassAnnouncement(classId!, {
-        title: annTitle.trim(),
-        content: annContent.trim(),
+        title,
+        content,
       });
 
       setAnnTitle("");
@@ -250,6 +252,7 @@ export default function TeacherClassDetailPage() {
         type: "error",
         message:
           err.response?.data?.message ||
+          err.message ||
           "Không thể gửi thông báo tới lớp. Vui lòng thử lại sau.",
       });
     } finally {
@@ -286,7 +289,7 @@ export default function TeacherClassDetailPage() {
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "lessons"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-white"
+                  : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <BookOpen className="h-3.5 w-3.5" />
@@ -298,7 +301,7 @@ export default function TeacherClassDetailPage() {
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "announcements"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-white"
+                  : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <Bell className="h-3.5 w-3.5" />
@@ -313,21 +316,21 @@ export default function TeacherClassDetailPage() {
         <div
           className={`flex items-center justify-between rounded-xl border p-4 text-xs font-medium transition ${
             uploadFeedback.type === "success"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-              : "border-red-500/30 bg-red-500/10 text-red-300"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
           }`}
         >
           <div className="flex items-center space-x-2">
             {uploadFeedback.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
             ) : (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400" />
             )}
             <span>{uploadFeedback.message}</span>
           </div>
           <button
             onClick={() => setUploadFeedback(null)}
-            className="text-slate-400 hover:text-white"
+            className="text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
             ✕
           </button>
@@ -336,8 +339,8 @@ export default function TeacherClassDetailPage() {
 
       {/* Loading Overlay khi đang upload */}
       {isUploading && (
-        <div className="flex items-center space-x-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-3.5 text-xs text-indigo-300">
-          <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+        <div className="flex items-center space-x-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-3.5 text-xs text-indigo-700 dark:text-indigo-300">
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
           <span>Hệ thống đang tải lên tệp tin và lưu trữ vào kho học liệu, vui lòng đợi trong giây lát...</span>
         </div>
       )}
@@ -349,11 +352,11 @@ export default function TeacherClassDetailPage() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-white flex items-center">
-                <BookOpen className="h-4 w-4 mr-2 text-indigo-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+                <BookOpen className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
                 Khung Chương Trình & Tài Liệu Bài Giảng
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Các bài giảng chính thống kèm giáo án số, video bài giảng và tài liệu PDF
               </p>
             </div>
@@ -368,7 +371,7 @@ export default function TeacherClassDetailPage() {
 
           {/* Loading State */}
           {lessonsLoading && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-slate-400">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-slate-400">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mb-3" />
               <p className="text-xs">Đang tải danh mục bài giảng của lớp...</p>
             </div>
@@ -376,13 +379,13 @@ export default function TeacherClassDetailPage() {
 
           {/* Error State */}
           {!lessonsLoading && lessonsError && (
-            <div className="flex items-center space-x-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-xs text-red-300">
-              <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+            <div className="flex items-center space-x-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-xs text-red-600 dark:text-red-300">
+              <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />
               <div>
                 <p className="font-semibold">{lessonsError}</p>
                 <button
                   onClick={loadLessons}
-                  className="mt-2 text-indigo-400 underline hover:text-indigo-300"
+                  className="mt-2 text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-500"
                 >
                   Thử tải lại
                 </button>
@@ -392,12 +395,12 @@ export default function TeacherClassDetailPage() {
 
           {/* Empty State */}
           {!lessonsLoading && !lessonsError && lessons.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800/80 text-slate-400 mb-3">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-[#162033] text-slate-400 mb-3">
                 <BookOpen className="h-6 w-6" />
               </div>
-              <h3 className="text-sm font-semibold text-white">Chưa có bài giảng nào</h3>
-              <p className="mt-1 text-xs text-slate-400 max-w-sm">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Chưa có bài giảng nào</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm">
                 Lớp học này chưa có khung bài giảng. Hãy nhấn "Tạo Bài Giảng Mới" để thiết lập nội dung và tải lên tài liệu học tập.
               </p>
               <button
@@ -416,19 +419,19 @@ export default function TeacherClassDetailPage() {
               {lessons.map((lesson, idx) => (
                 <div
                   key={lesson.id}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 hover:border-slate-700 transition shadow-sm space-y-3"
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm space-y-3"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                     <div className="flex items-start sm:items-center space-x-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-xs font-bold text-indigo-400 border border-indigo-500/20">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-xs font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                         #{lesson.orderIndex || idx + 1}
                       </span>
                       <div>
-                        <h3 className="font-semibold text-white text-sm sm:text-base">
+                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base">
                           {lesson.title}
                         </h3>
                         {lesson.objectives && (
-                          <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
                             {lesson.objectives}
                           </p>
                         )}
@@ -437,25 +440,25 @@ export default function TeacherClassDetailPage() {
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       {lesson.hasVideo ? (
-                        <span className="flex items-center rounded-lg bg-emerald-500/10 px-2.5 py-1 text-emerald-400 border border-emerald-500/20">
+                        <span className="flex items-center rounded-lg bg-emerald-500/10 px-2.5 py-1 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                           <Video className="h-3.5 w-3.5 mr-1" />
                           Đã có Video
                         </span>
                       ) : (
-                        <span className="flex items-center rounded-lg bg-slate-800/80 px-2.5 py-1 text-slate-400">
+                        <span className="flex items-center rounded-lg bg-slate-100 dark:bg-[#162033] px-2.5 py-1 text-slate-500 dark:text-slate-400">
                           Chưa có Video
                         </span>
                       )}
 
-                      <span className="flex items-center rounded-lg bg-slate-800/80 px-2.5 py-1 text-slate-300 border border-slate-700/40">
-                        <FileText className="h-3.5 w-3.5 mr-1 text-indigo-400" />
+                      <span className="flex items-center rounded-lg bg-slate-100 dark:bg-[#162033] px-2.5 py-1 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/40">
+                        <FileText className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
                         {lesson.documentsCount || 0} tài liệu
                       </span>
 
                       <button
                         onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
                         title="Xóa bài học này"
-                        className="p-1 text-slate-500 hover:text-red-400 transition ml-1"
+                        className="p-1 text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition ml-1"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -463,22 +466,22 @@ export default function TeacherClassDetailPage() {
                   </div>
 
                   {/* Attachment Actions */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800/80">
                     <button
                       onClick={() => triggerDocUpload(lesson.id)}
                       disabled={isUploading}
-                      className="flex items-center space-x-1.5 rounded-xl border border-slate-800 bg-slate-800/70 px-3.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700/80 transition disabled:opacity-50"
+                      className="flex items-center space-x-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/80 transition disabled:opacity-50"
                     >
-                      <Upload className="h-3.5 w-3.5 text-indigo-400" />
+                      <Upload className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                       <span>Upload Tài Liệu (PDF/Word)</span>
                     </button>
 
                     <button
                       onClick={() => triggerVideoUpload(lesson.id)}
                       disabled={isUploading}
-                      className="flex items-center space-x-1.5 rounded-xl border border-slate-800 bg-slate-800/70 px-3.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700/80 transition disabled:opacity-50"
+                      className="flex items-center space-x-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/80 transition disabled:opacity-50"
                     >
-                      <Video className="h-3.5 w-3.5 text-rose-400" />
+                      <Video className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
                       <span>Upload Video Bài Giảng</span>
                     </button>
                   </div>
@@ -495,13 +498,13 @@ export default function TeacherClassDetailPage() {
       {activeSubTab === "announcements" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5 space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4 shadow-xl">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-4 shadow-sm">
               <div>
-                <h2 className="text-sm font-bold text-white flex items-center">
-                  <Send className="h-4 w-4 mr-2 text-indigo-400" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
+                  <Send className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
                   Phát Thông Báo Mới
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Thông báo sẽ được gửi tức thì đến chuông thông báo cá nhân của toàn bộ học viên lớp.
                 </p>
               </div>
@@ -510,14 +513,14 @@ export default function TeacherClassDetailPage() {
                 <div
                   className={`flex items-center space-x-2 rounded-xl border p-3 text-xs ${
                     annFeedback.type === "success"
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                      : "border-red-500/30 bg-red-500/10 text-red-300"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
                   }`}
                 >
                   {annFeedback.type === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
                   ) : (
-                    <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400" />
                   )}
                   <span>{annFeedback.message}</span>
                 </div>
@@ -525,7 +528,7 @@ export default function TeacherClassDetailPage() {
 
               <form onSubmit={handleSendAnnouncement} className="space-y-3">
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1 font-medium">
+                  <label className="text-xs text-slate-700 dark:text-slate-300 block mb-1 font-medium">
                     Tiêu đề thông báo:
                   </label>
                   <input
@@ -533,12 +536,12 @@ export default function TeacherClassDetailPage() {
                     placeholder="Ví dụ: Lịch nộp bài kiểm tra Speaking Tuần 3"
                     value={annTitle}
                     onChange={(e) => setAnnTitle(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800/60 p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1 font-medium">
+                  <label className="text-xs text-slate-700 dark:text-slate-300 block mb-1 font-medium">
                     Nội dung thông báo:
                   </label>
                   <textarea
@@ -546,7 +549,7 @@ export default function TeacherClassDetailPage() {
                     placeholder="Nhập chi tiết nội dung cần dặn dò, lưu ý hoặc dời lịch..."
                     value={annContent}
                     onChange={(e) => setAnnContent(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800/60 p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
                     required
                   />
                 </div>
@@ -573,29 +576,29 @@ export default function TeacherClassDetailPage() {
 
           <div className="lg:col-span-7 space-y-3.5">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white flex items-center">
-                <Bell className="h-4 w-4 mr-2 text-indigo-400" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
+                <Bell className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
                 Lịch Sử Thông Báo ({announcements.length})
               </h2>
               <button
                 onClick={loadAnnouncements}
-                className="text-xs text-indigo-400 hover:text-indigo-300"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-500"
               >
                 Làm mới
               </button>
             </div>
 
             {annLoading && (
-              <div className="flex items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/40 p-10 text-slate-400">
+              <div className="flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-slate-400">
                 <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mr-2" />
                 <span className="text-xs">Đang tải lịch sử thông báo...</span>
               </div>
             )}
 
             {!annLoading && announcements.length === 0 && (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-10 text-center">
-                <Inbox className="h-8 w-8 text-slate-500 mb-2" />
-                <p className="text-xs text-slate-400">Chưa có thông báo nào được phát trong lớp này.</p>
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center">
+                <Inbox className="h-8 w-8 text-slate-400 mb-2" />
+                <p className="text-xs text-slate-500 dark:text-slate-400">Chưa có thông báo nào được phát trong lớp này.</p>
               </div>
             )}
 
@@ -604,10 +607,10 @@ export default function TeacherClassDetailPage() {
                 {announcements.map((ann, idx) => (
                   <div
                     key={ann.id || idx}
-                    className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 space-y-2 hover:border-slate-700 transition"
+                    className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm"
                   >
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-white text-sm">
+                      <span className="font-semibold text-slate-900 dark:text-white text-sm">
                         {ann.title}
                       </span>
                       <span className="text-slate-500">
@@ -616,7 +619,7 @@ export default function TeacherClassDetailPage() {
                           : "Gần đây"}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                       {ann.message || ann.content}
                     </p>
                   </div>
@@ -632,11 +635,11 @@ export default function TeacherClassDetailPage() {
       {/* ================================================================= */}
       {showLessonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <h2 className="text-base font-bold text-white">Soạn Bài Giảng Mới</h2>
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 shadow-2xl space-y-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Soạn Bài Giảng Mới</h2>
             <form onSubmit={handleCreateLesson} className="space-y-3.5 text-xs">
               <div>
-                <label className="text-slate-300 font-medium block mb-1">
+                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
                   Tên bài giảng:
                 </label>
                 <input
@@ -644,13 +647,13 @@ export default function TeacherClassDetailPage() {
                   placeholder="Ví dụ: Unit 3: Conditionals & Mixed Sentences"
                   value={lessonTitle}
                   onChange={(e) => setLessonTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800/60 p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 font-medium block mb-1">
+                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
                   Mục tiêu bài giảng (Objectives):
                 </label>
                 <textarea
@@ -658,15 +661,15 @@ export default function TeacherClassDetailPage() {
                   placeholder="Mô tả kỹ năng, từ vựng hoặc điểm ngữ pháp trọng tâm..."
                   value={lessonObjectives}
                   onChange={(e) => setLessonObjectives(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800/60 p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowLessonModal(false)}
-                  className="rounded-xl bg-slate-800 px-4 py-2 font-semibold text-slate-300 hover:bg-slate-700 transition"
+                  className="rounded-xl bg-slate-100 dark:bg-[#162033] px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                 >
                   Hủy
                 </button>

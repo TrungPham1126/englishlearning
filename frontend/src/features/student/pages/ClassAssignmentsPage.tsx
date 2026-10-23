@@ -56,20 +56,20 @@ export default function ClassAssignmentsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+      {/* Clean Open Header */}
+      <div className="flex items-center gap-3.5 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <button
           onClick={() => navigate("/student/courses")}
-          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50 cursor-pointer"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-sm cursor-pointer"
         >
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-lg font-bold text-slate-800">
+          <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Danh Sách Bài Tập
           </h1>
-          <p className="text-xs text-slate-500">
-            Hoàn thành các bài tập để hệ thống AI phân tích và cập nhật biểu đồ
-            năng lực
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Hoàn thành các bài tập để hệ thống AI phân tích và cập nhật biểu đồ năng lực
           </p>
         </div>
       </div>

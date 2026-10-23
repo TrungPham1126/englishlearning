@@ -9,5 +9,7 @@ public class UpdateProfileRequest {
     private String phone;
     private String targetCefr;
     private String currentLevel;
+    private String avatarUrl;
 }
+
 

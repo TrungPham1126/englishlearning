@@ -1,0 +1,46 @@
+@startuml Hinh_1_11_So_do_hoat_dong_UC_SYS_01_Chuyen_doi_Video_HLS_bat_dong_bo
+title Hình 1.11: Sơ đồ hoạt động UC Chuyển đổi Video sang luồng HLS bất đồng bộ (UC-SYS-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Giảng viên tải tệp Video MP4 bài giảng lên hệ thống;
+:Spring Boot lưu tệp tạm thời vào ổ đĩa (uploads/videos);
+:Tạo bản ghi trong bảng videos (status: DRAFT, MySQL);
+:Đẩy VideoTranscodeMessage vào hàng đợi RabbitMQ;
+:Trả về mã HTTP 202 Accepted cho Giảng viên;
+
+partition "RabbitMQ Consumer (Bất đồng bộ)" {
+    :VideoTranscodeConsumer lắng nghe và nhận thông điệp;
+    :Cập nhật trạng thái video: PROCESSING;
+    :Thực thi tiến trình FFmpeg phân mảnh HLS;
+    :Sinh tệp master.m3u8 và các phân đoạn segment_%03d.ts;
+    
+    if (FFmpeg nén và phân mảnh thành công?) then (Thành công)
+        :Tải toàn bộ thư mục HLS lên Cloudflare R2 (hls/{id}/);
+        :Tải video gốc MP4 lên Cloudflare R2 (raw/{id}/);
+        :Xóa sạch các tệp tạm trên ổ cứng nội bộ;
+        :Cập nhật hls_playlist_url và raw_storage_url vào MySQL;
+        :Đổi trạng thái video: PENDING_REVIEW;
+        :Gửi thông báo kiểm duyệt tới Quản trị viên (Admin);
+    else (Lỗi FFmpeg)
+        :Đổi trạng thái video: REJECTED kèm lý do lỗi;
+        :Gửi thông báo lỗi cho Giảng viên;
+        stop
+    endif
+}
+
+:Quản trị viên kiểm duyệt nội dung video;
+if (Video đạt yêu cầu sư phạm?) then (Phê duyệt)
+    :Cập nhật trạng thái: APPROVED;
+    :Video sẵn sàng phát luồng HLS đa băng thông cho học viên;
+else (Từ chối)
+    :Cập nhật trạng thái: REJECTED kèm rejection_reason;
+endif
+stop
+@enduml

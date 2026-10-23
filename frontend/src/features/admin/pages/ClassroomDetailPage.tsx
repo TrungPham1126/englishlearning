@@ -26,6 +26,7 @@ import {
   Calendar,
   Check,
   UserX,
+  School,
 } from "lucide-react";
 import VideoPlayer from "@/features/student/components/VideoPlayer";
 
@@ -279,29 +280,35 @@ export default function ClassroomDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in zoom-in-95 duration-200">
-      {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      {/* Clean Open Header */}
+      <div className="pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent space-y-4">
         <button
           onClick={() => navigate("/admin/classrooms")}
-          className="flex items-center gap-1.5 text-slate-500 hover:text-indigo-600 text-sm font-bold mb-4 transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 text-xs font-bold transition cursor-pointer"
         >
-          <ArrowLeft size={16} /> Quay lại danh sách
+          <ArrowLeft size={14} /> Quay lại danh sách
         </button>
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+              <School size={14} />
+              <span>Chi Tiết Lớp Học</span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               {classroom.name}
             </h1>
-            <div className="flex items-center gap-4 mt-2 text-sm font-semibold text-slate-600">
-              <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg uppercase">
-                Level: {classroom.level}
-              </span>
-              <span>
-                Sĩ số: {classroom.currentStudentsCount} /{" "}
-                {classroom.maxStudents || "∞"}
-              </span>
-              <span>GV: {classroom.teacherName || "Chưa phân công"}</span>
-            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800 uppercase">
+              Level: {classroom.level}
+            </span>
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 shadow-sm">
+              Sĩ số: {classroom.currentStudentsCount} / {classroom.maxStudents || "∞"}
+            </span>
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 shadow-sm">
+              GV: {classroom.teacherName || "Chưa phân công"}
+            </span>
           </div>
         </div>
       </div>

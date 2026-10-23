@@ -1,0 +1,50 @@
+@startuml Hinh_1_7_So_do_hoat_dong_UC_AUTH_01_Dang_nhap_va_Lam_moi_phien
+title Hình 1.7: Sơ đồ hoạt động của UC Đăng nhập và Làm mới phiên xác thực (UC-AUTH-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Người dùng nhập Email và Mật khẩu tại LoginPage;
+:Client gửi yêu cầu POST /api/v1/auth/login;
+
+if (Thông tin tài khoản chính xác?) then (Đúng)
+    :Spring Security xác thực thông tin (BCrypt Password);
+    :Khởi tạo Access Token (30m) & Refresh Token (7d);
+    :Lưu Refresh Token vào bảng refresh_tokens (MySQL);
+    :Ghi nhận phiên đăng nhập vào bảng learning_sessions;
+    :Trả về AuthResponse kèm Access Token và User Info;
+    :React Zustand Store lưu trạng thái và localStorage;
+else (Sai thông tin)
+    :Trả về mã lỗi HTTP 401 Unauthorized;
+    :Hiển thị thông báo đăng nhập thất bại trên giao diện;
+    stop
+endif
+
+repeat
+    :Client gửi yêu cầu API kèm Access Token (Bearer Token);
+    if (Access Token còn hạn?) then (Còn hạn)
+        :Xử lý yêu cầu nghiệp vụ và trả kết quả HTTP 200;
+    else (Hết hạn - Mã 401)
+        :Axios Interceptor chặn mã 401;
+        :Gửi Refresh Token lên POST /api/v1/auth/refresh-token;
+        if (Refresh Token hợp lệ và revoked = false?) then (Hợp lệ)
+            :Tạo mới Access Token và cập nhật Zustand store;
+            :Gửi lại yêu cầu API ban đầu tự động;
+        else (Không hợp lệ / Hết hạn)
+            :Thu hồi Refresh Token trong MySQL;
+            :Xóa sạch localStorage và Zustand state;
+            :Chuyển hướng người dùng về trang /login;
+            stop
+        endif
+    endif
+repeat while (Người dùng tiếp tục phiên làm việc?) is (Tiếp tục)
+
+:Người dùng nhấn Đăng xuất (Logout);
+:Thu hồi Refresh Token và xóa cache Redis;
+stop
+@enduml

@@ -1,0 +1,1565 @@
+{
+  "ai_evaluations": {
+    "cols": [
+      {
+        "name": "coherence_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "fluency_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "grammar_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "overall_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "pronunciation_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "tokens_used",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "vocabulary_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "estimated_cefr",
+        "type": "varchar(10) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "student_answer_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "corrected_text",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "mistakes_json",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "stt_transcript",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "suggestions_json",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "eval_type",
+        "type": "enum('SPEAKING','WRITING','COMPREHENSIVE_PROFILE') NOT NULL"
+      },
+      {
+        "name": "evaluation_engine",
+        "type": "varchar(50) DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_answer_id",
+        "ref_table": "student_answers",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "ai_generated_exercises": {
+    "cols": [
+      {
+        "name": "question_count",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "target_cefr",
+        "type": "varchar(10) NOT NULL"
+      },
+      {
+        "name": "exercise_type",
+        "type": "varchar(30) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) DEFAULT NULL"
+      },
+      {
+        "name": "teacher_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "raw_response_json",
+        "type": "text NOT NULL"
+      },
+      {
+        "name": "status",
+        "type": "enum('PENDING_GENERATION','READY_FOR_REVIEW','PUBLISHED','REJECTED') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      },
+      {
+        "col": "teacher_id",
+        "ref_table": "teachers",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "assignment_attempts": {
+    "cols": [
+      {
+        "name": "attempt_number",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "duration_seconds",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "total_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "started_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "submitted_at",
+        "type": "datetime(6) DEFAULT NULL"
+      },
+      {
+        "name": "assignment_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "teacher_feedback",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "status",
+        "type": "enum('IN_PROGRESS','SUBMITTED','GRADING','COMPLETED','TIMED_OUT') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      },
+      {
+        "col": "assignment_id",
+        "ref_table": "assignments",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "assignment_questions": {
+    "cols": [
+      {
+        "name": "order_index",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "points",
+        "type": "double NOT NULL"
+      },
+      {
+        "name": "assignment_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "media_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "correct_answer",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "explanation",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "prompt_text",
+        "type": "text NOT NULL"
+      },
+      {
+        "name": "transcript",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "question_type",
+        "type": "enum('MULTIPLE_CHOICE','TRUE_FALSE','FILL_IN_BLANK','MATCHING','AUDIO_RESPONSE','ESSAY') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "assignment_id",
+        "ref_table": "assignments",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "assignments": {
+    "cols": [
+      {
+        "name": "max_attempts",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "pass_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "time_limit_minutes",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "due_date",
+        "type": "datetime(6) DEFAULT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "class_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) DEFAULT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(200) NOT NULL"
+      },
+      {
+        "name": "description",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "skill_type",
+        "type": "enum('LISTENING','SPEAKING','READING','WRITING','VOCABULARY','GRAMMAR') NOT NULL"
+      },
+      {
+        "name": "audio_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "listening_script",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "class_id",
+        "ref_table": "classes",
+        "ref_col": "id"
+      },
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "audit_logs": {
+    "cols": [
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "user_id",
+        "type": "varchar(36) DEFAULT NULL"
+      },
+      {
+        "name": "ip_address",
+        "type": "varchar(45) DEFAULT NULL"
+      },
+      {
+        "name": "action",
+        "type": "varchar(100) NOT NULL"
+      },
+      {
+        "name": "entity_name",
+        "type": "varchar(100) DEFAULT NULL"
+      },
+      {
+        "name": "entity_id",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "metadata_json",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "user_id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "class_students": {
+    "cols": [
+      {
+        "name": "is_active",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "enrolled_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "class_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      },
+      {
+        "col": "class_id",
+        "ref_table": "classes",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "classes": {
+    "cols": [
+      {
+        "name": "end_date",
+        "type": "date DEFAULT NULL"
+      },
+      {
+        "name": "max_students",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "start_date",
+        "type": "date DEFAULT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "teacher_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "name",
+        "type": "varchar(150) NOT NULL"
+      },
+      {
+        "name": "description",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "level",
+        "type": "enum('BEGINNER','A1','A2','B1','B2','C1','C2','IELTS_PREP','TOEIC_PREP') NOT NULL"
+      },
+      {
+        "name": "status",
+        "type": "enum('PLANNING','OPEN','IN_PROGRESS','COMPLETED','CANCELLED') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "teacher_id",
+        "ref_table": "teachers",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "daily_plan_items": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "item_type",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "order_index",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "section_name",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "assignment_id",
+        "type": "varchar(36) DEFAULT NULL"
+      },
+      {
+        "name": "daily_plan_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "assignment_id",
+        "ref_table": "assignments",
+        "ref_col": "id"
+      },
+      {
+        "col": "daily_plan_id",
+        "ref_table": "daily_study_plans",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "daily_study_plans": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "day_number",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "estimated_minutes",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "is_unlocked",
+        "type": "bit(1) DEFAULT NULL"
+      },
+      {
+        "name": "scheduled_date",
+        "type": "date NOT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "classroom_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "classroom_id",
+        "ref_table": "classes",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "exercise_audios": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "assignment_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "content_hash",
+        "type": "varchar(64) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "duration_ms",
+        "type": "bigint(20) DEFAULT NULL"
+      },
+      {
+        "name": "error_message",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "exercise_type",
+        "type": "enum('SHADOWING','LISTENING') NOT NULL"
+      },
+      {
+        "name": "generated_by",
+        "type": "enum('SYSTEM','TEACHER','STUDENT_REPAIR') NOT NULL"
+      },
+      {
+        "name": "is_active",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "question_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "segments",
+        "type": "longtext DEFAULT NULL"
+      },
+      {
+        "name": "status",
+        "type": "enum('PENDING','PROCESSING','READY','FAILED','BROKEN') NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "version",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "voice_config",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": []
+  },
+  "global_resources": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "name",
+        "type": "varchar(255) NOT NULL"
+      },
+      {
+        "name": "resource_type",
+        "type": "enum('DOC','VIDEO','EXAM') NOT NULL"
+      },
+      {
+        "name": "size_bytes",
+        "type": "bigint(20) DEFAULT NULL"
+      },
+      {
+        "name": "storage_url",
+        "type": "varchar(1000) NOT NULL"
+      },
+      {
+        "name": "used_count",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "uploaded_by",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "uploaded_by",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "grammar_topics": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(150) NOT NULL"
+      },
+      {
+        "name": "examples",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "formula",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "rule_summary",
+        "type": "text NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "learning_sessions": {
+    "cols": [
+      {
+        "name": "session_duration_seconds",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "login_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "logout_at",
+        "type": "datetime(6) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "user_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "ip_address",
+        "type": "varchar(45) DEFAULT NULL"
+      },
+      {
+        "name": "user_agent",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "user_id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "lesson_documents": {
+    "cols": [
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "file_size_bytes",
+        "type": "bigint(20) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "storage_url",
+        "type": "varchar(1000) NOT NULL"
+      },
+      {
+        "name": "file_name",
+        "type": "varchar(255) NOT NULL"
+      },
+      {
+        "name": "file_type",
+        "type": "enum('PDF','DOCX','PPTX','IMAGE','AUDIO') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "lessons": {
+    "cols": [
+      {
+        "name": "order_index",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "class_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(200) NOT NULL"
+      },
+      {
+        "name": "content",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "objectives",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "class_id",
+        "ref_table": "classes",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "notifications": {
+    "cols": [
+      {
+        "name": "is_read",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "recipient_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "title",
+        "type": "varchar(200) NOT NULL"
+      },
+      {
+        "name": "target_url",
+        "type": "varchar(500) DEFAULT NULL"
+      },
+      {
+        "name": "message",
+        "type": "text NOT NULL"
+      },
+      {
+        "name": "type",
+        "type": "enum('NEW_ASSIGNMENT','DEADLINE_REMINDER','VIDEO_APPROVED','VIDEO_REJECTED','NEW_GRADE','ANNOUNCEMENT','SYSTEM_ALERT') NOT NULL"
+      },
+      {
+        "name": "classroom_id",
+        "type": "varchar(36) DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "recipient_id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "question_options": {
+    "cols": [
+      {
+        "name": "is_correct",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "option_label",
+        "type": "varchar(10) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "question_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "option_text",
+        "type": "text NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "question_id",
+        "ref_table": "assignment_questions",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "refresh_tokens": {
+    "cols": [
+      {
+        "name": "revoked",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "expiry_date",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "user_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "token",
+        "type": "varchar(500) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "user_id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "roles": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "int(11) NOT NULL AUTO_INCREMENT"
+      },
+      {
+        "name": "description",
+        "type": "varchar(255) DEFAULT NULL"
+      },
+      {
+        "name": "name",
+        "type": "enum('ROLE_ADMIN','ROLE_TEACHER','ROLE_STUDENT') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": []
+  },
+  "student_ai_quotas": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "daily_limit",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "is_blocked",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "last_reset_date",
+        "type": "date NOT NULL"
+      },
+      {
+        "name": "used_today",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "completion_tokens_used",
+        "type": "bigint(20) NOT NULL"
+      },
+      {
+        "name": "estimated_cost_usd",
+        "type": "double NOT NULL"
+      },
+      {
+        "name": "prompt_tokens_used",
+        "type": "bigint(20) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "student_answers": {
+    "cols": [
+      {
+        "name": "earned_points",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "is_correct",
+        "type": "bit(1) DEFAULT NULL"
+      },
+      {
+        "name": "attempt_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "question_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "audio_response_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "eval_feedback",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "text_response",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "attempt_id",
+        "ref_table": "assignment_attempts",
+        "ref_col": "id"
+      },
+      {
+        "col": "question_id",
+        "ref_table": "assignment_questions",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "student_daily_progress": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "completed_at",
+        "type": "datetime(6) DEFAULT NULL"
+      },
+      {
+        "name": "completed_items_count",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "is_completed",
+        "type": "bit(1) DEFAULT NULL"
+      },
+      {
+        "name": "total_items_count",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "daily_plan_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      },
+      {
+        "col": "daily_plan_id",
+        "ref_table": "daily_study_plans",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "student_skill_profiles": {
+    "cols": [
+      {
+        "name": "grammar_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "listening_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "reading_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "speaking_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "vocabulary_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "writing_score",
+        "type": "double DEFAULT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "ai_recommended_path",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "id",
+        "ref_table": "students",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "student_vocabulary_progress": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "ease_factor",
+        "type": "double NOT NULL"
+      },
+      {
+        "name": "interval_days",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "next_review_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "repetitions",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "stage",
+        "type": "enum('NEW','LEARNING','REVIEWING','MASTERED') NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "vocabulary_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      },
+      {
+        "col": "vocabulary_id",
+        "ref_table": "vocabulary_items",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "students": {
+    "cols": [
+      {
+        "name": "current_level",
+        "type": "varchar(10) DEFAULT NULL"
+      },
+      {
+        "name": "target_cefr",
+        "type": "varchar(10) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "teachers": {
+    "cols": [
+      {
+        "name": "years_of_experience",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "bio",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "specialization",
+        "type": "varchar(255) DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "user_roles": {
+    "cols": [
+      {
+        "name": "role_id",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "user_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "role_id",
+      "user_id"
+    ],
+    "fks": [
+      {
+        "col": "role_id",
+        "ref_table": "roles",
+        "ref_col": "id"
+      },
+      {
+        "col": "user_id",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "users": {
+    "cols": [
+      {
+        "name": "is_active",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "phone",
+        "type": "varchar(20) DEFAULT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "first_name",
+        "type": "varchar(100) DEFAULT NULL"
+      },
+      {
+        "name": "last_name",
+        "type": "varchar(100) DEFAULT NULL"
+      },
+      {
+        "name": "avatar_url",
+        "type": "varchar(500) DEFAULT NULL"
+      },
+      {
+        "name": "email",
+        "type": "varchar(255) NOT NULL"
+      },
+      {
+        "name": "password",
+        "type": "varchar(255) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": []
+  },
+  "video_watch_histories": {
+    "cols": [
+      {
+        "name": "completion_percentage",
+        "type": "float NOT NULL"
+      },
+      {
+        "name": "is_completed",
+        "type": "bit(1) NOT NULL"
+      },
+      {
+        "name": "watched_seconds",
+        "type": "int(11) NOT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "student_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "video_id",
+        "type": "varchar(36) NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "video_id",
+        "ref_table": "videos",
+        "ref_col": "id"
+      },
+      {
+        "col": "student_id",
+        "ref_table": "students",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "videos": {
+    "cols": [
+      {
+        "name": "duration_seconds",
+        "type": "int(11) DEFAULT NULL"
+      },
+      {
+        "name": "created_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "size_bytes",
+        "type": "bigint(20) DEFAULT NULL"
+      },
+      {
+        "name": "updated_at",
+        "type": "datetime(6) NOT NULL"
+      },
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "reviewed_by",
+        "type": "varchar(36) DEFAULT NULL"
+      },
+      {
+        "name": "uploaded_by",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "hls_playlist_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "raw_storage_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "thumbnail_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "original_file_name",
+        "type": "varchar(255) NOT NULL"
+      },
+      {
+        "name": "rejection_reason",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "status",
+        "type": "enum('DRAFT','PROCESSING','PENDING_REVIEW','APPROVED','REJECTED','ARCHIVED') NOT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      },
+      {
+        "col": "reviewed_by",
+        "ref_table": "users",
+        "ref_col": "id"
+      },
+      {
+        "col": "uploaded_by",
+        "ref_table": "users",
+        "ref_col": "id"
+      }
+    ]
+  },
+  "vocabulary_items": {
+    "cols": [
+      {
+        "name": "id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "lesson_id",
+        "type": "varchar(36) NOT NULL"
+      },
+      {
+        "name": "part_of_speech",
+        "type": "varchar(50) DEFAULT NULL"
+      },
+      {
+        "name": "ipa",
+        "type": "varchar(100) DEFAULT NULL"
+      },
+      {
+        "name": "word",
+        "type": "varchar(100) NOT NULL"
+      },
+      {
+        "name": "audio_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "image_url",
+        "type": "varchar(1000) DEFAULT NULL"
+      },
+      {
+        "name": "antonyms",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "example_sentence",
+        "type": "text DEFAULT NULL"
+      },
+      {
+        "name": "meaning",
+        "type": "text NOT NULL"
+      },
+      {
+        "name": "synonyms",
+        "type": "text DEFAULT NULL"
+      }
+    ],
+    "pks": [
+      "id"
+    ],
+    "fks": [
+      {
+        "col": "lesson_id",
+        "ref_table": "lessons",
+        "ref_col": "id"
+      }
+    ]
+  }
+}

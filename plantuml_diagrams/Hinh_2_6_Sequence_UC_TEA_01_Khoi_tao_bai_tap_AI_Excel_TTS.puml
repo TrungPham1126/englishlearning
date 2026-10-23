@@ -1,0 +1,48 @@
+@startuml Hinh_2_6_Sequence_UC_TEA_01_Khoi_tao_bai_tap_AI_Excel_TTS
+title Hình 2.6: Biểu đồ tuần tự Khởi tạo bài tập thông minh AI / Excel / TTS (UC-TEA-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+skinparam maxMessageSize 110
+
+actor "Giảng viên" as Teacher
+participant "React Frontend\n(Modal Tạo Đề)" as FE
+participant "AssignmentCtrl" as AsgCtrl
+participant "AiLabService" as AiSvc
+participant "Kokoro TTS\n(:8000)" as TTS
+participant "Cloudflare R2" as R2
+participant "MySQL DB\n(assignments)" as DB
+
+alt Lựa chọn 1: Nạp bài tập từ file Excel
+    Teacher -> FE: Chọn tệp Excel (.xlsx), nhấn Tải lên
+    FE -> FE: Thư viện SheetJS parse câu hỏi, đáp án, điểm
+else Lựa chọn 2: Sinh câu hỏi tự động bằng Gemini AI
+    Teacher -> FE: Chọn CEFR, chủ đề -> Nhấn "Tạo bằng AI"
+    FE -> AsgCtrl: POST /api/v1/ai/exercise/generate-quiz
+    AsgCtrl -> AiSvc: generateExercise(level, topic, count)
+    AiSvc -> AiSvc: Gọi Gemini 2.5 Flash sinh JSON theo CEFR
+    AiSvc -> DB: INSERT ai_generated_exercises (READY_FOR_REVIEW)
+    AiSvc --> AsgCtrl: Trả về danh sách câu hỏi AI
+    AsgCtrl --> FE: Hiển thị danh sách câu hỏi lên form
+end
+
+Teacher -> FE: Xem trước & chọn "Sinh giọng đọc TTS"
+FE -> AsgCtrl: POST /api/v1/assignments/synthesize-audio
+AsgCtrl -> TTS: POST /tts (Kokoro-82M, af_heart)
+TTS --> AsgCtrl: Luồng âm thanh WAV 24kHz
+AsgCtrl -> R2: uploadFile("audio/exercises/...")
+R2 --> AsgCtrl: Trả về public audioUrl
+AsgCtrl --> FE: Cập nhật audioUrl vào form
+
+Teacher -> FE: Nhấn "Lưu và Xuất bản bài tập"
+FE -> AsgCtrl: POST /api/v1/teacher/assignments
+AsgCtrl -> DB: INSERT assignments, questions, options
+AsgCtrl -> DB: INSERT exercise_audios (url, duration)
+AsgCtrl -> DB: INSERT daily_plan_items (daily_plan_id)
+AsgCtrl --> FE: HTTP 201 Created
+FE --> Teacher: Thông báo tạo bài tập thành công
+@enduml

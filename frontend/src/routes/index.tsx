@@ -52,12 +52,12 @@ const RedirectToDailyPlan = () => {
 };
 
 const routes: RouteObject[] = [
-  // 1. Phân hệ Public (Đăng nhập, Đăng ký)
+  // 1. Phân hệ Public (Đăng nhập, Đăng ký đã đóng chuyển hướng về Đăng nhập)
   {
     element: <PublicLayout />,
     children: [
       { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
+      { path: "/register", element: <Navigate replace to="/login" /> },
     ],
   },
 

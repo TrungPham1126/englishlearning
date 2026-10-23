@@ -1,0 +1,53 @@
+@startuml Hinh_2_7_Sequence_UC_STU_01_Lam_bai_tap_CBT_va_Cham_AI
+title Hình 2.7: Biểu đồ tuần tự Làm bài tập CBT và Chấm bài bằng AI (UC-STU-01)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+skinparam maxMessageSize 110
+
+actor "Học viên" as Student
+participant "React Frontend\n(AssignmentTake)" as FE
+participant "SubmissionCtrl" as SubCtrl
+participant "SubmissionService" as SubSvc
+participant "AiLabService" as AiLab
+participant "Cloudflare R2" as R2
+participant "MySQL DB\n(attempts, answers)" as DB
+
+Student -> FE: Chọn bài tập từ lộ trình ngày, nhấn "Bắt đầu"
+FE -> SubCtrl: POST /api/v1/student/assignments/{id}/take
+SubCtrl -> SubSvc: startAttempt(studentId, assignmentId)
+SubSvc -> DB: INSERT INTO assignment_attempts\n(status: IN_PROGRESS)
+SubSvc --> FE: Trả về cấu trúc đề thi CBT
+
+loop Từng câu hỏi làm bài
+    Student -> FE: Trả lời trắc nghiệm / thu âm bài nói
+    opt Nếu là câu hỏi phát âm Speaking
+        FE -> SubCtrl: POST upload-audio (Multipart WAV)
+        SubCtrl -> R2: uploadFile("audio/responses/...")
+        R2 --> SubCtrl: Trả về audioResponseUrl
+        SubCtrl -> DB: UPDATE student_answers\nSET audio_response_url = ...
+    end
+end
+
+Student -> FE: Nhấn "Nộp bài thi"
+FE -> SubCtrl: POST /assignments/{attemptId}/submit
+SubCtrl -> SubSvc: submitAttempt(studentId, attemptId, req)
+SubSvc -> SubSvc: Chấm điểm tự động câu trắc nghiệm
+
+opt Có câu hỏi tự luận Writing hoặc bài nói Speaking
+    SubSvc -> AiLab: evaluateSpeakingOrWriting(answerData)
+    AiLab -> DB: INSERT INTO ai_evaluations\n(scores, mistakes_json, cefr)
+    AiLab --> SubSvc: Trả về kết quả đánh giá AI
+end
+
+SubSvc -> DB: UPDATE assignment_attempts\nSET total_score = ..., status = COMPLETED
+SubSvc -> DB: UPDATE student_daily_progress\nSET completed_items_count = ...
+SubSvc -> DB: UPDATE student_skill_profiles\nSET scores = ... (Radar Chart)
+SubSvc --> SubCtrl: Trả về kết quả tổng kết lượt làm bài
+SubCtrl --> FE: HTTP 200 OK {totalScore, reviewData}
+FE --> Student: Hiển thị điểm số và Review Mode chi tiết
+@enduml

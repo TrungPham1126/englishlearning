@@ -1,0 +1,37 @@
+@startuml Hinh_1_6_Phan_ra_UC_Quan_tri_he_thong_Quota_va_Audit_Logs_Muc_1
+title Hình 1.6: Phân rã UC Quản trị hệ thống, Giám sát AI Quota & Nhật ký (Admin) - Mức 1
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Quản trị viên\n(Admin)" as Admin
+actor "MySQL Database" as DB <<Service>>
+
+rectangle "Phân hệ Quản trị Hệ thống & Giám sát (UC-ADM)" {
+    usecase "UC-ADM-01: Quản lý người dùng\n& Phân quyền (user_roles)" as UC_USERS
+    usecase "UC-ADM-02: Giám sát hạn ngạch Token\n& Chi phí AI (student_ai_quotas)" as UC_QUOTA
+    usecase "UC-ADM-03: Kiểm duyệt & Phê duyệt\nVideo bài giảng HLS" as UC_VIDEO_MOD
+    usecase "UC-ADM-04: Truy vết nhật ký hệ thống\nqua AOP (audit_logs)" as UC_AUDIT
+    usecase "UC-ADM-05: Quản trị kho tài nguyên dùng chung\n(global_resources)" as UC_RESOURCE
+    usecase "UC-ADM-06: Phát thông báo toàn hệ thống\n(System Broadcast)" as UC_BROADCAST
+}
+
+Admin --> UC_USERS
+Admin --> UC_QUOTA
+Admin --> UC_VIDEO_MOD
+Admin --> UC_AUDIT
+Admin --> UC_RESOURCE
+Admin --> UC_BROADCAST
+
+UC_USERS --> DB : Cập nhật users & user_roles
+UC_QUOTA --> DB : Điều chỉnh daily_limit & is_blocked
+UC_VIDEO_MOD --> DB : Cập nhật videos (APPROVED/REJECTED)
+UC_AUDIT --> DB : Ghi nhận audit_logs
+UC_BROADCAST --> DB : Lưu notifications & đẩy WebSocket
+@enduml

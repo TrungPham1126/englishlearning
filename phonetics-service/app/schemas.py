@@ -9,12 +9,15 @@ from pydantic.alias_generators import to_camel
 # ==============================================================================
 class EvaluationStatus(str, Enum):
     SUCCESS = "SUCCESS"
+    COMPLETED = "COMPLETED"
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
     INSUFFICIENT_AUDIO = "INSUFFICIENT_AUDIO"
     ALIGNMENT_FAILED = "ALIGNMENT_FAILED"
     ALIGNMENT_LOW_CONFIDENCE = "ALIGNMENT_LOW_CONFIDENCE"
     AUDIO_QUALITY_TOO_LOW = "AUDIO_QUALITY_TOO_LOW"
     PARTIAL_EVALUATION = "PARTIAL_EVALUATION"
+    REJECTED_MISMATCH = "REJECTED_MISMATCH"
+    WRONG_WORD = "WRONG_WORD"
 
 
 
@@ -99,6 +102,8 @@ class SpokenWordStatus(str, Enum):
     SPOKEN = "SPOKEN"
     MISSING = "MISSING"
     PARTIAL = "PARTIAL"
+    WRONG_WORD = "WRONG_WORD"
+    MISMATCH = "MISMATCH"
 
 
 class WordSchema(CamelModel):

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { studentApi } from "@/features/student/api/studentApi";
 import { axiosClient } from "@/lib/axiosClient";
+import { resolveAvatarUrl } from "@/lib/avatar";
 import type { StudentSkillProfile } from "@/features/student/types";
 import {
   ChevronDown,
@@ -64,10 +65,19 @@ export default function StudentProfileMenu() {
     }
   };
 
-  const displayName = user ? `${user.lastName} ${user.firstName}` : "Học viên";
-  const avatarFallback = user?.firstName
-    ? user.firstName.charAt(0).toUpperCase()
-    : "U";
+  const displayName = user
+    ? (user as any).fullName || `${user.lastName || ""} ${user.firstName || ""}`.trim() || "Học viên"
+    : "Học viên";
+
+  const getInitials = () => {
+    const rawFullName =
+      (user as any)?.fullName ||
+      `${user?.lastName || ""} ${user?.firstName || ""}`.trim();
+    if (!rawFullName) return "U";
+    const nameParts = rawFullName.split(/\s+/);
+    return nameParts[0].charAt(0).toUpperCase();
+  };
+  const avatarFallback = getInitials();
 
   // Tính tổng điểm tích lũy của 6 kỹ năng
   const totalScore = skillProfile
@@ -87,39 +97,47 @@ export default function StudentProfileMenu() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-white transition hover:bg-white/10 focus:outline-none"
+        className="flex items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 text-slate-700 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-slate-800/60 focus:outline-none cursor-pointer"
       >
-        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-indigo-600 font-bold text-xs shadow-inner">
-          {user?.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={displayName}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            avatarFallback
-          )}
-        </div>
-        <span className="text-xs font-semibold text-white/90 max-w-[130px] truncate">
+        {user?.avatarUrl ? (
+          <img
+            src={resolveAvatarUrl(user.avatarUrl)}
+            alt={displayName}
+            className="w-9 h-9 rounded-full object-cover border-2 border-indigo-500/30 shadow-sm"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white font-bold flex items-center justify-center text-sm shadow-sm border border-white/20">
+            {avatarFallback}
+          </div>
+        )}
+        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 max-w-[130px] truncate">
           {displayName}
         </span>
         {isOpen ? (
-          <ChevronUp size={14} className="text-white/70" />
+          <ChevronUp size={14} className="text-slate-500 dark:text-slate-400" />
         ) : (
-          <ChevronDown size={14} className="text-white/70" />
+          <ChevronDown size={14} className="text-slate-500 dark:text-slate-400" />
         )}
       </button>
 
       {/* Popup Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#121a2d] p-4 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
           {/* Thông tin User Header */}
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50 border border-indigo-200 text-lg font-black text-indigo-700">
-              {avatarFallback}
+          <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 border border-indigo-500/30 text-lg font-bold text-white shadow-sm">
+              {user?.avatarUrl ? (
+                <img
+                  src={resolveAvatarUrl(user.avatarUrl)}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                avatarFallback
+              )}
             </div>
             <div className="truncate">
-              <h4 className="text-sm font-bold text-slate-800 truncate">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                 {displayName}
               </h4>
               <p className="flex items-center gap-1 text-[11px] text-slate-500 truncate">

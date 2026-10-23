@@ -1,0 +1,43 @@
+@startuml Hinh_2_12_Luong_tuong_tac_thoi_gian_thuc_Audio_WebSocket
+title Hình 2.12: Sơ đồ luồng tương tác thời gian thực thu âm Audio và phản hồi WebSocket
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+skinparam maxMessageSize 110
+
+actor "Học viên" as Student
+participant "Web Audio API\n(Browser)" as WebAudio
+participant "WebSocket Client\n(STOMP over SockJS)" as StompClient
+participant "AiLabController\n(:8080)" as BackendAPI
+participant "3-Tier AI Engine\n(Python / Gemini)" as AiEngine
+participant "STOMP Broker\n(Spring WebSocket)" as Broker
+participant "MySQL DB\n(evaluations)" as DB
+
+Student -> WebAudio: Bắt đầu đọc câu mẫu (Nhấn Thu âm)
+WebAudio -> WebAudio: Ghi âm luồng Micro (PCM 16kHz đơn kênh)
+Student -> WebAudio: Dừng thu âm
+WebAudio -> StompClient: Kết nối và đăng ký nhận tin
+StompClient -> Broker: SUBSCRIBE /topic/student/{userId}/evaluation
+
+WebAudio -> BackendAPI: POST /api/v1/ai/speaking/shadowing-evaluate\n(Tệp audio WAV)
+BackendAPI --> WebAudio: HTTP 202 Accepted (Đã nhận audio)
+WebAudio --> Student: Hiển thị trạng thái "AI đang phân tích âm học..."
+
+BackendAPI -> AiEngine: Kích hoạt đánh giá 3 tầng (Python / Gemini)
+AiEngine -> AiEngine: Đo Formant F1/F2, GOP, mốc thời gian IPA
+AiEngine -> DB: Lưu kết quả vào ai_evaluations\nCập nhật điểm Radar
+AiEngine --> BackendAPI: Trả về kết quả đánh giá hoàn tất
+
+BackendAPI -> Broker: convertAndSend(/topic/student/{id}/evaluation)
+Broker --> StompClient: MESSAGE /topic/student/{userId}/evaluation
+StompClient --> Student: Cập nhật giao diện Review Mode ngay lập tức:
+note right of Student
+- Điểm tổng quát & 4 KPI (Phát âm, Trôi chảy, Hoàn thiện, Nhịp điệu)
+- Mảng tô màu câu văn (Xanh lá: Chuẩn, Vàng: Sửa, Đỏ: Sai, Xám: Thiếu)
+- Giải phẫu chi tiết từng âm vị IPA và biểu đồ Formant F1/F2
+end note
+@enduml

@@ -24,7 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ROLE_ADMIN')")
+@PreAuthorize("hasRole('ADMIN') or hasAuthority('ROLE_ADMIN')")
 @Tag(name = "Admin User Management", description = "Các API CRUD quản lý người dùng dành riêng cho ADMIN")
 public class AdminUserController {
 
@@ -53,6 +53,7 @@ public class AdminUserController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Admin tạo tài khoản người dùng mới")
     public ResponseEntity<ApiResponse<UserSummaryDto>> createUser(
             @Valid @RequestBody UserCreateByAdminRequest request) {

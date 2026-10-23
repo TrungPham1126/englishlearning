@@ -93,36 +93,34 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300 pb-16">
-      {/* 1. HERO HEADER */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden border border-slate-800">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-indigo-500/10 to-transparent pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 bg-indigo-500/20 text-indigo-300 text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border border-indigo-500/30 mb-3">
-              <Sparkles size={14} /> Quản Trị Hoạt Động Trung Tâm
-            </div>
-            <h1 className="text-3xl font-black text-white tracking-tight">
-              Bảng Điều Khiển Trung Tâm Đào Tạo
-            </h1>
-            <p className="text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Theo dõi toàn diện quy mô học viên, tiến độ giảng dạy của giáo viên, trạng thái mở lớp và tiến độ nộp/chấm bài tập theo thời gian thực.
-            </p>
+      {/* 1. CLEAN OPEN HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <Sparkles size={14} />
+            <span>Quản Trị Hoạt Động Trung Tâm</span>
           </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Bảng Điều Khiển Trung Tâm Đào Tạo
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+            Theo dõi toàn diện quy mô học viên, tiến độ giảng dạy của giáo viên, trạng thái mở lớp và tiến độ nộp/chấm bài tập theo thời gian thực.
+          </p>
+        </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => navigate("/admin/classrooms")}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
-            >
-              <PlusCircle size={16} /> Quản Lý Lớp Học
-            </button>
-            <button
-              onClick={() => navigate("/admin/reports")}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition border border-white/10 cursor-pointer"
-            >
-              <BarChart3 size={16} /> Xem Báo Cáo
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => navigate("/admin/classrooms")}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
+          >
+            <PlusCircle size={16} /> Quản Lý Lớp Học
+          </button>
+          <button
+            onClick={() => navigate("/admin/reports")}
+            className="inline-flex items-center gap-2 bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl transition border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer"
+          >
+            <BarChart3 size={16} /> Xem Báo Cáo
+          </button>
         </div>
       </div>
 

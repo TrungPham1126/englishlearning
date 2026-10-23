@@ -2217,15 +2217,15 @@ export default function AssignmentTakePage() {
     const isExhausted = phase === "EXHAUSTED";
 
     return (
-      <div className="max-w-3xl mx-auto my-12 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="elp-page max-w-3xl mx-auto my-12 space-y-6 animate-in fade-in zoom-in-95 duration-200">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50 cursor-pointer shadow-sm"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-3 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer shadow-sm"
         >
           <ArrowLeft size={20} />
         </button>
-        <div className="bg-white rounded-3xl border border-slate-200 p-8 md:p-12 shadow-sm text-center space-y-6">
-          <div className="h-20 w-20 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
+        <div className="elp-card bg-white dark:bg-[#111827] rounded-3xl border border-slate-200 dark:border-slate-800 p-8 md:p-12 shadow-sm text-center space-y-6">
+          <div className="h-20 w-20 rounded-full bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-inner">
             {isExhausted ? (
               <ShieldAlert size={36} className="text-amber-500" />
             ) : (
@@ -2233,13 +2233,13 @@ export default function AssignmentTakePage() {
             )}
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">
               {isExhausted
                 ? "Hết Lượt Làm Bài"
                 : previousAttempts[0]?.assignmentTitle ||
                   "Bắt Đầu bài tập IELTS"}
             </h1>
-            <p className="text-slate-500 mt-3 text-base leading-relaxed max-w-xl mx-auto">
+            <p className="text-slate-500 dark:text-slate-400 mt-3 text-base leading-relaxed max-w-xl mx-auto">
               {isExhausted
                 ? "Bạn đã dùng hết số lượt làm bài cho phép đối với bài tập này."
                 : "Hệ thống hỗ trợ làm bài tập toàn diện: có Audio phát nghe liên tục, toàn bộ câu hỏi hiển thị trên 1 trang và tự động lưu đáp án."}
@@ -2254,7 +2254,7 @@ export default function AssignmentTakePage() {
                     `/student/assignments/${assignmentId}/submissions/latest`,
                   )
                 }
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl border-2 border-slate-200 hover:bg-slate-50 font-bold text-slate-700 transition cursor-pointer"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
               >
                 Xem Lịch Sử Bài Nộp
               </button>
@@ -2263,7 +2263,7 @@ export default function AssignmentTakePage() {
               <button
                 disabled={isStarting}
                 onClick={handleStartNewAttempt}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-lg shadow-indigo-200 transition cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-lg shadow-indigo-200 dark:shadow-none transition cursor-pointer disabled:opacity-50"
               >
                 {isStarting ? (
                   <Loader2 size={20} className="animate-spin" />
@@ -2289,7 +2289,7 @@ export default function AssignmentTakePage() {
   }).length;
 
   return (
-    <div className="max-w-[1550px] mx-auto space-y-4 pb-16">
+    <div className="elp-page max-w-[1550px] mx-auto space-y-4 pb-16">
       {/* 1. TOPBAR CỐ ĐỊNH CHUẨN IELTS CBT */}
       <header className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky top-2 z-40 transition-colors duration-200">
         <div className="flex items-center gap-3">
@@ -2315,11 +2315,11 @@ export default function AssignmentTakePage() {
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           {phase === "REVIEW" ? (
             <div className="flex items-center gap-3">
-              <div className="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
-                <span className="text-[10px] text-emerald-800 font-bold block uppercase tracking-wider">
+              <div className="px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-center">
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold block uppercase tracking-wider">
                   Điểm Số Đạt Được
                 </span>
-                <span className="text-base font-black text-emerald-700">
+                <span className="text-base font-black text-emerald-700 dark:text-emerald-400">
                   {attempt?.score != null
                     ? Number(attempt.score).toFixed(1)
                     : attempt?.totalScore != null
@@ -2451,7 +2451,7 @@ export default function AssignmentTakePage() {
 
       {/* 2. AUDIO PLAYER BAR CỐ ĐỊNH CHO bài tập LISTENING */}
       {isListeningTest && (
-        <div className="border border-indigo-200 bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 rounded-2xl p-4 text-white shadow-lg sticky top-20 z-30">
+        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] rounded-2xl p-4 text-slate-900 dark:text-white shadow-sm sticky top-20 z-30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <audio
               ref={audioRef}
@@ -3229,16 +3229,16 @@ export default function AssignmentTakePage() {
 
                   {/* 6. CHẾ ĐỘ LUYỆN TẬP: NÚT GỢI Ý & KIỂM TRA ĐÁP ÁN TỨC THÌ */}
                   {studyMode === "PRACTICE" && !isSpeaking && !isParagraphWriting && !isIeltsEssay && (
-                    <div className="pt-3 border-t border-slate-100 space-y-3">
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         {/* Nút Xem Gợi Ý */}
                         {q.explanation && (
                           <button
                             type="button"
                             onClick={() => toggleHint(q.questionId)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3.5 py-2 rounded-xl transition cursor-pointer"
+                            className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 hover:bg-amber-100 dark:hover:bg-amber-500/25 border border-amber-200 dark:border-amber-500/30 px-3.5 py-2 rounded-xl transition cursor-pointer"
                           >
-                            <Lightbulb size={14} className="text-amber-600" />
+                            <Lightbulb size={14} className="text-amber-600 dark:text-amber-400" />
                             <span>{expandedHints[q.questionId] ? "Ẩn gợi ý" : "Xem gợi ý & quy tắc"}</span>
                           </button>
                         )}
@@ -3248,7 +3248,7 @@ export default function AssignmentTakePage() {
                             <button
                               type="button"
                               onClick={() => handleRetryQuestion(q.questionId)}
-                              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-xl transition cursor-pointer"
+                              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-xl transition cursor-pointer"
                             >
                               <RotateCcw size={13} />
                               <span>Làm lại câu này</span>
@@ -3278,8 +3278,8 @@ export default function AssignmentTakePage() {
 
                       {/* Hộp Gợi Ý khi mở */}
                       {expandedHints[q.questionId] && q.explanation && (
-                        <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 animate-in fade-in">
-                          <b className="flex items-center gap-1 text-amber-950 mb-1">
+                        <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
+                          <b className="flex items-center gap-1 text-amber-950 dark:text-amber-300 mb-1">
                             💡 Gợi ý / Quy tắc:
                           </b>
                           <p className="leading-relaxed whitespace-pre-wrap">{q.explanation}</p>
@@ -3290,18 +3290,18 @@ export default function AssignmentTakePage() {
                       {checkedQuestions[q.questionId]?.isChecked && !checkedQuestions[q.questionId]?.isEvaluating && (
                         <div className={`p-4 rounded-xl border-2 space-y-2 animate-in fade-in ${
                           checkedQuestions[q.questionId]?.isCorrect
-                            ? "bg-emerald-50/70 border-emerald-300 text-emerald-950"
+                            ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200"
                             : checkedQuestions[q.questionId]?.isContentCorrect
-                              ? "bg-blue-50/70 border-blue-300 text-blue-950"
-                              : "bg-rose-50/70 border-rose-300 text-rose-950"
+                              ? "bg-blue-50/70 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-950 dark:text-blue-200"
+                              : "bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-700 text-rose-950 dark:text-rose-200"
                         }`}>
                           <div className="flex items-center gap-2">
                             {checkedQuestions[q.questionId]?.isCorrect ? (
-                              <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                              <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                             ) : checkedQuestions[q.questionId]?.isContentCorrect ? (
-                              <AlertCircle size={18} className="text-blue-600 shrink-0" />
+                              <AlertCircle size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />
                             ) : (
-                              <XCircle size={18} className="text-rose-600 shrink-0" />
+                              <XCircle size={18} className="text-rose-600 dark:text-rose-400 shrink-0" />
                             )}
                             <span className="font-black text-sm">
                               {checkedQuestions[q.questionId]?.isCorrect
@@ -3316,15 +3316,15 @@ export default function AssignmentTakePage() {
                               <div className="flex items-center gap-1.5 ml-auto text-[11px] font-black">
                                 <span className={`px-2 py-0.5 rounded ${
                                   checkedQuestions[q.questionId]?.isContentCorrect
-                                    ? "bg-emerald-200 text-emerald-900"
-                                    : "bg-rose-200 text-rose-900"
+                                    ? "bg-emerald-200 dark:bg-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+                                    : "bg-rose-200 dark:bg-rose-500/30 text-rose-900 dark:text-rose-200"
                                 }`}>
                                   Đọc hiểu: {checkedQuestions[q.questionId]?.isContentCorrect ? "✓ ĐÚNG" : "✗ SAI"}
                                 </span>
                                 <span className={`px-2 py-0.5 rounded ${
                                   checkedQuestions[q.questionId]?.isGrammarCorrect
-                                    ? "bg-emerald-200 text-emerald-900"
-                                    : "bg-amber-200 text-amber-900"
+                                    ? "bg-emerald-200 dark:bg-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+                                    : "bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200"
                                 }`}>
                                   Ngữ pháp: {checkedQuestions[q.questionId]?.isGrammarCorrect ? "✓ CHUẨN" : "⚠️ CẦN SỬA"}
                                 </span>
@@ -3341,23 +3341,23 @@ export default function AssignmentTakePage() {
 
                           {/* Nhận xét ngữ pháp riêng nếu có */}
                           {checkedQuestions[q.questionId]?.grammarAnalysis && (
-                            <p className="text-xs text-amber-800 bg-amber-100/60 p-2.5 rounded-lg font-medium">
+                            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-100/60 dark:bg-amber-950/40 p-2.5 rounded-lg font-medium">
                               <b>Lưu ý ngữ pháp:</b> {checkedQuestions[q.questionId]?.grammarAnalysis}
                             </p>
                           )}
 
                           {/* Trích dẫn đoạn văn chứng minh nếu có */}
                           {checkedQuestions[q.questionId]?.contentAnalysis && (
-                            <div className="text-xs text-slate-700 bg-white/80 p-2.5 rounded-lg border border-slate-200 font-serif">
+                            <div className="text-xs text-slate-700 dark:text-slate-200 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 font-serif">
                               <b>Trích dẫn bài đọc:</b> "{checkedQuestions[q.questionId]?.contentAnalysis}"
                             </div>
                           )}
 
                           {/* Đáp án mẫu gợi ý */}
                           {checkedQuestions[q.questionId]?.suggestedAnswer && (
-                            <div className="text-xs pt-1 border-t border-slate-200/60">
+                            <div className="text-xs pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                               <span className="font-bold opacity-75">Đáp án gợi ý: </span>
-                              <span className="font-black text-indigo-700">
+                              <span className="font-black text-indigo-700 dark:text-indigo-400">
                                 {checkedQuestions[q.questionId]?.suggestedAnswer}
                               </span>
                             </div>
@@ -3365,7 +3365,7 @@ export default function AssignmentTakePage() {
 
                           {/* Giải thích chi tiết từ đề bài */}
                           {!checkedQuestions[q.questionId]?.isContentCorrect && q.explanation && (
-                            <div className="text-xs pt-1 text-slate-600">
+                            <div className="text-xs pt-1 text-slate-600 dark:text-slate-300">
                               <b>Giải thích:</b> {q.explanation}
                             </div>
                           )}
@@ -3376,11 +3376,11 @@ export default function AssignmentTakePage() {
 
                   {/* 7. KẾT QUẢ ĐÁNH GIÁ & LỜI GIẢI SAU KHI NỘP BÀI (phase === REVIEW) */}
                   {phase === "REVIEW" && (
-                    <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black uppercase text-indigo-900 flex items-center gap-1.5">
-                            <CheckCircle2 size={15} className="text-emerald-600" />
+                          <span className="text-xs font-black uppercase text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                            <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" />
                             Đánh giá kết quả & Lời giải:
                           </span>
                           {(q as any).earnedPoints != null && (
@@ -3391,17 +3391,17 @@ export default function AssignmentTakePage() {
                         </div>
 
                         {Boolean(q.correctAnswer) && (
-                          <div className="text-xs font-bold text-slate-800">
-                            <span className="text-emerald-700">Đáp án chính xác: </span>
-                            <span className="font-mono bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-black">
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            <span className="text-emerald-700 dark:text-emerald-400">Đáp án chính xác: </span>
+                            <span className="font-mono bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30 font-black">
                               {q.correctAnswer}
                             </span>
                           </div>
                         )}
 
                         {Boolean((q as any).explanation) && (
-                          <div className="p-3 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 leading-relaxed">
-                            <b className="text-slate-900 block mb-1">💡 Lời giải chi tiết:</b>
+                          <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                            <b className="text-slate-900 dark:text-white block mb-1">💡 Lời giải chi tiết:</b>
                             <p className="whitespace-pre-wrap">{(q as any).explanation}</p>
                           </div>
                         )}

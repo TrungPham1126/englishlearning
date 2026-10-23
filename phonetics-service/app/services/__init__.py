@@ -14,7 +14,10 @@ from app.services.word_aligner import (
     word_sequence_aligner,
     WordAlignmentStatus,
     AlignedWordEvidence,
-    detect_spoken_prefix_count
+    detect_spoken_prefix_count,
+    decode_raw_speech,
+    compute_phoneme_similarity,
+    verify_speech_content
 )
 
 __all__ = [
@@ -45,6 +48,9 @@ __all__ = [
     "WordAlignmentStatus",
     "AlignedWordEvidence",
     "detect_spoken_prefix_count",
+    "decode_raw_speech",
+    "compute_phoneme_similarity",
+    "verify_speech_content",
     "check_consonant_acoustic_evidence",
     "check_consonant_acoustic_evidence_detailed",
 ]

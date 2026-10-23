@@ -1,0 +1,128 @@
+@startuml Hinh_2_9_Bieu_do_lop_chi_tiet_Core_Domain_Model
+title Hình 2.9: Biểu đồ lớp chi tiết của miền dữ liệu cốt lõi (Core Domain Model)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+class User {
+    - id: UUID
+    - email: String
+    - passwordHash: String
+    - firstName: String
+    - lastName: String
+    - isActive: Boolean
+    + hasRole(roleName: String): Boolean
+}
+
+class Student {
+    - currentLevel: String
+    - targetCefr: String
+}
+
+class Teacher {
+    - specialization: String
+    - yearsOfExperience: Integer
+    - bio: String
+}
+
+class Classroom {
+    - id: UUID
+    - name: String
+    - level: ClassLevel
+    - status: ClassStatus
+    - maxStudents: Integer
+}
+
+class Lesson {
+    - id: UUID
+    - title: String
+    - orderIndex: Integer
+}
+
+class Video {
+    - id: UUID
+    - originalFileName: String
+    - rawStorageUrl: String
+    - hlsPlaylistUrl: String
+    - status: VideoStatus
+}
+
+class Assignment {
+    - id: UUID
+    - title: String
+    - skillType: SkillType
+    - passScore: Double
+    - timeLimitMinutes: Integer
+}
+
+class AssignmentQuestion {
+    - id: UUID
+    - orderIndex: Integer
+    - questionType: QuestionType
+    - promptText: String
+    - points: Double
+}
+
+class QuestionOption {
+    - id: UUID
+    - optionLabel: String
+    - optionText: String
+    - isCorrect: Boolean
+}
+
+class AssignmentAttempt {
+    - id: UUID
+    - attemptNumber: Integer
+    - startedAt: Instant
+    - submittedAt: Instant
+    - totalScore: Double
+    - status: AttemptStatus
+}
+
+class StudentAnswer {
+    - id: UUID
+    - textResponse: String
+    - audioResponseUrl: String
+    - earnedPoints: Double
+    - isCorrect: Boolean
+}
+
+class AiEvaluation {
+    - id: UUID
+    - evalType: AiEvaluationType
+    - overallScore: Double
+    - evaluationEngine: String
+    - sttTranscript: String
+    - suggestionsJson: String
+}
+
+class StudentSkillProfile {
+    - id: UUID
+    - listeningScore: Double
+    - speakingScore: Double
+    - readingScore: Double
+    - writingScore: Double
+    - vocabularyScore: Double
+    - grammarScore: Double
+}
+
+User <|-- Student
+User <|-- Teacher
+Teacher "1" -- "0..*" Classroom : manages >
+Classroom "1" *-- "0..*" Lesson : contains >
+Classroom "1" -- "0..*" Assignment : assigns >
+Lesson "1" o-- "0..*" Video : attaches >
+Assignment "1" *-- "1..*" AssignmentQuestion : comprises >
+AssignmentQuestion "1" *-- "0..*" QuestionOption : has >
+Student "1" -- "0..*" AssignmentAttempt : takes >
+Assignment "1" -- "0..*" AssignmentAttempt : evaluated_in >
+AssignmentAttempt "1" *-- "1..*" StudentAnswer : contains >
+AssignmentQuestion "1" -- "0..*" StudentAnswer : answers >
+StudentAnswer "1" o-- "0..1" AiEvaluation : scored_by >
+Student "1" -- "1" StudentSkillProfile : owns >
+@enduml

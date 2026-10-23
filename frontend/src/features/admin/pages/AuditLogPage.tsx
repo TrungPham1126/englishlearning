@@ -183,70 +183,70 @@ export default function AuditLogPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      {/* HEADER */}
-      <div className="flex items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl">
-          <Activity size={28} />
-        </div>
+      {/* Clean Open Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">
-            Lịch Sử Hoạt Động
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <Activity size={14} />
+            <span>Nhật Ký & Kiểm Toán Hệ Thống</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Lịch Sử Hoạt Động (Audit Log)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Theo dõi chi tiết các thao tác tạo mới Tài khoản, đăng Video, giao
-            Bài tập trên toàn bộ nền tảng.
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Theo dõi chi tiết các thao tác tạo mới Tài khoản, đăng Video, giao Bài tập trên toàn bộ nền tảng.
           </p>
         </div>
       </div>
 
       {/* FILTER BUTTONS */}
-      <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-2 px-3 py-2 border-r border-slate-200 mr-2 text-slate-400 font-bold text-sm uppercase">
+      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-[#111827] p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="flex items-center gap-2 px-3 py-2 border-r border-slate-200 dark:border-slate-800 mr-2 text-slate-400 font-bold text-sm uppercase">
           <Filter size={16} /> Lọc theo
         </div>
 
         <button
           onClick={() => setActiveFilter("ALL")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ALL" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ALL" ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
         >
           <LayoutList size={16} /> Tất cả
         </button>
 
         <button
           onClick={() => setActiveFilter("ACCOUNT")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ACCOUNT" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ACCOUNT" ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
         >
           <Users size={16} /> Tài khoản
         </button>
 
         <button
           onClick={() => setActiveFilter("ASSIGNMENT")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ASSIGNMENT" ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "ASSIGNMENT" ? "bg-amber-500 text-white" : "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
         >
           <FileText size={16} /> Bài tập
         </button>
 
         <button
           onClick={() => setActiveFilter("VIDEO")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "VIDEO" ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "VIDEO" ? "bg-rose-500 text-white" : "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
         >
           <Video size={16} /> Video
         </button>
 
         <button
           onClick={() => setActiveFilter("CLASS")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "CLASS" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer ${activeFilter === "CLASS" ? "bg-emerald-600 text-white" : "bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"}`}
         >
           <School size={16} /> Lớp & Bài giảng
         </button>
       </div>
 
       {/* DATA TABLE */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white dark:bg-[#111827] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 font-black border-b border-slate-200">
+              <tr className="bg-slate-50 dark:bg-[#162033] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-800">
                 <th className="p-4 w-40">Thời gian</th>
                 <th className="p-4 w-48">Người thao tác</th>
                 <th className="p-4 w-36">Loại hành động</th>
@@ -254,7 +254,7 @@ export default function AuditLogPage() {
                 <th className="p-4">Chi tiết thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
               {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-16 text-center text-slate-400">
@@ -270,9 +270,9 @@ export default function AuditLogPage() {
                   const entityName = formatEntity(log.entityName);
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50 transition">
-                      <td className="p-4 text-xs font-semibold text-slate-500 whitespace-nowrap">
-                        <div className="text-slate-800 font-bold mb-0.5">
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                      <td className="p-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <div className="text-slate-800 dark:text-slate-100 font-bold mb-0.5">
                           {new Date(log.createdAt).toLocaleDateString("vi-VN")}
                         </div>
                         <div>
@@ -285,7 +285,7 @@ export default function AuditLogPage() {
                       </td>
                       <td className="p-4">
                         <div
-                          className="font-bold text-indigo-700 truncate max-w-[150px]"
+                          className="font-bold text-indigo-700 dark:text-indigo-400 truncate max-w-[150px]"
                           title={log.userName || log.userId}
                         >
                           {log.userName || "Hệ thống tự động"}
@@ -298,11 +298,11 @@ export default function AuditLogPage() {
                           {actionBadge.text}
                         </span>
                       </td>
-                      <td className="p-4 font-bold text-slate-700">
+                      <td className="p-4 font-bold text-slate-700 dark:text-slate-200">
                         {entityName}
                       </td>
                       <td className="p-4">
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 max-w-md">
+                        <div className="bg-slate-50 dark:bg-[#162033] p-3 rounded-xl border border-slate-100 dark:border-slate-800 max-w-md">
                           {renderReadableMetadata(log.metadataJson)}
                         </div>
                       </td>

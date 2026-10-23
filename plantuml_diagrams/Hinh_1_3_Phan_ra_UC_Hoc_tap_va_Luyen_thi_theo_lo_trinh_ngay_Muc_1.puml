@@ -1,0 +1,37 @@
+@startuml Hinh_1_3_Phan_ra_UC_Hoc_tap_va_Luyen_thi_theo_lo_trinh_ngay_Muc_1
+title Hình 1.3: Sơ đồ phân rã Use Case Học tập và Luyện thi theo lộ trình ngày - Mức 1
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Học viên\n(Student)" as Student
+actor "Cloudflare R2\nStorage" as R2 <<Service>>
+actor "MySQL Engine" as DB <<Service>>
+
+rectangle "Phân hệ Học tập & Luyện thi Lộ trình Ngày (UC-STU)" {
+    usecase "UC-STU-01: Xem lộ trình học ngày\n(Daily Study Plan)" as UC_PLAN
+    usecase "UC-STU-02: Học bài giảng đa phương tiện\n& Xem Video HLS" as UC_LESSON
+    usecase "UC-STU-03: Ôn tập từ vựng ngắt quãng\n(SRS SuperMemo SM-2)" as UC_SRS
+    usecase "UC-STU-04: Làm bài tập & Khảo thí CBT\n(Trắc nghiệm, Nghe, Nói, Viết)" as UC_CBT
+    usecase "UC-STU-05: Xem hồ sơ năng lực 6D\n& Biểu đồ Radar Chart" as UC_RADAR
+    usecase "Ghi nhận tiến độ xem video\n(video_watch_histories)" as UC_VIDEO_LOG
+}
+
+Student --> UC_PLAN
+Student --> UC_LESSON
+Student --> UC_SRS
+Student --> UC_CBT
+Student --> UC_RADAR
+
+UC_LESSON ..> UC_VIDEO_LOG : <<include>>
+UC_LESSON --> R2 : Phát luồng HLS (.m3u8, .ts)
+UC_SRS --> DB : Cập nhật student_vocabulary_progress
+UC_CBT --> DB : Lưu assignment_attempts & student_answers
+UC_RADAR --> DB : Đọc student_skill_profiles
+@enduml

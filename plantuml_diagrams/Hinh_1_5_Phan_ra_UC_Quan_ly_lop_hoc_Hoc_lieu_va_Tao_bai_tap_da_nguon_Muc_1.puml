@@ -1,0 +1,39 @@
+@startuml Hinh_1_5_Phan_ra_UC_Quan_ly_lop_hoc_Hoc_lieu_va_Tao_bai_tap_da_nguon_Muc_1
+title Hình 1.5: Phân rã UC Quản lý lớp, Học liệu & Tạo bài tập đa nguồn (Teacher) - Mức 1
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Giảng viên\n(Teacher)" as Teacher
+actor "Cloudflare R2\nStorage" as R2 <<Service>>
+actor "Kokoro-82M TTS\nMicroservice" as TTS <<Service>>
+actor "Google Gemini 2.5\nFlash AI" as GeminiAI <<Service>>
+
+rectangle "Phân hệ Giảng viên & Quản lý Học liệu (UC-TEA)" {
+    usecase "UC-TEA-01: Quản lý lớp học &\nDanh sách học viên" as UC_CLASS
+    usecase "UC-TEA-02: Xây dựng giáo trình,\nBài giảng & Tài liệu PDF" as UC_CURRICULUM
+    usecase "UC-TEA-03: Tạo bài tập từ\nFile Excel (SheetJS)" as UC_EXCEL
+    usecase "UC-TEA-04: Tạo bài tập tự động\nbằng Gemini AI theo CEFR" as UC_GEN_AI
+    usecase "UC-TEA-05: Sinh âm thanh mẫu bản ngữ\nqua Kokoro-82M TTS" as UC_TTS
+    usecase "UC-TEA-06: Chấm bài tự luận &\nNhận xét bài làm học viên" as UC_GRADE
+}
+
+Teacher --> UC_CLASS
+Teacher --> UC_CURRICULUM
+Teacher --> UC_EXCEL
+Teacher --> UC_GEN_AI
+Teacher --> UC_GRADE
+
+UC_GEN_AI --> GeminiAI : Sinh câu hỏi & đáp án JSON
+UC_EXCEL ..> UC_TTS : <<extend>>
+UC_GEN_AI ..> UC_TTS : <<extend>>
+UC_TTS --> TTS : Tổng hợp giọng bản ngữ (af_heart)
+UC_TTS --> R2 : Lưu tệp âm thanh WAV
+UC_CURRICULUM --> R2 : Lưu tài liệu học tập
+@enduml

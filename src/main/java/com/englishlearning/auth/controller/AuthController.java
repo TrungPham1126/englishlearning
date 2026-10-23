@@ -7,6 +7,7 @@ import com.englishlearning.auth.dto.UserSummaryDto;
 import com.englishlearning.auth.service.AuthService;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.ForbiddenException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -32,11 +33,9 @@ public class AuthController {
     private long refreshTokenDurationMs;
 
     @PostMapping("/register")
-    @Operation(summary = "Đăng ký tài khoản mới (Mặc định học viên)")
-    public ResponseEntity<ApiResponse<UserSummaryDto>> register(@Valid @RequestBody RegistrationRequest request) {
-        UserSummaryDto user = authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Đăng ký tài khoản thành công", user));
+    @Operation(summary = "Đăng ký tài khoản mới (Đã vô hiệu hóa)")
+    public ResponseEntity<ApiResponse<UserSummaryDto>> register(@RequestBody(required = false) RegistrationRequest request) {
+        throw new ForbiddenException("Chức năng tự đăng ký đã bị khóa. Vui lòng liên hệ Quản trị viên để được cấp tài khoản.");
     }
 
     @PostMapping("/login")
@@ -95,6 +94,16 @@ public class AuthController {
         UserSummaryDto user = authService.updateProfile(userDetails.getId(), request);
         return ResponseEntity.ok(ApiResponse.success(user));
     }
+
+    @PostMapping(value = "/me/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Tải lên ảnh đại diện cho tài khoản hiện tại")
+    public ResponseEntity<ApiResponse<UserSummaryDto>> uploadAvatar(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        UserSummaryDto user = authService.updateAvatar(userDetails.getId(), file);
+        return ResponseEntity.ok(ApiResponse.success(user));
+    }
+
 
     // Helper cài đặt cookie HttpOnly an toàn
     private void setRefreshTokenCookie(HttpServletResponse response, String token, long maxAgeSeconds) {

@@ -1,6 +1,7 @@
 package com.englishlearning.notification.entity;
 
 import com.englishlearning.auth.entity.User;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -21,6 +22,7 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipient_id", nullable = true)
     private User recipient;
@@ -48,4 +50,20 @@ public class Notification {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public String getContent() {
+        return this.message;
+    }
+
+    public String getNotificationType() {
+        return this.type != null ? this.type.name() : null;
+    }
+
+    public UUID getRecipientUserId() {
+        try {
+            return this.recipient != null ? this.recipient.getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

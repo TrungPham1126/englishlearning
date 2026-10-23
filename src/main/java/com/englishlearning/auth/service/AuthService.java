@@ -12,6 +12,7 @@ import com.englishlearning.auth.repository.UserRepository;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -154,6 +156,8 @@ public class AuthService {
             user.setLastName(request.getLastName());
         if (request.getPhone() != null)
             user.setPhone(request.getPhone());
+        if (request.getAvatarUrl() != null)
+            user.setAvatarUrl(request.getAvatarUrl());
         userRepository.save(user);
 
         if (user.getRoles().stream().anyMatch(r -> r.getName().name().equals("ROLE_STUDENT"))) {
@@ -165,6 +169,53 @@ public class AuthService {
         }
         return mapToUserSummaryDto(user);
     }
+
+    @Transactional
+    public UserSummaryDto updateAvatar(UUID userId, org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn file ảnh hợp lệ");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BadRequestException("Chỉ chấp nhận các định dạng file ảnh (JPEG, PNG, WEBP, GIF)");
+        }
+
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new BadRequestException("Dung lượng ảnh tối đa là 5MB");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin tài khoản"));
+
+        try {
+            java.nio.file.Path uploadDir = java.nio.file.Paths.get("uploads", "avatars");
+            if (!java.nio.file.Files.exists(uploadDir)) {
+                java.nio.file.Files.createDirectories(uploadDir);
+            }
+
+            String originalFilename = file.getOriginalFilename();
+            String extension = ".jpg";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+            }
+
+            String fileName = "avatar_" + userId + "_" + System.currentTimeMillis() + extension;
+            java.nio.file.Path targetPath = uploadDir.resolve(fileName);
+            java.nio.file.Files.copy(file.getInputStream(), targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            String avatarUrl = "/uploads/avatars/" + fileName;
+            user.setAvatarUrl(avatarUrl);
+            userRepository.save(user);
+
+            log.info("Cập nhật avatar thành công cho user {}: {}", userId, avatarUrl);
+            return mapToUserSummaryDto(user);
+        } catch (java.io.IOException e) {
+            log.error("Lỗi khi lưu ảnh đại diện: ", e);
+            throw new RuntimeException("Không thể lưu file ảnh: " + e.getMessage(), e);
+        }
+    }
+
 
     private UserSummaryDto mapToUserSummaryDto(User user) {
         UserSummaryDto dto = UserSummaryDto.builder()

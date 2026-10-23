@@ -31,4 +31,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         @org.springframework.data.repository.query.Param("keyword") String keyword,
         org.springframework.data.domain.Pageable pageable
     );
+
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT DISTINCT u FROM User u LEFT JOIN u.roles r WHERE " +
+        "(u.isActive IS NULL OR u.isActive = true) AND " +
+        "(:role IS NULL OR r.name = :role)"
+    )
+    java.util.List<User> findActiveUsersByRole(
+        @org.springframework.data.repository.query.Param("role") com.englishlearning.auth.entity.RoleName role
+    );
 }

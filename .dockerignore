@@ -1,0 +1,20 @@
+# Exclude subprojects from Backend Docker build context
+frontend/
+phonetics-service/
+
+# Git and logs
+.git/
+*.log
+*.tmp
+dummy_audio.wav
+
+# Local build artifacts
+target/
+.mvn/wrapper/maven-wrapper.jar
+uploads/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+

@@ -1,0 +1,215 @@
+/* ==========================================================================
+   ELP CENTRALIZED THEME SYSTEM (ADMIN, TEACHER, STUDENT)
+   ========================================================================== */
+
+@layer components {
+  /* Khung nền chính của trang */
+  .elp-page {
+    @apply bg-[#f8fafc] dark:bg-[#070b14] text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200;
+  }
+
+  /* Khung thẻ Card chính (Thay thế bg-white / bg-slate-900 rời rạc) */
+  .elp-card {
+    @apply bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800/80 text-slate-900 dark:text-slate-100 rounded-2xl shadow-sm transition-colors duration-200;
+  }
+
+  /* Khung thẻ con / Ô thống kê phụ (Thay thế bg-slate-50 / bg-slate-100 / bg-slate-200) */
+  .elp-subcard {
+    @apply bg-slate-50 dark:bg-[#162033] border border-slate-200/80 dark:border-slate-700/70 text-slate-800 dark:text-slate-200 rounded-xl transition-colors duration-200;
+  }
+
+  /* Tiêu đề chính (H1, H2, H3) */
+  .elp-heading {
+    @apply text-slate-900 dark:text-white font-bold;
+  }
+
+  /* Chữ mô tả phụ */
+  .elp-muted {
+    @apply text-slate-500 dark:text-slate-400;
+  }
+
+  /* Ô nhập liệu chuẩn (Input, Select, Textarea) */
+  .elp-input {
+    @apply bg-white dark:bg-[#0b1120] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none rounded-xl transition-colors;
+  }
+}
+
+/* ==========================================================================
+   GLOBAL AUTOMATIC OVERRIDES (Đảm bảo không sót bất kỳ thẻ con nào)
+   ========================================================================== */
+
+/* --- 1. CHẾ ĐỘ TỐI (DARK MODE OVERRIDES) --- */
+html.dark body {
+  background-color: #070b14 !important;
+  color: #f8fafc !important;
+}
+
+/* Biến mọi khung nền sáng / xám xi-măng (white, slate-50/100/200/300, gray-50/100/200/300) thành nền tối sang trọng */
+html.dark [class*="bg-white"],
+html.dark [class*="bg-slate-50"],
+html.dark [class*="bg-gray-50"] {
+  background-color: #111827 !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+html.dark [class*="bg-slate-100"],
+html.dark [class*="bg-slate-200"],
+html.dark [class*="bg-slate-300"],
+html.dark [class*="bg-gray-100"],
+html.dark [class*="bg-gray-200"],
+html.dark [class*="bg-gray-300"] {
+  background-color: #162033 !important;
+  color: #f1f5f9 !important;
+  border-color: #26354d !important;
+}
+
+/* Tự động làm sáng toàn bộ các màu chữ tối khi ở trong Dark Mode */
+html.dark [class*="text-slate-900"],
+html.dark [class*="text-slate-800"],
+html.dark [class*="text-slate-700"],
+html.dark [class*="text-gray-900"],
+html.dark [class*="text-gray-800"],
+html.dark [class*="text-gray-700"],
+html.dark [class*="text-zinc-900"],
+html.dark .text-black {
+  color: #f8fafc !important;
+}
+
+html.dark [class*="text-slate-600"],
+html.dark [class*="text-slate-500"],
+html.dark [class*="text-gray-600"],
+html.dark [class*="text-gray-500"] {
+  color: #94a3b8 !important;
+}
+
+/* Làm sáng chữ xanh/tím đậm (indigo-700/800/900, blue-700/800/900) để không bị chìm trên nền tối */
+html.dark [class*="text-indigo-900"],
+html.dark [class*="text-indigo-800"],
+html.dark [class*="text-indigo-700"],
+html.dark [class*="text-indigo-600"] {
+  color: #818cf8 !important;
+}
+
+html.dark [class*="text-blue-900"],
+html.dark [class*="text-blue-800"],
+html.dark [class*="text-blue-700"],
+html.dark [class*="text-blue-600"] {
+  color: #60a5fa !important;
+}
+
+/* Đồng bộ toàn bộ Ô nhập liệu (Input, Select, Textarea) trong Dark Mode */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #0b1120 !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Đồng bộ viền (Borders & Dividers) trong Dark Mode */
+html.dark [class*="border-slate-100"],
+html.dark [class*="border-slate-200"],
+html.dark [class*="border-slate-300"],
+html.dark [class*="border-gray-100"],
+html.dark [class*="border-gray-200"],
+html.dark [class*="border-gray-300"] {
+  border-color: #1e293b !important;
+}
+
+/* --- 2. CHẾ ĐỘ SÁNG (LIGHT MODE OVERRIDES) --- */
+html:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Chuyển các khối bị hardcode màu tối (slate-950/900/800) bên trong vùng nội dung sang nền trắng sáng (Trừ khung video) */
+html:not(.dark) main [class*="bg-slate-950"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="bg-slate-900"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="bg-[#0"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="bg-[#1"]:not([class*="aspect-video"]) {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) main [class*="bg-slate-800"]:not([class*="aspect-video"]) {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Khung phát video & placeholder bài giảng luôn giữ nền tối như rạp phim */
+html:not(.dark) main [class*="aspect-video"],
+html.dark main [class*="aspect-video"] {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+html:not(.dark) main [class*="aspect-video"] .text-slate-300,
+html.dark main [class*="aspect-video"] .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+html:not(.dark) main [class*="aspect-video"] .text-slate-500,
+html.dark main [class*="aspect-video"] .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Đảm bảo màu chữ bài học đang xem (Active lesson item) không bị đổi màu sai */
+html:not(.dark) [class*="text-indigo-950"] {
+  color: #1e1b4b !important;
+}
+html.dark [class*="text-indigo-100"] {
+  color: #e0e7ff !important;
+}
+
+/* Sửa lỗi chữ trắng (text-white, text-slate-100/200) bị tàng hình trên nền sáng (Trừ các nút bấm có màu đậm và khung video) */
+html:not(.dark) main :is(h1, h2, h3, h4, h5, h6, p, label, td, th, div, span):is(.text-white, .text-slate-100, .text-slate-200, .text-slate-300):not([class*="aspect-video"] *):not([class*="bg-indigo-"]):not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-amber-"]):not([class*="bg-purple-"]):not([class*="from-"]) {
+  color: #0f172a !important;
+}
+
+/* Trong Light Mode: Xóa bỏ hoàn toàn các nền gradient tối (from-slate-900, to-slate-900, via-indigo-950...) trong vùng main */
+html:not(.dark) main [class*="from-slate-9"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="from-gray-9"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="to-slate-9"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="via-indigo-9"]:not([class*="aspect-video"]),
+html:not(.dark) main [class*="via-slate-9"]:not([class*="aspect-video"]) {
+  background-image: none !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) main [class*="blur-3xl"] {
+  display: none !important;
+}
+
+/* Bảo toàn chữ trắng bên trong các nút hành động chính */
+html:not(.dark) main [class*="bg-indigo-600"],
+html:not(.dark) main [class*="bg-indigo-600"] *,
+html:not(.dark) main [class*="bg-emerald-600"],
+html:not(.dark) main [class*="bg-emerald-600"] *,
+html:not(.dark) main [class*="bg-rose-600"],
+html:not(.dark) main [class*="bg-rose-600"] *,
+html:not(.dark) main [class*="bg-amber-500"],
+html:not(.dark) main [class*="bg-amber-500"] *,
+html:not(.dark) main [class*="bg-amber-600"],
+html:not(.dark) main [class*="bg-amber-600"] *,
+html:not(.dark) main [class*="bg-blue-600"],
+html:not(.dark) main [class*="bg-blue-600"] * {
+  color: #ffffff !important;
+}
+
+html:not(.dark) main input:not([type="checkbox"]):not([type="radio"]),
+html:not(.dark) main select,
+html:not(.dark) main textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}

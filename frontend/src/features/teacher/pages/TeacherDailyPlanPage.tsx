@@ -272,13 +272,13 @@ export default function TeacherDailyPlanPage() {
         classId={classId!}
         activeTab="plans"
         actions={
-          <div className="flex bg-slate-900/80 border border-slate-700/60 p-1 rounded-xl shadow-inner">
+          <div className="flex bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-sm">
             <button
               onClick={() => setActiveTab("BUILDER")}
               className={`flex items-center px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
                 activeTab === "BUILDER"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <CheckSquare className="h-3.5 w-3.5 mr-1.5" /> Soạn Lộ Trình
@@ -288,7 +288,7 @@ export default function TeacherDailyPlanPage() {
               className={`flex items-center px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
                 activeTab === "TRACKER"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <BarChart2 className="h-3.5 w-3.5 mr-1.5" /> Bảng Tiến Độ (Ma Trận)
@@ -303,8 +303,8 @@ export default function TeacherDailyPlanPage() {
           {/* CỘT TRÁI: Lộ trình học */}
           <div className="lg:col-span-8 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white flex items-center">
-                <Calendar className="h-5 w-5 mr-2 text-indigo-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+                <Calendar className="h-5 w-5 mr-2 text-indigo-600 dark:text-indigo-400" />
                 Lịch Học & Nhiệm Vụ ({plans.length} ngày)
               </h2>
               <div className="flex items-center space-x-2">
@@ -329,11 +329,11 @@ export default function TeacherDailyPlanPage() {
             </div>
 
             {loading ? (
-              <div className="rounded-xl border border-slate-800 p-12 text-center text-slate-500">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-500">
                 Đang tải lộ trình học tập...
               </div>
             ) : plans.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-12 text-center text-slate-500">
+              <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-500">
                 Chưa có lịch học hàng ngày nào. Bấm nút <b>Thêm Ngày Mới</b> để bắt đầu tạo lộ trình!
               </div>
             ) : (
@@ -341,23 +341,23 @@ export default function TeacherDailyPlanPage() {
                 {plans.map((p) => (
                   <div
                     key={p.id}
-                    className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hover:border-slate-700 transition space-y-3"
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 hover:border-slate-300 dark:hover:border-slate-700 transition space-y-3 shadow-sm"
                   >
-                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
                       <div className="flex items-center space-x-2.5">
-                        <span className="rounded-md bg-indigo-500/10 px-2.5 py-1 text-xs font-bold text-indigo-400 border border-indigo-500/20">
+                        <span className="rounded-md bg-indigo-500/10 px-2.5 py-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                           Day {p.dayNumber}
                         </span>
-                        <h3 className="font-semibold text-white text-base">
+                        <h3 className="font-semibold text-slate-900 dark:text-white text-base">
                           {p.title}
                         </h3>
                       </div>
                       <div className="flex items-center text-xs space-x-3">
-                        <span className="flex items-center text-slate-400">
+                        <span className="flex items-center text-slate-500 dark:text-slate-400">
                           <Clock className="h-3.5 w-3.5 mr-1" />
                           {p.estimatedMinutes} phút
                         </span>
-                        <span className="flex items-center rounded bg-amber-500/10 px-2 py-0.5 text-amber-400 border border-amber-500/20">
+                        <span className="flex items-center rounded bg-amber-500/10 px-2 py-0.5 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                           Hạn mở: {p.scheduledDate}
                         </span>
 
@@ -366,14 +366,14 @@ export default function TeacherDailyPlanPage() {
                           <button
                             onClick={() => openEditModal(p)}
                             title="Sửa thông tin Day"
-                            className="p-1 text-slate-400 hover:text-white transition rounded hover:bg-slate-800"
+                            className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white transition rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                           >
                             <Edit3 className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => handleDeletePlan(p.id, p.dayNumber)}
                             title="Xóa Day"
-                            className="p-1 text-rose-400 hover:text-rose-300 transition rounded hover:bg-slate-800"
+                            className="p-1 text-rose-500 dark:text-rose-400 hover:text-rose-600 transition rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -387,25 +387,25 @@ export default function TeacherDailyPlanPage() {
                         p.items.map((item, i) => (
                           <div
                             key={item.id || i}
-                            className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3.5 py-2 text-xs border border-slate-800/60"
+                            className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-[#162033] px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-800/60"
                           >
                             <div className="flex items-center space-x-2.5">
                               {item.itemType === "DOCUMENT" ? (
-                                <FileText className="h-4 w-4 text-indigo-400 shrink-0" />
+                                <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                               ) : (
-                                <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                                <CheckCircle className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
                               )}
-                              <span className="text-slate-200 font-medium">
+                              <span className="text-slate-800 dark:text-slate-200 font-medium">
                                 {item.title}
                               </span>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <span className="text-[10px] uppercase text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                              <span className="text-[10px] uppercase text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
                                 {item.sectionName}
                               </span>
                               <button
                                 onClick={() => handleDeleteItem(item.id)}
-                                className="text-slate-500 hover:text-rose-400 transition p-1"
+                                className="text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 transition p-1"
                                 title="Xóa khỏi ngày này"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -421,7 +421,7 @@ export default function TeacherDailyPlanPage() {
 
                       <button
                         onClick={() => openAddItemModal(p.id)}
-                        className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-700 bg-slate-900/30 text-xs font-semibold text-indigo-400 hover:bg-slate-800/50 hover:border-indigo-500 transition cursor-pointer"
+                        className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-indigo-500 transition cursor-pointer"
                       >
                         <Plus className="h-3.5 w-3.5" /> Thêm bài tập / tài liệu vào Day {p.dayNumber}
                       </button>
@@ -434,11 +434,11 @@ export default function TeacherDailyPlanPage() {
 
           {/* CỘT PHẢI: Kho tài liệu */}
           <div className="lg:col-span-4 space-y-4">
-            <h2 className="text-base font-bold text-white flex items-center">
-              <BookOpen className="h-5 w-5 mr-2 text-indigo-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+              <BookOpen className="h-5 w-5 mr-2 text-indigo-600 dark:text-indigo-400" />
               Kho Tài Liệu Chung
             </h2>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-3 shadow-sm">
               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                 {globalResources.length === 0 ? (
                   <div className="py-8 text-center text-slate-500">
@@ -449,14 +449,14 @@ export default function TeacherDailyPlanPage() {
                   globalResources.map((res) => (
                     <div
                       key={res.id}
-                      className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-800/40 p-3.5 hover:border-indigo-500/50"
+                      className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] p-3.5 hover:border-indigo-500/50"
                     >
                       <div className="flex items-start space-x-3 mb-3">
-                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                           {getResourceIcon(res.resourceType)}
                         </div>
                         <div>
-                          <span className="font-semibold text-slate-200 text-xs line-clamp-2">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs line-clamp-2">
                             {res.name}
                           </span>
                           <span className="text-[10px] text-slate-500 uppercase">
@@ -464,13 +464,13 @@ export default function TeacherDailyPlanPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex justify-end space-x-3 pt-2 border-t border-slate-800/80">
+                      <div className="flex justify-end space-x-3 pt-2 border-t border-slate-200 dark:border-slate-800/80">
                         {res.url && (
                           <a
                             href={res.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-emerald-400 hover:text-emerald-300 font-semibold text-[11px] flex items-center"
+                            className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 font-semibold text-[11px] flex items-center"
                           >
                             <Download className="h-3 w-3 mr-1" />
                             Xem / Tải về
@@ -491,16 +491,16 @@ export default function TeacherDailyPlanPage() {
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex items-center justify-between">
             <div className="relative w-72">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Tìm tên học viên..."
                 value={searchStudent}
                 onChange={(e) => setSearchStudent(e.target.value)}
-                className="w-full rounded-lg border border-slate-800 bg-slate-900/80 pl-9 pr-4 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
               />
             </div>
-            <div className="flex items-center space-x-4 text-xs text-slate-400">
+            <div className="flex items-center space-x-4 text-xs text-slate-500 dark:text-slate-400">
               <span className="flex items-center">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></div>{" "}
                 Hoàn thành (100%)
@@ -510,33 +510,33 @@ export default function TeacherDailyPlanPage() {
                 Đang làm dở
               </span>
               <span className="flex items-center">
-                <div className="w-3 h-3 rounded-full bg-slate-700 mr-1.5"></div>{" "}
+                <div className="w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-700 mr-1.5"></div>{" "}
                 Chưa làm
               </span>
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-900/60 shadow-xl">
-            <table className="w-full text-left text-sm text-slate-300 whitespace-nowrap">
-              <thead className="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-800">
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-[#111827] shadow-sm">
+            <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap">
+              <thead className="bg-slate-50 dark:bg-[#162033] text-xs uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="px-5 py-4 sticky left-0 bg-slate-900/95 z-10 w-64 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
+                  <th className="px-5 py-4 sticky left-0 bg-slate-50 dark:bg-[#162033] z-10 w-64 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                     Học viên
                   </th>
-                  <th className="px-4 py-4 text-center border-l border-slate-800 bg-slate-900/80">
+                  <th className="px-4 py-4 text-center border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033]">
                     Tổng tiến độ
                   </th>
                   {plans.map((p) => (
                     <th
                       key={p.id}
-                      className="px-4 py-4 text-center border-l border-slate-800 min-w-[100px]"
+                      className="px-4 py-4 text-center border-l border-slate-200 dark:border-slate-800 min-w-[100px]"
                     >
                       Day {p.dayNumber}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredStudents.length === 0 ? (
                   <tr>
                     <td
@@ -548,16 +548,16 @@ export default function TeacherDailyPlanPage() {
                   </tr>
                 ) : (
                   filteredStudents.map((student, sIdx) => (
-                    <tr key={sIdx} className="hover:bg-slate-800/30 transition">
-                      <td className="px-5 py-3 sticky left-0 bg-slate-900/95 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
-                        <div className="font-bold text-white text-sm">
+                    <tr key={sIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
+                      <td className="px-5 py-3 sticky left-0 bg-white dark:bg-[#111827] z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                        <div className="font-bold text-slate-900 dark:text-white text-sm">
                           {student.studentName}
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-center border-l border-slate-800 bg-slate-900/40">
+                      <td className="px-4 py-3 text-center border-l border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
                         <span
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold ${student.overallRate >= 80 ? "bg-emerald-500/10 text-emerald-400" : student.overallRate >= 50 ? "bg-amber-500/10 text-amber-400" : "bg-rose-500/10 text-rose-400"}`}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold ${student.overallRate >= 80 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : student.overallRate >= 50 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400"}`}
                         >
                           {student.overallRate}%
                         </span>
@@ -566,11 +566,11 @@ export default function TeacherDailyPlanPage() {
                       {student.days?.map((day: any, dIdx: number) => (
                         <td
                           key={dIdx}
-                          className="px-4 py-3 text-center border-l border-slate-800"
+                          className="px-4 py-3 text-center border-l border-slate-100 dark:border-slate-800"
                         >
                           {day.rate === 100 ? (
                             <div className="flex flex-col items-center">
-                              <span className="text-emerald-400 font-black text-sm">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">
                                 100%
                               </span>
                               <span className="text-[10px] text-slate-500 flex items-center mt-0.5">
@@ -580,7 +580,7 @@ export default function TeacherDailyPlanPage() {
                             </div>
                           ) : day.rate > 0 ? (
                             <div className="flex flex-col items-center">
-                              <span className="text-amber-400 font-bold text-sm">
+                              <span className="text-amber-600 dark:text-amber-400 font-bold text-sm">
                                 {day.rate}%
                               </span>
                               <span className="text-[10px] text-slate-500 flex items-center mt-0.5">
@@ -589,7 +589,7 @@ export default function TeacherDailyPlanPage() {
                               </span>
                             </div>
                           ) : (
-                            <span className="text-slate-600 font-medium text-xs">
+                            <span className="text-slate-400 dark:text-slate-600 font-medium text-xs">
                               -
                             </span>
                           )}

@@ -61,19 +61,19 @@ export default function AdminLessonDetailPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-4 pb-12 animate-in fade-in duration-200">
-      {/* Header Quay lại */}
-      <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      {/* Clean Open Header */}
+      <div className="flex items-center gap-3.5 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 cursor-pointer transition"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition shadow-sm"
         >
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-lg font-black text-slate-900 tracking-tight">
+          <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Góc Nhìn Học Viên: {lesson.title}
           </h1>
-          <p className="text-xs font-semibold text-emerald-600 mt-0.5">
+          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
             Bạn đang xem trước bài giảng giống hệt những gì học viên sẽ thấy.
           </p>
         </div>

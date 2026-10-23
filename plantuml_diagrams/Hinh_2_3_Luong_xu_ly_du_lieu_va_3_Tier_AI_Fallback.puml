@@ -1,0 +1,50 @@
+@startuml Hinh_2_3_Luong_xu_ly_du_lieu_va_3_Tier_AI_Fallback
+title Hình 2.3: Luồng xử lý dữ liệu và cơ chế dự phòng đa tầng (3-Tier AI Fallback)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+start
+:Client gửi Audio WAV (16kHz PCM) & Câu mẫu tham chiếu;
+:Backend Spring Boot nhận tại AiLabController;
+
+partition "Tầng 1: Python Acoustic Engine (Local Microservice :8000)" {
+    :Gửi tệp WAV sang Python FastAPI qua HTTP POST;
+    :VAD lọc nhiễu nền, kiểm tra ngưỡng SNR >= 12dB;
+    :Wav2Vec2 CTC căn chỉnh mốc thời gian âm vị IPA;
+    :Praat trích xuất Formant F1/F2 và tính khoảng cách Euclid;
+    :Tính GOP (Goodness of Pronunciation) phụ âm và nhịp điệu WPM;
+}
+
+if (Python phản hồi thành công và trễ <= 1.0s?) then (Thành công)
+    :Đánh dấu Engine = "PYTHON_ACOUSTIC_ENGINE";
+    :Nhận mảng mốc thời gian âm vị IPA và phổ Formant;
+else (Lỗi kết nối / Quá thời gian 1.0s)
+    partition "Tầng 2: Secondary Fallback (Groq Whisper + Gemini 2.5 Flash)" {
+        :Gửi âm thanh sang Groq Whisper-large-v3-turbo STT (< 800ms);
+        :Ghép văn bản bóc băng với câu mẫu tham chiếu;
+        :Gửi Prompt sang Google Gemini 2.5 Flash;
+        :Gemini đối chiếu từng từ theo Cambridge Phonetics Rule;
+        :Phát hiện từ đọc sai/bỏ sót và sinh nhận xét tiếng Việt;
+    }
+    if (Gemini 2.5 Flash phản hồi thành công?) then (Thành công)
+        :Đánh dấu Engine = "GEMINI_AI_FALLBACK";
+    else (Lỗi HTTP 429 Quota Exceeded / Mạng đứt đoạn)
+        partition "Tầng 3: Tertiary Fallback (Groq LLaMA / OSS 120B)" {
+            :Gửi Prompt sang Groq Chat Completion (JSON mode);
+            :Áp dụng thuật toán đối chiếu khoảng cách Levenshtein;
+            :Đánh dấu Engine = "GROQ_AI_FALLBACK";
+        }
+    endif
+endif
+
+:Lưu kết quả chi tiết vào bảng ai_evaluations (MySQL);
+:Cập nhật điểm kỹ năng Speaking vào bảng student_skill_profiles;
+:Bắn kết quả qua WebSocket STOMP (/topic/student/{userId}/evaluation);
+:Frontend React hiển thị Review Mode (tô màu từ, âm vị IPA, Formant Praat);
+stop
+@enduml

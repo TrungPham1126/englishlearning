@@ -1,0 +1,57 @@
+@startuml Hinh_2_4_Sequence_UC_AUTH_01_Dang_nhap_va_Lam_moi_phien
+title Hình 2.4: Biểu đồ tuần tự Đăng nhập và Làm mới phiên xác thực (UC-AUTH-01)
+skinparam dpi 180
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+skinparam maxMessageSize 130
+
+actor "Người dùng" as User
+participant "React Frontend\n(Zustand)" as FE
+participant "AuthController" as AuthCtrl
+participant "SecurityService" as SecSvc
+participant "MySQL DB" as DB
+participant "Redis Cache" as Redis
+
+== Giai đoạn 1: Đăng nhập hệ thống ==
+User -> FE: Nhập Email & Mật khẩu -> Đăng nhập
+FE -> AuthCtrl: POST /api/v1/auth/login {email, password}
+AuthCtrl -> SecSvc: authenticate(email, password)
+SecSvc -> DB: SELECT * FROM users WHERE email = ?
+DB --> SecSvc: Thông tin User & Hash BCrypt
+SecSvc -> SecSvc: Kiểm tra BCrypt & Sinh Access/Refresh Token
+SecSvc -> DB: INSERT refresh_tokens & learning_sessions
+SecSvc -> Redis: SET session:{userId} active (TTL: 30m)
+SecSvc --> AuthCtrl: Trả về AuthResponse {tokens, roles}
+AuthCtrl --> FE: HTTP 200 OK {accessToken, userSummary}
+FE -> FE: useAuthStore.setAuth(token, user)
+FE --> User: Điều hướng vào Dashboard tương ứng
+
+== Giai đoạn 2: Gọi API & Tự động Làm mới Token ==
+User -> FE: Thực hiện thao tác nghiệp vụ
+FE -> AuthCtrl: GET /api/v1/student/courses (Bearer Token)
+AuthCtrl -> SecSvc: JwtFilter kiểm tra token
+alt Access Token hết hạn (Mã 401)
+    SecSvc --> AuthCtrl: ExpiredJwtException
+    AuthCtrl --> FE: HTTP 401 Unauthorized
+    FE -> FE: Axios Interceptor chặn mã 401
+    FE -> AuthCtrl: POST /api/v1/auth/refresh-token {refreshToken}
+    AuthCtrl -> DB: SELECT * FROM refresh_tokens WHERE token = ?
+    DB --> AuthCtrl: Bản ghi Refresh Token
+    alt Token hợp lệ & chưa thu hồi
+        AuthCtrl -> SecSvc: Cấp Access Token mới (30m)
+        AuthCtrl --> FE: HTTP 200 OK {newAccessToken}
+        FE -> FE: useAuthStore.setAccessToken(new)
+        FE -> AuthCtrl: Gửi lại GET /api/v1/student/courses
+        AuthCtrl --> FE: HTTP 200 OK {coursesData}
+        FE --> User: Hiển thị nội dung bài học
+    else Token không hợp lệ / Hết hạn
+        AuthCtrl --> FE: HTTP 403 Forbidden
+        FE -> FE: useAuthStore.logout() & xóa localStorage
+        FE --> User: Chuyển hướng về trang /login
+    end
+end
+@enduml

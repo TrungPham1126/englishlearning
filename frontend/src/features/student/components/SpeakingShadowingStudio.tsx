@@ -118,17 +118,21 @@ export default function SpeakingShadowingStudio({
     }
   }, [referenceAudioUrl]);
 
-  // Student Recording State
+  // Student Recording State (Decoupled from AI Evaluation)
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(
     savedAudioUrl || null,
   );
+  const [hasEvaluated, setHasEvaluated] = useState<boolean>(false);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<any>(null);
+  const startTimeRef = useRef<number>(0);
 
   // AI Evaluation State
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -140,12 +144,24 @@ export default function SpeakingShadowingStudio({
   const studentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlayingStudent, setIsPlayingStudent] = useState(false);
 
+  // Sync external saved audio URL if props change
+  useEffect(() => {
+    if (savedAudioUrl) {
+      setRecordedAudioUrl(savedAudioUrl);
+    }
+  }, [savedAudioUrl]);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (recordedAudioUrl && recordedAudioUrl.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(recordedAudioUrl);
+        } catch {}
+      }
     };
-  }, []);
+  }, [recordedAudioUrl]);
 
   // Handle reference audio speed toggle with pitch preservation (HTML5 preservesPitch)
   const changeSpeed = (speed: number) => {
@@ -312,10 +328,29 @@ export default function SpeakingShadowingStudio({
 
   // Start Mic Recording
   const startRecording = async () => {
+    // 1. Pause any active playback before recording
+    if (studentAudioRef.current) {
+      studentAudioRef.current.pause();
+    }
+    setIsPlayingStudent(false);
+
+    if (refAudioRef.current && isPlayingRef) {
+      refAudioRef.current.pause();
+      setIsPlayingRef(false);
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
+
+      let mimeType = "audio/webm";
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        mimeType = "audio/webm;codecs=opus";
+      } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+        mimeType = "audio/ogg;codecs=opus";
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -325,24 +360,35 @@ export default function SpeakingShadowingStudio({
       };
 
       mediaRecorder.onstop = () => {
-        const mimeType = mediaRecorder.mimeType || "audio/webm";
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const finalMime = mediaRecorder.mimeType || mimeType;
+        const blob = new Blob(audioChunksRef.current, { type: finalMime });
         setAudioBlob(blob);
         const url = URL.createObjectURL(blob);
         setRecordedAudioUrl(url);
         stream.getTracks().forEach((track) => track.stop());
-        runAiEvaluation(blob);
+
+        const duration = (Date.now() - startTimeRef.current) / 1000;
+        setRecordingDuration(duration);
+
+        // Save audio to attempt draft without automatically calling AI evaluation
+        onAudioSubmitted(blob);
       };
 
-      mediaRecorder.start();
+      startTimeRef.current = Date.now();
+      mediaRecorder.start(200);
       setIsRecording(true);
       setRecordingSeconds(0);
+      setRecordingDuration(0);
       setAiResult(null);
+      setHasEvaluated(false);
+      setEvaluationError(null);
 
+      if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err) {
+      console.error("Mic error:", err);
       alert("Không thể truy cập Microphone! Vui lòng cho phép quyền ghi âm.");
     }
   };
@@ -356,23 +402,110 @@ export default function SpeakingShadowingStudio({
     }
   };
 
-  // Run AI Shadowing Evaluation
-  const runAiEvaluation = async (blob: Blob) => {
+  // Reset / Thu âm lại
+  const handleResetRecording = () => {
+    if (studentAudioRef.current) {
+      studentAudioRef.current.pause();
+    }
+    setIsPlayingStudent(false);
+
+    if (recordedAudioUrl && recordedAudioUrl.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(recordedAudioUrl);
+      } catch (e) {
+        console.warn("Error revoking URL:", e);
+      }
+    }
+
+    setAudioBlob(null);
+    setRecordedAudioUrl(null);
+    setAiResult(null);
+    setHasEvaluated(false);
+    setRecordingDuration(0);
+    setRecordingSeconds(0);
+    setEvaluationError(null);
+  };
+
+  // Explicit Trigger: Chấm Điểm Với AI
+  const handleTriggerEvaluation = async () => {
+    let blobToEvaluate = audioBlob;
+
+    // Fallback: If audioBlob is null but recordedAudioUrl exists (e.g. from saved draft), fetch it
+    if (!blobToEvaluate && recordedAudioUrl && (recordedAudioUrl.startsWith("http") || recordedAudioUrl.startsWith("blob:"))) {
+      try {
+        const res = await fetch(recordedAudioUrl);
+        if (res.ok) {
+          blobToEvaluate = await res.blob();
+          setAudioBlob(blobToEvaluate);
+        }
+      } catch (e) {
+        console.warn("Could not retrieve blob from recordedAudioUrl:", e);
+      }
+    }
+
+    if (!blobToEvaluate) {
+      alert("Vui lòng ghi âm trước khi bấm chấm điểm với AI.");
+      return;
+    }
+
+    // Pre-validation 1: Minimum duration (1.5 seconds)
+    if (recordingDuration > 0 && recordingDuration < 1.5) {
+      const msg = "Bản ghi âm quá ngắn (dưới 1.5 giây). Vui lòng phát âm rõ ràng và thu âm lại.";
+      setEvaluationError(msg);
+      alert(msg);
+      return;
+    }
+
+    // Pre-validation 2: Reference text
+    if (!targetSentence || !targetSentence.trim()) {
+      const msg = "Không tìm thấy câu mẫu đối chiếu (Reference Text). Vui lòng thử lại.";
+      setEvaluationError(msg);
+      alert(msg);
+      return;
+    }
+
     setIsEvaluating(true);
+    setEvaluationError(null);
+
     try {
       const targetId = studentAnswerId || questionId;
       const result = await studentApi.evaluateShadowingAI(
-        blob,
+        blobToEvaluate,
         targetId,
         targetSentence,
       );
       setAiResult(result);
-      onAudioSubmitted(blob, result);
-    } catch (err) {
-      console.error(err);
-      onAudioSubmitted(blob);
+      setHasEvaluated(true);
+      onAudioSubmitted(blobToEvaluate, result);
+    } catch (error: any) {
+      console.error("Lỗi chấm điểm Shadowing:", error);
+      const errMsg =
+        error?.response?.data?.message ||
+        "Lỗi xử lý âm học từ máy chủ. Bạn có thể bấm Chấm lại.";
+      setEvaluationError(errMsg);
+      alert(errMsg);
+      // Keep blobToEvaluate and recordedAudioUrl intact so student can retry
     } finally {
       setIsEvaluating(false);
+    }
+  };
+
+  // Toggle student audio playback
+  const togglePlayStudentAudio = () => {
+    if (!studentAudioRef.current) return;
+    if (isPlayingStudent) {
+      studentAudioRef.current.pause();
+      setIsPlayingStudent(false);
+    } else {
+      if (refAudioRef.current && isPlayingRef) {
+        refAudioRef.current.pause();
+        setIsPlayingRef(false);
+      }
+      studentAudioRef.current.play().catch((err) => {
+        console.error("Lỗi phát audio học viên:", err);
+        setIsPlayingStudent(false);
+      });
+      setIsPlayingStudent(true);
     }
   };
 
@@ -583,6 +716,11 @@ export default function SpeakingShadowingStudio({
             <div className="flex items-center justify-center space-x-2 text-xs font-bold text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
               <span>Đã hoàn thành bản ghi âm nhại giọng</span>
+              {recordingDuration > 0 && (
+                <span className="text-slate-400 font-mono text-[11px]">
+                  ({recordingDuration.toFixed(1)}s)
+                </span>
+              )}
             </div>
           ) : (
             <span className="text-xs font-medium text-slate-400">
@@ -591,48 +729,93 @@ export default function SpeakingShadowingStudio({
           )}
         </div>
 
-        {/* Student Audio Playback Control */}
+        {/* Student Audio Playback & Action Controls */}
         {recordedAudioUrl && !isRecording && (
-          <div className="flex items-center space-x-3 pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {/* Nút 1: Nghe lại bài nói */}
             <button
               type="button"
-              onClick={() => {
-                if (!studentAudioRef.current) return;
-                if (isPlayingStudent) {
-                  studentAudioRef.current.pause();
-                  setIsPlayingStudent(false);
-                } else {
-                  if (refAudioRef.current && isPlayingRef) {
-                    refAudioRef.current.pause();
-                    setIsPlayingRef(false);
-                  }
-                  studentAudioRef.current.play();
-                  setIsPlayingStudent(true);
-                }
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700"
+              onClick={togglePlayStudentAudio}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700 shadow-sm cursor-pointer"
             >
-              {isPlayingStudent ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-              <span>{isPlayingStudent ? "Tạm dừng" : "Nghe lại bài nói của bạn (Học sinh)"}</span>
+              {isPlayingStudent ? (
+                <>
+                  <Pause className="h-3.5 w-3.5 text-indigo-400" />
+                  <span>Tạm dừng</span>
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5 fill-indigo-400 text-indigo-400" />
+                  <span>Nghe lại bài nói của bạn</span>
+                </>
+              )}
             </button>
 
+            {/* Nút 2: Thu âm lại */}
             <button
               type="button"
-              onClick={startRecording}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 text-xs font-bold transition border border-slate-700"
+              onClick={handleResetRecording}
+              disabled={isEvaluating}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 text-xs font-bold transition border border-slate-700 shadow-sm disabled:opacity-50 cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>Thu âm lại</span>
+            </button>
+
+            {/* Nút 3 (Primary CTA): Chấm Điểm Với AI */}
+            <button
+              type="button"
+              onClick={handleTriggerEvaluation}
+              disabled={isEvaluating}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-indigo-800 disabled:to-violet-900 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer text-xs"
+            >
+              {isEvaluating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  <span>AI đang phân tích âm học Praat F1/F2...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 text-amber-300" />
+                  <span>Chấm Điểm Với AI</span>
+                </>
+              )}
             </button>
           </div>
         )}
       </div>
 
-      {/* 3. AI EVALUATION FEEDBACK CARD */}
+      {/* 3.1. TRẠNG THÁI CHỜ: Đã thu âm nhưng chưa bấm chấm */}
+      {recordedAudioUrl && !isRecording && !hasEvaluated && !aiResult && !isEvaluating && (
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4 text-indigo-300 text-xs flex items-center gap-3 animate-in fade-in">
+          <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+            <Sparkles className="h-5 w-5 text-amber-300" />
+          </div>
+          <p className="leading-relaxed">
+            Bản ghi âm đã sẵn sàng. Hãy bấm <strong className="text-white font-bold">"Chấm Điểm Với AI"</strong> để nhận phân tích độ chính xác, lưu loát và ngữ điệu.
+          </p>
+        </div>
+      )}
+
+      {/* 3.2. THÔNG BÁO LỖI NẾU CÓ */}
+      {evaluationError && !isEvaluating && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 text-rose-300 text-xs flex items-start gap-3 animate-in fade-in">
+          <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-rose-200">Chưa thể hoàn tất chấm điểm AI</p>
+            <p className="text-rose-300/90 leading-relaxed">{evaluationError}</p>
+            <p className="text-[11px] text-slate-400 pt-0.5">
+              Bản ghi âm vẫn được lưu an toàn. Bạn có thể bấm <span className="text-white font-semibold">"Chấm Điểm Với AI"</span> để thử lại hoặc bấm <span className="text-rose-400 font-semibold">"Thu âm lại"</span>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 3.3. AI EVALUATION LOADING CARD */}
       {isEvaluating && (
-        <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-center space-x-3 text-indigo-300 text-xs font-bold">
+        <div className="p-5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-center space-x-3 text-indigo-300 text-xs font-bold animate-in fade-in">
           <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
-          <span>AI đang phân tích âm tần & chấm điểm phát âm Shadowing...</span>
+          <span>AI đang phân tích âm học Praat F1/F2...</span>
         </div>
       )}
 

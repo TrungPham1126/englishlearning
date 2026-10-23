@@ -1,0 +1,310 @@
+@startuml Hinh_2_10_So_do_quan_he_thuc_the_ERD_32_thuc_the
+title Hình 2.10: Sơ đồ quan hệ thực thể (ERD) toàn diện hệ thống (32 thực thể MySQL)
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam titleFontSize 16
+skinparam linetype ortho
+
+entity "users" as users {
+  *id: VARCHAR(36) [PK]
+  --
+  email: VARCHAR(255) [UQ]
+  password: VARCHAR(255)
+  is_active: BIT(1)
+}
+
+entity "roles" as roles {
+  *id: INT(11) [PK, AI]
+  --
+  name: ENUM
+}
+
+entity "user_roles" as user_roles {
+  *user_id: VARCHAR(36) [PK, FK]
+  *role_id: INT(11) [PK, FK]
+}
+
+entity "refresh_tokens" as refresh_tokens {
+  *id: VARCHAR(36) [PK]
+  --
+  user_id: VARCHAR(36) [FK]
+  token: VARCHAR(500)
+  revoked: BIT(1)
+}
+
+entity "learning_sessions" as learning_sessions {
+  *id: VARCHAR(36) [PK]
+  --
+  user_id: VARCHAR(36) [FK]
+  login_at: DATETIME(6)
+}
+
+entity "students" as students {
+  *id: VARCHAR(36) [PK, FK]
+  --
+  current_level: VARCHAR(10)
+  target_cefr: VARCHAR(10)
+}
+
+entity "teachers" as teachers {
+  *id: VARCHAR(36) [PK, FK]
+  --
+  specialization: VARCHAR(255)
+  experience_years: INT(11)
+}
+
+entity "classes" as classes {
+  *id: VARCHAR(36) [PK]
+  --
+  teacher_id: VARCHAR(36) [FK]
+  name: VARCHAR(150)
+  level: ENUM
+  status: ENUM
+}
+
+entity "class_students" as class_students {
+  *id: VARCHAR(36) [PK]
+  --
+  class_id: VARCHAR(36) [FK]
+  student_id: VARCHAR(36) [FK]
+  is_active: BIT(1)
+}
+
+entity "lessons" as lessons {
+  *id: VARCHAR(36) [PK]
+  --
+  class_id: VARCHAR(36) [FK]
+  title: VARCHAR(200)
+  order_index: INT(11)
+}
+
+entity "lesson_documents" as lesson_documents {
+  *id: VARCHAR(36) [PK]
+  --
+  lesson_id: VARCHAR(36) [FK]
+  file_name: VARCHAR(255)
+}
+
+entity "videos" as videos {
+  *id: VARCHAR(36) [PK]
+  --
+  lesson_id: VARCHAR(36) [FK]
+  status: ENUM
+}
+
+entity "video_watch_histories" as video_watch_histories {
+  *id: VARCHAR(36) [PK]
+  --
+  video_id: VARCHAR(36) [FK]
+  student_id: VARCHAR(36) [FK]
+}
+
+entity "grammar_topics" as grammar_topics {
+  *id: VARCHAR(36) [PK]
+  --
+  lesson_id: VARCHAR(36) [FK]
+  title: VARCHAR(150)
+}
+
+entity "vocabulary_items" as vocabulary_items {
+  *id: VARCHAR(36) [PK]
+  --
+  lesson_id: VARCHAR(36) [FK]
+  word: VARCHAR(100)
+  ipa: VARCHAR(100)
+}
+
+entity "student_vocabulary_progress" as student_vocabulary_progress {
+  *id: VARCHAR(36) [PK]
+  --
+  student_id: VARCHAR(36) [FK]
+  vocabulary_id: VARCHAR(36) [FK]
+  stage: ENUM
+  ease_factor: DOUBLE
+}
+
+entity "assignments" as assignments {
+  *id: VARCHAR(36) [PK]
+  --
+  class_id: VARCHAR(36) [FK]
+  lesson_id: VARCHAR(36) [FK]
+  title: VARCHAR(200)
+  skill_type: ENUM
+}
+
+entity "assignment_questions" as assignment_questions {
+  *id: VARCHAR(36) [PK]
+  --
+  assignment_id: VARCHAR(36) [FK]
+  question_type: ENUM
+  points: DOUBLE
+}
+
+entity "question_options" as question_options {
+  *id: VARCHAR(36) [PK]
+  --
+  question_id: VARCHAR(36) [FK]
+  option_label: VARCHAR(10)
+  is_correct: BIT(1)
+}
+
+entity "exercise_audios" as exercise_audios {
+  *id: VARCHAR(36) [PK]
+  --
+  assignment_id: VARCHAR(36)
+  question_id: VARCHAR(36)
+  url: VARCHAR(1000)
+  status: ENUM
+}
+
+entity "assignment_attempts" as assignment_attempts {
+  *id: VARCHAR(36) [PK]
+  --
+  assignment_id: VARCHAR(36) [FK]
+  student_id: VARCHAR(36) [FK]
+  total_score: DOUBLE
+  status: ENUM
+}
+
+entity "student_answers" as student_answers {
+  *id: VARCHAR(36) [PK]
+  --
+  attempt_id: VARCHAR(36) [FK]
+  question_id: VARCHAR(36) [FK]
+  earned_points: DOUBLE
+  is_correct: BIT(1)
+}
+
+entity "ai_evaluations" as ai_evaluations {
+  *id: VARCHAR(36) [PK]
+  --
+  student_answer_id: VARCHAR(36) [FK]
+  eval_type: ENUM
+  overall_score: DOUBLE
+  engine: VARCHAR(50)
+}
+
+entity "student_skill_profiles" as student_skill_profiles {
+  *id: VARCHAR(36) [PK, FK]
+  --
+  speaking_score: DOUBLE
+  listening_score: DOUBLE
+  writing_score: DOUBLE
+}
+
+entity "student_ai_quotas" as student_ai_quotas {
+  *id: VARCHAR(36) [PK]
+  --
+  student_id: VARCHAR(36) [FK]
+  daily_limit: INT(11)
+  used_today: INT(11)
+  is_blocked: BIT(1)
+}
+
+entity "daily_study_plans" as daily_study_plans {
+  *id: VARCHAR(36) [PK]
+  --
+  classroom_id: VARCHAR(36) [FK]
+  day_number: INT(11)
+  scheduled_date: DATE
+}
+
+entity "daily_plan_items" as daily_plan_items {
+  *id: VARCHAR(36) [PK]
+  --
+  daily_plan_id: VARCHAR(36) [FK]
+  assignment_id: VARCHAR(36) [FK]
+  item_type: VARCHAR(255)
+}
+
+entity "student_daily_progress" as student_daily_progress {
+  *id: VARCHAR(36) [PK]
+  --
+  student_id: VARCHAR(36) [FK]
+  daily_plan_id: VARCHAR(36) [FK]
+  is_completed: BIT(1)
+}
+
+entity "ai_generated_exercises" as ai_generated_exercises {
+  *id: VARCHAR(36) [PK]
+  --
+  teacher_id: VARCHAR(36) [FK]
+  target_cefr: VARCHAR(10)
+  status: ENUM
+}
+
+entity "global_resources" as global_resources {
+  *id: VARCHAR(36) [PK]
+  --
+  uploaded_by: VARCHAR(36) [FK]
+  storage_url: VARCHAR(1000)
+  resource_type: ENUM
+}
+
+entity "notifications" as notifications {
+  *id: VARCHAR(36) [PK]
+  --
+  recipient_id: VARCHAR(36) [FK]
+  type: ENUM
+  is_read: BIT(1)
+}
+
+entity "audit_logs" as audit_logs {
+  *id: VARCHAR(36) [PK]
+  --
+  user_id: VARCHAR(36) [FK]
+  action: VARCHAR(100)
+  created_at: DATETIME(6)
+}
+
+users ||--o{ refresh_tokens
+users ||--o{ learning_sessions
+users ||--o{ user_roles
+roles ||--o{ user_roles
+users ||--o| students
+users ||--o| teachers
+
+teachers ||--o{ classes
+classes ||--o{ class_students
+students ||--o{ class_students
+
+classes ||--o{ lessons
+lessons ||--o{ lesson_documents
+lessons ||--o{ videos
+videos ||--o{ video_watch_histories
+students ||--o{ video_watch_histories
+
+lessons ||--o{ grammar_topics
+lessons ||--o{ vocabulary_items
+students ||--o{ student_vocabulary_progress
+vocabulary_items ||--o{ student_vocabulary_progress
+
+classes ||--o{ assignments
+lessons ||--o{ assignments
+assignments ||--o{ assignment_questions
+assignment_questions ||--o{ question_options
+
+students ||--o{ assignment_attempts
+assignments ||--o{ assignment_attempts
+assignment_attempts ||--o{ student_answers
+assignment_questions ||--o{ student_answers
+student_answers ||--o| ai_evaluations
+
+students ||--o| student_skill_profiles
+students ||--o| student_ai_quotas
+
+classes ||--o{ daily_study_plans
+daily_study_plans ||--o{ daily_plan_items
+assignments ||--o{ daily_plan_items
+students ||--o{ student_daily_progress
+daily_study_plans ||--o{ student_daily_progress
+
+teachers ||--o{ ai_generated_exercises
+lessons ||--o{ ai_generated_exercises
+users ||--o{ global_resources
+users ||--o{ notifications
+users ||--o{ audit_logs
+@enduml

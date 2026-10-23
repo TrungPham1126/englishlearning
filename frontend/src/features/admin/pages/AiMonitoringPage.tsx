@@ -205,35 +205,34 @@ export default function AiMonitoringPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-in fade-in duration-300">
-      {/* 1. TOP HEADER & KILL-SWITCH CONTROL */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl">
-            <Cpu size={32} />
+      {/* 1. CLEAN OPEN HEADER & KILL-SWITCH CONTROL */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <Cpu size={14} />
+            <span>Giám Sát Hệ Thống AI</span>
           </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black text-slate-900 dark:text-white">
-                Giám Sát Chi Phí & Hiệu Suất AI
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
-                Gemini 2.5 Flash
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                Groq LLaMA 3.3
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Hệ thống giám sát đa động cơ: Google Gemini (chấm bài nói Speaking) & Groq LLaMA (giáo viên tạo đề thi).
-            </p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Giám Sát Chi Phí & Hiệu Suất AI
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+              Gemini 2.5 Flash
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+              Groq LLaMA 3.3
+            </span>
           </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Giám sát hạn mức, lưu lượng token và chi phí vận hành các mô hình AI tích hợp trong hệ thống.
+          </p>
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">
           <button
             onClick={fetchData}
             disabled={loading || isProcessing}
-            className="p-2.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+            className="p-2.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition shadow-sm cursor-pointer"
             title="Làm mới dữ liệu"
           >
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
@@ -246,7 +245,7 @@ export default function AiMonitoringPage() {
             className={`flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-sm cursor-pointer ${
               stats?.systemKillSwitchActive
                 ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse shadow-rose-600/30"
-                : "bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700"
+                : "bg-white dark:bg-[#111827] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-800"
             }`}
           >
             {stats?.systemKillSwitchActive ? (
@@ -405,24 +404,24 @@ export default function AiMonitoringPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  Kiến Trúc Phối Hợp Đa Trí Tuệ Nhân Tạo (Dual-AI Cooperative Pipeline)
+                  Kiến Trúc Điều Phối Dịch Vụ AI (Dual-AI Pipeline)
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
-                  Router Phân Luồng Tự Động
+                  Điều Hướng Tự Động
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                  Auto-Failover 0% Downtime
+                  Cơ Chế Dự Phòng (Failover)
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Mô hình hợp tác 2 tầng: <strong>Groq LLaMA 3.3</strong> đảm nhận tạo đề &amp; xử lý văn bản tốc độ cao (&lt;1.2s); <strong>Gemini 2.5 Flash</strong> đảm nhận phân tích âm thanh đa phương thức &amp; làm chốt chặn dự phòng tự động khi có sự cố.
+                Hệ thống vận hành 2 mô hình: <strong>LLaMA 3.3</strong> đảm nhận tạo đề thi &amp; xử lý văn bản; <strong>Gemini 2.5 Flash</strong> đảm nhận đánh giá phát âm đa phương thức và dự phòng tự động khi vượt hạn mức.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            Cả 2 Động Cơ Sẵn Sàng Phối Hợp
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            Hệ thống hoạt động bình thường
           </div>
         </div>
 
@@ -479,7 +478,7 @@ export default function AiMonitoringPage() {
 
         {/* Hai thẻ Động cơ AI Chuyên Biệt */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Động cơ 1: Groq LLaMA 3.3 70B (Primary Fast Engine) */}
+          {/* Dịch vụ 1: Mô hình Soạn Đề & Xử Lý Văn Bản */}
           <div className="bg-gradient-to-br from-emerald-500/5 via-white to-emerald-500/10 dark:from-emerald-950/30 dark:via-slate-900 dark:to-emerald-950/20 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs relative overflow-hidden flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-emerald-100 dark:border-emerald-950/60">
@@ -490,20 +489,20 @@ export default function AiMonitoringPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-black text-slate-900 dark:text-white text-base">
-                        Groq LLaMA 3.3 70B
+                        Mô hình Soạn Đề &amp; Xử Lý Văn Bản
                       </h3>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                        Động cơ chính (Primary)
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        LLaMA 3.3 70B
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      <strong>Nhiệm vụ:</strong> Soạn đề thi trắc nghiệm, tạo bài tập ngữ pháp, bài đọc hiểu &amp; phân tích câu văn bản.
+                      Phạm vi: Sinh đề thi trắc nghiệm, bài tập ngữ pháp, bài đọc hiểu.
                     </p>
                   </div>
                 </div>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  &lt;1.2s Tốc độ cao
+                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Đang hoạt động
                 </span>
               </div>
 
@@ -543,13 +542,13 @@ export default function AiMonitoringPage() {
                 <span>In: {(stats?.groqStats?.promptTokens || 0).toLocaleString()} | Out: {(stats?.groqStats?.completionTokens || 0).toLocaleString()} tokens</span>
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">{stats?.groqStats?.pricingModel || "$0.59 / $0.79 per 1M"}</span>
               </div>
-              <div className="text-[10px] text-emerald-700 dark:text-emerald-400/90 font-medium bg-emerald-50/60 dark:bg-emerald-950/30 px-2 py-0.5 rounded">
-                ⚡ Phối hợp: Tự động chuyển tải sang Gemini nếu chạm hạn mức Rate Limit 429
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
+                Cơ chế dự phòng: Tự động chuyển hướng sang Gemini khi vượt hạn mức (Rate Limit).
               </div>
             </div>
           </div>
 
-          {/* Động cơ 2: Google Gemini 2.5 Flash (Multimodal & Auto-Failover) */}
+          {/* Dịch vụ 2: Mô hình Chấm Phát Âm & Đa Phương Thức */}
           <div className="bg-gradient-to-br from-indigo-500/5 via-white to-indigo-500/10 dark:from-indigo-950/30 dark:via-slate-900 dark:to-indigo-950/20 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 shadow-xs relative overflow-hidden flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-indigo-100 dark:border-indigo-950/60">
@@ -560,20 +559,20 @@ export default function AiMonitoringPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-black text-slate-900 dark:text-white text-base">
-                        Google Gemini 2.5 Flash
+                        Mô hình Chấm Phát Âm &amp; Đa Phương Thức
                       </h3>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">
-                        Đa phương thức &amp; Dự phòng
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        Gemini 2.5 Flash
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      <strong>Nhiệm vụ:</strong> Chấm điểm phát âm IELTS, Shadowing, phân tích sóng âm &amp; Chốt chặn dự phòng tạo đề.
+                      Phạm vi: Đánh giá âm học Speaking, phân tích phát âm và dự phòng tạo đề.
                     </p>
                   </div>
                 </div>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                  Sẵn sàng Failover
+                <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100/80 dark:bg-indigo-950/50 px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  Sẵn sàng dự phòng
                 </span>
               </div>
 
@@ -613,8 +612,8 @@ export default function AiMonitoringPage() {
                 <span>In: {(stats?.geminiStats?.promptTokens || 0).toLocaleString()} | Out: {(stats?.geminiStats?.completionTokens || 0).toLocaleString()} tokens</span>
                 <span className="font-semibold text-indigo-600 dark:text-indigo-400">{stats?.geminiStats?.pricingModel || "$0.075 / $0.30 per 1M"}</span>
               </div>
-              <div className="text-[10px] text-indigo-700 dark:text-indigo-400/90 font-medium bg-indigo-50/60 dark:bg-indigo-950/30 px-2 py-0.5 rounded">
-                🛡️ Phối hợp: Hot Standby - Tiếp nhận 100% request khi Groq lỗi hoặc rate limit (0% Downtime)
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
+                Cơ chế dự phòng: Kích hoạt tự động khi dịch vụ chính gặp sự cố.
               </div>
             </div>
           </div>
@@ -629,10 +628,10 @@ export default function AiMonitoringPage() {
             <div>
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <TrendingUp size={18} className="text-indigo-600 dark:text-indigo-400" />
-                Lưu Lượng Token Tiêu Thụ (7 Ngày Gần Nhất)
+                Thống Kê Token Tiêu Thụ (7 Ngày)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Theo dõi biến thiên Token đầu vào (Prompt) và Token sinh ra (Completion)
+                Dữ liệu phân tách giữa Token gửi đi (Input) và Token nhận về (Output)
               </p>
             </div>
             <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg">
@@ -718,7 +717,7 @@ export default function AiMonitoringPage() {
               Tỷ Lệ Phân Bổ Chi Phí AI
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Phân tách giữa Chấm Speaking học viên và Soạn đề giáo viên
+              Phân bổ ngân sách giữa tính năng Luyện Nói (Speaking) và Soạn Đề Thi
             </p>
           </div>
 

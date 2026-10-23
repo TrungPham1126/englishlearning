@@ -1,0 +1,60 @@
+@startuml Hinh_2_11_Kien_truc_Frontend_React_SPA_Zustand
+title Hình 2.11: Kiến trúc Frontend React SPA, phân quyền & quản lý trạng thái Zustand
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+package "React 19 Single Page Application (SPA)" {
+    component [Router Index\n(React Router v7)] as AppRouter
+    component [ProtectedRoute\n(Role Guard)] as Guard
+    
+    package "Feature Pages (UI Modules)" {
+        component [Auth Pages\n(Login, Register)] as AuthViews
+        component [Student Pages\n(Courses, DailyPlan, CBT, Shadowing, Profile)] as StudentViews
+        component [Teacher Pages\n(Classrooms, DailyPlan, CreateAssignment, Grading)] as TeacherViews
+        component [Admin Pages\n(Users, Moderation, Quota, AuditLogs, Broadcast)] as AdminViews
+    }
+    
+    package "State Management & Data Layer" {
+        component [useAuthStore\n(Zustand)] as AuthStore
+        component [TanStack React Query\n(Server Cache)] as ReactQuery
+        component [Axios Client &\nInterceptors] as AxiosClient
+    }
+    
+    package "Specialized Client Utilities" {
+        component [SheetJS XLSX\n(Excel Parser)] as ExcelParser
+        component [Recharts Visualizer\n(6D Radar Chart)] as ChartRadar
+        component [Web Audio Recorder\n(PCM 16kHz WAV)] as AudioRec
+    }
+}
+
+cloud "Spring Boot Backend REST APIs" as Backend
+
+AppRouter --> Guard : Định tuyến theo URL
+Guard --> AuthViews : Cho phép Public
+Guard --> StudentViews : Kiểm tra ROLE_STUDENT
+Guard --> TeacherViews : Kiểm tra ROLE_TEACHER
+Guard --> AdminViews : Kiểm tra ROLE_ADMIN
+
+Guard ..> AuthStore : Đọc isAuthenticated & user.roles
+StudentViews ..> AuthStore : Đọc accessToken
+TeacherViews ..> AuthStore : Đọc accessToken
+AdminViews ..> AuthStore : Đọc accessToken
+
+StudentViews --> ReactQuery : Quản lý trạng thái dữ liệu bài học
+TeacherViews --> ReactQuery : Quản lý danh sách lớp & học sinh
+AdminViews --> ReactQuery : Quản lý người dùng & nhật ký
+
+ReactQuery --> AxiosClient : Thực hiện HTTP Request
+AxiosClient --> Backend : Gửi kèm Bearer Access Token
+AxiosClient ..> AuthStore : Tự động Refresh Token khi gặp lỗi 401
+
+TeacherViews --> ExcelParser : Phân tích tệp bài tập Excel
+StudentViews --> ChartRadar : Vẽ biểu đồ mạng nhện 6 kỹ năng
+StudentViews --> AudioRec : Thu âm bài nói & Shadowing
+@enduml

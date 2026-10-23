@@ -1,0 +1,47 @@
+@startuml Hinh_1_1_So_do_Use_Case_tong_quat_Muc_0
+title Hình 1.1: Sơ đồ Use Case tổng quát mức 0 của hệ thống (ELP)
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Giảng viên\n(Teacher)" as Teacher
+actor "Học viên\n(Student)" as Student
+actor "Quản trị viên\n(Admin)" as Admin
+
+rectangle "«External Services»" {
+    actor "Cloudflare R2\nStorage" as R2 <<Service>>
+    actor "Python Phonetics\nMicroservice" as PythonService <<Service>>
+    actor "Gemini & Groq\nCloud AI" as CloudAI <<Service>>
+}
+
+rectangle "Hệ thống Học tiếng Anh trực tuyến (English Learning Platform - ELP)" {
+    usecase "UC-AUTH: Xác thực &\nQuản lý tài khoản" as UC_AUTH
+    usecase "UC-STU: Học tập &\nThi tương tác CBT" as UC_STU
+    usecase "UC-TEA: Quản lý lớp học &\nTạo bài tập đa nguồn" as UC_TEA
+    usecase "UC-ADM: Quản trị hệ thống,\nQuota & Nhật ký" as UC_ADM
+    usecase "UC-AI: Luyện phát âm &\nChấm Speaking/Writing" as UC_AI
+    usecase "UC-SYS: Chuyển đổi Video HLS\n& Quản trị học liệu" as UC_SYS
+}
+
+Teacher --> UC_AUTH
+Teacher --> UC_TEA
+Student --> UC_AUTH
+Student --> UC_STU
+Admin --> UC_AUTH
+Admin --> UC_ADM
+
+UC_STU ..> UC_AI : <<include>>
+UC_TEA ..> UC_SYS : <<include>>
+
+UC_AI --> PythonService : Phân tích Formant & GOP
+UC_AI --> CloudAI : Fallback STT & Chấm bài
+UC_TEA --> CloudAI : Sinh câu hỏi theo CEFR
+UC_SYS --> R2 : Lưu trữ Video HLS (.m3u8, .ts)
+UC_ADM --> CloudAI : Giám sát Quota & Chi phí
+@enduml

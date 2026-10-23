@@ -121,6 +121,8 @@ export default function SpeakingAiEvaluationPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const timerRef = useRef<any>(null);
+  const startTimeRef = useRef<number>(0);
+  const recordingDurationRef = useRef<number>(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -708,8 +710,13 @@ export default function SpeakingAiEvaluationPage() {
         setActiveAudioBlob(blob);
         setActiveAudioUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach((track) => track.stop());
+
+        const duration = (Date.now() - startTimeRef.current) / 1000;
+        recordingDurationRef.current = duration;
       };
 
+      startTimeRef.current = Date.now();
+      recordingDurationRef.current = 0;
       recorder.start(250);
       setIsRecording(true);
       setRecordingSeconds(0);
@@ -737,6 +744,7 @@ export default function SpeakingAiEvaluationPage() {
     if (file) {
       setActiveAudioBlob(file);
       setActiveAudioUrl(URL.createObjectURL(file));
+      recordingDurationRef.current = 10;
     }
   };
 
@@ -815,9 +823,6 @@ export default function SpeakingAiEvaluationPage() {
   // Đánh giá AI Shadowing (<2s)
   const handleTriggerShadowingEvaluation = async () => {
     if (!currentAttempt || !currentQ) return;
-    setIsEvaluating(true);
-    setAiReport(null);
-    setActionMessage(null);
 
     try {
       let finalAudioBlob = activeAudioBlob;
@@ -830,10 +835,28 @@ export default function SpeakingAiEvaluationPage() {
       }
 
       if (!finalAudioBlob) {
-        alert("Vui lòng ghi âm câu nhại giọng trước khi chấm điểm AI.");
-        setIsEvaluating(false);
+        alert("Vui lòng ghi âm câu nhại giọng trước khi bấm chấm điểm AI.");
         return;
       }
+
+      // Pre-validation 1: Audio duration (>= 1.5s)
+      if (recordingDurationRef.current > 0 && recordingDurationRef.current < 1.5) {
+        alert("Bản ghi âm quá ngắn (dưới 1.5 giây). Vui lòng phát âm rõ ràng và thu âm lại.");
+        return;
+      }
+
+      // Pre-validation 2: Reference text
+      const referenceSentence = cleanShadowingSentence(
+        currentQ.correctAnswer || currentQ.promptText || ""
+      );
+      if (!referenceSentence || !referenceSentence.trim()) {
+        alert("Không tìm thấy câu đối chiếu chuẩn (Reference Text) cho bài tập nhại giọng này.");
+        return;
+      }
+
+      setIsEvaluating(true);
+      setAiReport(null);
+      setActionMessage("AI đang phân tích âm học Praat F1/F2...");
 
       let targetAnswerId = (currentQ as any)?.studentAnswerId;
       if (!targetAnswerId && activeAudioBlob) {
@@ -849,9 +872,6 @@ export default function SpeakingAiEvaluationPage() {
         type: finalAudioBlob.type || "audio/webm",
       });
 
-      const referenceSentence = cleanShadowingSentence(
-        currentQ.correctAnswer || currentQ.promptText || ""
-      );
       const result = await studentApi.evaluateShadowingAI(
         cleanFile,
         targetAnswerId || "",
@@ -860,7 +880,7 @@ export default function SpeakingAiEvaluationPage() {
 
       setShadowingReport(result);
       setReportQuestionId(currentQ.questionId);
-      setActionMessage("Groq AI đã chấm xong bài Shadowing với điểm phát âm chi tiết!");
+      setActionMessage("AI đã chấm xong bài Shadowing với điểm phát âm chi tiết!");
     } catch (err: any) {
       alert(`Đánh giá Shadowing thất bại: ${err.response?.data?.message || err.message}`);
     } finally {
@@ -950,35 +970,34 @@ export default function SpeakingAiEvaluationPage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 pb-16 font-sans">
-      {/* 1. TOP HEADER & KHÓA HỌC */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-3">
+    <div className="elp-page max-w-[1400px] mx-auto space-y-6 pb-16 font-sans">
+      {/* 1. CLEAN OPEN HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <div className="flex items-center gap-3.5">
           <button
             type="button"
             onClick={() => navigate("/student/courses")}
-            className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-sm cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-black text-indigo-700 uppercase">
-                <Mic size={13} /> Daily Plan Speaking Lab
-              </span>
-              <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
-                <Calendar size={13} /> Lộ trình bài tập hàng ngày
-              </span>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+              <Mic size={14} />
+              <span>Speaking Lab & Shadowing Studio</span>
             </div>
-            <h1 className="text-lg md:text-xl font-black text-slate-900 mt-0.5">
-              Bài Nộp & Nhận Xét Speaking Theo Ngày (Daily Plan)
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Bài Nộp & Đánh Giá Speaking (AI Lab)
             </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Luyện phát âm AI theo lộ trình bài học và xem phân tích độ chuẩn xác từng âm tiết
+            </p>
           </div>
         </div>
 
         {courses.length > 1 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-bold">Lớp học:</span>
+          <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3.5 py-2 rounded-xl shadow-sm">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">Lớp học:</span>
             <select
               value={selectedClassId || ""}
               onChange={(e) => {
@@ -986,10 +1005,10 @@ export default function SpeakingAiEvaluationPage() {
                 setSelectedClassId(newId);
                 fetchDailyPlansAndSpeaking(newId);
               }}
-              className="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-indigo-500"
+              className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white outline-none cursor-pointer"
             >
               {courses.map((c) => (
-                <option key={c.classId} value={c.classId}>
+                <option key={c.classId} value={c.classId} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                   {c.className} ({c.level || "General"})
                 </option>
               ))}
@@ -999,14 +1018,14 @@ export default function SpeakingAiEvaluationPage() {
       </div>
 
       {actionMessage && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
+        <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{actionMessage}</span>
           </div>
           <button
             onClick={() => setActionMessage(null)}
-            className="text-emerald-700 hover:text-emerald-900 font-bold ml-4 cursor-pointer"
+            className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 font-bold ml-4 cursor-pointer"
           >
             ×
           </button>
@@ -1014,15 +1033,15 @@ export default function SpeakingAiEvaluationPage() {
       )}
 
       {/* 2. THANH ĐIỀU HƯỚNG CÁC NGÀY: NGÀY 1, NGÀY 2, NGÀY 3, NGÀY 4... */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="elp-card bg-white dark:bg-[#111827] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-indigo-600" />
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+            <Calendar size={18} className="text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
               Lộ trình bài tập Speaking theo Ngày (Daily Plan):
             </h2>
           </div>
-          <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
             {daysList.length} Ngày trong lộ trình
           </span>
         </div>
@@ -1030,7 +1049,7 @@ export default function SpeakingAiEvaluationPage() {
         {daysList.length === 0 ? (
           <div className="p-8 text-center text-slate-400 space-y-2">
             <AlertTriangle className="mx-auto text-amber-500" size={32} />
-            <p className="text-sm font-bold text-slate-700">
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
               Chưa có ngày học nào được giao bài Speaking trong lớp này.
             </p>
           </div>
@@ -1049,20 +1068,20 @@ export default function SpeakingAiEvaluationPage() {
                   onClick={() => handleSelectDay(day)}
                   className={`flex flex-col items-center justify-center min-w-[125px] py-3 px-4 rounded-xl border-2 transition cursor-pointer shrink-0 text-left ${
                     isSelectedDay
-                      ? "border-indigo-600 bg-indigo-50/70 shadow-xs ring-2 ring-indigo-500/20"
-                      : "border-slate-200 bg-slate-50/50 hover:bg-slate-100/70 text-slate-700"
+                      ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-500/15 shadow-xs ring-2 ring-indigo-500/20"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-100/70 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 w-full justify-between">
                     <span
                       className={`text-xs font-black uppercase tracking-wider ${
-                        isSelectedDay ? "text-indigo-700" : "text-slate-800"
+                        isSelectedDay ? "text-indigo-700 dark:text-indigo-400" : "text-slate-800 dark:text-slate-200"
                       }`}
                     >
                       Ngày {day.dayNumber}
                     </span>
                     {allDone ? (
-                      <CheckCircle2 size={13} className="text-emerald-600" />
+                      <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
                     ) : day.isCurrentDay ? (
                       <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
                     ) : null}
@@ -1076,14 +1095,14 @@ export default function SpeakingAiEvaluationPage() {
                     <span
                       className={`font-bold px-1.5 py-0.5 rounded ${
                         isSelectedDay
-                          ? "bg-indigo-200/60 text-indigo-900"
-                          : "bg-slate-200/60 text-slate-600"
+                          ? "bg-indigo-200/60 dark:bg-indigo-500/30 text-indigo-900 dark:text-indigo-200"
+                          : "bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       {totalCount} bài nói
                     </span>
                     {allDone && (
-                      <span className="text-emerald-700 font-black">
+                      <span className="text-emerald-700 dark:text-emerald-400 font-black">
                         Đã nộp ({completedCount}/{totalCount})
                       </span>
                     )}
@@ -1105,18 +1124,18 @@ export default function SpeakingAiEvaluationPage() {
           {/* CỘT TRÁI: DANH SÁCH BÀI TẬP NÓI CỦA NGÀY & LỊCH SỬ NỘP */}
           <div className="lg:col-span-4 space-y-4">
             {/* Box: Danh sách bài tập của Ngày đang chọn */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-              <div className="bg-[#f0f3f8] px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Mic size={14} className="text-indigo-600" />
+            <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
+              <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Mic size={14} className="text-indigo-600 dark:text-indigo-400" />
                   Bài tập Ngày {currentSelectedDay.dayNumber}
                 </span>
-                <span className="text-[11px] font-bold text-slate-500">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   {currentSelectedDay.speakingTasks.length} bài
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-100 max-h-[350px] overflow-y-auto">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[350px] overflow-y-auto">
                 {currentSelectedDay.speakingTasks.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400">
                     Ngày này chưa có bài tập Speaking nào
@@ -1130,16 +1149,16 @@ export default function SpeakingAiEvaluationPage() {
                         onClick={() => handleSelectAssignment(asg.id)}
                         className={`p-4 cursor-pointer transition flex items-center justify-between gap-3 ${
                           isAct
-                            ? "bg-indigo-50/80 border-l-4 border-indigo-600"
-                            : "hover:bg-slate-50"
+                            ? "bg-indigo-50/80 dark:bg-indigo-500/15 border-l-4 border-indigo-600"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         }`}
                       >
                         <div className="flex items-center gap-3 truncate">
                           <div
                             className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
                               asg.isShadowing
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-indigo-100 text-indigo-700"
+                                ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                                : "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300"
                             }`}
                           >
                             {asg.isShadowing ? (
@@ -1152,13 +1171,13 @@ export default function SpeakingAiEvaluationPage() {
                             <span
                               className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                                 asg.isShadowing
-                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                  : "bg-indigo-50 text-indigo-800 border border-indigo-200"
+                                  ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+                                  : "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
                               }`}
                             >
                               {asg.isShadowing ? "Shadowing (Nhại giọng)" : "Speaking Q&A"}
                             </span>
-                            <p className="text-xs font-black text-slate-800 truncate mt-1">
+                            <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate mt-1">
                               {asg.title}
                             </p>
                           </div>
@@ -1166,16 +1185,16 @@ export default function SpeakingAiEvaluationPage() {
 
                         <div className="shrink-0 text-right">
                           {asg.isCompleted ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md">
                               <CheckCircle2 size={11} /> Đã nộp
                             </span>
                           ) : (
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md">
                               Chưa nộp
                             </span>
                           )}
                           {asg.highestScore !== undefined && asg.highestScore !== null && (
-                            <p className="text-[11px] font-black text-indigo-700 mt-1">
+                            <p className="text-[11px] font-black text-indigo-700 dark:text-indigo-400 mt-1">
                               {asg.highestScore.toFixed(1)} pts
                             </p>
                           )}
@@ -1188,18 +1207,18 @@ export default function SpeakingAiEvaluationPage() {
             </div>
 
             {/* Box: Lịch Sử Lượt Nộp Bài Của Bài Tập Đang Chọn */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-              <div className="bg-[#f0f3f8] px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock size={13} className="text-indigo-600" />
+            <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
+              <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock size={13} className="text-indigo-600 dark:text-indigo-400" />
                   Lịch Sử Các Lần Nộp
                 </span>
-                <span className="text-[11px] font-bold text-slate-500">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   {attempts.length} lượt
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto">
                 {attempts.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400">
                     Chưa có lượt nộp bài nào
@@ -1227,19 +1246,19 @@ export default function SpeakingAiEvaluationPage() {
                         }}
                         className={`p-3.5 cursor-pointer transition ${
                           isSelectedAtt
-                            ? "bg-indigo-50/70 border-l-4 border-indigo-600"
-                            : "hover:bg-slate-50"
+                            ? "bg-indigo-50/70 dark:bg-indigo-500/15 border-l-4 border-indigo-600"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-800">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
                             Lần làm #{att.attemptNumber}
                           </span>
                           <span
                             className={`text-xs font-bold px-2 py-0.5 rounded ${
                               isDone
-                                ? "text-emerald-700 bg-emerald-100/70"
-                                : "text-amber-700 bg-amber-100/70"
+                                ? "text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-500/20"
+                                : "text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-500/20"
                             }`}
                           >
                             {isDone ? (
@@ -1253,7 +1272,7 @@ export default function SpeakingAiEvaluationPage() {
                             )}
                           </span>
                         </div>
-                        <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500">
+                        <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
                           <span className="flex items-center gap-1">
                             <Clock size={11} />
                             {att.submittedAt
@@ -1276,13 +1295,13 @@ export default function SpeakingAiEvaluationPage() {
               </div>
 
               {isSubmitted && (
-                <div className="p-3 bg-slate-50 border-t border-slate-200">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={handleStartNewAttempt}
-                    className="w-full py-2 px-3 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
                   >
-                    <RotateCcw size={13} className="text-indigo-600" />
+                    <RotateCcw size={13} className="text-indigo-600 dark:text-indigo-400" />
                     <span>Luyện tập lại (Tạo bài nộp mới)</span>
                   </button>
                 </div>
@@ -1293,28 +1312,28 @@ export default function SpeakingAiEvaluationPage() {
           {/* CỘT PHẢI: KHÔNG GIAN BÀI TẬP, NHẬN XÉT CỦA CÔ GIÁO & AI */}
           <div className="lg:col-span-8 space-y-6">
             {!currentQ ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[300px]">
+              <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[300px]">
                 <AlertTriangle className="mb-3 text-amber-500" size={40} />
-                <h3 className="font-bold text-lg text-slate-800">
+                <h3 className="font-bold text-lg text-slate-800 dark:text-white">
                   Chưa Có Nội Dung Bài Tập
                 </h3>
-                <p className="text-sm mt-1 max-w-md text-slate-500">
+                <p className="text-sm mt-1 max-w-md text-slate-500 dark:text-slate-400">
                   Vui lòng chọn một bài tập Speaking của Ngày {currentSelectedDay.dayNumber} để bắt đầu.
                 </p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8 shadow-xs space-y-6">
+              <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 md:p-8 shadow-xs space-y-6">
                 {/* Header Câu Hỏi & Trạng Thái Hoàn Thành */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">
+                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                       Ngày {currentSelectedDay.dayNumber} • Câu {selectedQuestionIndex + 1}/{questions.length}
                     </span>
                     <span
                       className={`rounded-md px-3 py-1 text-xs font-bold ${
                         isShadowingMode
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                          ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+                          : "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
                       }`}
                     >
                       {isShadowingMode
@@ -1325,18 +1344,18 @@ export default function SpeakingAiEvaluationPage() {
 
                   <div className="flex items-center gap-3">
                     {isSubmitted ? (
-                      <span className="flex items-center gap-1.5 text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 shadow-2xs">
+                      <span className="flex items-center gap-1.5 text-xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-500/30 shadow-2xs">
                         <CheckCircle2 size={14} /> ĐÃ HOÀN THÀNH
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-3 py-1.5 rounded-lg">
                         <Clock size={14} /> Đang làm bài
                       </span>
                     )}
 
                     {currentAttempt?.score !== undefined &&
                       currentAttempt?.score !== null && (
-                        <span className="text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg">
+                        <span className="text-xs font-black bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 px-3 py-1.5 rounded-lg">
                           Tổng điểm: {currentAttempt.score.toFixed(1)} pts
                         </span>
                       )}
@@ -1348,7 +1367,7 @@ export default function SpeakingAiEvaluationPage() {
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">
                     {isShadowingMode ? "Câu mẫu cần luyện nói (Reference Sentence):" : "Câu hỏi phỏng vấn (Interview Prompt):"}
                   </span>
-                  <div className="text-xl md:text-2xl font-black text-slate-900 leading-relaxed bg-slate-50/70 p-5 rounded-xl border border-slate-200">
+                  <div className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-relaxed bg-slate-50/70 dark:bg-slate-800/60 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
                     "{isShadowingMode
                       ? cleanShadowingSentence(currentQ.correctAnswer || currentQ.promptText || "No prompt provided")
                       : (currentQ.promptText || currentQ.correctAnswer || "No prompt provided")}"
@@ -1387,7 +1406,7 @@ export default function SpeakingAiEvaluationPage() {
                     </button>
 
                     {/* Bộ chọn giọng đọc mẫu */}
-                    <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300">
                       {[
                         { id: "af_heart", label: "Heart (US Nữ)" },
                         { id: "am_michael", label: "Michael (US Nam)" },
@@ -1405,8 +1424,8 @@ export default function SpeakingAiEvaluationPage() {
                           }}
                           className={`px-2.5 py-1 text-[11px] rounded-lg transition ${
                             selectedVoice === v.id
-                              ? "bg-white text-indigo-600 shadow-2xs font-black"
-                              : "hover:text-slate-900"
+                              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-black"
+                              : "hover:text-slate-900 dark:hover:text-white"
                           }`}
                         >
                           {v.label}
@@ -1415,7 +1434,7 @@ export default function SpeakingAiEvaluationPage() {
                     </div>
 
                     {/* Tốc độ đọc */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300">
                       <span className="px-1.5 text-[11px] text-slate-400">Tốc độ:</span>
                       {[0.75, 1.0, 1.25, 1.5].map((s) => (
                         <button
@@ -1427,8 +1446,8 @@ export default function SpeakingAiEvaluationPage() {
                           }}
                           className={`px-2 py-0.5 rounded-lg transition ${
                             ttsSpeed === s
-                              ? "bg-white text-indigo-600 shadow-2xs"
-                              : "hover:text-slate-900"
+                              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                              : "hover:text-slate-900 dark:hover:text-white"
                           }`}
                         >
                           {s}x
@@ -1440,7 +1459,7 @@ export default function SpeakingAiEvaluationPage() {
                       <button
                         type="button"
                         onClick={() => setShowGuidelines(!showGuidelines)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 ml-auto cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white ml-auto cursor-pointer"
                       >
                         <Lightbulb size={14} className="text-amber-500" />
                         <span>Gợi ý trả lời</span>
@@ -1454,15 +1473,15 @@ export default function SpeakingAiEvaluationPage() {
                   </div>
 
                   {showGuidelines && (
-                    <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 space-y-1.5 animate-in fade-in">
-                      <b className="block text-amber-950 font-black">
+                    <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-in fade-in">
+                      <b className="block text-amber-950 dark:text-amber-300 font-black">
                         💡 Hướng dẫn & Tiêu chí câu trả lời:
                       </b>
                       {currentQ.explanation && (
                         <p className="leading-relaxed">{currentQ.explanation}</p>
                       )}
                       {currentQ.correctAnswer && !isShadowingMode && (
-                        <p className="leading-relaxed font-medium text-amber-800">
+                        <p className="leading-relaxed font-medium text-amber-800 dark:text-amber-300">
                           Ý chính gợi ý: {currentQ.correctAnswer}
                         </p>
                       )}
@@ -1472,7 +1491,7 @@ export default function SpeakingAiEvaluationPage() {
 
                 {/* Điều hướng nếu bài có nhiều câu */}
                 {questions.length > 1 && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span className="text-xs font-bold text-slate-400 mr-1">
                       Chọn câu:
                     </span>
@@ -1484,7 +1503,7 @@ export default function SpeakingAiEvaluationPage() {
                         className={`h-8 w-8 rounded-lg text-xs font-black transition cursor-pointer border-2 ${
                           idx === selectedQuestionIndex
                             ? "bg-indigo-600 text-white border-indigo-600"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
                         }`}
                       >
                         {idx + 1}
@@ -1494,14 +1513,14 @@ export default function SpeakingAiEvaluationPage() {
                 )}
 
                 {/* KHU VỰC THU ÂM & PHÁT LẠI GIỌNG NÓI */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-6 space-y-5">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-6 space-y-5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                      <Volume2 size={16} className="text-indigo-600" />
+                    <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                      <Volume2 size={16} className="text-indigo-600 dark:text-indigo-400" />
                       Bản ghi âm bài nói của bạn (Học sinh thực hiện):
                     </span>
                     {isSubmitted && (
-                      <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                         <CheckCircle2 size={13} /> Đã nộp thành công
                       </span>
                     )}
@@ -1514,7 +1533,7 @@ export default function SpeakingAiEvaluationPage() {
                       className="w-full h-11 rounded-lg"
                     />
                   ) : (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-xs text-slate-500">
+                    <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-6 text-center text-xs text-slate-500 dark:text-slate-400">
                       Chưa có bản ghi âm. Hãy bấm nút thu âm micro bên dưới để trả lời bài tập Ngày {currentSelectedDay.dayNumber}.
                     </div>
                   )}
@@ -1532,15 +1551,15 @@ export default function SpeakingAiEvaluationPage() {
                       <button
                         type="button"
                         onClick={startRecording}
-                        className="flex items-center gap-2 rounded-xl border-2 border-indigo-200 bg-white hover:bg-indigo-50 px-5 py-3 text-xs font-black text-indigo-700 transition cursor-pointer shadow-2xs"
+                        className="flex items-center gap-2 rounded-xl border-2 border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 px-5 py-3 text-xs font-black text-indigo-700 dark:text-indigo-300 transition cursor-pointer shadow-2xs"
                       >
                         <Mic size={16} className="text-rose-600" />
                         <span>{activeAudioUrl ? "Thu âm lại" : "Thu âm trực tiếp"}</span>
                       </button>
                     )}
 
-                    <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-700 transition cursor-pointer shadow-2xs">
-                      <Upload size={15} className="text-indigo-600" />
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-2xs">
+                      <Upload size={15} className="text-indigo-600 dark:text-indigo-400" />
                       <span>Tải file ghi âm</span>
                       <input
                         type="file"
@@ -1556,14 +1575,19 @@ export default function SpeakingAiEvaluationPage() {
                         type="button"
                         disabled={isEvaluating || (!activeAudioUrl && !activeAudioBlob)}
                         onClick={handleTriggerShadowingEvaluation}
-                        className="ml-auto flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-3 text-xs font-black transition cursor-pointer shadow-xs"
+                        className="ml-auto inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-indigo-800 disabled:to-violet-900 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer text-xs"
                       >
                         {isEvaluating ? (
-                          <Loader2 size={16} className="animate-spin" />
+                          <>
+                            <Loader2 size={16} className="animate-spin text-white" />
+                            <span>AI đang phân tích âm học Praat F1/F2...</span>
+                          </>
                         ) : (
-                          <Zap size={16} />
+                          <>
+                            <Sparkles size={16} className="text-amber-300" />
+                            <span>Chấm Điểm Với AI</span>
+                          </>
                         )}
-                        <span>Groq AI Chấm Shadowing (&lt;2s)</span>
                       </button>
                     ) : (
                       <button
@@ -1583,7 +1607,7 @@ export default function SpeakingAiEvaluationPage() {
                   </div>
 
                   {!isSubmitted && (
-                    <div className="pt-4 border-t border-slate-200">
+                    <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                       <button
                         type="button"
                         disabled={isSubmitting}
@@ -1603,28 +1627,28 @@ export default function SpeakingAiEvaluationPage() {
 
                 {/* 4. HỘP NHẬN XÉT CỦA CÔ GIÁO (TEACHER FEEDBACK) NẾU ĐÃ NỘP & CHẤM */}
                 {isSubmitted && (
-                  <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-blue-50/40 p-6 space-y-3 shadow-xs">
-                    <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+                  <div className="rounded-2xl border-2 border-indigo-200 dark:border-indigo-500/30 bg-gradient-to-br from-indigo-50/70 to-blue-50/40 dark:from-indigo-950/30 dark:to-blue-950/20 p-6 space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-500/20 pb-3">
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-xs">
                           👩‍🏫
                         </div>
                         <div>
-                          <h4 className="text-sm font-black text-indigo-950 uppercase tracking-wide">
+                          <h4 className="text-sm font-black text-indigo-950 dark:text-indigo-200 uppercase tracking-wide">
                             Nhận Xét & Đánh Giá Của Giáo Viên (Cô Giáo)
                           </h4>
-                          <span className="text-[11px] text-slate-500 font-medium">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                             Giáo viên phụ trách lớp học
                           </span>
                         </div>
                       </div>
 
                       {currentAttempt.teacherFeedback ? (
-                        <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200 shadow-2xs">
+                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-500/30 shadow-2xs">
                           ✓ Đã có nhận xét
                         </span>
                       ) : (
-                        <span className="text-xs font-bold text-slate-500 bg-white/80 border border-slate-200 px-2.5 py-1 rounded-lg">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg">
                           Chờ cô giáo phê duyệt thêm
                         </span>
                       )}
@@ -1632,20 +1656,20 @@ export default function SpeakingAiEvaluationPage() {
 
                     {currentAttempt.teacherFeedback ? (
                       <div className="space-y-2 pt-1">
-                        <div className="bg-white p-4 rounded-xl border border-indigo-100 text-slate-800 text-sm leading-relaxed font-medium shadow-2xs whitespace-pre-wrap">
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-indigo-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-sm leading-relaxed font-medium shadow-2xs whitespace-pre-wrap">
                           "{currentAttempt.teacherFeedback}"
                         </div>
                         {typeof currentAttempt.score === "number" && (
-                          <p className="text-xs font-bold text-indigo-900">
+                          <p className="text-xs font-bold text-indigo-900 dark:text-indigo-300">
                             Điểm giáo viên ghi nhận:{" "}
-                            <span className="text-sm font-black text-indigo-700">
+                            <span className="text-sm font-black text-indigo-700 dark:text-indigo-400">
                               {currentAttempt.score.toFixed(1)} / 10 pts
                             </span>
                           </p>
                         )}
                       </div>
                     ) : (
-                      <div className="bg-white/80 p-3.5 rounded-xl border border-dashed border-indigo-200 text-xs text-slate-600 flex items-center gap-2">
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-xl border border-dashed border-indigo-200 dark:border-indigo-500/30 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
                         <Lightbulb size={16} className="text-amber-500 shrink-0" />
                         <span>
                           Bài tập Ngày {currentSelectedDay.dayNumber} đã được hệ thống AI khảo thí chấm điểm tự động. Khi cô giáo xem lại bài nộp, nhận xét chi tiết của cô sẽ hiển thị tại đây.
@@ -1660,7 +1684,7 @@ export default function SpeakingAiEvaluationPage() {
                   <div className="pt-2 animate-in fade-in duration-200">
                     <div className="flex items-center gap-2 mb-3">
                       <Zap size={18} className="text-amber-500" />
-                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
                         Nhận Xét & Đánh Giá Phát Âm AI (Groq Whisper & Phonetics):
                       </h4>
                     </div>
@@ -1670,25 +1694,25 @@ export default function SpeakingAiEvaluationPage() {
 
                 {/* 6. KẾT QUẢ ĐÁNH GIÁ IELTS SPEAKING Q&A */}
                 {aiReport && reportQuestionId === currentQ.questionId && (
-                  <div className="space-y-6 pt-4 border-t-2 border-dashed border-indigo-200 animate-in fade-in duration-200">
+                  <div className="space-y-6 pt-4 border-t-2 border-dashed border-indigo-200 dark:border-slate-800 animate-in fade-in duration-200">
                     <div className="flex items-center gap-2">
-                      <Sparkles size={18} className="text-indigo-600" />
-                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                      <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400" />
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
                         Nhận Xét & Đánh Giá Chi Tiết Từ AI Khảo Thí (IELTS Standards):
                       </h4>
                     </div>
 
                     {aiReport.isOffTopic && (
-                      <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5 text-rose-900 shadow-xs flex items-start gap-3">
+                      <div className="rounded-2xl border-2 border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-950/30 p-5 text-rose-900 dark:text-rose-200 shadow-xs flex items-start gap-3">
                         <AlertOctagon
                           size={28}
-                          className="text-rose-600 shrink-0 mt-0.5"
+                          className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5"
                         />
                         <div className="space-y-1">
-                          <h4 className="text-sm font-black uppercase tracking-wider text-rose-700">
+                          <h4 className="text-sm font-black uppercase tracking-wider text-rose-700 dark:text-rose-300">
                             Phát hiện lạc đề (Off-Topic)
                           </h4>
-                          <p className="text-xs text-rose-800 leading-relaxed font-medium">
+                          <p className="text-xs text-rose-800 dark:text-rose-200 leading-relaxed font-medium">
                             Nội dung bài nói không trả lời trực tiếp hoặc đi chệch
                             hướng so với yêu cầu đề bài. Overall Band bị giới hạn tối đa 4.0.
                           </p>
@@ -1701,18 +1725,18 @@ export default function SpeakingAiEvaluationPage() {
                       <div
                         className={`rounded-2xl border-2 p-5 text-center ${
                           aiReport.isOffTopic
-                            ? "border-rose-200 bg-rose-50/50"
-                            : "border-indigo-100 bg-indigo-50/40"
+                            ? "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20"
+                            : "border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20"
                         }`}
                       >
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Overall Band
                         </span>
                         <p
                           className={`text-4xl font-black mt-1 ${
                             aiReport.isOffTopic
-                              ? "text-rose-600"
-                              : "text-indigo-700"
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-indigo-700 dark:text-indigo-400"
                           }`}
                         >
                           {aiReport.overallBand}{" "}
@@ -1720,20 +1744,20 @@ export default function SpeakingAiEvaluationPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border-2 border-slate-100 bg-white p-5 text-center shadow-2xs">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      <div className="rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Trình độ CEFR
                         </span>
-                        <p className="text-4xl font-black text-emerald-600 mt-1">
+                        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
                           {aiReport.estimatedCefr}
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border-2 border-slate-100 bg-white p-5 text-center shadow-2xs">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      <div className="rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Tốc độ nói
                         </span>
-                        <p className="text-4xl font-black text-slate-800 mt-1">
+                        <p className="text-4xl font-black text-slate-800 dark:text-white mt-1">
                           {aiReport.wordsPerMinute}{" "}
                           <span className="text-sm font-bold text-slate-400">
                             WPM
@@ -1744,22 +1768,22 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Task Achievement */}
                     {aiReport.taskAchievement && (
-                      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5 space-y-3 shadow-2xs">
-                        <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
-                          <span className="text-xs font-black text-indigo-950 flex items-center gap-1.5 uppercase tracking-wider">
-                            <Target size={16} className="text-indigo-600" />
+                      <div className="rounded-2xl border border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-5 space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-500/20 pb-2">
+                          <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5 uppercase tracking-wider">
+                            <Target size={16} className="text-indigo-600 dark:text-indigo-400" />
                             Độ Hoàn Thành Yêu Cầu (Task Response):
                           </span>
                           {aiReport.taskAchievement.score !== undefined && (
-                            <span className="text-xs font-black text-indigo-700 bg-white border border-indigo-200 px-2 py-0.5 rounded">
+                            <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 px-2 py-0.5 rounded">
                               {aiReport.taskAchievement.score.toFixed(1)} / 9.0
                             </span>
                           )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                           <div className="space-y-2">
-                            <span className="font-bold text-xs text-emerald-800 flex items-center gap-1.5">
-                              <Check size={14} className="text-emerald-600" />
+                            <span className="font-bold text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                              <Check size={14} className="text-emerald-600 dark:text-emerald-400" />
                               Đã trả lời được:
                             </span>
                             {aiReport.taskAchievement.addressedPoints &&
@@ -1769,7 +1793,7 @@ export default function SpeakingAiEvaluationPage() {
                                   (item, idx) => (
                                     <li
                                       key={idx}
-                                      className="bg-white border border-emerald-200 text-emerald-900 font-medium rounded-lg p-2 text-xs leading-relaxed"
+                                      className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-200 font-medium rounded-lg p-2 text-xs leading-relaxed"
                                     >
                                       {item}
                                     </li>
@@ -1784,8 +1808,8 @@ export default function SpeakingAiEvaluationPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <span className="font-bold text-xs text-rose-800 flex items-center gap-1.5">
-                              <XCircle size={14} className="text-rose-600" />
+                            <span className="font-bold text-xs text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                              <XCircle size={14} className="text-rose-600 dark:text-rose-400" />
                               Cần bổ sung / thiếu ý:
                             </span>
                             {aiReport.taskAchievement.missingPoints &&
@@ -1795,7 +1819,7 @@ export default function SpeakingAiEvaluationPage() {
                                   (item, idx) => (
                                     <li
                                       key={idx}
-                                      className="bg-white border border-rose-200 text-rose-900 font-medium rounded-lg p-2 text-xs leading-relaxed"
+                                      className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-500/30 text-rose-900 dark:text-rose-200 font-medium rounded-lg p-2 text-xs leading-relaxed"
                                     >
                                       {item}
                                     </li>
@@ -1803,7 +1827,7 @@ export default function SpeakingAiEvaluationPage() {
                                 )}
                               </ul>
                             ) : (
-                              <p className="text-xs text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 rounded-lg p-2">
+                              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 rounded-lg p-2">
                                 Đã hoàn thành đầy đủ yêu cầu.
                               </p>
                             )}
@@ -1813,8 +1837,8 @@ export default function SpeakingAiEvaluationPage() {
                     )}
 
                     {/* 4 Tiêu Chí IELTS */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-2xs">
-                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-2xs">
+                      <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">
                         Điểm 4 Tiêu Chí Khảo Thí (Rubrics)
                       </h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
@@ -1838,12 +1862,12 @@ export default function SpeakingAiEvaluationPage() {
                         ].map((item) => (
                           <div
                             key={item.label}
-                            className="border border-slate-100 bg-slate-50 p-3 rounded-xl"
+                            className="border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl"
                           >
-                            <span className="text-[11px] font-bold text-slate-500 block truncate">
+                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block truncate">
                               {item.label}
                             </span>
-                            <span className="text-2xl font-black text-slate-800 mt-1 block">
+                            <span className="text-2xl font-black text-slate-800 dark:text-white mt-1 block">
                               {item.val}
                             </span>
                           </div>
@@ -1853,30 +1877,30 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Sửa Lỗi Chi Tiết (Mistakes) */}
                     {aiReport.mistakes && aiReport.mistakes.length > 0 && (
-                      <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 space-y-4 shadow-2xs">
-                        <h4 className="text-sm font-black text-rose-800 flex items-center gap-2">
+                      <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-950/20 p-5 space-y-4 shadow-2xs">
+                        <h4 className="text-sm font-black text-rose-800 dark:text-rose-300 flex items-center gap-2">
                           <AlertTriangle size={18} /> Sửa Lỗi Chi Tiết (Mistakes)
                         </h4>
                         <div className="grid gap-3">
                           {aiReport.mistakes.map((m, idx) => (
                             <div
                               key={idx}
-                              className="bg-white p-4 rounded-xl border border-rose-100 shadow-2xs space-y-2"
+                              className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-100 dark:border-slate-800 shadow-2xs space-y-2"
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                <span className="bg-rose-50 text-rose-800 px-3 py-1 rounded-md text-sm font-bold line-through decoration-rose-500">
+                                <span className="bg-rose-50 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300 px-3 py-1 rounded-md text-sm font-bold line-through decoration-rose-500">
                                   {m.original}
                                 </span>
                                 <ArrowRight
                                   size={16}
                                   className="text-slate-400 hidden sm:block"
                                 />
-                                <span className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-md text-sm font-black border border-emerald-200">
+                                <span className="bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 px-3 py-1 rounded-md text-sm font-black border border-emerald-200 dark:border-emerald-500/30">
                                   {m.correction}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-600 font-medium">
-                                <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded text-[10px] mr-1.5 uppercase">
+                              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                <span className="font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded text-[10px] mr-1.5 uppercase">
                                   {m.type}
                                 </span>
                                 {m.explanation}
@@ -1889,20 +1913,20 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Nhận xét chung & Native Phrasing */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5 space-y-2 shadow-2xs">
-                        <h4 className="text-xs font-black text-amber-900 flex items-center gap-1.5 uppercase tracking-wider">
+                      <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 p-5 space-y-2 shadow-2xs">
+                        <h4 className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
                           <Lightbulb size={16} /> Lời Nhận Xét Tổng Quan Của AI
                         </h4>
-                        <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                        <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
                           {aiReport.generalFeedback}
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 space-y-2 shadow-2xs">
-                        <h4 className="text-xs font-black text-indigo-900 flex items-center gap-1.5 uppercase tracking-wider">
+                      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/20 p-5 space-y-2 shadow-2xs">
+                        <h4 className="text-xs font-black text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5 uppercase tracking-wider">
                           <Check size={16} /> Cách Diễn Đạt Tự Nhiên Hơn (Native Phrasing)
                         </h4>
-                        <p className="text-xs text-indigo-950 leading-relaxed font-medium italic">
+                        <p className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed font-medium italic">
                           "{aiReport.correctedText}"
                         </p>
                       </div>
@@ -1910,11 +1934,11 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Kịch bản nhận diện STT */}
                     {aiReport.transcript && (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-2 shadow-2xs">
-                        <span className="text-xs font-black text-slate-600 uppercase tracking-wider">
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-5 space-y-2 shadow-2xs">
+                        <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">
                           Transcript nhận diện từ giọng nói:
                         </span>
-                        <p className="text-xs text-slate-800 italic bg-white p-3.5 rounded-xl border border-slate-200 leading-relaxed font-medium">
+                        <p className="text-xs text-slate-800 dark:text-slate-200 italic bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 leading-relaxed font-medium">
                           "{aiReport.transcript}"
                         </p>
                       </div>

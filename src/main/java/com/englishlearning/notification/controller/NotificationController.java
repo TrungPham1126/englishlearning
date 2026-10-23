@@ -6,6 +6,7 @@ import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -25,7 +27,7 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<Notification>>> getNotifications(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "30") int size,
             @RequestParam(required = false) UUID classId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         if (classId != null) {
@@ -40,26 +42,42 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Page<Notification>>> getClassroomAnnouncements(
             @PathVariable UUID classId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "30") int size) {
         return ResponseEntity.ok(ApiResponse.success(
                 notificationService.getClassroomAnnouncements(classId, page, size)));
+    }
+
+    @GetMapping("/broadcast-history")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Page<Notification>>> getBroadcastHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        UUID adminId = userDetails != null ? userDetails.getId() : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                notificationService.getBroadcastHistory(adminId, page, size)));
     }
 
     @PostMapping("/broadcast")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<String>> broadcastNotification(@RequestBody NotificationDto dto) {
-        notificationService.dispatchNotification(dto);
-        return ResponseEntity.ok(ApiResponse.success("Đã đưa thông báo vào hàng đợi xử lý"));
+        try {
+            notificationService.dispatchNotification(dto);
+            return ResponseEntity.ok(ApiResponse.success("Phát thông báo thành công", null));
+        } catch (Exception e) {
+            log.error("Lỗi khi phát thông báo broadcast: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(ApiResponse.error(500, "Lỗi khi phát thông báo: " + e.getMessage()));
+        }
     }
 
-    @PatchMapping("/{id}/read")
+    @RequestMapping(value = "/{id}/read", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable UUID id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         notificationService.markAsRead(id, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã đọc", null));
     }
 
-    @PatchMapping("/read-all")
+    @RequestMapping(value = "/read-all", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(@AuthenticationPrincipal CustomUserDetails userDetails) {
         notificationService.markAllAsRead(userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã đọc tất cả", null));

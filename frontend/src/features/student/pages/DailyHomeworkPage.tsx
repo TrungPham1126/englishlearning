@@ -135,20 +135,22 @@ export default function DailyHomeworkPage() {
   return (
     <div className="max-w-[1350px] mx-auto space-y-6 pb-12">
       {/* Top Header Navigation */}
-      <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-        <button
-          onClick={() => navigate("/student/courses")}
-          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50 cursor-pointer"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="text-lg font-bold text-slate-900">
-            Bảng Ngày Học (Daily Plan)
-          </h1>
-          <p className="text-xs text-slate-500">
-            Hệ thống tự động mở khóa lộ trình vào 00:00 mỗi ngày
-          </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/student/courses")}
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition cursor-pointer"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Bảng Ngày Học (Daily Plan)
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Hệ thống tự động mở khóa lộ trình vào 00:00 mỗi ngày
+            </p>
+          </div>
         </div>
       </div>
 
@@ -156,8 +158,8 @@ export default function DailyHomeworkPage() {
         {/* ================= CỘT TRÁI: GAUGE TIẾN ĐỘ & DANH SÁCH CÁC NGÀY ================= */}
         <div className="lg:col-span-5 space-y-5">
           {/* Box 1: Vòng Tròn Hoàn Thành */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col items-center justify-center text-center">
-            <h2 className="text-sm font-bold text-[#1b2b52] tracking-tight mb-5">
+          <div className="bg-white dark:bg-[#121a2d] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs flex flex-col items-center justify-center text-center">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight mb-5">
               Tỉ lệ hoàn thành bài tập
             </h2>
             <div className="relative w-48 h-48 flex items-center justify-center">
@@ -169,7 +171,7 @@ export default function DailyHomeworkPage() {
                   cx="50"
                   cy="50"
                   r="42"
-                  className="text-slate-100"
+                  className="text-slate-100 dark:text-slate-800"
                   strokeWidth="8"
                   stroke="currentColor"
                   fill="transparent"
@@ -188,7 +190,7 @@ export default function DailyHomeworkPage() {
                 />
               </svg>
               <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-5xl font-black text-slate-800 tracking-tight">
+                <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tight">
                   {percentage}%
                 </span>
               </div>
@@ -196,13 +198,13 @@ export default function DailyHomeworkPage() {
           </div>
 
           {/* Box 2: BẢNG NGÀY List */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="bg-[#f0f3f8] px-5 py-3.5 border-b border-slate-200">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#1e2d56]">
+          <div className="bg-white dark:bg-[#121a2d] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+            <div className="bg-[#f0f3f8] dark:bg-slate-800/60 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                 BÀI TẬP HÀNG NGÀY
               </h3>
             </div>
-            <div className="divide-y divide-slate-100 max-h-[550px] overflow-y-auto">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/70 max-h-[550px] overflow-y-auto">
               {days.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
                   Chưa có ngày học nào được giao cho lớp này
@@ -218,10 +220,10 @@ export default function DailyHomeworkPage() {
                       onClick={() => !isLocked && handleSelectDay(day.id)}
                       className={`px-5 py-3.5 flex items-center justify-between transition ${
                         isLocked
-                          ? "opacity-50 cursor-not-allowed bg-slate-50/50"
+                          ? "opacity-50 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/30"
                           : isSelected
-                            ? "bg-slate-100/90 font-bold cursor-pointer"
-                            : "hover:bg-slate-50 text-slate-700 cursor-pointer"
+                            ? "bg-slate-100/90 dark:bg-slate-800/70 font-bold cursor-pointer"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300 cursor-pointer"
                       }`}
                     >
                       <div className="flex items-center gap-3 text-xs truncate">
@@ -236,18 +238,18 @@ export default function DailyHomeworkPage() {
                         <span
                           className={`font-black ${
                             !day.isCompleted
-                              ? "text-[#d32f2f]"
-                              : "text-slate-900"
+                              ? "text-[#d32f2f] dark:text-rose-400"
+                              : "text-slate-900 dark:text-white"
                           }`}
                         >
                           {day.title}
                         </span>
                         {day.estimatedMinutes && (
-                          <span className="text-slate-500 font-normal">
+                          <span className="text-slate-500 dark:text-slate-400 font-normal">
                             ({day.estimatedMinutes} min)
                           </span>
                         )}
-                        <span className="text-slate-500 italic text-[11px] truncate">
+                        <span className="text-slate-500 dark:text-slate-400 italic text-[11px] truncate">
                           {day.dateLabel}
                         </span>
                       </div>
@@ -271,24 +273,24 @@ export default function DailyHomeworkPage() {
         {/* ================= CỘT PHẢI: CHI TIẾT BÀI TẬP THEO SECTION (MERGED) ================= */}
         <div className="lg:col-span-7 space-y-4">
           {!selectedDay ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-400 shadow-xs">
+            <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-2xl p-16 text-center text-slate-400 shadow-xs">
               <Calendar
                 size={40}
-                className="mx-auto mb-3 opacity-40 text-indigo-600"
+                className="mx-auto mb-3 opacity-40 text-indigo-600 dark:text-indigo-400"
               />
-              <p className="text-sm font-semibold text-slate-600">
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                 Hãy chọn một ngày bên danh sách để xem chi tiết
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Header của Day đang chọn */}
-              <div className="bg-[#f0f3f8] border border-slate-200 rounded-xl px-5 py-3.5 flex items-center justify-between">
-                <h2 className="text-sm font-black text-[#1e2d56] uppercase tracking-wide">
+              <div className="bg-[#f0f3f8] dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3.5 flex items-center justify-between">
+                <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
                   {selectedDay.fullHeaderLabel}
                 </h2>
                 {selectedDay.isCompleted ? (
-                  <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100/70 px-2.5 py-0.5 rounded-full">
+                  <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-500/20 px-2.5 py-0.5 rounded-full">
                     <CheckCircle2 size={13} /> Đã Hoàn Thành
                   </span>
                 ) : (
@@ -309,7 +311,7 @@ export default function DailyHomeworkPage() {
 
               {/* Danh sách các Section & Card bài tập đã được GOM NHÓM */}
               {groupedSections.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400 text-xs shadow-xs">
+                <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl p-12 text-center text-slate-400 text-xs shadow-xs">
                   Chưa có bài tập được giao cho ngày này
                 </div>
               ) : (
@@ -323,15 +325,15 @@ export default function DailyHomeworkPage() {
                   return (
                     <div
                       key={gIdx}
-                      className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4"
+                      className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4"
                     >
                       {/* Tiêu đề của Nhóm Lớn (VD: VOCABULARY) */}
-                      <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-                        <h3 className="text-sm font-black text-[#1e2d56] uppercase flex items-center gap-2">
-                          <BookText size={18} className="text-indigo-600" />
+                      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase flex items-center gap-2">
+                          <BookText size={18} className="text-indigo-600 dark:text-indigo-400" />
                           {group.mainTitle}
                         </h3>
-                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
                           {totalItems} đầu mục
                         </span>
                       </div>
@@ -355,8 +357,8 @@ export default function DailyHomeworkPage() {
                             <div key={sIdx} className="space-y-2.5">
                               {/* Chỉ hiển thị Header Menu Con nếu nhóm này có nhiều hơn 1 mục */}
                               {isMerged && (
-                                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg">
-                                  <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-2 rounded-lg">
+                                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
                                     <ChevronDown
                                       size={15}
                                       className="text-slate-400"
@@ -375,7 +377,7 @@ export default function DailyHomeworkPage() {
                               <div
                                 className={`space-y-2.5 ${
                                   isMerged
-                                    ? "pl-4 border-l-2 border-slate-100 ml-2"
+                                    ? "pl-4 border-l-2 border-slate-100 dark:border-slate-800 ml-2"
                                     : ""
                                 }`}
                               >
@@ -391,7 +393,7 @@ export default function DailyHomeworkPage() {
                                           );
                                         }
                                       }}
-                                      className="group border border-slate-200 hover:border-indigo-400 rounded-lg p-3.5 flex items-center justify-between cursor-pointer transition bg-white hover:bg-slate-50/70 shadow-2xs"
+                                      className="group border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-lg p-3.5 flex items-center justify-between cursor-pointer transition bg-white dark:bg-[#0d1322] hover:bg-slate-50/70 dark:hover:bg-slate-800/60 shadow-2xs"
                                     >
                                       <div className="flex items-center gap-3">
                                         <PlayCircle
@@ -402,13 +404,13 @@ export default function DailyHomeworkPage() {
                                               : "text-[#e84e40]"
                                           }`}
                                         />
-                                        <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-900 transition">
+                                        <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                                           {item.title}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3">
                                         {item.assignmentId && (
-                                          <span className="text-[11px] text-indigo-600 font-semibold group-hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded">
+                                          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline flex items-center gap-1 bg-indigo-50 dark:bg-indigo-500/15 px-2 py-1 rounded">
                                             Làm bài <ExternalLink size={12} />
                                           </span>
                                         )}

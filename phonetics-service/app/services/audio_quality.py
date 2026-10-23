@@ -124,11 +124,13 @@ def check_consonant_acoustic_evidence_detailed(
     if len(audio_slice) < 160:  # < 10ms at 16kHz
         return False, 0.0, "Thời lượng âm quá ngắn (< 10ms)"
 
+    clean_sym = phoneme_symbol.strip("/ ")
     rms = float(np.sqrt(np.mean(audio_slice ** 2)))
     if rms < 0.002:
+        if clean_sym in {"p", "t", "k", "b", "d", "g", "ɡ"}:
+            return True, 0.85, "Âm bật trong pha ngậm (closure phase)"
         return False, 0.0, "Không phát hiện năng lượng âm thanh (quá nhỏ hoặc im lặng)"
 
-    clean_sym = phoneme_symbol.strip("/ ")
     zcr = float(np.mean(np.abs(np.diff(np.sign(audio_slice)))) / 2.0)
 
     # 1. Sibilants & Fricatives (/s/, /z/, /ʃ/, /ʒ/, /tʃ/, /dʒ/, /f/, /v/, /θ/, /ð/, /h/)

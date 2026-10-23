@@ -134,9 +134,27 @@ export const adminApi = {
 
   // --- NOTIFICATIONS ---
   broadcastNotification: async (
-    data: NotificationBroadcastRequest,
-  ): Promise<void> => {
-    await axiosClient.post("/api/v1/notifications/broadcast", data);
+    data: NotificationBroadcastRequest | any,
+  ): Promise<any> => {
+    const rawMsg = (data.message || data.content || "").trim();
+    const payload = {
+      title: (data.title || "").trim(),
+      message: rawMsg,
+      content: rawMsg,
+      type: data.type || data.notificationType || "ANNOUNCEMENT",
+      notificationType: data.notificationType || data.type || "ANNOUNCEMENT",
+      targetAudience: data.targetAudience || "ALL",
+      targetUrl: data.targetUrl || data.redirectUrl || "/student/courses",
+      redirectUrl: data.redirectUrl || data.targetUrl || "/student/courses",
+    };
+    const res = await axiosClient.post("/api/v1/notifications/broadcast", payload);
+    return res.data;
+  },
+  getBroadcastHistory: async (page = 0, size = 10): Promise<any> => {
+    const res = await axiosClient.get(
+      `/api/v1/notifications/broadcast-history?page=${page}&size=${size}`,
+    );
+    return res.data.data;
   },
 
   // --- VIDEO MODERATION ---

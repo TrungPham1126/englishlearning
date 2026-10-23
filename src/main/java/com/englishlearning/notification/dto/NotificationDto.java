@@ -16,6 +16,20 @@ public class NotificationDto implements Serializable {
     private UUID classroomId;
     private String title;
     private String message;
-    private String notificationType;
+    private String content;
+    @Builder.Default
+    private String notificationType = "ANNOUNCEMENT";
     private String redirectUrl;
+    private String targetUrl;
+    private String targetAudience;
+
+    public String getEffectiveMessage() {
+        if (message != null && !message.trim().isEmpty()) {
+            return message.trim();
+        }
+        if (content != null && !content.trim().isEmpty()) {
+            return content.trim();
+        }
+        return "";
+    }
 }

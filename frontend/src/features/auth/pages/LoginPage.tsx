@@ -1,7 +1,6 @@
-// src/features/auth/pages/LoginPage.tsx
 import { useState } from "react";
 import type { FormEvent, ChangeEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { authApi } from "../api/authApi";
 import type { LoginFormData, FormErrors } from "../types";
@@ -86,21 +85,21 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-8 shadow-sm transition-colors duration-200">
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Đăng Nhập</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Đăng Nhập</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Hệ thống Học & Đánh giá năng lực Tiếng Anh
           </p>
         </div>
 
         {/* Thông báo lỗi từ Server */}
         {errors.general && (
-          <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-700">
+          <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 p-3.5 text-xs font-medium text-rose-700 dark:text-rose-300">
             <AlertCircle size={16} className="shrink-0" />
             <span>{errors.general}</span>
           </div>
@@ -109,7 +108,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email Input */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Địa chỉ Email
             </label>
             <div className="relative">
@@ -123,10 +122,10 @@ export default function LoginPage() {
                 onChange={handleChange}
                 disabled={isLoading}
                 placeholder="vd: admin@englishlearning.com"
-                className={`w-full rounded-lg border bg-white py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none transition focus:ring-2 ${
+                className={`w-full rounded-lg border bg-white dark:bg-[#1e293b] py-2.5 pl-9 pr-3 text-sm text-slate-900 dark:text-white outline-none transition focus:ring-2 ${
                   errors.email
                     ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
-                    : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-100"
+                    : "border-slate-300 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-100 dark:focus:ring-indigo-500/20"
                 }`}
               />
             </div>
@@ -138,7 +137,7 @@ export default function LoginPage() {
           {/* Password Input */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Mật khẩu
               </label>
             </div>
@@ -153,16 +152,16 @@ export default function LoginPage() {
                 onChange={handleChange}
                 disabled={isLoading}
                 placeholder="Nhập mật khẩu"
-                className={`w-full rounded-lg border bg-white py-2.5 pl-9 pr-10 text-sm text-slate-800 outline-none transition focus:ring-2 ${
+                className={`w-full rounded-lg border bg-white dark:bg-[#1e293b] py-2.5 pl-9 pr-10 text-sm text-slate-900 dark:text-white outline-none transition focus:ring-2 ${
                   errors.password
                     ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
-                    : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-100"
+                    : "border-slate-300 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-100 dark:focus:ring-indigo-500/20"
                 }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -189,15 +188,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Footer chuyển sang Đăng ký */}
-        <div className="mt-6 text-center text-xs text-slate-500">
-          Chưa có tài khoản?{" "}
-          <Link
-            to="/register"
-            className="font-semibold text-indigo-600 hover:underline"
-          >
-            Đăng ký ngay
-          </Link>
+        {/* Thông báo chính sách tài khoản nội bộ */}
+        <div className="mt-6 rounded-xl border border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/30 p-3.5 text-center text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="font-bold text-indigo-900 dark:text-indigo-300 mb-1 flex items-center justify-center gap-1.5">
+            <span>🔒</span> Thông Báo Cấp Phát Tài Khoản
+          </p>
+          Hệ thống sử dụng tài khoản nội bộ do Quản trị viên cấp. Nếu chưa có tài khoản, vui lòng liên hệ Ban quản trị để được hỗ trợ.
         </div>
       </div>
     </div>

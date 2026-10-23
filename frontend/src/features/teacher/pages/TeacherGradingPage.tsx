@@ -215,34 +215,37 @@ export default function TeacherGradingPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Selectors */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* Clean Open Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Award className="h-6 w-6 text-amber-400" />
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/50 mb-2">
+            <Award className="w-3.5 h-3.5" />
+            <span>Đánh Giá & Chấm Điểm</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Trung Tâm Chấm Bài & Đánh Giá
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Xem bài nộp của học sinh, kết quả tự động từ AI và chấm điểm thủ công
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Lựa chọn Lớp học */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400 font-medium">Lớp:</label>
+          <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl shadow-sm">
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Lớp:</label>
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
-              className="rounded-xl border border-slate-700/80 bg-slate-800/90 px-3.5 py-2 text-xs font-medium text-white outline-none focus:border-indigo-500 transition shadow-sm"
+              className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white outline-none cursor-pointer"
             >
               {loadingClasses ? (
-                <option value="">Đang tải lớp học...</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Đang tải lớp học...</option>
               ) : classes.length === 0 ? (
-                <option value="">Chưa có lớp phụ trách</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Chưa có lớp phụ trách</option>
               ) : (
                 classes.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     {c.name} ({c.level || "Chưa set level"})
                   </option>
                 ))
@@ -251,21 +254,21 @@ export default function TeacherGradingPage() {
           </div>
 
           {/* Lựa chọn Bài tập */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400 font-medium">Bài tập:</label>
+          <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl shadow-sm">
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Bài tập:</label>
             <select
               value={selectedAssignmentId}
               onChange={(e) => setSelectedAssignmentId(e.target.value)}
               disabled={assignments.length === 0}
-              className="rounded-xl border border-slate-700/80 bg-slate-800/90 px-3.5 py-2 text-xs font-medium text-white outline-none focus:border-indigo-500 transition shadow-sm disabled:opacity-50"
+              className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white outline-none cursor-pointer disabled:opacity-50"
             >
               {loadingAssignments ? (
-                <option value="">Đang tải bài tập...</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Đang tải bài tập...</option>
               ) : assignments.length === 0 ? (
-                <option value="">Không có bài tập nào</option>
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Không có bài tập nào</option>
               ) : (
                 assignments.map((a) => (
-                  <option key={a.id} value={a.id}>
+                  <option key={a.id} value={a.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     {a.title} ({a.skillType || "General"})
                   </option>
                 ))
@@ -281,13 +284,13 @@ export default function TeacherGradingPage() {
         {/* ============================================================= */}
         <div className="lg:col-span-5 space-y-3.5">
           {/* Status Tabs */}
-          <div className="flex rounded-xl border border-slate-800 bg-slate-900/80 p-1 text-xs">
+          <div className="flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-1 text-xs shadow-sm">
             <button
               onClick={() => setStatusFilter("ALL")}
               className={`flex-1 rounded-lg py-1.5 font-medium transition ${
                 statusFilter === "ALL"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               Tất cả ({submissions.length})
@@ -297,7 +300,7 @@ export default function TeacherGradingPage() {
               className={`flex-1 rounded-lg py-1.5 font-medium transition ${
                 statusFilter === "PENDING"
                   ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
-                  : "text-slate-400 hover:text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               Chờ chấm ({pendingCount})
@@ -307,7 +310,7 @@ export default function TeacherGradingPage() {
               className={`flex-1 rounded-lg py-1.5 font-medium transition ${
                 statusFilter === "COMPLETED"
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
-                  : "text-slate-400 hover:text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               Đã chấm ({completedCount})
@@ -316,13 +319,13 @@ export default function TeacherGradingPage() {
 
           {/* Search bar */}
           <div className="relative">
-            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-500" />
+            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Tìm theo tên hoặc email học viên..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-900/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-indigo-500 transition shadow-sm"
             />
           </div>
 
@@ -334,7 +337,7 @@ export default function TeacherGradingPage() {
                 <span className="text-xs">Đang tải danh sách bài nộp...</span>
               </div>
             ) : filteredSubmissions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-800 p-10 text-center text-slate-500 text-xs">
+              <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center text-slate-500 text-xs">
                 {submissions.length === 0
                   ? "Chưa có học sinh nào nộp bài tập này."
                   : "Không tìm thấy học sinh phù hợp với bộ lọc."}
@@ -350,39 +353,39 @@ export default function TeacherGradingPage() {
                     onClick={() => handleSelectSubmission(sub)}
                     className={`cursor-pointer rounded-2xl border p-4 transition shadow-sm ${
                       isSelected
-                        ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/30"
-                        : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-800/50"
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/30"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] hover:border-slate-300 dark:hover:border-slate-700"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center space-x-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-300 font-bold text-xs border border-indigo-500/20">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-600 dark:text-indigo-300 font-bold text-xs border border-indigo-500/20">
                           {sub.studentName?.charAt(0) || "U"}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-white text-xs sm:text-sm">
+                          <h3 className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm">
                             {sub.studentName}
                           </h3>
-                          <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
                             {sub.studentEmail}
                           </p>
                         </div>
                       </div>
 
                       {isCompleted ? (
-                        <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-400 border border-emerald-500/20 shrink-0">
+                        <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
                           {sub.score !== null && sub.score !== undefined
                             ? `${sub.score} đ`
                             : "Đã chấm"}
                         </span>
                       ) : (
-                        <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-400 border border-amber-500/20 shrink-0">
+                        <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
                           Chờ chấm
                         </span>
                       )}
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/80 pt-2">
+                    <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-2">
                       <span className="flex items-center">
                         <Clock className="h-3 w-3 mr-1 text-slate-400" />
                         Nộp:{" "}
@@ -411,30 +414,30 @@ export default function TeacherGradingPage() {
         {/* ============================================================= */}
         <div className="lg:col-span-7">
           {!selectedSub ? (
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-12 text-center text-slate-500 flex flex-col items-center justify-center min-h-[450px]">
-              <BookOpen className="h-12 w-12 mb-3 opacity-30 text-indigo-400" />
-              <h3 className="text-sm font-semibold text-slate-300">Chưa chọn bài nộp</h3>
+            <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-500 flex flex-col items-center justify-center min-h-[450px]">
+              <BookOpen className="h-12 w-12 mb-3 opacity-30 text-indigo-500 dark:text-indigo-400" />
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Chưa chọn bài nộp</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1">
                 Chọn một học viên từ danh sách bên trái để xem nội dung làm bài, kết quả chấm tự động của AI và nhập điểm số.
               </p>
             </div>
           ) : loadingDetail ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-12 text-center text-slate-400 flex flex-col items-center justify-center min-h-[450px]">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-400 flex flex-col items-center justify-center min-h-[450px]">
               <Loader2 className="animate-spin h-8 w-8 text-indigo-500 mb-3" />
               <p className="text-xs">Đang tải chi tiết bài làm của học sinh...</p>
             </div>
           ) : (
             submissionDetail && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-6 shadow-xl backdrop-blur-md">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 space-y-6 shadow-sm">
                 {/* Header chi tiết bài làm */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div>
-                    <h2 className="text-base font-bold text-white">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
                       {submissionDetail.assignmentTitle}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       Học sinh:{" "}
-                      <strong className="text-slate-200">
+                      <strong className="text-slate-800 dark:text-slate-200">
                         {selectedSub.studentName}
                       </strong>{" "}
                       ({selectedSub.studentEmail})
@@ -445,10 +448,10 @@ export default function TeacherGradingPage() {
                     {submissionDetail.score !== null &&
                       submissionDetail.score !== undefined && (
                         <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-right">
-                          <span className="block text-[10px] uppercase tracking-wider text-indigo-400 font-bold">
+                          <span className="block text-[10px] uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-bold">
                             Điểm hiện tại
                           </span>
-                          <span className="text-lg font-black text-indigo-300">
+                          <span className="text-lg font-black text-indigo-700 dark:text-indigo-300">
                             {submissionDetail.score} / 10
                           </span>
                         </div>
@@ -459,11 +462,11 @@ export default function TeacherGradingPage() {
                 {/* Overall AI Feedback Banner (nếu có) */}
                 {submissionDetail.aiFeedback && (
                   <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 space-y-1.5">
-                    <div className="flex items-center text-xs font-bold text-purple-300">
-                      <Sparkles className="mr-1.5 h-4 w-4 text-purple-400" />
+                    <div className="flex items-center text-xs font-bold text-purple-700 dark:text-purple-300">
+                      <Sparkles className="mr-1.5 h-4 w-4 text-purple-600 dark:text-purple-400" />
                       Đánh Giá Tổng Quan Từ AI (AI Evaluator)
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                       {submissionDetail.aiFeedback}
                     </p>
                   </div>
@@ -478,26 +481,26 @@ export default function TeacherGradingPage() {
                       return (
                         <div
                           key={q.id || i}
-                          className="rounded-xl border border-slate-800/90 bg-slate-950/70 p-4 space-y-3 transition hover:border-slate-700"
+                          className="rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-[#162033] p-4 space-y-3 transition hover:border-slate-300 dark:hover:border-slate-700"
                         >
                           {/* Câu hỏi & điểm số thành phần */}
                           <div className="flex items-start justify-between gap-2">
-                            <p className="text-xs sm:text-sm font-semibold text-slate-200">
-                              <span className="text-indigo-400 font-bold mr-1">
+                            <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
+                              <span className="text-indigo-600 dark:text-indigo-400 font-bold mr-1">
                                 Câu {i + 1}:
                               </span>
                               {q.promptText}
                             </p>
-                            <span className="shrink-0 rounded-md bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                            <span className="shrink-0 rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                               {q.questionType || "TỰ LUẬN"}
                             </span>
                           </div>
 
                           {/* Media đề bài (nếu có Audio đề bài nghe) */}
                           {q.mediaUrl && (
-                            <div className="rounded-lg bg-slate-900 p-2.5 border border-slate-800">
-                              <span className="text-[11px] text-slate-400 font-medium flex items-center mb-1">
-                                <Volume2 className="h-3.5 w-3.5 mr-1 text-emerald-400" />
+                            <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200 dark:border-slate-800">
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center mb-1">
+                                <Volume2 className="h-3.5 w-3.5 mr-1 text-emerald-500 dark:text-emerald-400" />
                                 Audio đề bài (Listening):
                               </span>
                               <audio
@@ -510,18 +513,18 @@ export default function TeacherGradingPage() {
 
                           {/* Bài làm của học sinh */}
                           <div className="space-y-1.5">
-                            <span className="text-[11px] font-semibold text-slate-400">
+                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                               Bài làm của học viên:
                             </span>
 
                             {q.studentAnswer ? (
-                              <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-xs text-slate-200 whitespace-pre-wrap leading-relaxed font-mono">
+                              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed font-mono">
                                 {q.studentAnswer}
                               </div>
                             ) : q.audioUrl ? (
-                              <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 space-y-2">
-                                <div className="flex items-center text-xs text-indigo-400 font-semibold">
-                                  <Mic className="h-4 w-4 mr-1 text-indigo-400" />
+                              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 space-y-2">
+                                <div className="flex items-center text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                                  <Mic className="h-4 w-4 mr-1 text-indigo-600 dark:text-indigo-400" />
                                   File âm thanh Speaking / Shadowing của học viên:
                                 </div>
                                 <audio
@@ -531,7 +534,7 @@ export default function TeacherGradingPage() {
                                 />
                               </div>
                             ) : (
-                              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-xs text-rose-400 italic">
+                              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-xs text-rose-600 dark:text-rose-400 italic">
                                 Học sinh bỏ trống hoặc chưa hoàn thành câu này.
                               </div>
                             )}
@@ -539,7 +542,7 @@ export default function TeacherGradingPage() {
 
                           {/* Đáp án chuẩn (nếu có) */}
                           {q.correctAnswer && (
-                            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                               <span>Đáp án chuẩn: <strong>{q.correctAnswer}</strong></span>
                             </div>
@@ -548,27 +551,27 @@ export default function TeacherGradingPage() {
                           {/* AI Feedback Accordion / Box cho câu này */}
                           {aiEval && (
                             <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3 space-y-2 text-xs">
-                              <div className="flex items-center justify-between text-indigo-300 font-semibold text-[11px]">
+                              <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-300 font-semibold text-[11px]">
                                 <span className="flex items-center">
-                                  <Sparkles className="h-3.5 w-3.5 mr-1 text-indigo-400" />
+                                  <Sparkles className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
                                   AI Phân Tích & Gợi Ý Chấm Điểm
                                 </span>
                                 {aiEval.bandScore && (
-                                  <span className="rounded bg-indigo-500/20 px-2 py-0.5 font-bold text-indigo-300">
+                                  <span className="rounded bg-indigo-500/20 px-2 py-0.5 font-bold text-indigo-700 dark:text-indigo-300">
                                     Band: {aiEval.bandScore}
                                   </span>
                                 )}
                               </div>
 
                               {aiEval.generalFeedback && (
-                                <p className="text-slate-300 leading-relaxed">
+                                <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
                                   {aiEval.generalFeedback}
                                 </p>
                               )}
 
                               {aiEval.grammarCorrections && (
-                                <div className="text-[11px] text-amber-300 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                                  <strong className="block mb-0.5 text-amber-400">Góp ý ngữ pháp:</strong>
+                                <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                                  <strong className="block mb-0.5 text-amber-700 dark:text-amber-400">Góp ý ngữ pháp:</strong>
                                   {Array.isArray(aiEval.grammarCorrections)
                                     ? aiEval.grammarCorrections.join("; ")
                                     : String(aiEval.grammarCorrections)}
@@ -576,8 +579,8 @@ export default function TeacherGradingPage() {
                               )}
 
                               {aiEval.pronunciationNotes && (
-                                <div className="text-[11px] text-cyan-300 bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
-                                  <strong className="block mb-0.5 text-cyan-400">Phát âm & Ngữ điệu:</strong>
+                                <div className="text-[11px] text-cyan-800 dark:text-cyan-300 bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
+                                  <strong className="block mb-0.5 text-cyan-700 dark:text-cyan-400">Phát âm & Ngữ điệu:</strong>
                                   {aiEval.pronunciationNotes}
                                 </div>
                               )}
@@ -595,8 +598,8 @@ export default function TeacherGradingPage() {
 
                 {/* Thông báo lưu thành công */}
                 {saveSuccess && (
-                  <div className="flex items-center space-x-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <div className="flex items-center space-x-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
                     <span>{saveSuccess}</span>
                   </div>
                 )}
@@ -606,12 +609,12 @@ export default function TeacherGradingPage() {
                 {/* ===================================================== */}
                 <form
                   onSubmit={handleSaveGrade}
-                  className="space-y-4 pt-4 border-t border-slate-800"
+                  className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300 flex items-center">
-                        <Award className="h-4 w-4 mr-1.5 text-amber-400" />
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center">
+                        <Award className="h-4 w-4 mr-1.5 text-amber-500 dark:text-amber-400" />
                         Điểm chính thức (Thang 10):
                       </label>
                       <div className="flex items-center gap-1.5">
@@ -621,7 +624,7 @@ export default function TeacherGradingPage() {
                             key={scorePreset}
                             type="button"
                             onClick={() => setInputScore(String(scorePreset))}
-                            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300 hover:border-indigo-500 hover:text-white transition"
+                            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-white transition"
                           >
                             {scorePreset}
                           </button>
@@ -637,14 +640,14 @@ export default function TeacherGradingPage() {
                       placeholder="Nhập điểm từ 0.0 đến 10.0..."
                       value={inputScore}
                       onChange={(e) => setInputScore(e.target.value)}
-                      className="w-full max-w-xs rounded-xl border border-slate-700/80 bg-slate-800/80 px-3.5 py-2 text-sm text-white font-bold outline-none focus:border-indigo-500 transition"
+                      className="w-full max-w-xs rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#0b1120] px-3.5 py-2 text-sm text-slate-900 dark:text-white font-bold outline-none focus:border-indigo-500 transition"
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300 block">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
                         Nhận xét & Hướng dẫn sửa bài cho học sinh:
                       </label>
                       <div className="flex items-center gap-1.5">
@@ -661,7 +664,7 @@ export default function TeacherGradingPage() {
                                 prev ? `${prev}. ${chip}` : chip,
                               )
                             }
-                            className="rounded-md bg-slate-800/60 border border-slate-700/60 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200 transition"
+                            className="rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 px-2 py-0.5 text-[10px] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition"
                           >
                             + {chip}
                           </button>
@@ -674,7 +677,7 @@ export default function TeacherGradingPage() {
                       placeholder="Ghi chú chi tiết cho học sinh về điểm mạnh, lỗi sai và cách khắc phục..."
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}
-                      className="w-full rounded-xl border border-slate-700/80 bg-slate-800/80 p-3 text-xs text-white outline-none focus:border-indigo-500 transition placeholder-slate-500"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#0b1120] p-3 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition placeholder-slate-400 dark:placeholder-slate-500"
                     />
                   </div>
 

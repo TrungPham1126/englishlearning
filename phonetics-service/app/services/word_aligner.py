@@ -20,14 +20,13 @@ from app.services.audio_preprocessor import preprocessor
 logger = logging.getLogger("phonetics-service")
 
 
-def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> int:
+def decode_raw_speech(audio: np.ndarray) -> List[str]:
     """
-    Computes Needleman-Wunsch alignment between target script phonemes and 
-    Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
-    Returns the number of sequential words from the beginning that were actually spoken.
+    Decodes raw acoustic audio directly into a sequence of phonemes using Wav2Vec2 CTC greedy decoding.
+    Deduplicates consecutive identical frames and strips '<pad>' tokens.
     """
-    if not expected_words or len(audio) == 0:
-        return 0
+    if len(audio) == 0:
+        return []
 
     from app.services.aligner import forced_aligner
 
@@ -50,6 +49,148 @@ def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> 
         if sym and sym != "<pad>" and (not emitted or emitted[-1] != sym):
             emitted.append(sym)
 
+    return emitted
+
+
+def compute_phoneme_similarity(expected_tokens: List[str], emitted_tokens: List[str]) -> float:
+    """
+    Computes Levenshtein-based sequence similarity between expected target tokens and emitted acoustic tokens,
+    incorporating universal allophonic and vowel-variation tolerances.
+    Returns a normalized similarity score in [0.0, 1.0].
+    """
+    if not expected_tokens or not emitted_tokens:
+        return 0.0
+
+    from app.services.aligner import forced_aligner
+
+    N = len(expected_tokens)
+    M = len(emitted_tokens)
+
+    dp = np.zeros((N + 1, M + 1), dtype=np.float32)
+    for i in range(N + 1):
+        dp[i, 0] = float(i)
+    for j in range(M + 1):
+        dp[0, j] = float(j)
+
+    for i in range(1, N + 1):
+        t1 = expected_tokens[i - 1]
+        alts = set([t1] + list(forced_aligner.UNIVERSAL_ALLOPHONES.get(t1, ())))
+        for j in range(1, M + 1):
+            t2 = emitted_tokens[j - 1]
+            if t1 == t2:
+                cost = 0.0
+            elif t2 in alts or t1.strip("ː") == t2.strip("ː"):
+                cost = 0.35
+            else:
+                cost = 1.0
+            dp[i, j] = min(
+                dp[i - 1, j] + 1.0,
+                dp[i, j - 1] + 1.0,
+                dp[i - 1, j - 1] + cost
+            )
+
+    dist = dp[N, M]
+    max_len = max(N, M)
+    return float(max(0.0, 1.0 - (dist / max_len)))
+
+
+def verify_speech_content(
+    audio: np.ndarray,
+    expected_words: List[str]
+) -> Tuple[bool, str, float, List[str], str]:
+    """
+    ASR Content Verification Gate:
+    Validates whether the user's speech corresponds to the target lesson script,
+    preventing forced alignment hallucinations when an entirely different word or sentence is spoken.
+
+    Returns:
+        is_valid: bool (True if speech matches target or prefix)
+        reason: str ('VALID', 'LENGTH_RATIO_EXCEEDED', 'LOW_SIMILARITY', 'EMPTY_SPEECH')
+        similarity: float [0.0, 1.0]
+        emitted_tokens: List[str]
+        spoken_repr: str (human-readable IPA approximation of spoken speech)
+    """
+    if not expected_words or len(audio) == 0:
+        return False, "EMPTY_SPEECH", 0.0, [], ""
+
+    from app.services.aligner import forced_aligner
+
+    emitted = decode_raw_speech(audio)
+    if not emitted:
+        return False, "EMPTY_SPEECH", 0.0, [], ""
+
+    spoken_repr = "/" + "".join(emitted[:18]) + ("..." if len(emitted) > 18 else "") + "/"
+
+    clean_script = " ".join(expected_words)
+    word_phonemes = forced_aligner.g2p.convert_text(clean_script)
+    if not word_phonemes:
+        return False, "EMPTY_SPEECH", 0.0, emitted, spoken_repr
+
+    expected_tokens = [
+        forced_aligner.ACOUSTIC_TOKEN_FALLBACK.get(ph.token, ph.token)
+        for _, ph_list in word_phonemes
+        for ph in ph_list
+    ]
+
+    N = len(expected_tokens)
+    M = len(emitted)
+    sim = compute_phoneme_similarity(expected_tokens, emitted)
+    ratio = M / max(1, N)
+
+    logger.info(
+        "[ASR Verification Gate] Expected tokens (%d): %s | Emitted tokens (%d): %s | Similarity: %.2f | Length ratio: %.2f",
+        N, "".join(expected_tokens), M, "".join(emitted[:20]), sim, ratio
+    )
+
+    # 1. Single-word target verification
+    if len(expected_words) == 1:
+        if M >= 6 and ratio > 2.2:
+            logger.warning(
+                "[ASR Verification Gate] REJECTED: Single word '%s' spoken with abnormal length ratio %.2f (emitted %d tokens)",
+                expected_words[0], ratio, M
+            )
+            return False, "LENGTH_RATIO_EXCEEDED", sim, emitted, spoken_repr
+
+        if sim < 0.35:
+            logger.warning(
+                "[ASR Verification Gate] REJECTED: Single word '%s' mismatch (similarity: %.2f < 0.35)",
+                expected_words[0], sim
+            )
+            return False, "LOW_SIMILARITY", sim, emitted, spoken_repr
+
+        return True, "VALID", sim, emitted, spoken_repr
+
+    # 2. Multi-word sentence target verification
+    else:
+        if sim >= 0.30:
+            return True, "VALID", sim, emitted, spoken_repr
+
+        curr_tokens = []
+        for w_text, ph_list in word_phonemes:
+            curr_tokens.extend([forced_aligner.ACOUSTIC_TOKEN_FALLBACK.get(p.token, p.token) for p in ph_list])
+            p_sim = compute_phoneme_similarity(curr_tokens, emitted[:len(curr_tokens) + 3])
+            if p_sim >= 0.35:
+                return True, "VALID_PREFIX", p_sim, emitted, spoken_repr
+
+        logger.warning(
+            "[ASR Verification Gate] REJECTED: Sentence mismatch (similarity: %.2f < 0.30, no valid prefix)",
+            sim
+        )
+        return False, "LOW_SIMILARITY", sim, emitted, spoken_repr
+
+
+def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> int:
+    """
+    Computes Needleman-Wunsch alignment between target script phonemes and 
+    Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
+    Returns the number of sequential words from the beginning that were actually spoken.
+    """
+    if not expected_words or len(audio) == 0:
+        return 0
+
+    from app.services.aligner import forced_aligner
+
+    emitted = decode_raw_speech(audio)
     if not emitted:
         return 0
 

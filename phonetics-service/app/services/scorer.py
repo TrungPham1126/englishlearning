@@ -49,6 +49,8 @@ class Scorer:
     ) -> float:
         safe_post = max(1e-6, min(1.0, posterior))
         if safe_post < 0.02:
+            if formant_score is not None and formant_score >= 60.0:
+                return float(formant_score * 0.75)
             return 0.0
 
         log_post = float(np.log(safe_post))
@@ -160,12 +162,24 @@ class Scorer:
         weighted_mean = float(np.sum(np.array(scores) * np.array(weights)) / max(1e-6, np.sum(weights)))
 
         # VOWEL NUCLEUS GATE:
-        # Nếu nguyên âm chính bị sai nặng (< 35 điểm), người nghe không thể nhận diện từ
+        # Đối với từ đơn ngắn (<= 3 âm vị): Nguyên âm là hạt nhân duy nhất, nếu hỏng (< 35) thì từ hỏng.
+        # Đối với từ đa âm tiết: Chỉ phạt trần nếu NGUYÊN ÂM TRỌNG ÂM CHÍNH (stressed vowel) bị hỏng nặng.
         if vowels:
-            min_vowel_score = min(p_s.score for p_s, _ in vowels)
-            if min_vowel_score < 35.0:
-                hard_cap = min(35.0, min_vowel_score * 1.8)
-                weighted_mean = min(weighted_mean, hard_cap)
+            if len(phoneme_schemas) <= 3:
+                min_vowel_score = min(p_s.score for p_s, _ in vowels)
+                if min_vowel_score < 35.0:
+                    hard_cap = min(35.0, min_vowel_score * 1.8)
+                    weighted_mean = min(weighted_mean, hard_cap)
+            else:
+                stressed_vowels = [p_s.score for p_s, p_a in vowels if p_a.is_stress]
+                vowel_avg = float(np.mean([p_s.score for p_s, _ in vowels]))
+                if stressed_vowels:
+                    min_stressed = min(stressed_vowels)
+                    if min_stressed < 35.0:
+                        hard_cap = max(35.0, min_stressed * 1.5)
+                        weighted_mean = min(weighted_mean, hard_cap)
+                elif vowel_avg < 35.0:
+                    weighted_mean = min(weighted_mean, 35.0)
 
         # Ràng buộc từ ngắn 2 âm vị (ví dụ "is", "it", "at") nếu mất âm cuối (/z/ = 0)
         if len(phoneme_schemas) <= 2:

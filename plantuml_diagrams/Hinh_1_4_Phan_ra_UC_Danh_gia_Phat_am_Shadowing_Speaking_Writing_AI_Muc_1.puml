@@ -1,0 +1,39 @@
+@startuml Hinh_1_4_Phan_ra_UC_Danh_gia_Phat_am_Shadowing_Speaking_Writing_AI_Muc_1
+title Hình 1.4: Phân rã UC Đánh giá Phát âm Shadowing, Speaking & Writing AI - Mức 1
+left to right direction
+skinparam dpi 200
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam titleFontSize 16
+skinparam roundcorner 8
+
+actor "Học viên\n(Student)" as Student
+actor "Python Phonetics\n(FastAPI :8000)" as PythonService <<Service>>
+actor "Groq Cloud\n(Whisper / LLaMA)" as GroqCloud <<Service>>
+actor "Google Gemini 2.5\n(Flash AI)" as GeminiAI <<Service>>
+
+rectangle "Phân hệ Đánh giá Ngữ âm & Trí tuệ Nhân tạo Đa tầng (UC-AI)" {
+    usecase "UC-AI-01: Luyện phát âm Shadowing\n(Phân tích âm học Formant F1/F2)" as UC_SHADOW
+    usecase "UC-AI-02: Chấm bài nói Speaking\n(Độ trôi chảy, từ vựng, ngữ pháp)" as UC_SPEAK
+    usecase "UC-AI-03: Chấm bài viết luận Writing\n(Chính tả, ngữ pháp, độ mạch lạc)" as UC_WRITE
+    usecase "UC-AI-04: Cơ chế dự phòng 3 tầng\n(3-Tier AI Fallback Pipeline)" as UC_FALLBACK
+    usecase "UC-AI-05: Cập nhật Radar Chart &\nLưu ai_evaluations (MySQL)" as UC_UPDATE
+}
+
+Student --> UC_SHADOW
+Student --> UC_SPEAK
+Student --> UC_WRITE
+
+UC_SHADOW ..> UC_FALLBACK : <<include>>
+UC_SPEAK ..> UC_FALLBACK : <<include>>
+UC_SHADOW ..> UC_UPDATE : <<include>>
+UC_SPEAK ..> UC_UPDATE : <<include>>
+UC_WRITE ..> UC_UPDATE : <<include>>
+
+UC_FALLBACK --> PythonService : Tầng 1: Wav2Vec2 CTC & Praat Formant
+UC_FALLBACK --> GroqCloud : Tầng 2 STT (Whisper) & Tầng 3 (LLaMA 3.3)
+UC_FALLBACK --> GeminiAI : Tầng 2: Cambridge Phonetics Rule
+@enduml

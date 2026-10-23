@@ -74,14 +74,18 @@ async def handle_unhandled_exception(request: Request, exc: Exception):
     - Full stack trace logged to server logger
     - Safe generic 500 error returned to client.
     """
-    logger.error("Unhandled Exception on %s: %s", request.url.path, str(exc), exc_info=True)
+    import traceback
+    error_trace = traceback.format_exc()
+    logger.error(f"[ACOUSTIC_CRASH_TRACE] Chi tiết ngoại lệ trên {request.url.path}:\n{error_trace}")
+    print(f"=== CHI TIẾT LỖI XỬ LÝ ÂM HỌC ===\n{error_trace}", flush=True)
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": {
                 "code": ErrorCode.INTERNAL_ERROR,
                 "message": "Đã xảy ra lỗi nội bộ trong quá trình xử lý âm học.",
-                "reason": "Internal server processing failure",
+                "reason": str(exc) if str(exc) else "Internal server processing failure",
                 "suggestion": "Vui lòng thử lại sau hoặc liên hệ bộ phận hỗ trợ kỹ thuật."
             }
         }

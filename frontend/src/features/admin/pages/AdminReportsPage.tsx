@@ -75,23 +75,24 @@ export default function AdminReportsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-200 pb-12">
-      {/* 1. HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm print:hidden">
+      {/* 1. CLEAN OPEN HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent print:hidden">
         <div>
-          <div className="inline-flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-wider mb-1">
-            <BarChart3 size={16} /> Báo cáo học vụ & hiệu quả đào tạo
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <BarChart3 size={14} />
+            <span>Báo Cáo Học Vụ & Hiệu Quả</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Báo Cáo Hoạt Động & Đào Tạo Trung Tâm
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Tổng hợp dữ liệu học viên, phân bổ cấp độ CEFR, tải giảng dạy của giáo viên và tiến độ đào tạo.
           </p>
         </div>
 
         <button
           onClick={() => window.print()}
-          className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-xs"
+          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-xs"
         >
           <Printer size={16} /> In Báo Cáo
         </button>
