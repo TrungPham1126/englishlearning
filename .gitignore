@@ -86,4 +86,30 @@ AGENTS.md
 DESIGN.md
 PRODUCT.md
 
+### Report Images & Documentation ###
+HinhAnh_BaoCao_Chuong1/
+HinhAnh_BaoCao_Chuong2/
+*.doc
+*.docx
+current_doc.md
+live_doc.md
+updated_doc.md
+scripts/
+
+### Database Dumps & SQL Scripts ###
+*.sql
+src/main/resources/*.sql
+src/main/resources/db/
+
+### Temporary & Scratch Files ###
+frontend/*.txt
+frontend/*.py
+phonetics-service/*.txt
+phonetics-service/test_*.py
+phonetics-service/test_*.json
+phonetics-service/inspect_current.py
+phonetics-service/vocab_dump.json
+!phonetics-service/requirements.txt
+
+
 

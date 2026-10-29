@@ -1,6 +1,0 @@
-Targets: ['b', 'ʌ', 's']
-Posteriors: [np.float32(0.97660106), np.float32(0.014228719), np.float32(0.7322247)]
-Targets: ['b', 'ə', 's']
-Posteriors: [np.float32(0.97660106), np.float32(0.0019618953), np.float32(0.7322247)]
-Targets: ['b', 'a', 's']
-Posteriors: [np.float32(0.97660106), np.float32(0.65758896), np.float32(0.7322247)]
