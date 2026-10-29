@@ -2,11 +2,8 @@ package com.englishlearning.ai.controller;
 
 import com.englishlearning.ai.dto.PhoneticEvaluationResponse;
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
-import com.englishlearning.ai.dto.TtsRequest;
-import com.englishlearning.ai.dto.TtsResponse;
 import com.englishlearning.ai.entity.AiGeneratedExercise;
 import com.englishlearning.ai.service.AiLabService;
-import com.englishlearning.ai.service.KokoroTtsClientService;
 import com.englishlearning.ai.service.ShadowingService;
 import com.englishlearning.ai.service.WhisperPronunciationService;
 import com.englishlearning.auth.service.CustomUserDetails;
@@ -29,7 +26,6 @@ import java.util.UUID;
 public class AiLabController {
 
         private final AiLabService aiLabService;
-        private final KokoroTtsClientService kokoroTtsClientService;
 
         @PostMapping(value = "/speaking/evaluate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
         @PreAuthorize("hasRole('STUDENT')")
@@ -195,14 +191,5 @@ public class AiLabController {
                                                 request.getQuestion(),
                                                 request.getStudentAnswer(),
                                                 request.getExpectedAnswer())));
-        }
-
-        @PostMapping("/tts")
-        @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
-        public ResponseEntity<ApiResponse<TtsResponse>> synthesizeSpeech(
-                        @Valid @RequestBody TtsRequest request) {
-                return ResponseEntity.ok(ApiResponse.success(
-                                "Tổng hợp âm thanh Kokoro-82M thành công",
-                                kokoroTtsClientService.synthesizeSpeech(request)));
         }
 }

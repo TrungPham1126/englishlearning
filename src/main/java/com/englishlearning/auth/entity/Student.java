@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -31,4 +32,11 @@ public class Student {
 
     @Column(name = "current_level", length = 10)
     private String currentLevel;
+
+    @Builder.Default
+    @Column(name = "current_streak")
+    private Integer currentStreak = 0;
+
+    @Column(name = "last_active_date")
+    private LocalDate lastActiveDate;
 }

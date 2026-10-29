@@ -139,7 +139,7 @@ export default function UserManagementPage() {
   if (loading && !data)
     return (
       <div className="flex justify-center p-20">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <Loader2 className="animate-spin text-blue-700" size={32} />
       </div>
     );
 
@@ -148,7 +148,7 @@ export default function UserManagementPage() {
       {/* Clean Open Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <Users size={14} />
             <span>Quản Trị Người Dùng</span>
           </div>
@@ -164,14 +164,14 @@ export default function UserManagementPage() {
             setFormData(initialForm);
             setIsCreateModalOpen(true);
           }}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+          className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
         >
           <Plus size={18} /> Tạo Mới
         </button>
       </div>
 
       {/* FILTER TABS & SEARCH */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-[#121a2d] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-slate-900 dark:text-slate-100">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-[#121a2d] p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-slate-900 dark:text-slate-100">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
           {[
             { label: "Tất Cả", value: "ALL" },
@@ -184,7 +184,7 @@ export default function UserManagementPage() {
               onClick={() => setRoleFilter(tab.value)}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 roleFilter === tab.value
-                  ? "bg-indigo-600 text-white shadow-sm"
+                  ? "bg-blue-800 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
@@ -201,19 +201,19 @@ export default function UserManagementPage() {
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="Tìm theo tên, email, SĐT..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0d1322] text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-indigo-600"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0d1322] text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-700"
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+            className="px-4 py-2 bg-blue-800 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition cursor-pointer"
           >
             Tìm
           </button>
         </form>
       </div>
 
-      <div className="bg-white dark:bg-[#121a2d] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 overflow-hidden">
+      <div className="bg-white dark:bg-[#121a2d] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -234,7 +234,7 @@ export default function UserManagementPage() {
                     {user.lastName} {user.firstName}
                   </td>
                   <td className="p-4 text-slate-600 dark:text-slate-300">
-                    <div className="font-semibold text-indigo-700 dark:text-indigo-400">
+                    <div className="font-semibold text-blue-800 dark:text-blue-400">
                       {user.email}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">
@@ -246,7 +246,7 @@ export default function UserManagementPage() {
                       {user.roles.map((r) => (
                         <span
                           key={r}
-                          className="px-2 py-1 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold rounded uppercase border border-indigo-100 dark:border-indigo-500/30"
+                          className="px-2 py-1 bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 text-[10px] font-bold rounded uppercase border border-blue-100 dark:border-blue-600/30"
                         >
                           {r.replace("ROLE_", "")}
                         </span>
@@ -276,7 +276,7 @@ export default function UserManagementPage() {
                   <td className="p-4 text-right space-x-2">
                     <button
                       onClick={() => openEditModal(user)}
-                      className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 hover:text-indigo-600 rounded-lg transition cursor-pointer"
+                      className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition cursor-pointer"
                     >
                       <Edit size={16} />
                     </button>
@@ -298,7 +298,7 @@ export default function UserManagementPage() {
       {/* MODAL TẠO MỚI / CHỈNH SỬA USER */}
       {(isCreateModalOpen || isEditModalOpen) && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-card w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/60">
               <h2 className="text-lg font-black text-slate-900 dark:text-white">
                 {isCreateModalOpen ? "Tạo Tài Khoản Mới" : "Cập Nhật Tài Khoản"}
@@ -332,7 +332,7 @@ export default function UserManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, lastName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold"
                   />
                 </div>
                 <div>
@@ -346,7 +346,7 @@ export default function UserManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, firstName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold"
                   />
                 </div>
               </div>
@@ -363,7 +363,7 @@ export default function UserManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold disabled:bg-slate-100"
+                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold disabled:bg-slate-100"
                 />
               </div>
 
@@ -376,7 +376,7 @@ export default function UserManagementPage() {
                     <button
                       type="button"
                       onClick={() => setFormData((prev) => ({ ...prev, password: "Password@123" }))}
-                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      className="text-[11px] font-bold text-blue-700 hover:text-blue-800 cursor-pointer"
                     >
                       Dùng mặc định: Password@123
                     </button>
@@ -389,7 +389,7 @@ export default function UserManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold"
                   />
                   <p className="mt-1 text-[11px] text-slate-400">
                     Tối thiểu 8 ký tự gồm chữ hoa, chữ thường, số hoặc ký tự đặc biệt.
@@ -408,7 +408,7 @@ export default function UserManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, phone: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold"
                 />
               </div>
 
@@ -430,11 +430,11 @@ export default function UserManagementPage() {
                         onClick={() => toggleRole(item.role)}
                         className={`flex flex-col items-center text-center p-3 rounded-xl border-2 cursor-pointer transition select-none ${
                           isChecked
-                            ? "border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-xs"
+                            ? "border-blue-700 bg-blue-50/70 text-blue-900 shadow-xs"
                             : "border-slate-200 hover:border-slate-300 text-slate-600"
                         }`}
                       >
-                        <Icon size={20} className={isChecked ? "text-indigo-600 mb-1" : "text-slate-400 mb-1"} />
+                        <Icon size={20} className={isChecked ? "text-blue-700 mb-1" : "text-slate-400 mb-1"} />
                         <span className="text-xs font-black">{item.label}</span>
                         <span className="text-[10px] text-slate-500 mt-0.5 leading-tight">{item.desc}</span>
                       </div>
@@ -457,7 +457,7 @@ export default function UserManagementPage() {
                 <button
                   type="submit"
                   disabled={isSaving || formData.roles.length === 0}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer disabled:opacity-50 transition shadow-sm"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 transition shadow-sm"
                 >
                   {isSaving && <Loader2 size={16} className="animate-spin" />}{" "}
                   Lưu Tài Khoản

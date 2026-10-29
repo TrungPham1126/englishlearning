@@ -3,7 +3,16 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "@/features/student/api/studentApi";
 import ShadowingEvaluationView from "@/features/student/components/ShadowingEvaluationView";
-import { cleanShadowingSentence } from "@/features/student/components/SpeakingShadowingStudio";
+import SpeakingShadowingStudio, { cleanShadowingSentence } from "@/features/student/components/SpeakingShadowingStudio";
+import {
+  extractReferenceSentence,
+  isGradingRubricOrMetaText,
+  isInvalidSampleAudioUrl,
+  isMockOrBrokenAudioUrl,
+  playSampleAudio,
+  resolveFullAudioUrl,
+  stopAllSampleAudio,
+} from "@/utils/sampleAudioPlayer";
 import type {
   AttemptResponse,
   SpeakingAiEvaluationResult,
@@ -26,6 +35,7 @@ import {
   Check,
   Target,
   AlertOctagon,
+  AlertCircle,
   Zap,
   Headphones,
   MessageSquare,
@@ -35,6 +45,7 @@ import {
   Play,
   Pause,
   Award,
+  GraduationCap,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -111,6 +122,7 @@ export default function SpeakingAiEvaluationPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showGuidelines, setShowGuidelines] = useState(false);
 
   // Âm thanh của học sinh
@@ -126,21 +138,25 @@ export default function SpeakingAiEvaluationPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Phát câu mẫu Text-to-speech (Kokoro-82M Neural Audio)
+  // Phát câu mẫu Text-to-speech (Kokoro-82M Neural Audio / Web Speech English Fallback)
   const [isPlayingRefTts, setIsPlayingRefTts] = useState(false);
   const [ttsSpeed, setTtsSpeed] = useState<number>(1.0);
   const [selectedVoice, setSelectedVoice] = useState<string>("af_heart");
   const [isSynthesizingTts, setIsSynthesizingTts] = useState<boolean>(false);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsCacheRef = useRef<Map<string, string>>(new Map());
+
+  // Phát lại bản thu âm của học viên (tách biệt 100% với state câu mẫu)
+  const [isPlayingStudentRec, setIsPlayingStudentRec] = useState(false);
+  const studentPlaybackAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Cleanup khi unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
+      if (studentPlaybackAudioRef.current) {
+        studentPlaybackAudioRef.current.pause();
       }
+      stopAllSampleAudio();
     };
   }, []);
 
@@ -507,6 +523,7 @@ export default function SpeakingAiEvaluationPage() {
     if (dayGroup.id === selectedDayId) return;
     setSelectedDayId(dayGroup.id);
     setActionMessage(null);
+    setErrorMessage(null);
 
     // Chọn bài tập đầu tiên của Ngày đó
     const firstTask = dayGroup.speakingTasks[0];
@@ -531,6 +548,7 @@ export default function SpeakingAiEvaluationPage() {
     setSwitching(true);
     setSelectedAssignmentId(asgId);
     setActionMessage(null);
+    setErrorMessage(null);
     try {
       await selectAndLoadAssignment(asgId);
     } finally {
@@ -543,6 +561,7 @@ export default function SpeakingAiEvaluationPage() {
     if (!selectedAssignmentId || switching) return;
     setSwitching(true);
     setActionMessage(null);
+    setErrorMessage(null);
     try {
       const newAttempt = await studentApi.startAssignment(selectedAssignmentId);
       const detail = await studentApi.getAttemptDetail(newAttempt.attemptId);
@@ -550,7 +569,7 @@ export default function SpeakingAiEvaluationPage() {
       applyAttemptDetail(detail);
       setActionMessage("Đã bắt đầu lượt làm mới. Bạn có thể ghi âm câu trả lời.");
     } catch (err: any) {
-      alert("Không thể bắt đầu lượt mới: " + (err.response?.data?.message || err.message));
+      setErrorMessage("Không thể bắt đầu lượt mới: " + (err.response?.data?.message || err.message));
     } finally {
       setSwitching(false);
     }
@@ -566,122 +585,156 @@ export default function SpeakingAiEvaluationPage() {
   const selectedAsgMeta = currentSelectedDay?.speakingTasks.find(
     (a) => a.id === selectedAssignmentId,
   );
+  const attemptTitleLower = (
+    currentAttempt?.assignmentTitle ||
+    selectedAsgMeta?.title ||
+    ""
+  ).toLowerCase();
   const attemptDescLower = (
     (currentAttempt as any)?.assignmentDescription ||
     selectedAsgMeta?.description ||
     ""
   ).toLowerCase();
+  const currentPromptLower = (currentQ?.promptText || "").toLowerCase();
+
   const isShadowingMode =
     !!selectedAsgMeta?.isShadowing ||
+    attemptTitleLower.includes("shadow") ||
+    attemptTitleLower.includes("nhại") ||
     attemptDescLower.includes("shadow") ||
     attemptDescLower.includes("nhại") ||
+    currentPromptLower.includes("shadowing") ||
+    currentPromptLower.includes("repeat after") ||
+    currentPromptLower.includes("nhại lại") ||
+    currentPromptLower.includes("đọc to câu") ||
+    currentPromptLower.includes("phát âm câu") ||
     Boolean(
       currentQ &&
         currentQ.correctAnswer &&
+        !isGradingRubricOrMetaText(currentQ.correctAnswer) &&
         currentQ.promptText &&
         currentQ.promptText.trim() === currentQ.correctAnswer.trim(),
-    ) ||
-    Boolean(
-      currentQ &&
-        (currentQ.mediaUrl || (currentQ as any).audioUrl) &&
-        !currentQ.promptText?.trim().endsWith("?"),
     );
 
-  // Cập nhật âm thanh khi chuyển câu hỏi
+  // Dừng mọi âm thanh cũ và cập nhật âm thanh khi chuyển câu hỏi / lượt nộp
   useEffect(() => {
+    stopAllSampleAudio();
+    setIsPlayingRefTts(false);
+    setIsSynthesizingTts(false);
+    if (studentPlaybackAudioRef.current) {
+      studentPlaybackAudioRef.current.pause();
+      studentPlaybackAudioRef.current.currentTime = 0;
+    }
+    setIsPlayingStudentRec(false);
     setActiveAudioBlob(null);
+
     if (!currentQ) {
       setActiveAudioUrl(null);
       return;
     }
 
-    const backendUrl =
-      (currentQ as any)?.audioUrl || currentQ?.studentAnswer || null;
-    if (
-      backendUrl &&
-      (backendUrl.startsWith("http") || backendUrl.startsWith("blob:"))
-    ) {
-      setActiveAudioUrl(backendUrl);
+    const rawStudentUrl =
+      (currentQ as any)?.audioUrl ||
+      (currentQ?.studentAnswer &&
+      (currentQ.studentAnswer.startsWith("http") ||
+        currentQ.studentAnswer.startsWith("blob:") ||
+        currentQ.studentAnswer.startsWith("/uploads/"))
+        ? currentQ.studentAnswer
+        : null);
+
+    if (rawStudentUrl && !isMockOrBrokenAudioUrl(rawStudentUrl)) {
+      setActiveAudioUrl(resolveFullAudioUrl(rawStudentUrl));
     } else {
       setActiveAudioUrl(null);
     }
 
     extractAndSetAiReportForQuestion(currentQ, currentAttempt);
-  }, [selectedQuestionIndex, currentAttempt?.attemptId]);
+  }, [selectedQuestionIndex, currentAttempt?.attemptId, currentQ?.questionId]);
 
-  // Điều khiển TTS đọc câu hỏi hoặc câu mẫu bằng Kokoro-82M Neural TTS
-  const handlePlayTtsPrompt = async (textToRead: string) => {
+  // Nút 1: Điều khiển phát câu mẫu chuẩn (Sample Audio / Reference Sentence)
+  // Tuyệt đối tách biệt với nguồn âm thanh bài thu của học viên
+  const handlePlayTtsPrompt = async (textToRead?: string) => {
     if (isPlayingRefTts) {
-      if (ttsAudioRef.current) ttsAudioRef.current.pause();
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopAllSampleAudio();
       setIsPlayingRefTts(false);
       return;
     }
 
-    const cleanText = cleanShadowingSentence(textToRead?.trim() || "");
-    if (!cleanText) return;
+    // Dừng phát bản thu của học viên nếu đang bật
+    if (studentPlaybackAudioRef.current && isPlayingStudentRec) {
+      studentPlaybackAudioRef.current.pause();
+      setIsPlayingStudentRec(false);
+    }
 
-    const resolveUrl = (u?: string) => {
-      if (!u) return "";
-      if (u.startsWith("http://") || u.startsWith("https://")) return u;
-      const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-      return `${base}${u.startsWith("/") ? "" : "/"}${u}`;
-    };
+    const sampleText =
+      cleanShadowingSentence(textToRead?.trim() || "") ||
+      extractReferenceSentence(currentQ);
+    if (!sampleText) return;
 
-    const cacheKey = `${cleanText}_${selectedVoice}`;
-    let audioUrl = ttsCacheRef.current.get(cacheKey);
-
-    // Nếu câu hỏi đã có sẵn file audio Kokoro-82M cho giọng mặc định af_heart, dùng ngay
-    if (
-      !audioUrl &&
+    const studentUrl = activeAudioUrl || currentQ?.audioUrl || null;
+    const validMediaUrl =
       selectedVoice === "af_heart" &&
       currentQ?.mediaUrl &&
-      !currentQ.mediaUrl.includes("translate.google") &&
-      !currentQ.mediaUrl.includes("dictvoice")
-    ) {
-      audioUrl = resolveUrl(currentQ.mediaUrl);
-      ttsCacheRef.current.set(cacheKey, audioUrl);
+      !isInvalidSampleAudioUrl(currentQ.mediaUrl, studentUrl)
+        ? currentQ.mediaUrl
+        : undefined;
+
+    setIsSynthesizingTts(true);
+    try {
+      await playSampleAudio(sampleText, {
+        audioUrl: validMediaUrl,
+        voice: selectedVoice,
+        lang: selectedVoice.startsWith("b") ? "en-GB" : "en-US",
+        rate: ttsSpeed,
+        studentAudioUrl: studentUrl,
+        onStart: () => {
+          setIsSynthesizingTts(false);
+          setIsPlayingRefTts(true);
+        },
+        onEnd: () => {
+          setIsSynthesizingTts(false);
+          setIsPlayingRefTts(false);
+        },
+        onError: () => {
+          setIsSynthesizingTts(false);
+          setIsPlayingRefTts(false);
+        },
+      });
+    } finally {
+      setIsSynthesizingTts(false);
+    }
+  };
+
+  // Nút 2: Điều khiển phát lại bản thu âm của học viên (Submission User Audio)
+  // Tuyệt đối không dùng chung state hay gọi nhầm sang câu mẫu
+  const handleTogglePlayStudentAudio = () => {
+    if (!activeAudioUrl || isMockOrBrokenAudioUrl(activeAudioUrl)) return;
+
+    if (isPlayingStudentRec && studentPlaybackAudioRef.current) {
+      studentPlaybackAudioRef.current.pause();
+      setIsPlayingStudentRec(false);
+      return;
     }
 
-    if (!audioUrl) {
-      setIsSynthesizingTts(true);
-      try {
-        const response = await studentApi.synthesizeTTS({
-          text: cleanText,
-          voice: selectedVoice,
-          speed: 1.0,
-        });
-        if (response && response.audioUrl) {
-          audioUrl = resolveUrl(response.audioUrl);
-          ttsCacheRef.current.set(cacheKey, audioUrl);
-        }
-      } catch (err) {
-        console.warn("Kokoro TTS backend error in SpeakingAiEvaluationPage:", err);
-      } finally {
-        setIsSynthesizingTts(false);
-      }
+    // Dừng phát câu mẫu nếu đang bật
+    if (isPlayingRefTts) {
+      stopAllSampleAudio();
+      setIsPlayingRefTts(false);
     }
 
-    if (audioUrl) {
-      if (!ttsAudioRef.current) {
-        ttsAudioRef.current = new Audio(audioUrl);
-      } else {
-        ttsAudioRef.current.src = audioUrl;
-      }
-
-      ttsAudioRef.current.playbackRate = ttsSpeed;
-      (ttsAudioRef.current as any).preservesPitch = true;
-      ttsAudioRef.current.onended = () => setIsPlayingRefTts(false);
-      ttsAudioRef.current.onerror = () => setIsPlayingRefTts(false);
-
-      try {
-        await ttsAudioRef.current.play();
-        setIsPlayingRefTts(true);
-      } catch (playErr) {
-        console.error("Lỗi phát audio:", playErr);
-        setIsPlayingRefTts(false);
-      }
+    if (!studentPlaybackAudioRef.current) {
+      studentPlaybackAudioRef.current = new Audio(activeAudioUrl);
+    } else if (studentPlaybackAudioRef.current.src !== activeAudioUrl) {
+      studentPlaybackAudioRef.current.pause();
+      studentPlaybackAudioRef.current.src = activeAudioUrl;
     }
+
+    studentPlaybackAudioRef.current.onended = () => setIsPlayingStudentRec(false);
+    studentPlaybackAudioRef.current.onerror = () => setIsPlayingStudentRec(false);
+    studentPlaybackAudioRef.current
+      .play()
+      .then(() => setIsPlayingStudentRec(true))
+      .catch(() => setIsPlayingStudentRec(false));
   };
 
   // Bắt đầu thu âm
@@ -773,6 +826,7 @@ export default function SpeakingAiEvaluationPage() {
     setIsEvaluating(true);
     setShadowingReport(null);
     setActionMessage(null);
+    setErrorMessage(null);
 
     try {
       let finalAudioBlob = activeAudioBlob;
@@ -814,7 +868,7 @@ export default function SpeakingAiEvaluationPage() {
       setReportQuestionId(currentQ.questionId);
       setActionMessage("AI đã hoàn thành đánh giá bài nói phỏng vấn của bạn!");
     } catch (err: any) {
-      alert(`Đánh giá Speaking thất bại: ${err.response?.data?.message || err.message}`);
+      setErrorMessage(`Đánh giá Speaking thất bại: ${err.response?.data?.message || err.message}`);
     } finally {
       setIsEvaluating(false);
     }
@@ -882,7 +936,7 @@ export default function SpeakingAiEvaluationPage() {
       setReportQuestionId(currentQ.questionId);
       setActionMessage("AI đã chấm xong bài Shadowing với điểm phát âm chi tiết!");
     } catch (err: any) {
-      alert(`Đánh giá Shadowing thất bại: ${err.response?.data?.message || err.message}`);
+      setErrorMessage(`Đánh giá Shadowing thất bại: ${err.response?.data?.message || err.message}`);
     } finally {
       setIsEvaluating(false);
     }
@@ -955,7 +1009,7 @@ export default function SpeakingAiEvaluationPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500 font-medium gap-3">
-        <Loader2 className="animate-spin text-indigo-600" size={36} />
+        <Loader2 className="animate-spin text-blue-700" size={36} />
         <span className="text-sm font-semibold">
           Đang tải lộ trình Daily Plan và bài tập Speaking...
         </span>
@@ -982,7 +1036,7 @@ export default function SpeakingAiEvaluationPage() {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
               <Mic size={14} />
               <span>Speaking Lab & Shadowing Studio</span>
             </div>
@@ -1017,6 +1071,21 @@ export default function SpeakingAiEvaluationPage() {
         )}
       </div>
 
+            {errorMessage && (
+        <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-900 dark:text-rose-300 px-4 py-3 rounded-xl text-xs font-medium flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-rose-700 dark:text-rose-300 hover:text-rose-900 font-bold ml-4 cursor-pointer text-base"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {actionMessage && (
         <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
           <div className="flex items-center gap-2">
@@ -1033,10 +1102,10 @@ export default function SpeakingAiEvaluationPage() {
       )}
 
       {/* 2. THANH ĐIỀU HƯỚNG CÁC NGÀY: NGÀY 1, NGÀY 2, NGÀY 3, NGÀY 4... */}
-      <div className="elp-card bg-white dark:bg-[#111827] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-3">
+      <div className="elp-card bg-white dark:bg-[#111827] rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-indigo-600 dark:text-indigo-400" />
+            <Calendar size={18} className="text-blue-700 dark:text-blue-400" />
             <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
               Lộ trình bài tập Speaking theo Ngày (Daily Plan):
             </h2>
@@ -1047,7 +1116,7 @@ export default function SpeakingAiEvaluationPage() {
         </div>
 
         {daysList.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 space-y-2">
+          <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
             <AlertTriangle className="mx-auto text-amber-500" size={32} />
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
               Chưa có ngày học nào được giao bài Speaking trong lớp này.
@@ -1068,14 +1137,14 @@ export default function SpeakingAiEvaluationPage() {
                   onClick={() => handleSelectDay(day)}
                   className={`flex flex-col items-center justify-center min-w-[125px] py-3 px-4 rounded-xl border-2 transition cursor-pointer shrink-0 text-left ${
                     isSelectedDay
-                      ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-500/15 shadow-xs ring-2 ring-indigo-500/20"
+                      ? "border-blue-700 bg-blue-50/70 dark:bg-blue-600/15 shadow-xs ring-2 ring-blue-600/20"
                       : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-100/70 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 w-full justify-between">
                     <span
                       className={`text-xs font-black uppercase tracking-wider ${
-                        isSelectedDay ? "text-indigo-700 dark:text-indigo-400" : "text-slate-800 dark:text-slate-200"
+                        isSelectedDay ? "text-blue-800 dark:text-blue-400" : "text-slate-800 dark:text-slate-200"
                       }`}
                     >
                       Ngày {day.dayNumber}
@@ -1083,11 +1152,11 @@ export default function SpeakingAiEvaluationPage() {
                     {allDone ? (
                       <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
                     ) : day.isCurrentDay ? (
-                      <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                      <span className="h-2 w-2 rounded-full bg-blue-800 animate-pulse" />
                     ) : null}
                   </div>
 
-                  <span className="text-[11px] font-medium text-slate-400 mt-0.5 truncate w-full">
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate w-full">
                     {day.scheduledDate || day.title}
                   </span>
 
@@ -1095,7 +1164,7 @@ export default function SpeakingAiEvaluationPage() {
                     <span
                       className={`font-bold px-1.5 py-0.5 rounded ${
                         isSelectedDay
-                          ? "bg-indigo-200/60 dark:bg-indigo-500/30 text-indigo-900 dark:text-indigo-200"
+                          ? "bg-blue-200/60 dark:bg-blue-600/30 text-blue-900 dark:text-blue-200"
                           : "bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -1124,10 +1193,10 @@ export default function SpeakingAiEvaluationPage() {
           {/* CỘT TRÁI: DANH SÁCH BÀI TẬP NÓI CỦA NGÀY & LỊCH SỬ NỘP */}
           <div className="lg:col-span-4 space-y-4">
             {/* Box: Danh sách bài tập của Ngày đang chọn */}
-            <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
+            <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
               <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <Mic size={14} className="text-indigo-600 dark:text-indigo-400" />
+                  <Mic size={14} className="text-blue-700 dark:text-blue-400" />
                   Bài tập Ngày {currentSelectedDay.dayNumber}
                 </span>
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
@@ -1137,7 +1206,7 @@ export default function SpeakingAiEvaluationPage() {
 
               <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[350px] overflow-y-auto">
                 {currentSelectedDay.speakingTasks.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400">
+                  <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">
                     Ngày này chưa có bài tập Speaking nào
                   </div>
                 ) : (
@@ -1149,7 +1218,7 @@ export default function SpeakingAiEvaluationPage() {
                         onClick={() => handleSelectAssignment(asg.id)}
                         className={`p-4 cursor-pointer transition flex items-center justify-between gap-3 ${
                           isAct
-                            ? "bg-indigo-50/80 dark:bg-indigo-500/15 border-l-4 border-indigo-600"
+                            ? "bg-blue-50/80 dark:bg-blue-950/40 border border-blue-700 dark:border-blue-500 rounded-md"
                             : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         }`}
                       >
@@ -1158,7 +1227,7 @@ export default function SpeakingAiEvaluationPage() {
                             className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
                               asg.isShadowing
                                 ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                                : "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300"
+                                : "bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300"
                             }`}
                           >
                             {asg.isShadowing ? (
@@ -1172,7 +1241,7 @@ export default function SpeakingAiEvaluationPage() {
                               className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                                 asg.isShadowing
                                   ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
-                                  : "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
+                                  : "bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30"
                               }`}
                             >
                               {asg.isShadowing ? "Shadowing (Nhại giọng)" : "Speaking Q&A"}
@@ -1194,7 +1263,7 @@ export default function SpeakingAiEvaluationPage() {
                             </span>
                           )}
                           {asg.highestScore !== undefined && asg.highestScore !== null && (
-                            <p className="text-[11px] font-black text-indigo-700 dark:text-indigo-400 mt-1">
+                            <p className="text-[11px] font-black text-blue-800 dark:text-blue-400 mt-1">
                               {asg.highestScore.toFixed(1)} pts
                             </p>
                           )}
@@ -1207,10 +1276,10 @@ export default function SpeakingAiEvaluationPage() {
             </div>
 
             {/* Box: Lịch Sử Lượt Nộp Bài Của Bài Tập Đang Chọn */}
-            <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
+            <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
               <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock size={13} className="text-indigo-600 dark:text-indigo-400" />
+                  <Clock size={13} className="text-blue-700 dark:text-blue-400" />
                   Lịch Sử Các Lần Nộp
                 </span>
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
@@ -1220,7 +1289,7 @@ export default function SpeakingAiEvaluationPage() {
 
               <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto">
                 {attempts.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400">
+                  <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">
                     Chưa có lượt nộp bài nào
                   </div>
                 ) : (
@@ -1246,7 +1315,7 @@ export default function SpeakingAiEvaluationPage() {
                         }}
                         className={`p-3.5 cursor-pointer transition ${
                           isSelectedAtt
-                            ? "bg-indigo-50/70 dark:bg-indigo-500/15 border-l-4 border-indigo-600"
+                            ? "bg-blue-50/80 dark:bg-blue-950/40 border border-blue-700 dark:border-blue-500 rounded-md"
                             : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         }`}
                       >
@@ -1301,7 +1370,7 @@ export default function SpeakingAiEvaluationPage() {
                     onClick={handleStartNewAttempt}
                     className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
                   >
-                    <RotateCcw size={13} className="text-indigo-600 dark:text-indigo-400" />
+                    <RotateCcw size={13} className="text-blue-700 dark:text-blue-400" />
                     <span>Luyện tập lại (Tạo bài nộp mới)</span>
                   </button>
                 </div>
@@ -1312,7 +1381,7 @@ export default function SpeakingAiEvaluationPage() {
           {/* CỘT PHẢI: KHÔNG GIAN BÀI TẬP, NHẬN XÉT CỦA CÔ GIÁO & AI */}
           <div className="lg:col-span-8 space-y-6">
             {!currentQ ? (
-              <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[300px]">
+              <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[300px]">
                 <AlertTriangle className="mb-3 text-amber-500" size={40} />
                 <h3 className="font-bold text-lg text-slate-800 dark:text-white">
                   Chưa Có Nội Dung Bài Tập
@@ -1322,18 +1391,18 @@ export default function SpeakingAiEvaluationPage() {
                 </p>
               </div>
             ) : (
-              <div className="elp-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 md:p-8 shadow-xs space-y-6">
+              <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 md:p-8 shadow-xs space-y-6">
                 {/* Header Câu Hỏi & Trạng Thái Hoàn Thành */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    <span className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-wider">
                       Ngày {currentSelectedDay.dayNumber} • Câu {selectedQuestionIndex + 1}/{questions.length}
                     </span>
                     <span
                       className={`rounded-md px-3 py-1 text-xs font-bold ${
                         isShadowingMode
                           ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
-                          : "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
+                          : "bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30"
                       }`}
                     >
                       {isShadowingMode
@@ -1355,55 +1424,136 @@ export default function SpeakingAiEvaluationPage() {
 
                     {currentAttempt?.score !== undefined &&
                       currentAttempt?.score !== null && (
-                        <span className="text-xs font-black bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 px-3 py-1.5 rounded-lg">
+                        <span className="text-xs font-black bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30 px-3 py-1.5 rounded-lg">
                           Tổng điểm: {currentAttempt.score.toFixed(1)} pts
                         </span>
                       )}
                   </div>
                 </div>
 
-                {/* ĐỀ BÀI CHÍNH */}
+                {/* ĐỀ BÀI CHÍNH & STUDIO SHADOWING HIỆN ĐẠI */}
+                {isShadowingMode ? (
+                  <div className="space-y-5">
+                    <SpeakingShadowingStudio
+                      questionId={currentQ.questionId}
+                      studentAnswerId={currentQ.studentAnswerId || currentQ.id}
+                      referenceSentence={
+                        extractReferenceSentence(currentQ) ||
+                        "No prompt provided"
+                      }
+                      referenceAudioUrl={
+                        currentQ.mediaUrl &&
+                        !isInvalidSampleAudioUrl(
+                          currentQ.mediaUrl,
+                          activeAudioUrl || currentQ.audioUrl,
+                        )
+                          ? currentQ.mediaUrl
+                          : undefined
+                      }
+                      savedAudioUrl={
+                        activeAudioUrl ||
+                        (!isMockOrBrokenAudioUrl(currentQ.audioUrl)
+                          ? currentQ.audioUrl
+                          : undefined)
+                      }
+                      currentStep={selectedQuestionIndex + 1}
+                      totalSteps={Math.max(1, questions.length)}
+                      onBack={() => navigate(-1)}
+                      onAudioSubmitted={(blob, result) => {
+                        setActiveAudioBlob(blob);
+                        setActiveAudioUrl(URL.createObjectURL(blob));
+                        void ensureStudentAnswerAudioUploaded(blob);
+                        if (result) {
+                          setShadowingReport(result);
+                          setReportQuestionId(currentQ.questionId);
+                        }
+                      }}
+                    />
+
+                    {!isSubmitted && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={handleSubmitAssignment}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3.5 px-6 text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                        >
+                          {isSubmitting ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <CheckCircle2 size={18} />
+                          )}
+                          <span>
+                            Nộp Bài Hoàn Thành Ngày {currentSelectedDay.dayNumber}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                {/* ĐỀ BÀI CHÍNH (CHẾ ĐỘ SPEAKING Q&A INTERVIEW & XEM KẾT QUẢ BÀI NỘP) */}
                 <div className="space-y-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">
-                    {isShadowingMode ? "Câu mẫu cần luyện nói (Reference Sentence):" : "Câu hỏi phỏng vấn (Interview Prompt):"}
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest block">
+                    Câu hỏi phỏng vấn / Câu mẫu chuẩn (Reference Prompt):
                   </span>
                   <div className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-relaxed bg-slate-50/70 dark:bg-slate-800/60 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
-                    "{isShadowingMode
-                      ? cleanShadowingSentence(currentQ.correctAnswer || currentQ.promptText || "No prompt provided")
-                      : (currentQ.promptText || currentQ.correctAnswer || "No prompt provided")}"
+                    "{cleanShadowingSentence(currentQ.promptText || currentQ.transcript || "") || "No prompt provided"}"
                   </div>
 
-                  {/* Nút Voice AI Text-To-Speech Kokoro-82M cho học sinh nghe câu hỏi / câu mẫu */}
+                  {/* Cụm 2 nút tách biệt: Nút 1 (Nghe câu mẫu chuẩn) & Nút 2 (Nghe lại bản thu của bạn) */}
                   <div className="flex flex-wrap items-center gap-3 pt-1">
+                    {/* NÚT 1: NGHE CÂU MẪU CHUẨN */}
                     <button
                       type="button"
                       disabled={isSynthesizingTts}
                       onClick={() =>
-                        handlePlayTtsPrompt(
-                          isShadowingMode
-                            ? cleanShadowingSentence(currentQ.correctAnswer || currentQ.promptText || "")
-                            : (currentQ.promptText || currentQ.correctAnswer || "")
+                        void handlePlayTtsPrompt(
+                          cleanShadowingSentence(
+                            currentQ.promptText || currentQ.transcript || "",
+                          ),
                         )
                       }
-                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white px-4 py-2 rounded-xl transition shadow-md cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-blue-800 hover:bg-blue-600 disabled:opacity-60 text-white px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
                     >
                       {isSynthesizingTts ? (
                         <>
-                          <Loader2 size={14} className="animate-spin text-indigo-200" />
+                          <Loader2 size={14} className="animate-spin text-blue-200" />
                           <span>Đang tải âm mẫu AI...</span>
                         </>
                       ) : isPlayingRefTts ? (
                         <>
                           <Pause size={14} />
-                          <span>Dừng phát âm mẫu</span>
+                          <span>Dừng câu mẫu chuẩn</span>
                         </>
                       ) : (
                         <>
                           <Volume2 size={14} />
-                          <span>Nghe âm mẫu bản xứ</span>
+                          <span>Nghe câu mẫu chuẩn</span>
                         </>
                       )}
                     </button>
+
+                    {/* NÚT 2: NGHE LẠI BẢN THU CỦA BẠN (Tách biệt hoàn toàn state & nguồn audio) */}
+                    {activeAudioUrl && (
+                      <button
+                        type="button"
+                        onClick={handleTogglePlayStudentAudio}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer"
+                      >
+                        {isPlayingStudentRec ? (
+                          <>
+                            <Pause size={14} />
+                            <span>Dừng bản thu của bạn</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play size={14} />
+                            <span>Nghe lại bản thu của bạn</span>
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     {/* Bộ chọn giọng đọc mẫu */}
                     <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -1418,13 +1568,13 @@ export default function SpeakingAiEvaluationPage() {
                           onClick={() => {
                             setSelectedVoice(v.id);
                             if (isPlayingRefTts) {
-                              if (ttsAudioRef.current) ttsAudioRef.current.pause();
+                              stopAllSampleAudio();
                               setIsPlayingRefTts(false);
                             }
                           }}
                           className={`px-2.5 py-1 text-[11px] rounded-lg transition ${
                             selectedVoice === v.id
-                              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-black"
+                              ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs font-black"
                               : "hover:text-slate-900 dark:hover:text-white"
                           }`}
                         >
@@ -1446,7 +1596,7 @@ export default function SpeakingAiEvaluationPage() {
                           }}
                           className={`px-2 py-0.5 rounded-lg transition ${
                             ttsSpeed === s
-                              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                              ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs"
                               : "hover:text-slate-900 dark:hover:text-white"
                           }`}
                         >
@@ -1480,7 +1630,7 @@ export default function SpeakingAiEvaluationPage() {
                       {currentQ.explanation && (
                         <p className="leading-relaxed">{currentQ.explanation}</p>
                       )}
-                      {currentQ.correctAnswer && !isShadowingMode && (
+                      {currentQ.correctAnswer && (
                         <p className="leading-relaxed font-medium text-amber-800 dark:text-amber-300">
                           Ý chính gợi ý: {currentQ.correctAnswer}
                         </p>
@@ -1502,7 +1652,7 @@ export default function SpeakingAiEvaluationPage() {
                         onClick={() => setSelectedQuestionIndex(idx)}
                         className={`h-8 w-8 rounded-lg text-xs font-black transition cursor-pointer border-2 ${
                           idx === selectedQuestionIndex
-                            ? "bg-indigo-600 text-white border-indigo-600"
+                            ? "bg-blue-800 text-white border-blue-700"
                             : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
                         }`}
                       >
@@ -1512,12 +1662,12 @@ export default function SpeakingAiEvaluationPage() {
                   </div>
                 )}
 
-                {/* KHU VỰC THU ÂM & PHÁT LẠI GIỌNG NÓI */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-6 space-y-5">
+                {/* KHU VỰC THU ÂM & PHÁT LẠI GIỌNG NÓI CỦA HỌC VIÊN (Q&A / SUBMISSION) */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                      <Volume2 size={16} className="text-indigo-600 dark:text-indigo-400" />
-                      Bản ghi âm bài nói của bạn (Học sinh thực hiện):
+                      <Mic size={16} className="text-emerald-600 dark:text-emerald-400" />
+                      Bản thu của bạn (Student Recorded Submission):
                     </span>
                     {isSubmitted && (
                       <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
@@ -1527,14 +1677,27 @@ export default function SpeakingAiEvaluationPage() {
                   </div>
 
                   {activeAudioUrl ? (
-                    <audio
-                      controls
-                      src={activeAudioUrl}
-                      className="w-full h-11 rounded-lg"
-                    />
+                    <div className="space-y-2">
+                      <audio
+                        controls
+                        src={activeAudioUrl}
+                        onPlay={() => {
+                          if (isPlayingRefTts) {
+                            stopAllSampleAudio();
+                            setIsPlayingRefTts(false);
+                          }
+                          setIsPlayingStudentRec(true);
+                        }}
+                        onPause={() => setIsPlayingStudentRec(false)}
+                        onEnded={() => setIsPlayingStudentRec(false)}
+                        className="w-full h-11 rounded-lg"
+                      />
+                    </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-6 text-center text-xs text-slate-500 dark:text-slate-400">
-                      Chưa có bản ghi âm. Hãy bấm nút thu âm micro bên dưới để trả lời bài tập Ngày {currentSelectedDay.dayNumber}.
+                      {aiReport?.transcript
+                        ? `Bản ghi âm đã được chấm điểm AI (Transcript: "${aiReport.transcript}"). Bấm nút Thu âm lại bên dưới nếu bạn muốn ghi âm bản mới.`
+                        : `Chưa có bản ghi âm. Hãy bấm nút thu âm micro bên dưới để trả lời bài tập Ngày ${currentSelectedDay.dayNumber}.`}
                     </div>
                   )}
 
@@ -1551,7 +1714,7 @@ export default function SpeakingAiEvaluationPage() {
                       <button
                         type="button"
                         onClick={startRecording}
-                        className="flex items-center gap-2 rounded-xl border-2 border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 px-5 py-3 text-xs font-black text-indigo-700 dark:text-indigo-300 transition cursor-pointer shadow-2xs"
+                        className="flex items-center gap-2 rounded-xl border-2 border-blue-200 dark:border-blue-600/40 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 px-5 py-3 text-xs font-black text-blue-800 dark:text-blue-300 transition cursor-pointer shadow-2xs"
                       >
                         <Mic size={16} className="text-rose-600" />
                         <span>{activeAudioUrl ? "Thu âm lại" : "Thu âm trực tiếp"}</span>
@@ -1559,7 +1722,7 @@ export default function SpeakingAiEvaluationPage() {
                     )}
 
                     <label className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-2xs">
-                      <Upload size={15} className="text-indigo-600 dark:text-indigo-400" />
+                      <Upload size={15} className="text-blue-700 dark:text-blue-400" />
                       <span>Tải file ghi âm</span>
                       <input
                         type="file"
@@ -1569,41 +1732,19 @@ export default function SpeakingAiEvaluationPage() {
                       />
                     </label>
 
-                    {/* NÚT AI CHẤM ĐIỂM NGAY */}
-                    {isShadowingMode ? (
-                      <button
-                        type="button"
-                        disabled={isEvaluating || (!activeAudioUrl && !activeAudioBlob)}
-                        onClick={handleTriggerShadowingEvaluation}
-                        className="ml-auto inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-indigo-800 disabled:to-violet-900 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-75 disabled:cursor-not-allowed cursor-pointer text-xs"
-                      >
-                        {isEvaluating ? (
-                          <>
-                            <Loader2 size={16} className="animate-spin text-white" />
-                            <span>AI đang phân tích âm học Praat F1/F2...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={16} className="text-amber-300" />
-                            <span>Chấm Điểm Với AI</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isEvaluating || (!activeAudioUrl && !activeAudioBlob)}
-                        onClick={handleTriggerAiEvaluation}
-                        className="ml-auto flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-3 text-xs font-black transition cursor-pointer shadow-xs"
-                      >
-                        {isEvaluating ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Sparkles size={16} />
-                        )}
-                        <span>AI Chấm Điểm Phỏng Vấn (IELTS)</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={isEvaluating || (!activeAudioUrl && !activeAudioBlob)}
+                      onClick={handleTriggerAiEvaluation}
+                      className="ml-auto flex items-center gap-2 rounded-xl bg-blue-800 hover:bg-blue-800 disabled:opacity-50 text-white px-5 py-3 text-xs font-black transition cursor-pointer shadow-xs"
+                    >
+                      {isEvaluating ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={16} />
+                      )}
+                      <span>AI Chấm Điểm Phỏng Vấn (IELTS)</span>
+                    </button>
                   </div>
 
                   {!isSubmitted && (
@@ -1612,7 +1753,7 @@ export default function SpeakingAiEvaluationPage() {
                         type="button"
                         disabled={isSubmitting}
                         onClick={handleSubmitAssignment}
-                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white py-3.5 px-6 text-sm font-black shadow-md transition cursor-pointer disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3.5 px-6 text-sm font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
                       >
                         {isSubmitting ? (
                           <Loader2 size={18} className="animate-spin" />
@@ -1624,17 +1765,19 @@ export default function SpeakingAiEvaluationPage() {
                     </div>
                   )}
                 </div>
+                  </>
+                )}
 
                 {/* 4. HỘP NHẬN XÉT CỦA CÔ GIÁO (TEACHER FEEDBACK) NẾU ĐÃ NỘP & CHẤM */}
                 {isSubmitted && (
-                  <div className="rounded-2xl border-2 border-indigo-200 dark:border-indigo-500/30 bg-gradient-to-br from-indigo-50/70 to-blue-50/40 dark:from-indigo-950/30 dark:to-blue-950/20 p-6 space-y-3 shadow-xs">
-                    <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-500/20 pb-3">
+                  <div className="rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/50 dark:bg-slate-900/20 p-6 space-y-3 shadow-card">
+                    <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-600/20 pb-3">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-xs">
+                        <div className="h-10 w-10 rounded-xl bg-blue-800 text-white flex items-center justify-center font-bold text-lg shadow-xs">
                           👩‍🏫
                         </div>
                         <div>
-                          <h4 className="text-sm font-black text-indigo-950 dark:text-indigo-200 uppercase tracking-wide">
+                          <h4 className="text-sm font-black text-blue-950 dark:text-blue-200 uppercase tracking-wide">
                             Nhận Xét & Đánh Giá Của Giáo Viên (Cô Giáo)
                           </h4>
                           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -1656,20 +1799,20 @@ export default function SpeakingAiEvaluationPage() {
 
                     {currentAttempt.teacherFeedback ? (
                       <div className="space-y-2 pt-1">
-                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-indigo-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-sm leading-relaxed font-medium shadow-2xs whitespace-pre-wrap">
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-blue-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-sm leading-relaxed font-medium shadow-2xs whitespace-pre-wrap">
                           "{currentAttempt.teacherFeedback}"
                         </div>
                         {typeof currentAttempt.score === "number" && (
-                          <p className="text-xs font-bold text-indigo-900 dark:text-indigo-300">
+                          <p className="text-xs font-bold text-blue-900 dark:text-blue-300">
                             Điểm giáo viên ghi nhận:{" "}
-                            <span className="text-sm font-black text-indigo-700 dark:text-indigo-400">
+                            <span className="text-sm font-black text-blue-800 dark:text-blue-400">
                               {currentAttempt.score.toFixed(1)} / 10 pts
                             </span>
                           </p>
                         )}
                       </div>
                     ) : (
-                      <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-xl border border-dashed border-indigo-200 dark:border-indigo-500/30 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                      <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-xl border border-dashed border-blue-200 dark:border-blue-600/30 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
                         <Lightbulb size={16} className="text-amber-500 shrink-0" />
                         <span>
                           Bài tập Ngày {currentSelectedDay.dayNumber} đã được hệ thống AI khảo thí chấm điểm tự động. Khi cô giáo xem lại bài nộp, nhận xét chi tiết của cô sẽ hiển thị tại đây.
@@ -1694,16 +1837,16 @@ export default function SpeakingAiEvaluationPage() {
 
                 {/* 6. KẾT QUẢ ĐÁNH GIÁ IELTS SPEAKING Q&A */}
                 {aiReport && reportQuestionId === currentQ.questionId && (
-                  <div className="space-y-6 pt-4 border-t-2 border-dashed border-indigo-200 dark:border-slate-800 animate-in fade-in duration-200">
+                  <div className="space-y-6 pt-4 border-t-2 border-dashed border-blue-200 dark:border-slate-800 animate-in fade-in duration-200">
                     <div className="flex items-center gap-2">
-                      <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400" />
+                      <Sparkles size={18} className="text-blue-700 dark:text-blue-400" />
                       <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
                         Nhận Xét & Đánh Giá Chi Tiết Từ AI Khảo Thí (IELTS Standards):
                       </h4>
                     </div>
 
                     {aiReport.isOffTopic && (
-                      <div className="rounded-2xl border-2 border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-950/30 p-5 text-rose-900 dark:text-rose-200 shadow-xs flex items-start gap-3">
+                      <div className="rounded-xl border-2 border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-950/30 p-5 text-rose-900 dark:text-rose-200 shadow-xs flex items-start gap-3">
                         <AlertOctagon
                           size={28}
                           className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5"
@@ -1723,10 +1866,10 @@ export default function SpeakingAiEvaluationPage() {
                     {/* Thống kê Tổng quan (Bands, CEFR, WPM) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div
-                        className={`rounded-2xl border-2 p-5 text-center ${
+                        className={`rounded-xl border-2 p-5 text-center ${
                           aiReport.isOffTopic
                             ? "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20"
-                            : "border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20"
+                            : "border-blue-100 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900/20"
                         }`}
                       >
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
@@ -1736,7 +1879,7 @@ export default function SpeakingAiEvaluationPage() {
                           className={`text-4xl font-black mt-1 ${
                             aiReport.isOffTopic
                               ? "text-rose-600 dark:text-rose-400"
-                              : "text-indigo-700 dark:text-indigo-400"
+                              : "text-blue-800 dark:text-blue-400"
                           }`}
                         >
                           {aiReport.overallBand}{" "}
@@ -1744,7 +1887,7 @@ export default function SpeakingAiEvaluationPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
+                      <div className="rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Trình độ CEFR
                         </span>
@@ -1753,13 +1896,13 @@ export default function SpeakingAiEvaluationPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
+                      <div className="rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-center shadow-2xs">
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Tốc độ nói
                         </span>
                         <p className="text-4xl font-black text-slate-800 dark:text-white mt-1">
                           {aiReport.wordsPerMinute}{" "}
-                          <span className="text-sm font-bold text-slate-400">
+                          <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
                             WPM
                           </span>
                         </p>
@@ -1768,14 +1911,14 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Task Achievement */}
                     {aiReport.taskAchievement && (
-                      <div className="rounded-2xl border border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-5 space-y-3 shadow-2xs">
-                        <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-500/20 pb-2">
-                          <span className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5 uppercase tracking-wider">
-                            <Target size={16} className="text-indigo-600 dark:text-indigo-400" />
+                      <div className="rounded-xl border border-blue-100 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900/20 p-5 space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-600/20 pb-2">
+                          <span className="text-xs font-black text-blue-950 dark:text-blue-200 flex items-center gap-1.5 uppercase tracking-wider">
+                            <Target size={16} className="text-blue-700 dark:text-blue-400" />
                             Độ Hoàn Thành Yêu Cầu (Task Response):
                           </span>
                           {aiReport.taskAchievement.score !== undefined && (
-                            <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 px-2 py-0.5 rounded">
+                            <span className="text-xs font-black text-blue-800 dark:text-blue-300 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-600/30 px-2 py-0.5 rounded">
                               {aiReport.taskAchievement.score.toFixed(1)} / 9.0
                             </span>
                           )}
@@ -1837,7 +1980,7 @@ export default function SpeakingAiEvaluationPage() {
                     )}
 
                     {/* 4 Tiêu Chí IELTS */}
-                    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-2xs">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-2xs">
                       <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">
                         Điểm 4 Tiêu Chí Khảo Thí (Rubrics)
                       </h4>
@@ -1877,7 +2020,7 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Sửa Lỗi Chi Tiết (Mistakes) */}
                     {aiReport.mistakes && aiReport.mistakes.length > 0 && (
-                      <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-950/20 p-5 space-y-4 shadow-2xs">
+                      <div className="rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-950/20 p-5 space-y-4 shadow-2xs">
                         <h4 className="text-sm font-black text-rose-800 dark:text-rose-300 flex items-center gap-2">
                           <AlertTriangle size={18} /> Sửa Lỗi Chi Tiết (Mistakes)
                         </h4>
@@ -1913,7 +2056,7 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Nhận xét chung & Native Phrasing */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 p-5 space-y-2 shadow-2xs">
+                      <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 p-5 space-y-2 shadow-2xs">
                         <h4 className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
                           <Lightbulb size={16} /> Lời Nhận Xét Tổng Quan Của AI
                         </h4>
@@ -1922,11 +2065,11 @@ export default function SpeakingAiEvaluationPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/20 p-5 space-y-2 shadow-2xs">
-                        <h4 className="text-xs font-black text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5 uppercase tracking-wider">
+                      <div className="rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/70 dark:bg-slate-900/20 p-5 space-y-2 shadow-2xs">
+                        <h4 className="text-xs font-black text-blue-900 dark:text-blue-300 flex items-center gap-1.5 uppercase tracking-wider">
                           <Check size={16} /> Cách Diễn Đạt Tự Nhiên Hơn (Native Phrasing)
                         </h4>
-                        <p className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed font-medium italic">
+                        <p className="text-xs text-blue-950 dark:text-blue-200 leading-relaxed font-medium italic">
                           "{aiReport.correctedText}"
                         </p>
                       </div>
@@ -1934,7 +2077,7 @@ export default function SpeakingAiEvaluationPage() {
 
                     {/* Kịch bản nhận diện STT */}
                     {aiReport.transcript && (
-                      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-5 space-y-2 shadow-2xs">
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-5 space-y-2 shadow-2xs">
                         <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">
                           Transcript nhận diện từ giọng nói:
                         </span>

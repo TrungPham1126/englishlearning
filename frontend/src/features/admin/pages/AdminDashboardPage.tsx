@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500 dark:text-slate-400">
-        <Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400 mb-3" size={36} />
+        <Loader2 className="animate-spin text-blue-700 dark:text-blue-400 mb-3" size={36} />
         <p className="text-sm font-semibold">Đang tổng hợp dữ liệu trung tâm...</p>
       </div>
     );
@@ -73,7 +73,7 @@ export default function AdminDashboardPage() {
 
   if (!stats) {
     return (
-      <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/50 shadow-sm max-w-xl mx-auto my-12">
+      <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm max-w-xl mx-auto my-12">
         <ShieldAlert size={48} className="text-rose-500 mx-auto mb-3" />
         <h3 className="text-lg font-bold text-slate-800 dark:text-white">Không thể tải dữ liệu thống kê</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <Sparkles size={14} />
             <span>Quản Trị Hoạt Động Trung Tâm</span>
           </div>
@@ -111,7 +111,7 @@ export default function AdminDashboardPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => navigate("/admin/classrooms")}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
           >
             <PlusCircle size={16} /> Quản Lý Lớp Học
           </button>
@@ -130,7 +130,7 @@ export default function AdminDashboardPage() {
           {pendingVideosCount > 0 && (
             <div
               onClick={() => navigate("/admin/video-moderation")}
-              className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-200 dark:border-rose-900/60 rounded-2xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-rose-400 transition group"
+              className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-200 dark:border-rose-900/60 rounded-xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-rose-400 transition group"
             >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-md shadow-rose-600/30">
@@ -150,7 +150,7 @@ export default function AdminDashboardPage() {
           )}
 
           {pendingGradingCount > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900/60 rounded-2xl p-5 flex items-center justify-between shadow-sm">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900/60 rounded-xl p-5 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-500/30">
                   <Clock size={24} />
@@ -172,13 +172,13 @@ export default function AdminDashboardPage() {
       {/* 3. FOUR STRIPE-STYLE KPI CARDS */}
       <div>
         <h2 className="text-lg font-black text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <Users size={20} className="text-indigo-600 dark:text-indigo-400" /> Quy Mô & Chỉ Số Hiệu Suất Trung Tâm
+          <Users size={20} className="text-blue-700 dark:text-blue-400" /> Quy Mô & Chỉ Số Hiệu Suất Trung Tâm
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Học viên */}
           <div
             onClick={() => navigate("/admin/students")}
-            className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md transition cursor-pointer group"
+            className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-md transition cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -200,13 +200,13 @@ export default function AdminDashboardPage() {
           {/* Card 2: Giáo viên */}
           <div
             onClick={() => navigate("/admin/teachers")}
-            className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md transition cursor-pointer group"
+            className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-400 dark:hover:border-blue-700 hover:shadow-md transition cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Đội Ngũ Giảng Viên
               </span>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center group-hover:bg-blue-800 group-hover:text-white transition-colors">
                 <GraduationCap size={20} />
               </div>
             </div>
@@ -215,14 +215,14 @@ export default function AdminDashboardPage() {
             </div>
             <div className="flex items-center justify-between mt-3 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
               <span>Phụ trách đào tạo</span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400 group-hover:underline">Chi tiết &rarr;</span>
+              <span className="font-bold text-blue-700 dark:text-blue-400 group-hover:underline">Chi tiết &rarr;</span>
             </div>
           </div>
 
           {/* Card 3: Lớp Đang Đào Tạo & Tuyển sinh */}
           <div
             onClick={() => navigate("/admin/classrooms")}
-            className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-sky-400 dark:hover:border-sky-600 hover:shadow-md transition cursor-pointer group"
+            className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-sky-400 dark:hover:border-sky-600 hover:shadow-md transition cursor-pointer group"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -242,22 +242,22 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 4: Tỷ lệ hoàn thành bài tập */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Tỷ Lệ Hoàn Thành Bài
               </span>
-              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
                 <Award size={20} />
               </div>
             </div>
-            <div className="text-3xl font-black text-purple-600 dark:text-purple-400 mt-3">
+            <div className="text-3xl font-black text-blue-700 dark:text-blue-400 mt-3">
               {completionRate.toFixed(1)}%
             </div>
             {/* Progress Bar */}
             <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
               <div
-                className="h-full bg-purple-600 rounded-full transition-all duration-500"
+                className="h-full bg-blue-800 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(0, completionRate))}%` }}
               />
             </div>
@@ -272,18 +272,18 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 4. RECHARTS BAR CHART: XU HƯỚNG NỘP & CHẤM BÀI TẬP 7 NGÀY GẦN NHẤT */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
           <div>
             <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <TrendingUp size={20} className="text-indigo-600 dark:text-indigo-400" />
+              <TrendingUp size={20} className="text-blue-700 dark:text-blue-400" />
               Xu Hướng Nộp & Chấm Bài Tập (7 Ngày Gần Nhất)
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               So sánh lượng bài tập học viên gửi về và số bài giáo viên/AI đã xử lý
             </p>
           </div>
-          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1 rounded-xl">
+          <span className="text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900/50 px-3 py-1 rounded-xl">
             Activity Overview
           </span>
         </div>
@@ -332,11 +332,11 @@ export default function AdminDashboardPage() {
       {/* 5. CLASSROOM PIPELINE & CURRICULUM OVERVIEW */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Lớp học theo trạng thái */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Layers size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <Layers size={18} className="text-blue-700 dark:text-blue-400" />
                 Tình Hình Vận Hành Lớp Học
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -345,14 +345,14 @@ export default function AdminDashboardPage() {
             </div>
             <button
               onClick={() => navigate("/admin/classrooms")}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition cursor-pointer"
+              className="text-xs font-bold text-blue-700 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition cursor-pointer"
             >
               Xem tất cả &rarr;
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-center">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                 Kế Hoạch (Planning)
               </span>
@@ -362,7 +362,7 @@ export default function AdminDashboardPage() {
               <span className="text-[10px] text-slate-400 mt-1 block">Chuẩn bị mở</span>
             </div>
 
-            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 text-center">
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-center">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">
                 Tuyển Sinh (Open)
               </span>
@@ -372,7 +372,7 @@ export default function AdminDashboardPage() {
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block">Đang nhận học viên</span>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 text-center">
+            <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 text-center">
               <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">
                 Đang Học (In Progress)
               </span>
@@ -382,14 +382,14 @@ export default function AdminDashboardPage() {
               <span className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 block">Đang giảng dạy</span>
             </div>
 
-            <div className="bg-purple-50 dark:bg-purple-950/40 p-4 rounded-2xl border border-purple-200 dark:border-purple-900/50 text-center">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 block">
+            <div className="bg-blue-50 dark:bg-slate-900/40 p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 text-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800 dark:text-blue-400 block">
                 Kết Thúc (Completed)
               </span>
-              <span className="text-2xl font-black text-purple-700 dark:text-purple-300 block mt-1">
+              <span className="text-2xl font-black text-blue-800 dark:text-blue-300 block mt-1">
                 {stats.completedClasses ?? 0}
               </span>
-              <span className="text-[10px] text-purple-600 dark:text-purple-400 mt-1 block">Đã tốt nghiệp</span>
+              <span className="text-[10px] text-blue-700 dark:text-blue-400 mt-1 block">Đã tốt nghiệp</span>
             </div>
           </div>
 
@@ -397,41 +397,41 @@ export default function AdminDashboardPage() {
             <span>
               Tổng số lớp trên toàn hệ thống: <strong className="text-slate-800 dark:text-white">{stats.totalClasses}</strong>
             </span>
-            <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
+            <span className="text-blue-700 dark:text-blue-400 font-semibold">
               Tỷ lệ lớp đang chạy: {stats.totalClasses > 0 ? Math.round(((stats.inProgressClasses || 0) / stats.totalClasses) * 100) : 0}%
             </span>
           </div>
         </div>
 
         {/* Hoạt động học liệu & bài tập */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <BookOpen size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <BookOpen size={18} className="text-blue-700 dark:text-blue-400" />
                 Học Liệu & Bài Tập
               </h3>
-              <FileText size={18} className="text-indigo-600 dark:text-indigo-400" />
+              <FileText size={18} className="text-blue-700 dark:text-blue-400" />
             </div>
 
             <div className="space-y-3 mt-4">
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <BookOpen size={18} className="text-indigo-600 dark:text-indigo-400" />
+                  <BookOpen size={18} className="text-blue-700 dark:text-blue-400" />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Tổng số Bài Giảng</span>
                 </div>
                 <span className="text-base font-black text-slate-900 dark:text-white">{stats.totalLessons}</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <Video size={18} className="text-purple-600 dark:text-purple-400" />
+                  <Video size={18} className="text-blue-700 dark:text-blue-400" />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Video Bài Giảng</span>
                 </div>
                 <span className="text-base font-black text-slate-900 dark:text-white">{stats.totalVideos}</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-3">
                   <FileText size={18} className="text-teal-600 dark:text-teal-400" />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Bài Tập Hệ Thống</span>
@@ -439,7 +439,7 @@ export default function AdminDashboardPage() {
                 <span className="text-base font-black text-slate-900 dark:text-white">{stats.totalAssignments}</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Bài Nộp Học Viên</span>
@@ -461,16 +461,16 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 6. QUICK ACTIONS FOR CENTER MANAGEMENT */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <h3 className="text-base font-black text-slate-900 dark:text-white mb-4">
           Thao Tác Quản Trị Nhanh
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <button
             onClick={() => navigate("/admin/classrooms")}
-            className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-blue-600 hover:bg-blue-50/50 dark:hover:bg-slate-900/30 transition text-left cursor-pointer group"
           >
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-slate-900 text-blue-800 dark:text-blue-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
               <School size={20} />
             </div>
             <h4 className="text-sm font-bold text-slate-900 dark:text-white">Khởi Tạo Lớp Mới</h4>
@@ -479,7 +479,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => navigate("/admin/teachers")}
-            className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition text-left cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
               <GraduationCap size={20} />
@@ -490,7 +490,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => navigate("/admin/students")}
-            className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-sky-500 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 transition text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-sky-500 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 transition text-left cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
               <Users size={20} />
@@ -501,7 +501,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => navigate("/admin/broadcast")}
-            className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 transition text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 transition text-left cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
               <Sparkles size={20} />

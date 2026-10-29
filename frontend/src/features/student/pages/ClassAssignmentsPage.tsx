@@ -48,7 +48,7 @@ export default function ClassAssignmentsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-20 text-slate-500 font-semibold text-sm gap-2">
-        <Loader2 className="animate-spin text-indigo-600" size={20} />
+        <Loader2 className="animate-spin text-blue-700" size={20} />
         <span>Đang tải danh sách bài tập...</span>
       </div>
     );
@@ -75,10 +75,10 @@ export default function ClassAssignmentsPage() {
       </div>
 
       {assignments.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-xs">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center shadow-xs">
           <FileText size={40} className="mx-auto text-slate-300 mb-3" />
-          <h3 className="font-bold text-slate-700">Chưa có bài tập nào</h3>
-          <p className="text-xs text-slate-500 mt-1">
+          <h3 className="font-bold text-slate-700 dark:text-slate-200">Chưa có bài tập nào</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Giảng viên chưa giao bài tập cho lớp học này.
           </p>
         </div>
@@ -91,22 +91,22 @@ export default function ClassAssignmentsPage() {
             return (
               <div
                 key={assignment.id}
-                className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs hover:border-indigo-300 transition"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs hover:border-blue-300 dark:hover:border-blue-600/50 transition"
               >
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/80">
                       {assignment.skillType}
                     </span>
-                    <h3 className="font-bold text-slate-900 text-base">
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
                       {assignment.title}
                     </h3>
                   </div>
-                  <p className="text-xs text-slate-600 line-clamp-1">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-1">
                     {assignment.description}
                   </p>
 
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 font-medium pt-1">
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 font-medium pt-1">
                     <span className="flex items-center gap-1">
                       <Clock size={13} />{" "}
                       {assignment.timeLimitMinutes
@@ -121,10 +121,10 @@ export default function ClassAssignmentsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+                <div className="flex items-center gap-4 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
                   {isCompleted && (
                     <div className="text-right mr-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">
                         Điểm cao nhất
                       </span>
                       <span className="text-lg font-black text-emerald-600">

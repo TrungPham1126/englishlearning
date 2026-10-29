@@ -2,6 +2,7 @@ package com.englishlearning.ai.service;
 
 import com.englishlearning.ai.dto.TtsRequest;
 import com.englishlearning.ai.dto.TtsResponse;
+import com.englishlearning.ai.service.impl.KokoroTtsClientServiceImpl;
 import com.englishlearning.curriculum.service.DocumentStorageService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ public class KokoroTtsClientServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        kokoroTtsClientService = new KokoroTtsClientService(
+        kokoroTtsClientService = new KokoroTtsClientServiceImpl(
                 documentStorageService,
                 redisTemplate,
                 "http://127.0.0.1:8000/tts",

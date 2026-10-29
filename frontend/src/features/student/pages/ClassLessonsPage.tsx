@@ -52,10 +52,10 @@ export default function ClassLessonsPage() {
           <div
             key={lesson.id}
             onClick={() => navigate(`/student/lessons/${lesson.id}`)}
-            className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 shadow-sm transition hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md cursor-pointer"
+            className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 shadow-sm transition hover:border-blue-400 dark:hover:border-blue-700 hover:shadow-md cursor-pointer"
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-950/50 font-bold text-indigo-600 dark:text-indigo-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-slate-900/50 font-bold text-blue-700 dark:text-blue-400">
                 {idx + 1}
               </div>
               <div>
@@ -65,7 +65,7 @@ export default function ClassLessonsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-700 dark:text-blue-400">
               <PlayCircle size={18} /> Vào học
             </div>
           </div>

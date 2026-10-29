@@ -195,7 +195,7 @@ export default function StudentManagementPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <Users size={14} />
             <span>Học Viên & Tuyển Sinh</span>
           </div>
@@ -213,7 +213,7 @@ export default function StudentManagementPage() {
               setFormData(initialForm);
               setIsCreateModalOpen(true);
             }}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+            className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
           >
             <Plus size={18} /> Thêm Học Viên Mới
           </button>
@@ -222,8 +222,8 @@ export default function StudentManagementPage() {
 
       {/* 2. STATS & SEARCH */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+        <div className="bg-white dark:bg-[#111827] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-600/15 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold">
             <Users size={20} />
           </div>
           <div>
@@ -232,7 +232,7 @@ export default function StudentManagementPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
+        <div className="bg-white dark:bg-[#111827] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
           <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
             <UserCheck size={20} />
           </div>
@@ -242,7 +242,7 @@ export default function StudentManagementPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
+        <div className="bg-white dark:bg-[#111827] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 transition-colors">
           <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
             <UserX size={20} />
           </div>
@@ -261,12 +261,12 @@ export default function StudentManagementPage() {
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="Tìm theo tên, email, SĐT..."
-              className="w-full pl-9 pr-3 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-600 shadow-sm"
+              className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-blue-700 shadow-sm"
             />
           </div>
           <button
             type="submit"
-            className="px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer"
+            className="px-4 bg-blue-800 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
           >
             Lọc
           </button>
@@ -274,10 +274,10 @@ export default function StudentManagementPage() {
       </div>
 
       {/* 3. STUDENT TABLE */}
-      <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
+      <div className="bg-white dark:bg-[#111827] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
         {loading ? (
           <div className="p-16 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
+            <Loader2 className="animate-spin text-blue-700 mb-2" size={32} />
             <p className="text-xs font-semibold">Đang tải danh sách học viên...</p>
           </div>
         ) : data.content.length === 0 ? (
@@ -361,7 +361,7 @@ export default function StudentManagementPage() {
                         <button
                           onClick={() => openEditModal(student)}
                           title="Chỉnh sửa thông tin"
-                          className="p-2 bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-indigo-100 hover:text-indigo-600 rounded-lg transition cursor-pointer"
+                          className="p-2 bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition cursor-pointer"
                         >
                           <Edit size={15} />
                         </button>
@@ -385,10 +385,10 @@ export default function StudentManagementPage() {
       {/* MODAL 1: TẠO HỌC VIÊN MỚI */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
-                <UserPlus className="text-indigo-600" /> Thêm Hồ Sơ Học Viên Mới
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
+              <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <UserPlus className="text-blue-700" /> Thêm Hồ Sơ Học Viên Mới
               </h2>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
@@ -401,7 +401,7 @@ export default function StudentManagementPage() {
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Họ & Đệm
                   </label>
                   <input
@@ -411,12 +411,12 @@ export default function StudentManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, lastName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                     placeholder="Trần Thị"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Tên Học Viên
                   </label>
                   <input
@@ -426,14 +426,14 @@ export default function StudentManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, firstName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                     placeholder="Bình"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Email
                 </label>
                 <input
@@ -443,13 +443,13 @@ export default function StudentManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="student@example.com"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Mật Khẩu Ban Đầu (Tối thiểu 8 ký tự, có hoa/thường/số)
                 </label>
                 <input
@@ -459,13 +459,13 @@ export default function StudentManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="Student@123"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Số Điện Thoại
                 </label>
                 <input
@@ -474,23 +474,23 @@ export default function StudentManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, phone: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="0987654321"
                 />
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer text-xs"
+                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
                 >
                   {isSaving && <Loader2 size={16} className="animate-spin" />} Lưu Học Viên
                 </button>
@@ -503,10 +503,10 @@ export default function StudentManagementPage() {
       {/* MODAL 2: SỬA HỌC VIÊN */}
       {isEditModalOpen && selectedStudent && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
-                <Edit className="text-indigo-600" /> Cập Nhật Hồ Sơ Học Viên
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
+              <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Edit className="text-blue-700" /> Cập Nhật Hồ Sơ Học Viên
               </h2>
               <button
                 onClick={() => setIsEditModalOpen(false)}
@@ -519,7 +519,7 @@ export default function StudentManagementPage() {
             <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Họ & Đệm
                   </label>
                   <input
@@ -529,11 +529,11 @@ export default function StudentManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, lastName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Tên
                   </label>
                   <input
@@ -543,25 +543,25 @@ export default function StudentManagementPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, firstName: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Email (Không đổi)
                 </label>
                 <input
                   disabled
                   type="email"
                   value={formData.email}
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 text-sm font-semibold bg-slate-100 text-slate-500"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-sm font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Số Điện Thoại
                 </label>
                 <input
@@ -570,22 +570,22 @@ export default function StudentManagementPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, phone: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-indigo-600 text-sm font-semibold"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 />
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer text-xs"
+                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
                 >
                   {isSaving && <Loader2 size={16} className="animate-spin" />} Cập Nhật
                 </button>
@@ -598,9 +598,9 @@ export default function StudentManagementPage() {
       {/* MODAL 3: GHI DANH HỌC VIÊN VÀO LỚP HỌC */}
       {isEnrollModalOpen && selectedStudent && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
+              <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <School className="text-emerald-600" /> Ghi Danh Vào Lớp Học
               </h2>
               <button
@@ -612,7 +612,7 @@ export default function StudentManagementPage() {
             </div>
 
             <form onSubmit={handleEnrollSubmit} className="p-6 space-y-4">
-              <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100">
+              <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100">
                 <span className="text-xs font-semibold text-slate-500 block">Học viên được ghi danh:</span>
                 <span className="text-sm font-bold text-emerald-950 block mt-0.5">
                   {selectedStudent.lastName} {selectedStudent.firstName} ({selectedStudent.email})
@@ -620,14 +620,14 @@ export default function StudentManagementPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Chọn Lớp Học Cần Ghi Danh
                 </label>
                 <select
                   required
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold bg-white"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold"
                 >
                   <option value="" disabled>-- Vui lòng chọn lớp học --</option>
                   {classes.map((cls) => (
@@ -638,11 +638,11 @@ export default function StudentManagementPage() {
                 </select>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsEnrollModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer text-xs"
+                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
                 >
                   Hủy
                 </button>

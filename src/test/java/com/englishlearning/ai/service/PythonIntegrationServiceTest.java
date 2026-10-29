@@ -1,6 +1,7 @@
 package com.englishlearning.ai.service;
 
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
+import com.englishlearning.ai.service.impl.PythonIntegrationServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +18,7 @@ public class PythonIntegrationServiceTest {
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
         String url = "http://127.0.0.1:8000/api/v1/audio/evaluate-phonetics";
-        pythonIntegrationService = new PythonIntegrationService(objectMapper, url, 5000, 60000);
+        pythonIntegrationService = new PythonIntegrationServiceImpl(objectMapper, url, 5000, 60000);
     }
 
     @Test

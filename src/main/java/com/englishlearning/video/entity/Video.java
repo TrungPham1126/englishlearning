@@ -2,6 +2,7 @@ package com.englishlearning.video.entity;
 
 import com.englishlearning.auth.entity.User;
 import com.englishlearning.curriculum.entity.Lesson;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -19,6 +20,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Video {
 
     @Id
@@ -29,6 +31,7 @@ public class Video {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lesson_id", nullable = false, unique = true)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Lesson lesson;
 
     @Column(name = "original_file_name", nullable = false)
@@ -59,10 +62,12 @@ public class Video {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "roles"})
     private User uploadedBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password", "roles"})
     private User reviewedBy;
 
     @CreationTimestamp

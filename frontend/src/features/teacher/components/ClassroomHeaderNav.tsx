@@ -105,14 +105,14 @@ export default function ClassroomHeaderNav({
           <Link
             to="/teacher/classrooms"
             title="Quay lại danh sách lớp học"
-            className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:border-indigo-500 hover:bg-indigo-600 hover:text-white hover:shadow-lg hover:shadow-indigo-500/20"
+            className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:border-blue-600 hover:bg-blue-800 hover:text-white hover:shadow-lg hover:shadow-indigo-500/20"
           >
             <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
           </Link>
 
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400">
                 <GraduationCap className="mr-1 h-3.5 w-3.5" />
                 Không gian lớp học
               </span>
@@ -128,7 +128,7 @@ export default function ClassroomHeaderNav({
               </h1>
 
               {classroom?.level && (
-                <span className="inline-flex items-center rounded-full border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-0.5 text-xs font-bold text-indigo-600 dark:text-indigo-300">
+                <span className="inline-flex items-center rounded-full border border-blue-200 dark:border-blue-600/30 bg-blue-50 dark:bg-blue-600/10 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
                   <Sparkles className="mr-1 h-3 w-3" />
                   {classroom.level}
                 </span>
@@ -190,7 +190,7 @@ export default function ClassroomHeaderNav({
                 to={tab.path}
                 className={`group relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
                     : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-900 dark:hover:text-white shadow-xs"
                 }`}
               >
@@ -198,7 +198,7 @@ export default function ClassroomHeaderNav({
                   className={`h-4 w-4 transition-colors ${
                     isActive
                       ? "text-white"
-                      : "text-slate-400 group-hover:text-indigo-500"
+                      : "text-slate-400 group-hover:text-blue-600"
                   }`}
                 />
                 <span>{tab.label}</span>

@@ -277,7 +277,7 @@ export default function TeacherDailyPlanPage() {
               onClick={() => setActiveTab("BUILDER")}
               className={`flex items-center px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
                 activeTab === "BUILDER"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
@@ -287,7 +287,7 @@ export default function TeacherDailyPlanPage() {
               onClick={() => setActiveTab("TRACKER")}
               className={`flex items-center px-3.5 py-1.5 text-xs font-semibold rounded-lg transition ${
                 activeTab === "TRACKER"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
@@ -304,7 +304,7 @@ export default function TeacherDailyPlanPage() {
           <div className="lg:col-span-8 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-                <Calendar className="h-5 w-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+                <Calendar className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
                 Lịch Học & Nhiệm Vụ ({plans.length} ngày)
               </h2>
               <div className="flex items-center space-x-2">
@@ -321,7 +321,7 @@ export default function TeacherDailyPlanPage() {
                 </button>
                 <button
                   onClick={openCreateModal}
-                  className="flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shadow-md"
+                  className="flex items-center px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer shadow-md"
                 >
                   <Plus className="h-4 w-4 mr-1" /> Thêm Ngày Mới
                 </button>
@@ -345,7 +345,7 @@ export default function TeacherDailyPlanPage() {
                   >
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
                       <div className="flex items-center space-x-2.5">
-                        <span className="rounded-md bg-indigo-500/10 px-2.5 py-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        <span className="rounded-md bg-blue-600/10 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-400 border border-blue-600/20">
                           Day {p.dayNumber}
                         </span>
                         <h3 className="font-semibold text-slate-900 dark:text-white text-base">
@@ -391,7 +391,7 @@ export default function TeacherDailyPlanPage() {
                           >
                             <div className="flex items-center space-x-2.5">
                               {item.itemType === "DOCUMENT" ? (
-                                <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                <FileText className="h-4 w-4 text-blue-700 dark:text-blue-400 shrink-0" />
                               ) : (
                                 <CheckCircle className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
                               )}
@@ -421,7 +421,7 @@ export default function TeacherDailyPlanPage() {
 
                       <button
                         onClick={() => openAddItemModal(p.id)}
-                        className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-indigo-500 transition cursor-pointer"
+                        className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-blue-600 transition cursor-pointer"
                       >
                         <Plus className="h-3.5 w-3.5" /> Thêm bài tập / tài liệu vào Day {p.dayNumber}
                       </button>
@@ -435,7 +435,7 @@ export default function TeacherDailyPlanPage() {
           {/* CỘT PHẢI: Kho tài liệu */}
           <div className="lg:col-span-4 space-y-4">
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-              <BookOpen className="h-5 w-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+              <BookOpen className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
               Kho Tài Liệu Chung
             </h2>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-3 shadow-sm">
@@ -449,7 +449,7 @@ export default function TeacherDailyPlanPage() {
                   globalResources.map((res) => (
                     <div
                       key={res.id}
-                      className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] p-3.5 hover:border-indigo-500/50"
+                      className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] p-3.5 hover:border-blue-600/50"
                     >
                       <div className="flex items-start space-x-3 mb-3">
                         <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
@@ -497,7 +497,7 @@ export default function TeacherDailyPlanPage() {
                 placeholder="Tìm tên học viên..."
                 value={searchStudent}
                 onChange={(e) => setSearchStudent(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
               />
             </div>
             <div className="flex items-center space-x-4 text-xs text-slate-500 dark:text-slate-400">
@@ -606,15 +606,15 @@ export default function TeacherDailyPlanPage() {
 
       {/* MODAL TẠO / SỬA DAY */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/80 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-elevated space-y-4 text-slate-900 dark:text-slate-100">
+            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {editingPlan ? `Chỉnh Sửa Day ${editingPlan.dayNumber}` : "Thêm Ngày Học Mới"}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -622,29 +622,29 @@ export default function TeacherDailyPlanPage() {
             <form onSubmit={handleSavePlan} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-400 block mb-1">Day thứ:</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">Day thứ:</label>
                   <input
                     type="number"
                     min="1"
                     value={dayNumber}
                     onChange={(e) => setDayNumber(Number(e.target.value))}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2 text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1">Ngày mở bài tập (Deadline):</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">Ngày mở bài tập (Deadline):</label>
                   <input
                     type="date"
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2 text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     required
                   />
                 </div>
               </div>
               <div>
-                <label className="text-slate-400 block mb-1">
+                <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
                   Tiêu đề ngày học:
                 </label>
                 <input
@@ -652,12 +652,12 @@ export default function TeacherDailyPlanPage() {
                   placeholder="Ví dụ: DAY 1: Nắm vững câu điều kiện"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   required
                 />
               </div>
               <div>
-                <label className="text-slate-400 block mb-1">
+                <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
                   Thời gian làm bài ước tính (phút):
                 </label>
                 <input
@@ -665,21 +665,21 @@ export default function TeacherDailyPlanPage() {
                   min="5"
                   value={estimatedMinutes}
                   onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   required
                 />
               </div>
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-slate-800 px-4 py-2 font-semibold text-slate-400 hover:text-white"
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-indigo-600 px-5 py-2 font-semibold text-white hover:bg-indigo-500 cursor-pointer"
+                  className="rounded-lg bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-600 cursor-pointer shadow-sm"
                 >
                   {editingPlan ? "Cập Nhật" : "Tạo Mới"}
                 </button>
@@ -691,28 +691,28 @@ export default function TeacherDailyPlanPage() {
 
       {/* MODAL THÊM BÀI TẬP / TÀI LIỆU VÀO DAY */}
       {showAddItemModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/80 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-elevated space-y-4 text-slate-900 dark:text-slate-100">
+            <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 Gắn Bài Tập / Nội Dung vào Ngày Học
               </h2>
               <button
                 onClick={() => setShowAddItemModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <form onSubmit={handleAddItemToPlan} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-400 block mb-1">Loại nội dung:</label>
+                <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">Loại nội dung:</label>
                 <select
                   value={selectedResourceType}
                   onChange={(e) =>
                     setSelectedResourceType(e.target.value as any)
                   }
-                  className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                 >
                   <option value="ASSIGNMENT">Bài Tập Từ Lớp Học (Assignment)</option>
                   <option value="DOCUMENT">Tài Liệu Đính Kèm (Document)</option>
@@ -720,31 +720,31 @@ export default function TeacherDailyPlanPage() {
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Tên mục / Section:</label>
+                <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">Tên mục / Section:</label>
                 <input
                   type="text"
                   placeholder="Ví dụ: Bài tập Listening, Tài liệu đính kèm..."
                   value={itemSectionName}
                   onChange={(e) => setItemSectionName(e.target.value)}
-                  className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   required
                 />
               </div>
 
               {selectedResourceType === "ASSIGNMENT" ? (
                 <div>
-                  <label className="text-slate-400 block mb-1">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
                     Chọn Bài Tập Đã Tạo Trong Lớp:
                   </label>
                   {classAssignments.length === 0 ? (
-                    <p className="text-amber-400 text-xs italic">
+                    <p className="text-amber-600 dark:text-amber-400 text-xs italic">
                       Lớp này chưa có bài tập nào. Hãy vào mục Quản lý bài tập để tạo trước!
                     </p>
                   ) : (
                     <select
                       value={selectedAssignmentId}
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
-                      className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     >
                       {classAssignments.map((a) => (
                         <option key={a.id} value={a.id}>
@@ -756,29 +756,29 @@ export default function TeacherDailyPlanPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="text-slate-400 block mb-1">Tiêu đề tài liệu:</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">Tiêu đề tài liệu:</label>
                   <input
                     type="text"
                     placeholder="Ví dụ: File Audio Luyện Nghe IELTS"
                     value={itemTitle}
                     onChange={(e) => setItemTitle(e.target.value)}
-                    className="w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     required
                   />
                 </div>
               )}
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddItemModal(false)}
-                  className="rounded-lg border border-slate-800 px-4 py-2 font-semibold text-slate-400 hover:text-white"
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-indigo-600 px-5 py-2 font-semibold text-white hover:bg-indigo-500 cursor-pointer"
+                  className="rounded-lg bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-600 cursor-pointer shadow-sm"
                 >
                   Gắn Vào Ngày Học
                 </button>

@@ -136,7 +136,7 @@ public class NotificationControllerTest {
                 .type(NotificationType.SYSTEM_ALERT)
                 .build();
 
-        when(notificationService.getBroadcastHistory(anyInt(), anyInt()))
+        when(notificationService.getBroadcastHistory(nullable(UUID.class), anyInt(), anyInt()))
                 .thenReturn(new PageImpl<>(List.of(sysNotif), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/notifications/broadcast-history"))

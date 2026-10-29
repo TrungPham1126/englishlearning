@@ -36,6 +36,7 @@ import AssignmentTakePage from "@/features/student/pages/AssignmentTakePage";
 import StudentProfilePage from "@/features/student/pages/StudentProfilePage";
 import SpeakingAiEvaluationPage from "@/features/student/pages/SpeakingAiEvaluationPage";
 import DailyHomeworkPage from "@/features/student/pages/DailyHomeworkPage";
+import VocabularyPracticePage from "@/features/student/pages/VocabularyPracticePage";
 
 // Phân hệ Teacher
 import TeacherDashboardPage from "@/features/teacher/pages/TeacherDashboardPage";
@@ -86,6 +87,8 @@ const routes: RouteObject[] = [
         path: "assignments/:assignmentId/take",
         element: <AssignmentTakePage />,
       },
+      { path: "vocabulary", element: <VocabularyPracticePage /> },
+      { path: "flashcards", element: <Navigate to="/student/vocabulary" replace /> },
       { path: "submissions", element: <SpeakingAiEvaluationPage /> },
       { path: "submissions/:attemptId", element: <SpeakingAiEvaluationPage /> },
       {
@@ -177,12 +180,12 @@ const routes: RouteObject[] = [
   {
     path: "/unauthorized",
     element: (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="rounded-xl border border-rose-200 bg-white p-8 text-center shadow-sm">
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950">
+        <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-8 text-center shadow-sm">
           <h2 className="text-xl font-bold text-rose-600 mb-2">
             403 - Quyền Truy Cập Bị Từ Chối
           </h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Tài khoản hiện tại không có quyền truy cập vào phân hệ này.
           </p>
         </div>

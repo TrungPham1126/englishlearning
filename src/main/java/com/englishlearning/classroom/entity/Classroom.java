@@ -57,6 +57,9 @@ public class Classroom {
     @Column(name = "max_students")
     private Integer maxStudents;
 
+    @Column(name = "join_code", length = 20, unique = true)
+    private String joinCode;
+
     @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<ClassStudent> classStudents = new HashSet<>();

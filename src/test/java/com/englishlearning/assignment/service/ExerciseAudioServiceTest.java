@@ -1,6 +1,7 @@
 package com.englishlearning.assignment.service;
 
 import com.englishlearning.assignment.entity.AssignmentQuestion;
+import com.englishlearning.assignment.service.impl.ExerciseAudioServiceImpl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -106,7 +107,7 @@ public class ExerciseAudioServiceTest {
             return "/api/v1/files/audio/" + file.getName();
         });
 
-        ExerciseAudioService service = new ExerciseAudioService(
+        ExerciseAudioService service = new ExerciseAudioServiceImpl(
                 null,
                 null,
                 null,

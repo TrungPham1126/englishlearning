@@ -4,6 +4,7 @@ public enum VideoStatus {
     DRAFT,
     PROCESSING,
     PENDING_REVIEW,
+    READY,
     APPROVED,
     REJECTED,
     ARCHIVED

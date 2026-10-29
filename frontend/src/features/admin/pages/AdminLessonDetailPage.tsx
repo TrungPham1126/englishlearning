@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { adminApi } from "@/features/admin/api/adminApi";
+import VideoPlayer from "@/features/student/components/VideoPlayer";
 import {
   Play,
   FileText,
@@ -53,7 +54,7 @@ export default function AdminLessonDetailPage() {
   if (loading || !lesson) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-slate-500 font-semibold gap-3">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <Loader2 className="animate-spin text-blue-700" size={32} />
         <span>Đang tải nội dung bài giảng...</span>
       </div>
     );
@@ -82,25 +83,28 @@ export default function AdminLessonDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* CỘT TRÁI: Video Player + Tab Content */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="border border-slate-200 bg-black rounded-xl overflow-hidden aspect-video shadow-sm flex items-center justify-center relative">
-            {video?.hlsPlaylistUrl ? (
-              // Sử dụng thẻ video chuẩn để tránh gọi API update progress của học viên
-              <video
-                src={video.hlsPlaylistUrl}
-                controls
-                playsInline
-                className="h-full w-full object-contain"
+          {video?.hlsPlaylistUrl ? (
+            <div className="relative">
+              <VideoPlayer
+                videoId={video.id}
+                streamUrl={video.hlsPlaylistUrl}
+                enableProgressSync={false}
               />
-            ) : (
+              <div className="absolute top-4 left-4 z-40 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 backdrop-blur pointer-events-none">
+                Giao diện Xem Trước
+              </div>
+            </div>
+          ) : (
+            <div className="border border-slate-200 dark:border-slate-800 bg-slate-900 rounded-xl overflow-hidden aspect-video shadow-sm flex items-center justify-center relative">
               <div className="text-slate-400 text-sm font-semibold flex flex-col items-center gap-3">
                 <Play size={48} className="opacity-40" />
                 <span>Bài giảng này chưa có Video bài giảng</span>
               </div>
-            )}
-            <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg border border-white">
-              Giao diện Xem Trước
+              <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 pointer-events-none">
+                Giao diện Xem Trước
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="flex border-b border-slate-200 px-4 bg-slate-50 overflow-x-auto">
@@ -124,7 +128,7 @@ export default function AdminLessonDetailPage() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`py-4 px-6 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                     activeTab === tab.id
-                      ? "border-indigo-600 text-indigo-700 bg-white"
+                      ? "border-blue-700 text-blue-800 dark:text-blue-400 bg-white dark:bg-slate-900"
                       : "border-transparent text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -158,12 +162,12 @@ export default function AdminLessonDetailPage() {
                   {lesson.documents?.map((doc: any) => (
                     <div
                       key={doc.id}
-                      className="flex items-center justify-between border-2 border-slate-100 p-4 rounded-xl hover:border-indigo-200 transition"
+                      className="flex items-center justify-between border-2 border-slate-100 p-4 rounded-xl hover:border-blue-200 transition"
                     >
                       <div className="flex items-center gap-3 text-slate-800 font-bold truncate">
                         <FileText
                           size={20}
-                          className="text-indigo-500 shrink-0"
+                          className="text-blue-600 shrink-0"
                         />
                         <span className="truncate text-sm">{doc.fileName}</span>
                       </div>
@@ -172,7 +176,7 @@ export default function AdminLessonDetailPage() {
                           href={doc.fileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg font-bold text-xs transition"
+                          className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg font-bold text-xs transition"
                         >
                           <Download size={14} /> Tải Xuống
                         </a>
@@ -219,7 +223,7 @@ export default function AdminLessonDetailPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm font-semibold text-indigo-700 mt-1">
+                      <p className="text-sm font-semibold text-blue-800 mt-1">
                         {v.meaning}
                       </p>
                     </div>
@@ -246,7 +250,7 @@ export default function AdminLessonDetailPage() {
                         {g.ruleSummary}
                       </p>
                       {g.formula && (
-                        <div className="bg-indigo-50 p-3 rounded-lg font-mono text-sm font-bold text-indigo-800 border border-indigo-100 mt-2">
+                        <div className="bg-blue-50 p-3 rounded-lg font-mono text-sm font-bold text-blue-800 border border-blue-100 mt-2">
                           {g.formula}
                         </div>
                       )}
@@ -262,7 +266,7 @@ export default function AdminLessonDetailPage() {
         <div className="lg:col-span-4 border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col sticky top-24">
           <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <BookOpen size={18} className="text-indigo-600" /> Danh Sách Bài
+              <BookOpen size={18} className="text-blue-700" /> Danh Sách Bài
               Giảng
             </h3>
             <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded-md">
@@ -278,13 +282,13 @@ export default function AdminLessonDetailPage() {
                   onClick={() => navigate(`/admin/lessons/${item.id}`)}
                   className={`p-4 flex items-center justify-between cursor-pointer transition-all ${
                     isCurrent
-                      ? "bg-indigo-600 text-white"
+                      ? "bg-blue-800 text-white"
                       : "hover:bg-slate-50 text-slate-700"
                   }`}
                 >
                   <div className="flex items-center gap-3 truncate pr-4">
                     <span
-                      className={`text-xs font-black ${isCurrent ? "text-indigo-300" : "text-slate-400"}`}
+                      className={`text-xs font-black ${isCurrent ? "text-blue-300" : "text-slate-400"}`}
                     >
                       {String(idx + 1).padStart(2, "0")}
                     </span>

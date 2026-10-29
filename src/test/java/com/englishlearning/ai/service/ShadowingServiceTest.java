@@ -3,6 +3,7 @@ package com.englishlearning.ai.service;
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
 import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.repository.AiEvaluationRepository;
+import com.englishlearning.ai.service.impl.ShadowingServiceImpl;
 import com.englishlearning.analytics.service.AnalyticsService;
 import com.englishlearning.submission.entity.StudentAnswer;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,7 +45,7 @@ public class ShadowingServiceTest {
         @BeforeEach
         void setUp() {
                 objectMapper = new ObjectMapper();
-                shadowingService = new ShadowingService(
+                shadowingService = new ShadowingServiceImpl(
                                 groqClientService,
                                 geminiClientService,
                                 pythonIntegrationService,
@@ -60,6 +61,7 @@ public class ShadowingServiceTest {
                                 new byte[] { 1, 2, 3 });
                 UUID answerId = UUID.randomUUID();
                 StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
                 when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
                 when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
 
@@ -85,6 +87,7 @@ public class ShadowingServiceTest {
                                 new byte[] { 1, 2, 3 });
                 UUID answerId = UUID.randomUUID();
                 StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
                 when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
                 when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
 
@@ -118,6 +121,7 @@ public class ShadowingServiceTest {
                                 new byte[] { 1, 2, 3 });
                 UUID answerId = UUID.randomUUID();
                 StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
                 when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
                 when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
 

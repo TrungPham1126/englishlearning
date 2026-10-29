@@ -33,9 +33,28 @@ import {
   Type,
   Play,
   Square,
+  HelpCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { teacherApi } from "../api/teacherApi";
+import ImportReportBanner from "./ImportReportBanner";
+import ExcelFormatCheatSheetModal from "./ExcelFormatCheatSheetModal";
+import {
+  downloadExcelTemplate,
+  downloadSkillExcelTemplate,
+  groupKeyOf,
+  normalizeTrueFalse,
+  parseExcelRows,
+  parseRawText,
+  readSpreadsheetFile,
+} from "../utils/assignmentImport";
+import type {
+  ImportGroup,
+  ImportReport,
+  ImportResult,
+  SkillKey,
+  SpeakingModeKey,
+} from "../utils/assignmentImport";
 
 interface CreateAssignmentModalProps {
   isOpen: boolean;
@@ -56,6 +75,7 @@ export interface QuestionDraft {
   ipa?: string;
   targetWord?: string;
   transcript?: string;
+  points?: number;
 }
 
 export interface SubPartItem {
@@ -1270,6 +1290,43 @@ export const getLevelQuestionFormats = (
   return [];
 };
 
+interface SavePayload {
+  skill: SkillKey;
+  shadowing: boolean;
+  questions: QuestionDraft[];
+  readingPassage: string;
+  listeningScript: string;
+  audioUrl: string;
+  subFormat: string;
+  title: string;
+}
+
+const QUESTION_TYPE_LABELS: Record<QuestionDraft["questionType"], string> = {
+  MULTIPLE_CHOICE: "Trắc nghiệm",
+  TRUE_FALSE: "True / False / Not Given",
+  FILL_IN_BLANK: "Điền từ / Hoàn thành câu",
+  AUDIO_RESPONSE: "Nói (Audio Response)",
+  ESSAY: "Tự luận / Viết",
+};
+
+const SKILL_LABELS: Record<SkillKey, string> = {
+  LISTENING: "Nghe (Listening)",
+  SPEAKING: "Nói (Speaking)",
+  READING: "Đọc (Reading)",
+  WRITING: "Viết (Writing)",
+  VOCABULARY: "Từ vựng (Vocabulary)",
+  GRAMMAR: "Ngữ pháp (Grammar)",
+};
+
+const SKILL_BADGE_CLASS: Record<SkillKey, string> = {
+  LISTENING: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  SPEAKING: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+  READING: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+  WRITING: "bg-blue-600/15 text-blue-800 dark:text-blue-300 border-blue-500/30",
+  VOCABULARY: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  GRAMMAR: "bg-blue-600/15 text-blue-800 dark:text-blue-300 border-blue-600/30",
+};
+
 export default function CreateAssignmentModal({
   isOpen,
   onClose,
@@ -1336,6 +1393,11 @@ export default function CreateAssignmentModal({
   const [status, setStatus] = useState<"PUBLISHED" | "DRAFT">("PUBLISHED");
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Kết quả nạp từ Excel / Text & các nhóm kỹ năng (khi 1 file chứa nhiều kỹ năng)
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [importGroups, setImportGroups] = useState<ImportGroup[]>([]);
+  const [showCheatSheetModal, setShowCheatSheetModal] = useState<boolean>(false);
   const [playingPreviewId, setPlayingPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1384,6 +1446,15 @@ export default function CreateAssignmentModal({
   }, [assignmentType, aiLevel]);
 
   // Danh sách chủ đề gợi ý tự động thay đổi theo Kỹ Năng + Trình Độ (CEFR/IELTS) + Dạng bài (Sub-task)
+  // Xem trước tức thì số câu nhận diện được khi dán văn bản thô (Regex Parser, không gọi AI)
+  const liveTextPreview = useMemo(
+    () =>
+      creationSource === "TEXT_AI" && step === 1 && rawText.trim()
+        ? parseRawText(rawText, assignmentType, speakingMode)
+        : null,
+    [creationSource, step, rawText, assignmentType, speakingMode],
+  );
+
   const suggestedTopics = useMemo(() => {
     return getSuggestedTopics(
       assignmentType,
@@ -1453,6 +1524,8 @@ export default function CreateAssignmentModal({
   const handleGenerateAiQuestions = async (customTopicOrPrompt?: string) => {
     setIsGeneratingAi(true);
     setAiError(null);
+    setImportGroups([]);
+    setImportReport(null);
     try {
       const promptToUse = (customTopicOrPrompt || aiTopic || "General Practice").trim();
 
@@ -1831,120 +1904,73 @@ export default function CreateAssignmentModal({
     setQuestions(questions.filter((q) => q.id !== id));
   };
 
-  // Tải File Mẫu Excel Chuẩn (.xlsx) cho tất cả các kỹ năng
-  const handleDownloadExcelTemplate = () => {
-    const sampleData = [
-      {
-        "STT": 1,
-        "Kỹ năng (Skill)": "LISTENING",
-        "Dạng câu hỏi (Type)": "MULTIPLE_CHOICE",
-        "Đề bài / Câu hỏi (Prompt)": "What time does the conference begin tomorrow?",
-        "Lựa chọn A": "8:30 AM",
-        "Lựa chọn B": "9:00 AM",
-        "Lựa chọn C": "9:30 AM",
-        "Lựa chọn D": "10:00 AM",
-        "Đáp án đúng (Correct Answer)": "9:00 AM",
-        "Giải thích (Explanation)": "Người nói thông báo: 'Registration starts at 8:30, but the opening remarks begin at 9:00 AM.'",
-        "Đoạn nghe / Kịch bản (Transcript)": "Welcome everyone to our annual innovation summit. Registration will commence at 8:30 AM in the main foyer. Please be seated by 8:50 AM because the keynote speech will begin promptly at 9:00 AM. Refreshments and networking will follow in room B.",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 2
-      },
-      {
-        "STT": 2,
-        "Kỹ năng (Skill)": "LISTENING",
-        "Dạng câu hỏi (Type)": "FILL_IN_BLANK",
-        "Đề bài / Câu hỏi (Prompt)": "Refreshments will be served in room ______.",
-        "Lựa chọn A": "",
-        "Lựa chọn B": "",
-        "Lựa chọn C": "",
-        "Lựa chọn D": "",
-        "Đáp án đúng (Correct Answer)": "B",
-        "Giải thích (Explanation)": "Kịch bản bài nghe nêu rõ: 'Refreshments will follow in room B.'",
-        "Đoạn nghe / Kịch bản (Transcript)": "Welcome everyone to our annual innovation summit. Registration will commence at 8:30 AM in the main foyer. Please be seated by 8:50 AM because the keynote speech will begin promptly at 9:00 AM. Refreshments and networking will follow in room B.",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 2
-      },
-      {
-        "STT": 3,
-        "Kỹ năng (Skill)": "VOCABULARY",
-        "Dạng câu hỏi (Type)": "MULTIPLE_CHOICE",
-        "Đề bài / Câu hỏi (Prompt)": "Chọn từ đồng nghĩa với 'ENORMOUS':",
-        "Lựa chọn A": "Tiny",
-        "Lựa chọn B": "Gigantic",
-        "Lựa chọn C": "Fragile",
-        "Lựa chọn D": "Delicate",
-        "Đáp án đúng (Correct Answer)": "Gigantic",
-        "Giải thích (Explanation)": "'Enormous' và 'Gigantic' đều mang nghĩa là to lớn, khổng lồ.",
-        "Đoạn nghe / Kịch bản (Transcript)": "",
-        "Từ vựng / IPA": "enormous /ɪˈnɔːməs/",
-        "Điểm (Points)": 2
-      },
-      {
-        "STT": 4,
-        "Kỹ năng (Skill)": "GRAMMAR",
-        "Dạng câu hỏi (Type)": "MULTIPLE_CHOICE",
-        "Đề bài / Câu hỏi (Prompt)": "If she ______ harder, she would pass the exam.",
-        "Lựa chọn A": "studies",
-        "Lựa chọn B": "studied",
-        "Lựa chọn C": "had studied",
-        "Lựa chọn D": "will study",
-        "Đáp án đúng (Correct Answer)": "studied",
-        "Giải thích (Explanation)": "Câu điều kiện loại 2 (vế If dùng thì quá khứ đơn, vế chính would + V).",
-        "Đoạn nghe / Kịch bản (Transcript)": "",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 2
-      },
-      {
-        "STT": 5,
-        "Kỹ năng (Skill)": "READING",
-        "Dạng câu hỏi (Type)": "TRUE_FALSE",
-        "Đề bài / Câu hỏi (Prompt)": "The company was founded in 1995.",
-        "Lựa chọn A": "TRUE",
-        "Lựa chọn B": "FALSE",
-        "Lựa chọn C": "NOT GIVEN",
-        "Lựa chọn D": "",
-        "Đáp án đúng (Correct Answer)": "TRUE",
-        "Giải thích (Explanation)": "Dòng 2 bài đọc ghi: 'Founded in 1995 by two university graduates...'",
-        "Đoạn nghe / Kịch bản (Transcript)": "",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 2
-      },
-      {
-        "STT": 6,
-        "Kỹ năng (Skill)": "WRITING",
-        "Dạng câu hỏi (Type)": "ESSAY",
-        "Đề bài / Câu hỏi (Prompt)": "Some people believe that technology reduces human interaction. Discuss both views and give your opinion.",
-        "Lựa chọn A": "",
-        "Lựa chọn B": "",
-        "Lựa chọn C": "",
-        "Lựa chọn D": "",
-        "Đáp án đúng (Correct Answer)": "",
-        "Giải thích (Explanation)": "Yêu cầu viết tối thiểu 250 từ, phân tích 2 mặt và nêu quan điểm cá nhân.",
-        "Đoạn nghe / Kịch bản (Transcript)": "",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 10
-      },
-      {
-        "STT": 7,
-        "Kỹ năng (Skill)": "SPEAKING",
-        "Dạng câu hỏi (Type)": "AUDIO_RESPONSE",
-        "Đề bài / Câu hỏi (Prompt)": "Describe your favorite hobby and explain why you enjoy it.",
-        "Lựa chọn A": "",
-        "Lựa chọn B": "",
-        "Lựa chọn C": "",
-        "Lựa chọn D": "",
-        "Đáp án đúng (Correct Answer)": "",
-        "Giải thích (Explanation)": "Nói trong vòng 1-2 phút, tập trung phát âm, từ vựng và độ trôi chảy.",
-        "Đoạn nghe / Kịch bản (Transcript)": "",
-        "Từ vựng / IPA": "",
-        "Điểm (Points)": 10
-      }
-    ];
+  // ========================================================================
+  // NHẬP BÀI TẬP TỪ EXCEL / TEXT THÔ (logic thuần nằm ở utils/assignmentImport.ts)
+  // ========================================================================
+  const defaultSubFormatFor = (skill: SkillKey, mode: SpeakingModeKey): string => {
+    if (skill === "SPEAKING") {
+      return mode === "SHADOWING" ? "SPEAKING_SHADOWING" : "SPEAKING_QA";
+    }
+    const subs = SUB_PARTS_CONFIG[skill] || [];
+    return subs[0]?.code || "";
+  };
 
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Mau_Cau_Hoi");
-    XLSX.writeFile(wb, "Mau_Bai_Tap_Excel_Tieng_Anh.xlsx");
+  const activeGroupKey = groupKeyOf(
+    assignmentType,
+    assignmentType === "SPEAKING" ? speakingMode : "QA",
+  );
+
+  // Lưu lại phần đang chỉnh sửa của nhóm kỹ năng hiện tại vào danh sách nhóm
+  const snapshotGroups = (): ImportGroup[] =>
+    importGroups.map((g) =>
+      g.key === activeGroupKey
+        ? {
+            ...g,
+            questions,
+            passage: g.skill === "LISTENING" ? mainTranscript : readingPassageText,
+            audioUrl: g.skill === "LISTENING" ? mainAudioUrl : g.audioUrl,
+          }
+        : g,
+    );
+
+  const loadGroup = (g: ImportGroup) => {
+    setAssignmentType(g.skill);
+    setSpeakingMode(g.speakingMode);
+    setSelectedSubFormat(defaultSubFormatFor(g.skill, g.speakingMode));
+    setQuestions(g.questions);
+    setReadingPassageText(g.skill === "LISTENING" ? "" : g.passage);
+    setMainTranscript(g.skill === "LISTENING" ? g.passage : "");
+    setMainAudioUrl(g.skill === "LISTENING" ? g.audioUrl : "");
+  };
+
+  const handleSwitchGroup = (key: string) => {
+    if (key === activeGroupKey) return;
+    const synced = snapshotGroups();
+    setImportGroups(synced);
+    const target = synced.find((g) => g.key === key);
+    if (target) loadGroup(target);
+  };
+
+  // Áp dụng kết quả nạp: có câu hợp lệ -> sang Bước 2 xem trước; không có -> ở lại Bước 1 hiện lỗi
+  const applyImportResult = (result: ImportResult) => {
+    setImportReport(result.report);
+    if (result.groups.length === 0) return;
+    setImportGroups(result.groups);
+    setAiError(null);
+    setSynthesizeAudioError(null);
+    setAudioUploadSuccess(null);
+    loadGroup(result.groups[0]);
+    setStep(2);
+  };
+
+  // Tải File Mẫu Excel Chuẩn (.xlsx) cho tất cả các kỹ năng (Multi-Sheet 7 Sheets)
+  const handleDownloadFullExcelTemplate = () => {
+    downloadExcelTemplate();
+  };
+
+  // Tải File Mẫu Excel Cho Kỹ Năng Đang Chọn
+  const handleDownloadSkillExcelTemplate = () => {
+    downloadSkillExcelTemplate(assignmentType);
   };
 
   // Đọc và phân tích file Excel / CSV người dùng tải lên
@@ -1953,130 +1979,129 @@ export default function CreateAssignmentModal({
     if (!file) return;
 
     try {
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data, { type: "array" });
-      const firstSheetName = wb.SheetNames[0];
-      const ws = wb.Sheets[firstSheetName];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
-
-      if (!rows || rows.length === 0) {
-        alert("File Excel trống hoặc không có dòng dữ liệu hợp lệ!");
+      const rows = await readSpreadsheetFile(file);
+      if (rows.length === 0) {
+        setImportReport({
+          source: "EXCEL",
+          totalRows: 0,
+          imported: 0,
+          errors: ["File Excel trống hoặc Sheet đầu tiên không có dòng dữ liệu hợp lệ."],
+          warnings: [],
+        });
         return;
       }
-
-      let detectedSkill = assignmentType;
-      let detectedPassage = "";
-
-      const parsedQuestions: QuestionDraft[] = rows.map((r, idx) => {
-        const rawSkill = (r["Kỹ năng (Skill)"] || r["Skill"] || "").toString().toUpperCase().trim();
-        if (rawSkill && ["VOCABULARY", "GRAMMAR", "READING", "LISTENING", "WRITING", "SPEAKING"].includes(rawSkill)) {
-          detectedSkill = rawSkill as any;
-        }
-
-        const prompt = (
-          r["Đề bài / Câu hỏi (Prompt)"] ||
-          r["Prompt"] ||
-          r["Câu hỏi"] ||
-          r["Đề bài"] ||
-          `Câu hỏi ${idx + 1}`
-        ).toString().trim();
-
-        const rawType = (
-          r["Dạng câu hỏi (Type)"] ||
-          r["Type"] ||
-          r["Loại câu hỏi"] ||
-          "MULTIPLE_CHOICE"
-        ).toString().toUpperCase().trim();
-
-        let questionType: QuestionDraft["questionType"] = "MULTIPLE_CHOICE";
-        if (rawType.includes("FILL") || rawType.includes("GAP") || rawType.includes("ĐIỀN")) {
-          questionType = "FILL_IN_BLANK";
-        } else if (rawType.includes("AUDIO") || rawType.includes("SPEAK") || rawType.includes("NÓI")) {
-          questionType = "AUDIO_RESPONSE";
-        } else if (rawType.includes("ESSAY") || rawType.includes("WRITE") || rawType.includes("VIẾT")) {
-          questionType = "ESSAY";
-        } else if (rawType.includes("TRUE") || rawType.includes("ĐÚNG")) {
-          questionType = "TRUE_FALSE";
-        }
-
-        const optA = (r["Lựa chọn A"] || r["A"] || r["Option A"] || "").toString().trim();
-        const optB = (r["Lựa chọn B"] || r["B"] || r["Option B"] || "").toString().trim();
-        const optC = (r["Lựa chọn C"] || r["C"] || r["Option C"] || "").toString().trim();
-        const optD = (r["Lựa chọn D"] || r["D"] || r["Option D"] || "").toString().trim();
-
-        let options: string[] = [];
-        if (questionType === "TRUE_FALSE") {
-          options = ["TRUE", "FALSE", "NOT GIVEN"];
-        } else if (questionType === "MULTIPLE_CHOICE") {
-          options = [optA, optB, optC, optD].filter(Boolean);
-          if (options.length < 2) {
-            options = ["Lựa chọn A", "Lựa chọn B", "Lựa chọn C", "Lựa chọn D"];
-          }
-        }
-
-        const correctAnswer = (
-          r["Đáp án đúng (Correct Answer)"] ||
-          r["Đáp án"] ||
-          r["Correct Answer"] ||
-          optA ||
-          ""
-        ).toString().trim();
-
-        const explanation = (r["Giải thích (Explanation)"] || r["Giải thích"] || "").toString().trim();
-        const transcript = (
-          r["Đoạn nghe / Kịch bản (Transcript)"] ||
-          r["Transcript"] ||
-          r["Kịch bản"] ||
-          ""
-        ).toString().trim();
-
-        if (transcript && !detectedPassage) {
-          detectedPassage = transcript;
-        }
-
-        const vocabIpa = (
-          r["Từ vựng / IPA"] ||
-          r["Từ mục tiêu / IPA (Target Word / IPA)"] ||
-          r["Target Word"] ||
-          r["Từ vựng"] ||
-          ""
-        ).toString().trim();
-
-        let targetWord = "";
-        let ipa = "";
-        if (vocabIpa) {
-          const parts = vocabIpa.split(/[\/\s]+/);
-          targetWord = parts[0] || vocabIpa;
-          if (vocabIpa.includes("/")) {
-            const m = vocabIpa.match(/\/([^/]+)\//);
-            if (m) ipa = "/" + m[1] + "/";
-          }
-        }
-
-        return {
-          id: `q-excel-${Date.now()}-${idx}`,
-          prompt,
-          questionType,
-          options,
-          correctAnswer,
-          explanation,
-          transcript: transcript || detectedPassage,
-          targetWord: targetWord || undefined,
-          ipa: ipa || undefined,
-        };
+      applyImportResult(parseExcelRows(rows, assignmentType, speakingMode));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "File không đúng cấu trúc";
+      setImportReport({
+        source: "EXCEL",
+        totalRows: 0,
+        imported: 0,
+        errors: [`Không đọc được file Excel: ${message}`],
+        warnings: [],
       });
-
-      setAssignmentType(detectedSkill);
-      if (detectedPassage) {
-        setMainTranscript(detectedPassage);
-      }
-      setQuestions(parsedQuestions);
-      setStep(2);
-    } catch (err: any) {
-      alert("Lỗi đọc file Excel: " + (err.message || "File không đúng cấu trúc"));
     } finally {
       e.target.value = "";
     }
+  };
+
+  // Phân tích nhanh văn bản thô bằng Regex Parser (không gọi AI)
+  const handleQuickParseText = () => {
+    if (!rawText.trim()) {
+      alert("Vui lòng dán hoặc nhập nội dung văn bản thô!");
+      return;
+    }
+    applyImportResult(parseRawText(rawText, assignmentType, speakingMode));
+  };
+
+  // Đổi dạng câu hỏi trong Bước 2 (tự điều chỉnh danh sách lựa chọn & đáp án)
+  const handleChangeQuestionType = (id: string, newType: QuestionDraft["questionType"]) => {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== id || q.questionType === newType) return q;
+        if (newType === "MULTIPLE_CHOICE") {
+          const opts = q.options.length > 0 ? [...q.options] : [];
+          while (opts.length < 4) opts.push("");
+          return {
+            ...q,
+            questionType: newType,
+            options: opts,
+            correctAnswer: opts.includes(q.correctAnswer) ? q.correctAnswer : "",
+          };
+        }
+        if (newType === "TRUE_FALSE") {
+          return {
+            ...q,
+            questionType: newType,
+            options: ["TRUE", "FALSE", "NOT GIVEN"],
+            correctAnswer: normalizeTrueFalse(q.correctAnswer) || "TRUE",
+          };
+        }
+        return { ...q, questionType: newType, options: [] };
+      }),
+    );
+  };
+
+  const handleAddOption = (id: string) => {
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === id && q.options.length < 6 ? { ...q, options: [...q.options, ""] } : q)),
+    );
+  };
+
+  const handleRemoveOption = (id: string, optionIndex: number) => {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== id || q.options.length <= 2) return q;
+        const removed = q.options[optionIndex];
+        return {
+          ...q,
+          options: q.options.filter((_, i) => i !== optionIndex),
+          correctAnswer: q.correctAnswer === removed ? "" : q.correctAnswer,
+        };
+      }),
+    );
+  };
+
+  // Kiểm tra tính hợp lệ của bộ câu hỏi trước khi lưu
+  const validateQuestions = (qs: QuestionDraft[], prefix: string): string[] => {
+    const issues: string[] = [];
+    qs.forEach((q, i) => {
+      const tag = `${prefix}Câu ${i + 1}`;
+      if (!q.prompt.trim()) issues.push(`${tag}: thiếu đề bài.`);
+      if (q.questionType === "MULTIPLE_CHOICE") {
+        const filled = q.options.filter((o) => o.trim());
+        if (filled.length < 2) {
+          issues.push(`${tag}: trắc nghiệm cần tối thiểu 2 lựa chọn có nội dung.`);
+        }
+        if (!q.correctAnswer.trim() || !filled.includes(q.correctAnswer)) {
+          issues.push(`${tag}: chưa chọn đáp án đúng khớp với một lựa chọn.`);
+        }
+      } else if (q.questionType === "TRUE_FALSE") {
+        if (!normalizeTrueFalse(q.correctAnswer)) {
+          issues.push(`${tag}: đáp án phải là TRUE, FALSE hoặc NOT GIVEN.`);
+        }
+      } else if (q.questionType === "FILL_IN_BLANK" && !q.correctAnswer.trim()) {
+        issues.push(`${tag}: thiếu đáp án cần điền.`);
+      }
+    });
+    return issues;
+  };
+
+  const handleGoToScheduleStep = () => {
+    const synced = importGroups.length > 1 ? snapshotGroups() : [];
+    const issues =
+      synced.length > 1
+        ? synced.flatMap((g) => validateQuestions(g.questions, `[${g.skill}] `))
+        : validateQuestions(questions, "");
+    if (questions.length === 0 && synced.length <= 1) {
+      alert("Chưa có câu hỏi nào. Hãy thêm ít nhất 1 câu hỏi trước khi tiếp tục!");
+      return;
+    }
+    if (issues.length > 0) {
+      alert(`⚠️ Cần sửa ${issues.length} lỗi trước khi giao bài:\n\n${issues.slice(0, 12).join("\n")}${issues.length > 12 ? "\n..." : ""}`);
+      return;
+    }
+    setStep(3);
   };
 
   // Tổng hợp giọng đọc Neural Studio Voice
@@ -2136,7 +2161,7 @@ export default function CreateAssignmentModal({
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("blob:") || url.startsWith("data:")) {
       return url;
     }
-    const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+    const base = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8080";
     return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
   };
 
@@ -2294,125 +2319,199 @@ export default function CreateAssignmentModal({
       return;
     }
 
+    // Chuẩn bị danh sách bài tập cần tạo (1 bài, hoặc nhiều bài khi file có nhiều kỹ năng)
+    const synced = importGroups.length > 1 ? snapshotGroups() : [];
+    const payloads: SavePayload[] =
+      synced.length > 1
+        ? synced.map((g) => ({
+            skill: g.skill,
+            shadowing: g.skill === "SPEAKING" && g.speakingMode === "SHADOWING",
+            questions: g.questions,
+            readingPassage: g.skill === "LISTENING" ? "" : g.passage,
+            listeningScript: g.skill === "LISTENING" ? g.passage : "",
+            audioUrl: g.skill === "LISTENING" ? g.audioUrl : "",
+            subFormat: defaultSubFormatFor(g.skill, g.speakingMode),
+            title: `${title.trim()} - ${g.skill}${
+              g.skill === "SPEAKING"
+                ? g.speakingMode === "SHADOWING"
+                  ? " Shadowing"
+                  : " Hỏi đáp"
+                : ""
+            }`,
+          }))
+        : [
+            {
+              skill: assignmentType,
+              shadowing:
+                assignmentType === "SPEAKING" &&
+                (speakingMode === "SHADOWING" || selectedSubFormat.includes("SHADOWING")),
+              questions,
+              readingPassage: readingPassageText,
+              listeningScript: mainTranscript,
+              audioUrl: mainAudioUrl,
+              subFormat: selectedSubFormat,
+              title: title.trim(),
+            },
+          ];
+
+    const activePayloads = payloads.filter((p) => p.questions.length > 0);
+    if (activePayloads.length === 0) {
+      alert("Chưa có câu hỏi nào để lưu. Vui lòng quay lại Bước 2 để thêm câu hỏi!");
+      return;
+    }
+    const issues = activePayloads.flatMap((p) =>
+      validateQuestions(p.questions, activePayloads.length > 1 ? `[${p.skill}] ` : ""),
+    );
+    if (issues.length > 0) {
+      alert(`⚠️ Cần sửa ${issues.length} lỗi trước khi lưu:\n\n${issues.slice(0, 12).join("\n")}${issues.length > 12 ? "\n..." : ""}`);
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const isShadowing =
-        assignmentType === "SPEAKING" &&
-        (speakingMode === "SHADOWING" || selectedSubFormat.includes("SHADOWING"));
-
-      // 1. Tạo Assignment trong hệ thống
-      const createdAssign: any = await teacherApi.createAssignment({
-        classroomId: classId,
-        title: title.trim(),
-        description: `${readingPassageText.trim() ? `[READING PASSAGE]\n${readingPassageText.trim()}\n\n` : ""}${description}\n\n[Loại: ${assignmentType}${
-          assignmentType === "SPEAKING"
-            ? isShadowing
-              ? " - Shadowing"
-              : " - Hỏi Đáp Phỏng Vấn"
-            : ""
-        }] [Trình độ: ${aiLevel}] [Độ khó: ${difficulty}] [Dự kiến: ${estimatedMinutes}p] [Đối tượng: ${
-          targetStudents === "ALL" ? "Tất cả học sinh" : "Học sinh cần cải thiện"
-        }]`,
-        skillType:
-          assignmentType === "SPEAKING"
-            ? "SPEAKING"
-            : assignmentType === "WRITING"
-            ? "WRITING"
-            : assignmentType === "READING"
-            ? "READING"
-            : assignmentType === "VOCABULARY"
-            ? "VOCABULARY"
-            : assignmentType === "GRAMMAR"
-            ? "GRAMMAR"
-            : "LISTENING",
-        timeLimitMinutes: estimatedMinutes,
-        dueDate: new Date(dueDate).toISOString(),
-        audioUrl: assignmentType === "LISTENING" ? (mainAudioUrl || undefined) : undefined,
-        listeningScript: assignmentType === "LISTENING" ? (mainTranscript || undefined) : undefined,
-        questions: questions.map((q) => {
-          const cleanShadowText = isShadowing
-            ? (q.correctAnswer || q.prompt || "").trim()
-            : q.prompt;
-          return {
-            promptText: isShadowing ? cleanShadowText : q.prompt,
-            questionType: q.questionType,
-            correctAnswer: isShadowing ? cleanShadowText : q.correctAnswer,
-            mediaUrl:
-              assignmentType === "VOCABULARY" || assignmentType === "SPEAKING"
-                ? q.referenceAudioUrl || undefined
-                : undefined,
-            transcript:
-              assignmentType === "VOCABULARY" || assignmentType === "SPEAKING"
-                ? q.transcript || undefined
-                : undefined,
-            explanation: q.explanation || "",
-            options:
-              q.questionType === "MULTIPLE_CHOICE"
-                ? q.options.map((opt) => ({
-                    optionText: opt,
-                    isCorrect: opt === q.correctAnswer,
-                  }))
-                : q.questionType === "TRUE_FALSE"
-                ? [
-                    { optionText: "TRUE", isCorrect: q.correctAnswer?.toUpperCase() === "TRUE" },
-                    { optionText: "FALSE", isCorrect: q.correctAnswer?.toUpperCase() === "FALSE" },
-                    { optionText: "NOT GIVEN", isCorrect: q.correctAnswer?.toUpperCase() === "NOT GIVEN" },
-                  ]
-                : [],
-          };
-        }),
-      });
-
-      const assignId = createdAssign.data?.data?.id || createdAssign.data?.id || createdAssign.id;
-
-      // 2. Tự động liên kết bài tập này vào Lộ trình Ngày học (Daily Plan) tương ứng
       let targetPlan: any = null;
       if (selectedPlanId && selectedPlanId !== "NEW_DAY") {
         targetPlan = dailyPlans.find((p: any) => p.id === selectedPlanId);
       }
+      let planItemBase = targetPlan?.items?.length || 0;
+      let addedItems = 0;
 
-      if (!targetPlan) {
-        const plansRes: any = await teacherApi.getDailyPlans(classId);
-        const existingPlans = plansRes.data?.data || [];
-        targetPlan = existingPlans.find((p: any) => p.scheduledDate === scheduledDate);
+      for (const p of activePayloads) {
+        // 1. Tạo Assignment trong hệ thống (đóng gói đúng DTO AssignmentRequest của Backend)
+        const createdAssign: any = await teacherApi.createAssignment({
+          classroomId: classId,
+          title: p.title,
+          description: `${p.readingPassage.trim() ? `[READING PASSAGE]\n${p.readingPassage.trim()}\n\n` : ""}${description}\n\n[Loại: ${p.skill}${
+            p.skill === "SPEAKING"
+              ? p.shadowing
+                ? " - Shadowing"
+                : " - Hỏi Đáp Phỏng Vấn"
+              : ""
+          }] [Trình độ: ${aiLevel}] [Độ khó: ${difficulty}] [Dự kiến: ${estimatedMinutes}p] [Đối tượng: ${
+            targetStudents === "ALL" ? "Tất cả học sinh" : "Học sinh cần cải thiện"
+          }]`,
+          skillType: p.skill,
+          timeLimitMinutes: estimatedMinutes,
+          dueDate: new Date(dueDate).toISOString(),
+          audioUrl: p.skill === "LISTENING" ? p.audioUrl || undefined : undefined,
+          listeningScript:
+            p.skill === "LISTENING" ? p.listeningScript || undefined : undefined,
+          questions: p.questions.map((q) => {
+            const cleanShadowText = p.shadowing
+              ? (q.correctAnswer || q.prompt || "").trim()
+              : q.prompt.trim();
 
+            const matchingOption = q.options.find((opt, idx) => {
+              const letter = String.fromCharCode(65 + idx);
+              return (
+                letter === (q.correctAnswer || "").trim().toUpperCase() ||
+                opt.trim().toLowerCase() === (q.correctAnswer || "").trim().toLowerCase()
+              );
+            });
+
+            const resolvedCorrectAnswer =
+              q.questionType === "MULTIPLE_CHOICE"
+                ? (matchingOption?.trim() || (q.correctAnswer || "").trim())
+                : q.questionType === "TRUE_FALSE"
+                ? (normalizeTrueFalse(q.correctAnswer) || "TRUE")
+                : p.shadowing
+                ? cleanShadowText
+                : (q.correctAnswer || "").trim();
+
+            return {
+              promptText: p.shadowing ? cleanShadowText : q.prompt.trim(),
+              questionType: q.questionType,
+              correctAnswer: resolvedCorrectAnswer,
+              mediaUrl:
+                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                  ? q.referenceAudioUrl || undefined
+                  : undefined,
+              transcript:
+                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                  ? q.transcript || undefined
+                  : undefined,
+              explanation: q.explanation || "",
+              points: q.points,
+              options:
+                q.questionType === "MULTIPLE_CHOICE"
+                  ? q.options
+                      .filter((opt) => opt.trim().length > 0)
+                      .map((opt, optIndex) => {
+                        const trimmed = opt.trim();
+                        const letter = String.fromCharCode(65 + optIndex);
+                        const isCorrect =
+                          trimmed.toLowerCase() === (q.correctAnswer || "").trim().toLowerCase() ||
+                          letter === (q.correctAnswer || "").trim().toUpperCase() ||
+                          (matchingOption && trimmed === matchingOption.trim());
+                        return {
+                          optionText: trimmed,
+                          isCorrect: !!isCorrect,
+                        };
+                      })
+                  : q.questionType === "TRUE_FALSE"
+                  ? [
+                      { optionText: "TRUE", isCorrect: resolvedCorrectAnswer === "TRUE" },
+                      { optionText: "FALSE", isCorrect: resolvedCorrectAnswer === "FALSE" },
+                      { optionText: "NOT GIVEN", isCorrect: resolvedCorrectAnswer === "NOT GIVEN" },
+                    ]
+                  : [],
+            };
+          }),
+        });
+
+        const assignId =
+          createdAssign.data?.data?.id || createdAssign.data?.id || createdAssign.id;
+
+        // 2. Tự động liên kết bài tập này vào Lộ trình Ngày học (Daily Plan) tương ứng
         if (!targetPlan) {
-          const newDayRes: any = await teacherApi.createDailyPlan(classId, {
-            dayNumber: existingPlans.length + 1,
-            title: `DAY ${existingPlans.length + 1}: ${title.trim()}`,
-            scheduledDate,
-            estimatedMinutes,
+          const plansRes: any = await teacherApi.getDailyPlans(classId);
+          const existingPlans = plansRes.data?.data || [];
+          targetPlan = existingPlans.find((pl: any) => pl.scheduledDate === scheduledDate);
+
+          if (!targetPlan) {
+            const newDayRes: any = await teacherApi.createDailyPlan(classId, {
+              dayNumber: existingPlans.length + 1,
+              title: `DAY ${existingPlans.length + 1}: ${title.trim()}`,
+              scheduledDate,
+              estimatedMinutes,
+            });
+            targetPlan = newDayRes.data?.data || newDayRes.data;
+          }
+          planItemBase = targetPlan?.items?.length || 0;
+        }
+
+        if (targetPlan?.id) {
+          const subs = SUB_PARTS_CONFIG[p.skill] || [];
+          const currentSub = subs.find((s) => s.code === p.subFormat) || subs[0];
+          const subLabel = currentSub ? currentSub.shortLabel : p.skill;
+
+          const skillIcons: Record<string, string> = {
+            GRAMMAR: "🧩",
+            LISTENING: "🎧",
+            READING: "📖",
+            VOCABULARY: "📚",
+            SPEAKING: "🎙️",
+            WRITING: "✍️",
+          };
+          const skillIcon = skillIcons[p.skill] || "📝";
+          const sectionName = `${skillIcon} ${p.skill}: ${subLabel}`;
+
+          addedItems += 1;
+          await teacherApi.addPlanItem(targetPlan.id, {
+            sectionName,
+            title: p.title,
+            itemType: p.skill,
+            orderIndex: planItemBase + addedItems,
+            assignmentId: assignId,
           });
-          targetPlan = newDayRes.data?.data || newDayRes.data;
         }
       }
 
-      if (targetPlan?.id) {
-        const subs = SUB_PARTS_CONFIG[assignmentType] || [];
-        const currentSub = subs.find((s) => s.code === selectedSubFormat) || subs[0];
-        const subLabel = currentSub ? currentSub.shortLabel : assignmentType;
-
-        const skillIcons: Record<string, string> = {
-          GRAMMAR: "🧩",
-          LISTENING: "🎧",
-          READING: "📖",
-          VOCABULARY: "📚",
-          SPEAKING: "🎙️",
-          WRITING: "✍️",
-        };
-        const skillIcon = skillIcons[assignmentType] || "📝";
-        const sectionName = `${skillIcon} ${assignmentType}: ${subLabel}`;
-
-        await teacherApi.addPlanItem(targetPlan.id, {
-          sectionName,
-          title: title.trim(),
-          itemType: assignmentType,
-          orderIndex: (targetPlan.items?.length || 0) + 1,
-          assignmentId: assignId,
-        });
-      }
-
-      alert("🎉 Đã tạo và gán bài tập thành công vào lộ trình!");
+      alert(
+        activePayloads.length > 1
+          ? `🎉 Đã tạo ${activePayloads.length} bài tập (theo từng kỹ năng) và gán vào lộ trình thành công!`
+          : "🎉 Đã tạo và gán bài tập thành công vào lộ trình!",
+      );
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -2430,11 +2529,11 @@ export default function CreateAssignmentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-4xl rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-elevated overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header Modal */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50/90 dark:bg-slate-900/90">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50/90 dark:bg-slate-900/90">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+            <div className="p-2 rounded-xl bg-blue-800/10 border border-blue-600/20 text-blue-700 dark:text-blue-400">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
@@ -2460,41 +2559,84 @@ export default function CreateAssignmentModal({
         </div>
 
         {/* Stepper Progress Bar */}
-        <div className="grid grid-cols-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 text-xs text-center font-bold">
-          <div
-            className={`py-2.5 transition border-r border-slate-200 dark:border-slate-800 flex items-center justify-center gap-2 ${
-              step === 1 ? "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"
-            }`}
-          >
-            <span className="h-5 w-5 rounded-full border border-current flex items-center justify-center text-[10px]">
-              1
-            </span>
-            <span>Loại & Nguồn Bài</span>
-          </div>
-          <div
-            className={`py-2.5 transition border-r border-slate-200 dark:border-slate-800 flex items-center justify-center gap-2 ${
-              step === 2 ? "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"
-            }`}
-          >
-            <span className="h-5 w-5 rounded-full border border-current flex items-center justify-center text-[10px]">
-              2
-            </span>
-            <span>Biên Soạn Nội Dung</span>
-          </div>
-          <div
-            className={`py-2.5 transition flex items-center justify-center gap-2 ${
-              step === 3 ? "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"
-            }`}
-          >
-            <span className="h-5 w-5 rounded-full border border-current flex items-center justify-center text-[10px]">
-              3
-            </span>
-            <span>Lịch Học & Giao Lớp</span>
-          </div>
+        <div className="grid grid-cols-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/60 text-xs font-bold">
+          {[
+            { id: 1, title: "1. Nguồn Khởi Tạo", sub: "AI / Excel / Thủ công" },
+            { id: 2, title: "2. Biên Soạn & TTS", sub: `${questions.length} câu hỏi & Audio` },
+            { id: 3, title: "3. Lịch Học & Giao Bài", sub: "Gán vào lộ trình ngày" },
+          ].map((st) => {
+            const isActive = step === st.id;
+            const isCompleted = step > st.id;
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  if (st.id === 1 || questions.length > 0) setStep(st.id);
+                }}
+                className={`py-3 px-3 transition border-r last:border-r-0 border-slate-200 dark:border-slate-800 flex items-center justify-center gap-2.5 cursor-pointer ${
+                  isActive
+                    ? "bg-blue-800/10 text-blue-700 dark:text-blue-400 border-b-2 border-b-indigo-600"
+                    : isCompleted
+                      ? "bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                      : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                }`}
+              >
+                <span
+                  className={`h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                    isActive
+                      ? "bg-blue-800 text-white shadow-xs"
+                      : isCompleted
+                        ? "bg-emerald-500 text-white"
+                        : "border border-current"
+                  }`}
+                >
+                  {isCompleted ? <Check className="h-3.5 w-3.5" /> : st.id}
+                </span>
+                <div className="text-left hidden sm:block">
+                  <div className="text-xs font-extrabold leading-tight">{st.title}</div>
+                  <div className="text-[10px] font-medium opacity-75">{st.sub}</div>
+                </div>
+                <span className="sm:hidden">{st.title}</span>
+              </button>
+            );
+          })}
         </div>
 
+        {(isGeneratingAi || isSynthesizingTts || isUploadingAudio) && (
+          <div className="border-b border-blue-200 dark:border-blue-600/30 bg-blue-50/90 dark:bg-slate-900/60 px-6 py-3 space-y-2 animate-in fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 font-bold text-blue-800 dark:text-blue-300">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-700 dark:text-blue-400" />
+                <span>
+                  {isGeneratingAi
+                    ? "Hệ thống AI Đa Tầng (Groq LLaMA 3.3 / Gemini 2.5 Flash) đang phân tích & biên soạn bộ câu hỏi..."
+                    : isSynthesizingTts
+                      ? "Đang tổng hợp giọng đọc Neural TTS (Kokoro Multi-Voice) và lưu trữ Cloudflare R2..."
+                      : "Đang tải tệp âm thanh lên máy chủ đám mây..."}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-blue-800 text-white text-[10px] font-extrabold uppercase tracking-wider">
+                Async Processing
+              </span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-blue-100 dark:bg-slate-800 overflow-hidden">
+              <div className="h-full w-3/4 rounded-full bg-brand-600 animate-pulse" />
+            </div>
+          </div>
+        )}
+
         {/* Modal Body Content */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+          {/* Báo cáo nạp Excel / Regex Text & Chuyển đổi nhóm kỹ năng */}
+          <ImportReportBanner
+            report={importReport}
+            groups={importGroups}
+            activeGroupKey={activeGroupKey}
+            onSwitchGroup={handleSwitchGroup}
+            onClose={() => setImportReport(null)}
+          />
+
           {/* ================= BƯỚC 1: CHỌN LOẠI & NGUỒN ================= */}
           {step === 1 && (
             <div className="space-y-6">
@@ -2535,7 +2677,7 @@ export default function CreateAssignmentModal({
                     {
                       id: "VOCABULARY",
                       label: "Vocabulary (Từ Vựng)",
-                      sub: "Flashcards & Spaced Repetition",
+                      sub: "Từ vựng, Ngữ cảnh & Phát âm",
                       icon: Sparkles,
                       color: "border-amber-500/30 text-amber-400 bg-amber-500/5",
                     },
@@ -2544,7 +2686,7 @@ export default function CreateAssignmentModal({
                       label: "Reading (Đọc Hiểu)",
                       sub: "Đoạn văn & Highlighting",
                       icon: BookOpen,
-                      color: "border-indigo-500/30 text-indigo-400 bg-indigo-500/5",
+                      color: "border-blue-600/30 text-blue-400 bg-blue-600/5",
                     },
                     {
                       id: "LISTENING",
@@ -2565,7 +2707,7 @@ export default function CreateAssignmentModal({
                       label: "Grammar (Ngữ Pháp)",
                       sub: "Điền từ & Trắc nghiệm",
                       icon: CheckSquare,
-                      color: "border-purple-500/30 text-purple-400 bg-purple-500/5",
+                      color: "border-blue-500/30 text-blue-400 bg-blue-600/5",
                     },
                   ].map((typeItem) => {
                     const IconComp = typeItem.icon;
@@ -2592,7 +2734,7 @@ export default function CreateAssignmentModal({
                         }}
                         className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
-                            ? "border-indigo-500 bg-indigo-50/80 dark:bg-indigo-600/15 ring-2 ring-indigo-500/30"
+                            ? "border-blue-600 bg-blue-50/80 dark:bg-blue-800/15 ring-2 ring-blue-600/30"
                             : "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/80 dark:hover:bg-slate-800/40"
                         }`}
                       >
@@ -2603,7 +2745,7 @@ export default function CreateAssignmentModal({
                             <IconComp className="h-5 w-5" />
                           </div>
                           {isSelected && (
-                            <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                            <Check className="h-4 w-4 text-blue-700 dark:text-blue-400" />
                           )}
                         </div>
                         <div>
@@ -2621,11 +2763,11 @@ export default function CreateAssignmentModal({
               </div>
 
               {/* 1.1. Chọn Dạng Bài / Định Dạng Câu Hỏi Phù Hợp Trình Độ (Sub-task Format) */}
-              <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-slate-50 dark:bg-slate-900/90 p-4 space-y-3 shadow-sm dark:shadow-md">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-indigo-100 dark:border-indigo-500/20 pb-2.5">
+              <div className="rounded-xl border border-blue-200 dark:border-blue-600/30 bg-slate-50 dark:bg-slate-900/90 p-4 space-y-3 shadow-sm dark:shadow-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-blue-100 dark:border-blue-600/20 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <ListChecks className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    <span className="font-bold text-xs text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">
+                    <ListChecks className="h-4 w-4 text-blue-700 dark:text-blue-400" />
+                    <span className="font-bold text-xs text-blue-800 dark:text-blue-300 uppercase tracking-wider">
                       1.1. Chọn Trình Độ & Định Dạng Câu Hỏi ({assignmentType} • {aiLevel})
                     </span>
                   </div>
@@ -2639,7 +2781,7 @@ export default function CreateAssignmentModal({
                         onClick={() => handleSelectLevel(lvl)}
                         className={`px-2 py-0.5 rounded text-[10px] font-black uppercase transition cursor-pointer ${
                           aiLevel === lvl
-                            ? "bg-indigo-600 text-white font-bold shadow-xs scale-105"
+                            ? "bg-blue-800 text-white font-bold shadow-xs scale-105"
                             : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700"
                         }`}
                         title={`Chọn trình độ ${lvl}`}
@@ -2652,9 +2794,9 @@ export default function CreateAssignmentModal({
 
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                    Các định dạng câu hỏi chuẩn cho trình độ <b className="text-indigo-600 dark:text-indigo-300">{aiLevel}</b> (Bấm chọn dạng bài):
+                    Các định dạng câu hỏi chuẩn cho trình độ <b className="text-blue-700 dark:text-blue-300">{aiLevel}</b> (Bấm chọn dạng bài):
                   </span>
-                  <span className="text-[10px] bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-100 dark:border-transparent">
+                  <span className="text-[10px] bg-blue-50 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium border border-blue-100 dark:border-transparent">
                     Đang chọn: {currentLevelFormats.find((f) => f.code === selectedSubFormat)?.label?.split("(")[0]?.trim() || "Mặc định"}
                   </span>
                 </div>
@@ -2669,16 +2811,16 @@ export default function CreateAssignmentModal({
                         onClick={() => handleSelectSubFormat(subItem.code)}
                         className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSubSelected
-                            ? "border-indigo-500 bg-indigo-50/90 dark:bg-indigo-600/20 ring-1 ring-indigo-400/50 shadow-sm"
+                            ? "border-blue-600 bg-blue-50/90 dark:bg-blue-800/20 ring-1 ring-blue-500/50 shadow-sm"
                             : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/60"
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className={`font-bold text-xs flex items-center gap-1.5 ${isSubSelected ? "text-indigo-700 dark:text-indigo-200" : "text-slate-800 dark:text-slate-200"}`}>
-                            <span className={`h-2 w-2 rounded-full ${isSubSelected ? "bg-indigo-500 animate-pulse" : "bg-slate-400 dark:bg-slate-600"}`}></span>
+                          <span className={`font-bold text-xs flex items-center gap-1.5 ${isSubSelected ? "text-blue-800 dark:text-blue-200" : "text-slate-800 dark:text-slate-200"}`}>
+                            <span className={`h-2 w-2 rounded-full ${isSubSelected ? "bg-blue-600 animate-pulse" : "bg-slate-400 dark:bg-slate-600"}`}></span>
                             {subItem.label}
                           </span>
-                          {isSubSelected && <Check className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />}
+                          {isSubSelected && <Check className="h-3.5 w-3.5 text-blue-700 dark:text-blue-400" />}
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                           {subItem.description}
@@ -2700,7 +2842,7 @@ export default function CreateAssignmentModal({
                     onClick={() => setCreationSource(creationSource === "RESOURCE" ? "AI" : "RESOURCE")}
                     className={`text-[11px] font-semibold flex items-center gap-1 transition ${
                       creationSource === "RESOURCE"
-                        ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                        ? "text-blue-700 dark:text-blue-400 font-bold"
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                     }`}
                   >
@@ -2788,14 +2930,14 @@ export default function CreateAssignmentModal({
                     onClick={() => setCreationSource("MANUAL")}
                     className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
                       creationSource === "MANUAL"
-                        ? "border-purple-500 bg-purple-50 dark:bg-purple-600/15 ring-1 ring-purple-500/50 shadow-md"
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-800/15 ring-1 ring-blue-500/50 shadow-md"
                         : "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700"
                     }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <Edit3 className="h-5 w-5 text-purple-500 dark:text-purple-400" />
-                        <span className="text-[10px] bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 px-1.5 py-0.5 rounded font-bold">
+                        <Edit3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <span className="text-[10px] bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold">
                           Tự soạn
                         </span>
                       </div>
@@ -2828,18 +2970,37 @@ export default function CreateAssignmentModal({
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
                     placeholder={`Dán nội dung đề bài vào đây...\n• Ví dụ 1: Copy đề trắc nghiệm từ file Word/PDF: "Câu 1: What is the main idea...? A. ... B. ... C. ... D. ... Đáp án: A. Giải thích: ..."\n• Ví dụ 2: Dán một đoạn văn bản hoặc kịch bản nghe, AI sẽ tự động tạo bài nghe dài liên tục và trích xuất câu hỏi trắc nghiệm hoặc điền từ chuẩn định dạng!`}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-hidden font-mono leading-relaxed"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-sky-500 focus:outline-hidden font-mono leading-relaxed"
                   />
+
+                  {/* Realtime syntax recognition badge */}
+                  {liveTextPreview && liveTextPreview.report.imported > 0 && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs animate-in fade-in">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-amber-400 shrink-0" />
+                        <span>
+                          Bộ phân tích Regex đã nhận diện sẵn <b>{liveTextPreview.report.imported}</b> câu hỏi ({liveTextPreview.groups.map((g) => g.label || g.skill).join(", ")})!
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleQuickParseText}
+                        className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0 transition cursor-pointer shadow-xs"
+                      >
+                        Chuyển sang Bước 2 ngay ⚡
+                      </button>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                         Trình độ mục tiêu (CEFR):
                       </label>
                       <select
                         value={aiLevel}
                         onChange={(e) => setAiLevel(e.target.value)}
-                        className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-sky-500"
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-sky-500"
                       >
                         <option value="A1">A1 - Sơ cấp (Beginner)</option>
                         <option value="A2">A2 - Cơ bản (Elementary)</option>
@@ -2850,13 +3011,13 @@ export default function CreateAssignmentModal({
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                        Số lượng câu hỏi mong muốn:
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        Số lượng câu hỏi mong muốn (nếu dùng AI):
                       </label>
                       <select
                         value={aiQuestionCount}
                         onChange={(e) => setAiQuestionCount(Number(e.target.value))}
-                        className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-sky-500"
+                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-sky-500"
                       >
                         <option value={3}>3 câu</option>
                         <option value={5}>5 câu</option>
@@ -2865,46 +3026,116 @@ export default function CreateAssignmentModal({
                     </div>
                   </div>
 
+                  {/* 2 Nút thao tác song song: Regex Parser vs Gemini AI */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2 border-t border-sky-500/20">
+                    <button
+                      type="button"
+                      onClick={handleQuickParseText}
+                      disabled={!rawText.trim()}
+                      className="w-full sm:w-1/2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-extrabold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
+                      title="Bóc tách tức thì bằng biểu thức chính quy (Regex) không cần gọi AI, phù hợp khi văn bản đã có sẵn dạng Câu 1, A, B, C, D"
+                    >
+                      <Zap className="h-4 w-4 text-slate-950" />
+                      <span>⚡ Phân Tích Nhanh (Regex Parser)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isGeneratingAi || !rawText.trim()}
+                      onClick={() => handleGenerateAiQuestions(rawText)}
+                      className="w-full sm:w-1/2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-extrabold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
+                      title="Sử dụng Gemini AI để phân tích đoạn văn thô, viết lại và sinh câu hỏi trắc nghiệm chuẩn CEFR"
+                    >
+                      {isGeneratingAi ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      <span>✨ Gemini AI Tối Ưu & Tạo Câu Hỏi</span>
+                    </button>
+                  </div>
+
                   <p className="text-[11px] text-slate-400 italic">
-                    💡 Bấm nút &quot;Tiếp Tục&quot; bên dưới, AI sẽ tự phân tích và chuyển đổi văn bản trên thành danh sách câu hỏi chuẩn 100% để bạn kiểm tra ở Bước 2.
+                    💡 <b>Mẹo</b>: Bấm <b>⚡ Phân Tích Nhanh</b> để tách câu hỏi trong <b>&lt; 10ms</b> nếu văn bản đã có sẵn &quot;Câu 1:&quot;, &quot;A.&quot;, &quot;Đáp án: A&quot;. Dùng <b>✨ Gemini AI</b> nếu dán đoạn văn thô hoặc bài đọc dài cần AI tự sinh câu hỏi.
                   </p>
                 </div>
               )}
 
               {/* Chi tiết cho Option EXCEL (Nhập File Excel) */}
               {creationSource === "EXCEL" && (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-4 animate-in fade-in">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3">
-                    <div className="flex items-center gap-2">
-                      <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5 p-5 space-y-4 animate-in fade-in">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 border-b border-emerald-500/20 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <FileSpreadsheet className="h-6 w-6" />
+                      </div>
                       <div>
-                        <h4 className="text-xs font-bold text-emerald-200">
-                          Nhập Đề Thi Nhanh Từ File Excel (.xlsx, .xls, .csv)
+                        <h4 className="text-sm font-extrabold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                          <span>Nhập Đề Thi Nhanh Từ File Excel (.xlsx, .xls, .csv)</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                            Multi-Sheet Scanner
+                          </span>
                         </h4>
-                        <p className="text-[11px] text-slate-400">
-                          Hỗ trợ đầy đủ tất cả 6 kỹ năng: Vocabulary, Grammar, Reading, Listening, Writing, Speaking
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                          Tự động nhận diện đa sheet, kế thừa bài đọc/kịch bản nghe và ánh xạ thông minh đáp án A, B, C, D
                         </p>
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleDownloadExcelTemplate}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shadow-xs shrink-0"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      <span>Tải File Mẫu Excel Chuẩn (.xlsx)</span>
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleDownloadSkillExcelTemplate}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shadow-xs shrink-0"
+                        title={`Tải file mẫu Excel chuẩn dành riêng cho kỹ năng ${assignmentType}`}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>📥 Tải Mẫu Kỹ Năng ({assignmentType})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDownloadFullExcelTemplate}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-bold transition cursor-pointer shadow-2xs shrink-0"
+                        title="Tải file mẫu Excel đầy đủ 7 Sheets bao quát toàn bộ 6 kỹ năng và các dạng bài tập"
+                      >
+                        <Layers className="h-3.5 w-3.5 text-emerald-500" />
+                        <span>📂 Tải Trọn Bộ (7 Sheets .xlsx)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCheatSheetModal(true)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 dark:bg-slate-900/50 border border-blue-400/40 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/60 text-xs font-bold transition cursor-pointer shadow-2xs shrink-0"
+                        title="Xem bảng hướng dẫn chi tiết quy chuẩn các cột và ví dụ cụ thể cho từng dạng bài"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5 text-blue-600" />
+                        <span>👁️ Xem Hướng Dẫn &amp; Ví Dụ</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <label className="border-2 border-dashed border-emerald-500/40 hover:border-emerald-500/80 rounded-xl p-6 flex flex-col items-center justify-center gap-2.5 cursor-pointer bg-slate-950/60 hover:bg-emerald-500/10 transition group text-center">
-                    <UploadCloud className="h-8 w-8 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <label
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        handleImportExcelFile({
+                          target: { files: e.dataTransfer.files },
+                        } as any);
+                      }
+                    }}
+                    className="border-2 border-dashed border-emerald-400/60 dark:border-emerald-500/40 hover:border-emerald-500 rounded-xl p-7 flex flex-col items-center justify-center gap-3 cursor-pointer bg-white/80 dark:bg-slate-950/60 hover:bg-emerald-500/10 transition group text-center shadow-2xs"
+                  >
+                    <div className="h-12 w-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                      <UploadCloud className="h-6 w-6" />
+                    </div>
                     <div>
-                      <span className="text-xs font-bold text-emerald-300">
-                        Bấm vào đây để chọn File Excel từ máy tính của bạn
+                      <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 block">
+                        Kéo &amp; Thả File Excel vào đây hoặc bấm để chọn từ máy tính
                       </span>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Hỗ trợ file .xlsx, .xls hoặc .csv (Hệ thống sẽ nạp trực tiếp vào danh sách câu hỏi)
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        Hỗ trợ định dạng <span className="font-mono font-semibold">.xlsx, .xls, .csv</span> • Tự động phân tách câu hỏi &amp; chuyển sang Bước 2
                       </p>
                     </div>
                     <input
@@ -2915,18 +3146,20 @@ export default function CreateAssignmentModal({
                     />
                   </label>
 
-                  <div className="rounded-lg bg-slate-950/60 border border-slate-800 p-3 space-y-1.5 text-[11px] text-slate-300">
-                    <span className="font-bold text-emerald-400 block">Quy chuẩn các cột trong bảng Excel:</span>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[10px] text-slate-400">
-                      <div>• <b className="text-slate-300">STT</b>: Số thứ tự</div>
-                      <div>• <b className="text-slate-300">Kỹ năng</b>: VOCABULARY, LISTENING...</div>
-                      <div>• <b className="text-slate-300">Dạng câu hỏi</b>: MULTIPLE_CHOICE, FILL_IN_BLANK...</div>
-                      <div>• <b className="text-slate-300">Đề bài</b>: Nội dung câu hỏi</div>
-                      <div>• <b className="text-slate-300">Lựa chọn A, B, C, D</b>: Các phương án</div>
-                      <div>• <b className="text-slate-300">Đáp án đúng</b>: Đáp án chính xác</div>
-                      <div>• <b className="text-slate-300">Giải thích</b>: Lời giải chi tiết</div>
-                      <div>• <b className="text-slate-300">Kịch bản nghe</b>: Toàn bộ đoạn nghe dài</div>
-                      <div>• <b className="text-slate-300">Từ vựng / IPA</b>: Dành cho Vocabulary</div>
+                  <div className="rounded-xl bg-white/90 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-3.5 space-y-2 text-[11px] text-slate-700 dark:text-slate-300">
+                    <span className="font-extrabold text-emerald-700 dark:text-emerald-400 block">
+                      Quy chuẩn các cột tự động nhận diện trong bảng Excel:
+                    </span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                      <div>• <b className="text-slate-800 dark:text-slate-300">STT</b>: Số thứ tự</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Kỹ năng</b>: VOCABULARY, LISTENING...</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Dạng câu hỏi</b>: MULTIPLE_CHOICE, FILL_IN_BLANK...</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Đề bài</b>: Nội dung câu hỏi</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Lựa chọn A, B, C, D</b>: Các phương án</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Đáp án đúng</b>: Đáp án chính xác</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Giải thích</b>: Lời giải chi tiết</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Kịch bản nghe</b>: Toàn bộ đoạn nghe dài</div>
+                      <div>• <b className="text-slate-800 dark:text-slate-300">Từ vựng / IPA</b>: Dành cho Vocabulary</div>
                     </div>
                   </div>
                 </div>
@@ -2934,25 +3167,25 @@ export default function CreateAssignmentModal({
 
               {/* Chi tiết cho Option MANUAL (Soạn thủ công) */}
               {creationSource === "MANUAL" && (
-                <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3 animate-in fade-in">
+                <div className="rounded-xl border border-blue-500/30 bg-blue-600/5 p-4 space-y-3 animate-in fade-in">
                   <div className="flex items-center gap-2">
-                    <Edit3 className="h-4 w-4 text-purple-400" />
-                    <span className="text-xs font-bold text-purple-200">
+                    <Edit3 className="h-4 w-4 text-blue-400" />
+                    <span className="text-xs font-bold text-blue-200">
                       Soạn Bài Thủ Công Bằng Tay (Có Hỗ Trợ Tải File Audio Lên Từ Máy Tính)
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                     Bạn có thể tự tay tạo từng câu hỏi, nhập đáp án đúng, thêm giải thích chi tiết, hoặc tải lên file âm thanh (MP3, WAV) từ máy tính cho bài nghe/nói ở bước tiếp theo.
                   </p>
                   {assignmentType === "LISTENING" && (
-                    <div className="rounded-lg bg-slate-950/80 border border-purple-500/20 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="rounded-lg bg-blue-50/60 dark:bg-slate-950/80 border border-blue-200 dark:border-blue-500/20 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                       <div>
-                        <span className="font-bold text-purple-300 block">Đính kèm File Audio Toàn Bài Nghe:</span>
-                        <span className="text-[11px] text-slate-400">
+                        <span className="font-bold text-blue-800 dark:text-blue-300 block">Đính kèm File Audio Toàn Bài Nghe:</span>
+                        <span className="text-[11px] text-slate-600 dark:text-slate-400">
                           {mainAudioUrl ? `Đã có file audio: ${mainAudioUrl.split("/").pop()}` : "Bạn có thể chọn file audio ngay bây giờ hoặc ở bước soạn câu hỏi."}
                         </span>
                       </div>
-                      <label className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs">
+                      <label className="px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs">
                         {isUploadingAudio ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
@@ -2977,8 +3210,8 @@ export default function CreateAssignmentModal({
 
               {/* Chi tiết cho Option RESOURCE */}
               {creationSource === "RESOURCE" && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
-                  <span className="text-xs font-bold text-slate-300 block">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-4 space-y-3">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                     Chọn bài giảng / tài liệu nguồn:
                   </span>
                   {globalResources.length === 0 ? (
@@ -2990,7 +3223,7 @@ export default function CreateAssignmentModal({
                       {globalResources.map((res) => (
                         <label
                           key={res.id}
-                          className="flex items-center justify-between p-2.5 rounded-lg border border-slate-800 bg-slate-900 text-xs text-slate-200 cursor-pointer hover:border-slate-700"
+                          className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-700"
                         >
                           <span className="font-semibold">{res.name}</span>
                           <input
@@ -3032,7 +3265,7 @@ export default function CreateAssignmentModal({
                         value={aiTopic}
                         onChange={(e) => setAiTopic(e.target.value)}
                         placeholder="Vd: IELTS Speaking Part 2 - Environment"
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                       />
                     </div>
 
@@ -3043,7 +3276,7 @@ export default function CreateAssignmentModal({
                       <select
                         value={aiLevel}
                         onChange={(e) => handleSelectLevel(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                       >
                         <option value="A1">A1 - Sơ cấp (Beginner)</option>
                         <option value="A2">A2 - Cơ bản (Elementary)</option>
@@ -3061,7 +3294,7 @@ export default function CreateAssignmentModal({
                       <select
                         value={aiQuestionCount}
                         onChange={(e) => setAiQuestionCount(Number(e.target.value))}
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                       >
                         <option value={3}>3 câu</option>
                         <option value={5}>5 câu</option>
@@ -3071,13 +3304,13 @@ export default function CreateAssignmentModal({
                     </div>
 
                     {/* KHUNG HIỂN THỊ CHI TIẾT ĐỊNH DẠNG THEO TRÌNH ĐỘ (ĐỒNG BỘ 2 CHIỀU VỚI MỤC 1.1) */}
-                    <div className="md:col-span-3 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 space-y-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-500/20 pb-2.5">
+                    <div className="md:col-span-3 rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900/20 p-4 space-y-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 dark:border-blue-600/20 pb-2.5">
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-600 text-white">
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-800 text-white">
                             {aiLevel}
                           </span>
-                          <span className="font-bold text-xs text-indigo-700 dark:text-indigo-200">
+                          <span className="font-bold text-xs text-blue-800 dark:text-blue-200">
                             Định Dạng Câu Hỏi Phù Hợp Trình Độ: {assignmentType} ({aiLevel})
                           </span>
                         </div>
@@ -3094,7 +3327,7 @@ export default function CreateAssignmentModal({
                         <span className="text-slate-700 dark:text-slate-300 font-semibold">
                           Danh sách định dạng câu hỏi cho {aiLevel} (Đồng bộ 2 chiều với Mục 1.1):
                         </span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-medium">
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 font-medium">
                           Đang chọn: {currentLevelFormats.find((f) => f.code === selectedSubFormat)?.label || "Mặc định"}
                         </span>
                       </div>
@@ -3110,20 +3343,20 @@ export default function CreateAssignmentModal({
                               onClick={() => handleSelectSubFormat(fmt.code)}
                               className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                                 isFormatActive
-                                  ? "bg-indigo-50/90 dark:bg-indigo-600/25 border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-400/50 shadow-md scale-[1.01]"
-                                  : "bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                                  ? "bg-blue-50/90 dark:bg-blue-800/25 border-blue-600 dark:border-blue-400 ring-2 ring-blue-500/50 shadow-md scale-[1.01]"
+                                  : "bg-white dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-600/40 hover:bg-slate-50 dark:hover:bg-slate-800/80"
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2 mb-1.5">
                                 <span
                                   className={`text-xs font-bold ${
-                                    isFormatActive ? "text-indigo-700 dark:text-indigo-200" : "text-slate-900 dark:text-white"
+                                    isFormatActive ? "text-blue-800 dark:text-blue-200" : "text-slate-900 dark:text-white"
                                   }`}
                                 >
                                   {fmt.label}
                                 </span>
                                 {isFormatActive && (
-                                  <span className="p-0.5 rounded-full bg-indigo-600 text-white shrink-0">
+                                  <span className="p-0.5 rounded-full bg-blue-800 text-white shrink-0">
                                     <Check className="h-3.5 w-3.5 font-bold" />
                                   </span>
                                 )}
@@ -3138,7 +3371,7 @@ export default function CreateAssignmentModal({
 
                       {/* ĐỐI VỚI READING IELTS: HỖ TRỢ CHỌN PASSAGE 1 / 2 / 3 */}
                       {assignmentType === "READING" && aiLevel === "IELTS" && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-indigo-100 dark:border-indigo-500/20 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-blue-100 dark:border-blue-600/20 text-xs">
                           <span className="text-slate-700 dark:text-slate-300 font-bold">Chọn Passage Đọc Hiểu IELTS:</span>
                           <div className="flex items-center gap-1.5">
                             {([1, 2, 3] as const).map((pNum) => (
@@ -3151,7 +3384,7 @@ export default function CreateAssignmentModal({
                                 }}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
                                   readingPassageIelts === pNum
-                                    ? "bg-indigo-600 text-white border-indigo-400"
+                                    ? "bg-blue-800 text-white border-blue-400"
                                     : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                                 }`}
                               >
@@ -3165,7 +3398,7 @@ export default function CreateAssignmentModal({
 
                     <div className="md:col-span-3">
                       <label className="block text-xs font-bold text-slate-400 mb-1 flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-indigo-400" /> Gán vào Ngày Học (Daily Study Plan):
+                        <Calendar className="h-3.5 w-3.5 text-blue-400" /> Gán vào Ngày Học (Daily Study Plan):
                       </label>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <select
@@ -3178,7 +3411,7 @@ export default function CreateAssignmentModal({
                               if (plan) setScheduledDate(plan.scheduledDate);
                             }
                           }}
-                          className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                         >
                           {dailyPlans.map((p: any) => (
                             <option key={p.id} value={p.id}>
@@ -3193,7 +3426,7 @@ export default function CreateAssignmentModal({
                             type="date"
                             value={scheduledDate}
                             onChange={(e) => setScheduledDate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-indigo-500"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                           />
                         )}
                       </div>
@@ -3210,7 +3443,7 @@ export default function CreateAssignmentModal({
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Edit3 className="h-4 w-4 text-indigo-400" />
+                    <Edit3 className="h-4 w-4 text-blue-400" />
                     Xem & Chỉnh Sửa Bộ Câu Hỏi ({questions.length} câu)
                   </h3>
                   <p className="text-xs text-slate-400">
@@ -3220,7 +3453,7 @@ export default function CreateAssignmentModal({
                 <button
                   type="button"
                   onClick={handleAddBlankQuestion}
-                  className="flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-400 text-xs font-bold border border-slate-700 transition"
+                  className="flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold border border-slate-700 transition"
                 >
                   <Plus className="h-4 w-4 mr-1" /> Thêm Câu Hỏi
                 </button>
@@ -3228,14 +3461,14 @@ export default function CreateAssignmentModal({
 
               {/* CẤU HÌNH ĐOẠN VĂN BÀI ĐỌC DÙNG CHUNG CHO TẤT CẢ CÂU HỎI (READING PASSAGE) */}
               {(assignmentType === "READING" || Boolean(readingPassageText)) && (
-                <div className="rounded-xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/50 p-4 space-y-3.5 shadow-md">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
+                <div className="rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900 p-4 space-y-3.5 shadow-card">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-600/20 pb-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-indigo-600/30 text-indigo-300">
+                      <div className="p-2 rounded-lg bg-blue-800/30 text-blue-300">
                         <BookOpen className="h-5 w-5" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-black uppercase tracking-wider text-indigo-300">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-blue-300">
                           Đoạn Văn Bài Đọc Dùng Chung (Reading Passage)
                         </h4>
                         <p className="text-[11px] text-slate-400">
@@ -3269,7 +3502,7 @@ export default function CreateAssignmentModal({
                       value={readingPassageText}
                       onChange={(e) => setReadingPassageText(e.target.value)}
                       placeholder="Nhập hoặc dán nội dung đoạn văn bài đọc (Reading Passage) tại đây..."
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-xs text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-hidden font-serif leading-relaxed"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-3.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-600 focus:outline-hidden font-serif leading-relaxed"
                     />
                   </div>
                 </div>
@@ -3277,14 +3510,14 @@ export default function CreateAssignmentModal({
 
               {/* CẤU HÌNH BÀI NGHE DÀI LIÊN TỤC CHO CẢ BÀI TẬP (LISTENING PASSAGE & AUDIO TRACK) */}
               {assignmentType === "LISTENING" && (
-                <div className="rounded-xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/50 p-4 space-y-3.5 shadow-md">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
+                <div className="rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900 p-4 space-y-3.5 shadow-card">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-600/20 pb-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-indigo-600/30 text-amber-300">
+                      <div className="p-2 rounded-lg bg-blue-800/30 text-amber-300">
                         <Headphones className="h-5 w-5" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-black uppercase tracking-wider text-indigo-300">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-blue-300">
                           Kịch Bản & Âm Thanh Toàn Bài Nghe (Official Listening Track)
                         </h4>
                         <p className="text-[11px] text-slate-400">
@@ -3295,7 +3528,7 @@ export default function CreateAssignmentModal({
 
                     {/* Nút tải lên file audio từ máy tính & nghe thử */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shadow-xs">
+                      <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer shadow-xs">
                         {isUploadingAudio ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
@@ -3321,7 +3554,7 @@ export default function CreateAssignmentModal({
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             isPlayingMainAudio
                               ? "bg-amber-400 text-slate-950"
-                              : "bg-slate-800 hover:bg-slate-700 text-indigo-200 border border-indigo-500/30"
+                              : "bg-slate-800 hover:bg-slate-700 text-blue-200 border border-blue-600/30"
                           }`}
                         >
                           {isPlayingMainAudio ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
@@ -3338,7 +3571,7 @@ export default function CreateAssignmentModal({
                   )}
 
                   {mainAudioUrl && (
-                    <div className="flex items-center gap-2 text-xs text-indigo-200 bg-indigo-900/30 border border-indigo-500/20 px-3 py-1.5 rounded-lg">
+                    <div className="flex items-center gap-2 text-xs text-blue-200 bg-blue-950/30 border border-blue-600/20 px-3 py-1.5 rounded-lg">
                       <FileAudio className="h-4 w-4 text-emerald-400 shrink-0" />
                       <span className="font-mono truncate flex-1">{mainAudioUrl}</span>
                       <button
@@ -3364,7 +3597,7 @@ export default function CreateAssignmentModal({
                       <button
                         type="button"
                         onClick={handlePreviewTranscriptAi}
-                        className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition cursor-pointer"
+                        className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition cursor-pointer"
                       >
                         <Volume2 className="h-3 w-3" />
                         {playingPreviewId === "main-transcript" ? "Đang đọc... (Bấm dừng)" : "Nghe thử giọng đọc AI"}
@@ -3378,13 +3611,13 @@ export default function CreateAssignmentModal({
                         setMainTranscript(val);
                       }}
                       placeholder="Nhập nội dung bài nghe hoặc hội thoại (VD: A: Hello / B: Hi)..."
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-hidden font-serif leading-relaxed"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-600 focus:outline-hidden font-serif leading-relaxed"
                     />
                   </div>
 
                   {/* Cụm công cụ Cấu hình Giọng Đọc Bài Nghe */}
-                  <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/40 p-3.5 space-y-2.5">
-                    <div className="flex items-center gap-2 border-b border-indigo-500/20 pb-2">
+                  <div className="rounded-xl border border-blue-600/30 bg-slate-900/40 p-3.5 space-y-2.5">
+                    <div className="flex items-center gap-2 border-b border-blue-600/20 pb-2">
                       <Sparkles className="h-4 w-4 text-amber-400" />
                       <span className="text-xs font-bold text-amber-300">
                         Cấu hình giọng đọc bài nghe
@@ -3393,13 +3626,13 @@ export default function CreateAssignmentModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                           Giọng đọc:
                         </label>
                         <select
                           value={ttsVoice}
                           onChange={(e) => setTtsVoice(e.target.value)}
-                          className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-white outline-none focus:border-amber-400"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400"
                         >
                           <option value="af_heart">🇺🇸 Giọng Mỹ - Nữ (Heart)</option>
                           <option value="am_michael">🇺🇸 Giọng Mỹ - Nam (Michael)</option>
@@ -3411,13 +3644,13 @@ export default function CreateAssignmentModal({
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                           Tốc Độ Phát (Speed):
                         </label>
                         <select
                           value={ttsSpeed}
                           onChange={(e) => setTtsSpeed(e.target.value)}
-                          className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-white outline-none focus:border-amber-400"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400"
                         >
                           <option value="0.75x">0.75x (Chậm - Dành cho sơ cấp A1/A2)</option>
                           <option value="1.0x">1.0x (Chuẩn - Tốc độ bản ngữ tự nhiên)</option>
@@ -3494,16 +3727,33 @@ export default function CreateAssignmentModal({
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                            Câu {idx + 1} ({q.questionType})
+                          <span className="text-xs font-bold text-blue-700 dark:text-blue-400">
+                            Câu {idx + 1}
                           </span>
+                          <select
+                            value={q.questionType}
+                            onChange={(e) =>
+                              handleChangeQuestionType(
+                                q.id,
+                                e.target.value as QuestionDraft["questionType"],
+                              )
+                            }
+                            className="text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-blue-700 dark:text-blue-400 outline-none cursor-pointer"
+                            title="Thay đổi dạng câu hỏi"
+                          >
+                            <option value="MULTIPLE_CHOICE">Trắc nghiệm (MULTIPLE_CHOICE)</option>
+                            <option value="FILL_IN_BLANK">Điền từ (FILL_IN_BLANK)</option>
+                            <option value="TRUE_FALSE">Đúng / Sai (TRUE_FALSE)</option>
+                            <option value="ESSAY">Tự luận / Luận (ESSAY)</option>
+                            <option value="AUDIO_RESPONSE">Nói / Ghi âm (AUDIO_RESPONSE)</option>
+                          </select>
                           {q.targetWord && (
                             <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] border border-emerald-500/20">
                               Từ: {q.targetWord}
                             </span>
                           )}
                           {q.ipa && (
-                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-mono text-[11px] font-bold border border-indigo-500/20">
+                            <span className="px-2 py-0.5 rounded bg-blue-600/10 text-blue-800 dark:text-blue-300 font-mono text-[11px] font-bold border border-blue-600/20">
                               IPA: {q.ipa}
                             </span>
                           )}
@@ -3516,7 +3766,7 @@ export default function CreateAssignmentModal({
                                   ? "bg-amber-400 text-slate-950 border-amber-400"
                                   : q.referenceAudioUrl
                                   ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 hover:bg-amber-500/20"
-                                  : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20"
+                                  : "bg-blue-600/10 text-blue-800 dark:text-blue-300 border-blue-600/20 hover:bg-blue-600/20"
                               }`}
                               title="Nghe thử phát âm mẫu"
                             >
@@ -3564,7 +3814,7 @@ export default function CreateAssignmentModal({
                               ? "Vd: Sắp xếp các từ sau thành câu hoàn chỉnh: always / to school / by bus / She / goes"
                               : "Nhập nội dung câu hỏi..."
                           }
-                          className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                         />
                       </div>
 
@@ -3588,7 +3838,7 @@ export default function CreateAssignmentModal({
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+                            <label className="block text-[11px] font-semibold text-blue-700 dark:text-blue-400 mb-1">
                               💡 Gợi ý trả lời & Dàn ý / Từ vựng cho học sinh (Hint & Vocabulary):
                             </label>
                             <textarea
@@ -3598,7 +3848,7 @@ export default function CreateAssignmentModal({
                                 handleUpdateQuestion(q.id, "explanation", e.target.value)
                               }
                               placeholder="Vd: Từ vựng gợi ý: cognitive skills, global perspective, career advancement..."
-                              className="w-full rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400 placeholder:text-slate-500"
+                              className="w-full rounded-lg border border-blue-600/30 bg-blue-600/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-400 placeholder:text-slate-500"
                             />
                           </div>
                         </div>
@@ -3607,7 +3857,7 @@ export default function CreateAssignmentModal({
                       {/* SPEAKING SHADOWING: Dịch nghĩa & hướng dẫn phát âm */}
                       {assignmentType === "SPEAKING" && speakingMode === "SHADOWING" && (
                         <div className="space-y-2 pt-1">
-                          <label className="block text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mb-1">
+                          <label className="block text-[11px] font-semibold text-blue-800 dark:text-blue-300 mb-1">
                             Dịch nghĩa tiếng Việt & Ghi chú phát âm (Linking / Stress notes):
                           </label>
                           <textarea
@@ -3617,7 +3867,7 @@ export default function CreateAssignmentModal({
                               handleUpdateQuestion(q.id, "explanation", e.target.value)
                             }
                             placeholder="Vd: Dịch nghĩa và lưu ý nối âm..."
-                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/30 p-2.5 text-xs text-indigo-900 dark:text-indigo-200 outline-none focus:border-indigo-400"
+                            className="w-full rounded-lg border border-blue-600/30 bg-blue-50 dark:bg-slate-900/30 p-2.5 text-xs text-blue-900 dark:text-blue-200 outline-none focus:border-blue-400"
                           />
                         </div>
                       )}
@@ -3642,12 +3892,26 @@ export default function CreateAssignmentModal({
 
                       {q.questionType === "MULTIPLE_CHOICE" && (
                         <div className="space-y-2 pt-1">
-                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                            Các lựa chọn đáp án (nhấn nút chữ cái để đánh dấu đáp án đúng):
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                              Các lựa chọn đáp án (nhấn nút chữ cái để đánh dấu đáp án đúng):
+                            </label>
+                            {q.options.length < 6 && (
+                              <button
+                                type="button"
+                                onClick={() => handleAddOption(q.id)}
+                                className="text-[11px] font-bold text-blue-700 dark:text-blue-400 hover:text-blue-600 flex items-center gap-1 cursor-pointer transition"
+                              >
+                                <Plus className="h-3 w-3" /> Thêm lựa chọn
+                              </button>
+                            )}
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {q.options.map((opt, oIdx) => {
-                              const isCorrect = q.correctAnswer === opt;
+                              const letter = String.fromCharCode(65 + oIdx);
+                              const isCorrect =
+                                (q.correctAnswer || "").trim().toLowerCase() === opt.trim().toLowerCase() ||
+                                (q.correctAnswer || "").trim().toUpperCase() === letter;
                               return (
                                 <div
                                   key={oIdx}
@@ -3663,13 +3927,13 @@ export default function CreateAssignmentModal({
                                       handleUpdateQuestion(q.id, "correctAnswer", opt)
                                     }
                                     title="Đặt làm đáp án đúng"
-                                    className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold transition shrink-0 ${
+                                    className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold transition shrink-0 cursor-pointer ${
                                       isCorrect
                                         ? "bg-emerald-500 text-slate-950 shadow-sm"
                                         : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
                                     }`}
                                   >
-                                    {String.fromCharCode(65 + oIdx)}
+                                    {letter}
                                   </button>
                                   <input
                                     type="text"
@@ -3679,7 +3943,10 @@ export default function CreateAssignmentModal({
                                       const oldVal = newOpts[oIdx];
                                       newOpts[oIdx] = e.target.value;
                                       handleUpdateQuestion(q.id, "options", newOpts);
-                                      if (q.correctAnswer === oldVal) {
+                                      if (
+                                        (q.correctAnswer || "").trim().toLowerCase() === oldVal.trim().toLowerCase() ||
+                                        (q.correctAnswer || "").trim().toUpperCase() === letter
+                                      ) {
                                         handleUpdateQuestion(
                                           q.id,
                                           "correctAnswer",
@@ -3688,6 +3955,7 @@ export default function CreateAssignmentModal({
                                       }
                                     }}
                                     className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 outline-none"
+                                    placeholder={`Lựa chọn ${letter}...`}
                                   />
                                 </div>
                               );
@@ -3730,8 +3998,8 @@ export default function CreateAssignmentModal({
                                 key={val}
                                 type="button"
                                 onClick={() => handleUpdateQuestion(q.id, "correctAnswer", val)}
-                                className={`px-4 py-1.5 rounded-lg text-xs font-bold border transition ${
-                                  q.correctAnswer?.toUpperCase() === val
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                  (q.correctAnswer || "").toUpperCase() === val
                                     ? "bg-sky-500 text-slate-950 border-sky-400 shadow-sm"
                                     : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700"
                                 }`}
@@ -3743,12 +4011,22 @@ export default function CreateAssignmentModal({
                         </div>
                       )}
 
-                      {q.explanation && assignmentType !== "SPEAKING" && (
-                        <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/20 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">
-                          <span className="font-semibold text-indigo-900 dark:text-indigo-200">
-                            💡 Gợi ý / Giải thích AI:{" "}
-                          </span>
-                          {q.explanation}
+                      {/* Giải thích chi tiết & Gợi ý làm bài (Explanation) */}
+                      {assignmentType !== "SPEAKING" && (
+                        <div className="space-y-1 pt-1">
+                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                            Giải thích chi tiết &amp; Gợi ý làm bài (Explanation):
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={q.explanation || ""}
+                            onChange={(e) =>
+                              handleUpdateQuestion(q.id, "explanation", e.target.value)
+                            }
+                            placeholder="Nhập giải thích chi tiết đáp án hoặc mẹo ghi nhớ cho học sinh..."
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600 placeholder:text-slate-500 leading-relaxed"
+                          />
                         </div>
                       )}
 
@@ -3769,7 +4047,7 @@ export default function CreateAssignmentModal({
                                   : "bg-amber-600 hover:bg-amber-500"
                               }`}
                             >
-                              <Volume2 className={`h-3.5 w-3.5 ${playingPreviewId === q.id ? "animate-bounce" : ""}`} />
+                              <Volume2 className={`h-3.5 w-3.5 ${playingPreviewId === q.id ? "animate-pulse" : ""}`} />
                               {playingPreviewId === q.id ? "Đang phát..." : "Nghe thử phát âm từ"}
                             </button>
                           </div>
@@ -3804,7 +4082,7 @@ export default function CreateAssignmentModal({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Nhập tiêu đề bài tập..."
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     required
                   />
                 </div>
@@ -3816,7 +4094,7 @@ export default function CreateAssignmentModal({
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   >
                     <option value="EASY">Dễ (Easy)</option>
                     <option value="MEDIUM">Trung bình (Medium)</option>
@@ -3834,15 +4112,15 @@ export default function CreateAssignmentModal({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Nhập hướng dẫn làm bài cho học viên..."
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                 />
               </div>
 
               {/* Lộ Trình Ngày Học (Daily Study Plan) & Deadline */}
-              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-3">
+              <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/50 dark:bg-slate-900/20 space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-1 flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Gán vào Ngày Học (Daily Study Plan trong Lộ Trình Lớp):
+                  <label className="block text-xs font-bold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-blue-700 dark:text-blue-400" /> Gán vào Ngày Học (Daily Study Plan trong Lộ Trình Lớp):
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <select
@@ -3855,7 +4133,7 @@ export default function CreateAssignmentModal({
                           if (plan) setScheduledDate(plan.scheduledDate);
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     >
                       {dailyPlans.map((p: any) => (
                         <option key={p.id} value={p.id}>
@@ -3869,7 +4147,7 @@ export default function CreateAssignmentModal({
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                       required
                     />
                   </div>
@@ -3884,7 +4162,7 @@ export default function CreateAssignmentModal({
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                       required
                     />
                   </div>
@@ -3898,7 +4176,7 @@ export default function CreateAssignmentModal({
                       min={5}
                       value={estimatedMinutes}
                       onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     />
                   </div>
                 </div>
@@ -3913,7 +4191,7 @@ export default function CreateAssignmentModal({
                   <select
                     value={targetStudents}
                     onChange={(e) => setTargetStudents(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   >
                     <option value="ALL">Tất cả học sinh trong lớp</option>
                     <option value="WEAK_STUDENTS">Chỉ học sinh cần cải thiện (Cảnh báo AI)</option>
@@ -3927,7 +4205,7 @@ export default function CreateAssignmentModal({
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                   >
                     <option value="PUBLISHED">Công khai & Mở bài đúng hạn (PUBLISHED)</option>
                     <option value="DRAFT">Lưu nháp (DRAFT)</option>
@@ -3939,7 +4217,7 @@ export default function CreateAssignmentModal({
         </div>
 
         {/* Footer Navigation */}
-        <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50/90 dark:bg-slate-900/90">
+        <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50/90 dark:bg-slate-900/90 flex-wrap gap-2">
           {step > 1 ? (
             <button
               type="button"
@@ -3964,7 +4242,13 @@ export default function CreateAssignmentModal({
                     alert("Vui lòng dán hoặc nhập nội dung văn bản thô!");
                     return;
                   }
-                  handleGenerateAiQuestions(rawText);
+                  // Nếu văn bản đã có sẵn cấu trúc dạng Câu 1, A, B, C... ưu tiên dùng Regex parser tức thì (<10ms)
+                  const quickRes = parseRawText(rawText, assignmentType, speakingMode);
+                  if (quickRes.report.imported > 0) {
+                    applyImportResult(quickRes);
+                  } else {
+                    handleGenerateAiQuestions(rawText);
+                  }
                 } else if (creationSource === "EXCEL") {
                   alert("Vui lòng chọn File Excel ở khung bên trên để hệ thống tự động nạp câu hỏi!");
                 } else if (creationSource === "RESOURCE") {
@@ -3985,7 +4269,7 @@ export default function CreateAssignmentModal({
                   setStep(2);
                 }
               }}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-500 transition cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-blue-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-600 transition cursor-pointer disabled:opacity-50"
             >
               {isGeneratingAi ? (
                 <>
@@ -4005,7 +4289,7 @@ export default function CreateAssignmentModal({
             <button
               type="button"
               onClick={() => setStep(3)}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-500 transition cursor-pointer"
+              className="flex items-center gap-1.5 rounded-lg bg-blue-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-600 transition cursor-pointer"
             >
               <span>Tiếp Tục (Cấu Hình Ngày & Giao Bài)</span>
               <ChevronRight className="h-4 w-4" />
@@ -4034,6 +4318,15 @@ export default function CreateAssignmentModal({
           )}
         </div>
       </div>
+
+      {/* Modal Bảng Tra Cứu & Hướng Dẫn Quy Cách Nhập File Excel Chi Tiết */}
+      <ExcelFormatCheatSheetModal
+        isOpen={showCheatSheetModal}
+        onClose={() => setShowCheatSheetModal(false)}
+        currentSkill={assignmentType}
+        onDownloadSkillTemplate={downloadSkillExcelTemplate}
+        onDownloadFullTemplate={downloadExcelTemplate}
+      />
     </div>
   );
 }

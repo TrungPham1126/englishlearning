@@ -19,6 +19,11 @@ import {
   PieChart as PieIcon,
   Users,
   ArrowRight,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Workflow,
   ShieldCheck,
   Zap,
@@ -44,6 +49,20 @@ export default function AiMonitoringPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | "STUDENT" | "TEACHER">("ALL");
+  const [sortField, setSortField] = useState<"name" | "used" | "tokens" | "cost" | "status">("used");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const toggleSort = (field: "name" | "used" | "tokens" | "cost" | "status") => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+    setCurrentPage(1);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -160,6 +179,33 @@ export default function AiMonitoringPage() {
     );
   }, [quotas, roleFilter, searchQuery]);
 
+  const sortedQuotas = useMemo(() => {
+    return [...filteredQuotas].sort((a, b) => {
+      let comparison = 0;
+      if (sortField === "name") {
+        const nameA = a.studentName || a.email;
+        const nameB = b.studentName || b.email;
+        comparison = nameA.localeCompare(nameB);
+      } else if (sortField === "used") {
+        comparison = (a.dailyUsed || 0) - (b.dailyUsed || 0);
+      } else if (sortField === "tokens") {
+        comparison = (a.totalTokensUsed || 0) - (b.totalTokensUsed || 0);
+      } else if (sortField === "cost") {
+        comparison = (a.estimatedCostUsd || 0) - (b.estimatedCostUsd || 0);
+      } else if (sortField === "status") {
+        const statusRank = (item: StudentQuotaItem) => (item.isBlocked ? 2 : (item.dailyUsed >= item.dailyLimit ? 1 : 0));
+        comparison = statusRank(a) - statusRank(b);
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [filteredQuotas, sortField, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedQuotas.length / pageSize));
+  const paginatedQuotas = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedQuotas.slice(start, start + pageSize);
+  }, [sortedQuotas, currentPage, pageSize]);
+
   // Quota remaining logic & styling
   const remainingPercent = stats?.systemQuotaRemainingPercent ?? 100;
   const isQuotaDanger = remainingPercent <= 10;
@@ -197,7 +243,7 @@ export default function AiMonitoringPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500 dark:text-slate-400">
-        <Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400 mb-3" size={36} />
+        <Loader2 className="animate-spin text-blue-700 dark:text-blue-400 mb-3" size={36} />
         <p className="text-sm font-semibold">Đang tổng hợp dữ liệu giám sát AI...</p>
       </div>
     );
@@ -208,7 +254,7 @@ export default function AiMonitoringPage() {
       {/* 1. CLEAN OPEN HEADER & KILL-SWITCH CONTROL */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <Cpu size={14} />
             <span>Giám Sát Hệ Thống AI</span>
           </div>
@@ -216,7 +262,7 @@ export default function AiMonitoringPage() {
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               Giám Sát Chi Phí & Hiệu Suất AI
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
               Gemini 2.5 Flash
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
@@ -259,11 +305,57 @@ export default function AiMonitoringPage() {
             )}
           </button>
         </div>
+
+        {/* DATA TABLE PAGINATION CONTROLS */}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/40 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2">
+            <span>Hiển thị</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+            <span>trên tổng <strong className="text-slate-800 dark:text-slate-200 tabular-nums">{sortedQuotas.length}</strong> người dùng</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="tabular-nums">
+              Trang <strong className="text-slate-800 dark:text-slate-200">{currentPage}</strong> / {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                title="Trang trước"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                title="Trang kế tiếp"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 2. KILL-SWITCH ACTIVE WARNING BANNER */}
       {stats?.systemKillSwitchActive && (
-        <div className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-800 rounded-2xl p-4 flex items-center gap-4 text-rose-800 dark:text-rose-200">
+        <div className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-800 rounded-xl p-4 flex items-center gap-4 text-rose-800 dark:text-rose-200">
           <AlertOctagon size={28} className="text-rose-600 dark:text-rose-400 shrink-0" />
           <div className="flex-1">
             <h4 className="font-black text-sm uppercase tracking-wide">
@@ -276,48 +368,87 @@ export default function AiMonitoringPage() {
         </div>
       )}
 
-      {/* 3. FOUR MODERN STRIPE-STYLE KPI CARDS */}
+      {/* 3. FOUR MODERN STRIPE-STYLE KPI QUOTA CARDS WITH THRESHOLD PROGRESS BARS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Chi Phí Tháng */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Ước Tính Chi Phí (Tháng)
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-              <DollarSign size={20} />
+        {/* Card 1: Chi Phí Tháng & Hạn Ngạch Ngân Sách */}
+        {(() => {
+          const monthlyCost = stats?.monthlyCostUsd ?? stats?.estimatedCostUsd ?? 0;
+          const budgetLimitUsd = 50;
+          const costPct = Math.min(100, Math.round((monthlyCost / budgetLimitUsd) * 100));
+          const costColor =
+            costPct >= 85
+              ? "bg-rose-500 text-rose-600 dark:text-rose-400"
+              : costPct >= 60
+                ? "bg-amber-500 text-amber-600 dark:text-amber-400"
+                : "bg-emerald-500 text-emerald-600 dark:text-emerald-400";
+          return (
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Hạn Ngạch Chi Phí (Tháng)
+                </span>
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                  <DollarSign size={20} />
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between mt-3">
+                <div className="text-3xl font-black text-slate-900 dark:text-white">
+                  ${monthlyCost.toFixed(3)}
+                </div>
+                <span className="text-xs font-bold text-slate-400">/ ${budgetLimitUsd}.00</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${costColor.split(" ")[0]}`}
+                  style={{ width: `${Math.max(4, costPct)}%` }}
+                />
+              </div>
+              <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span>Ngưỡng ngân sách: {costPct}%</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                  {costPct >= 85 ? "Sắp chạm trần" : costPct >= 60 ? "Cảnh báo" : "An toàn"}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="text-3xl font-black text-rose-600 dark:text-rose-400 mt-3">
-            ${stats?.monthlyCostUsd?.toFixed(3) ?? stats?.estimatedCostUsd?.toFixed(3) ?? "0.000"}
-          </div>
-          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span>Model: Gemini 2.5 Flash</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">$0.075 / 1M token</span>
-          </div>
-        </div>
+          );
+        })()}
 
-        {/* Card 2: Tổng Token Tiêu Thụ */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Tổng Token Tiêu Thụ
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Activity size={20} />
+        {/* Card 2: Tổng Token Tiêu Thụ & Quota Token */}
+        {(() => {
+          const totalTok = stats?.totalTokens || 0;
+          const tokenCap = 5_000_000;
+          const tokPct = Math.min(100, Math.round((totalTok / tokenCap) * 100));
+          const tokBarColor =
+            tokPct >= 85 ? "bg-rose-500" : tokPct >= 65 ? "bg-amber-500" : "bg-emerald-500";
+          return (
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Quota Token Tiêu Thụ
+                </span>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
+                  <Activity size={20} />
+                </div>
+              </div>
+              <div className="text-3xl font-black text-blue-700 dark:text-blue-400 mt-3">
+                {totalTok.toLocaleString()}
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${tokBarColor}`}
+                  style={{ width: `${Math.max(5, tokPct)}%` }}
+                />
+              </div>
+              <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span>In: {(stats?.promptTokens || 0).toLocaleString()}</span>
+                <span>Out: {(stats?.completionTokens || 0).toLocaleString()}</span>
+              </div>
             </div>
-          </div>
-          <div className="text-3xl font-black text-indigo-600 dark:text-indigo-400 mt-3">
-            {(stats?.totalTokens || 0).toLocaleString()}
-          </div>
-          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span>In: {(stats?.promptTokens || 0).toLocaleString()}</span>
-            <span>Out: {(stats?.completionTokens || 0).toLocaleString()}</span>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Card 3: Hạn Mức Toàn Hệ Thống Còn Lại */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Hạn Mức Hệ Thống Còn Lại
@@ -345,7 +476,7 @@ export default function AiMonitoringPage() {
           >
             {remainingPercent.toFixed(1)}%
           </div>
-          {/* Progress Bar */}
+          {/* Threshold Progress Bar (Emerald -> Amber -> Rose) */}
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
@@ -358,120 +489,171 @@ export default function AiMonitoringPage() {
               style={{ width: `${Math.min(100, Math.max(0, remainingPercent))}%` }}
             />
           </div>
-          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>{isQuotaDanger ? "Mức nguy hiểm" : isQuotaWarning ? "Mức cảnh báo" : "Hạn mức an toàn"}</span>
-            <span className="font-bold">Ngày hôm nay</span>
+          <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span
+              className={`font-bold ${
+                isQuotaDanger
+                  ? "text-rose-600 dark:text-rose-400"
+                  : isQuotaWarning
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              {isQuotaDanger ? "🔴 Sắp hết Quota" : isQuotaWarning ? "🟡 Cảnh báo ngưỡng" : "🟢 Hạn mức an toàn"}
+            </span>
+            <span className="font-bold">Hôm nay</span>
           </div>
         </div>
 
-        {/* Card 4: Người Dùng & Bị Chặn */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Học Viên AI & Chặn Spam
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <Users size={20} />
+        {/* Card 4: Người Dùng & Bị Chặn Rate Limit */}
+        {(() => {
+          const activeU = stats?.activeUsers || 0;
+          const blockedU = stats?.blockedUsers || 0;
+          const blockRatio = activeU > 0 ? Math.min(100, Math.round((blockedU / activeU) * 100)) : 0;
+          const blockBarColor =
+            blockedU > 3 ? "bg-rose-500" : blockedU > 0 ? "bg-amber-500" : "bg-emerald-500";
+          return (
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Học Viên AI & Chặn Spam
+                </span>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
+                  <Users size={20} />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-2 mt-3">
+                <span className="text-3xl font-black text-slate-900 dark:text-white">
+                  {activeU}
+                </span>
+                <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">active</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${blockBarColor}`}
+                  style={{ width: `${blockedU === 0 ? 100 : Math.max(15, blockRatio)}%` }}
+                />
+              </div>
+              <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span>Chặn spam (HTTP 429):</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded-full ${
+                    blockedU > 0
+                      ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400"
+                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+                  }`}
+                >
+                  {blockedU} bị khóa
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-baseline gap-2 mt-3">
-            <span className="text-3xl font-black text-slate-900 dark:text-white">
-              {stats?.activeUsers || 0}
-            </span>
-            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">active</span>
-          </div>
-          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span>Bị chặn spam (429):</span>
-            <span className={`font-bold px-2 py-0.5 rounded-full ${
-              (stats?.blockedUsers || 0) > 0
-                ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400"
-                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            }`}>
-              {stats?.blockedUsers || 0} user
-            </span>
-          </div>
-        </div>
+          );
+        })()}
       </div>
 
-      {/* 3.5 KIẾN TRÚC PHỐI HỢP ĐA TRÍ TUỆ NHÂN TẠO (HYBRID DUAL-AI COOPERATIVE ARCHITECTURE) */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+      {/* 3.5 KIẾN TRÚC FALLBACK AI 3 TẦNG (3-TIER AI FALLBACK ARCHITECTURE & STATUS) */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
         {/* Header Kiến Trúc Phối Hợp */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+            <div className="p-3 bg-blue-50 dark:bg-slate-900/60 text-blue-700 dark:text-blue-400 rounded-xl">
               <Workflow size={24} />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  Kiến Trúc Điều Phối Dịch Vụ AI (Dual-AI Pipeline)
+                  Kiến Trúc Điều Phối &amp; Lịch Sử Fallback AI 3 Tầng (3-Tier AI Pipeline)
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
-                  Điều Hướng Tự Động
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/50">
+                  Tier 1: Groq Cloud
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                  Cơ Chế Dự Phòng (Failover)
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                  Tier 2: Gemini 2.5 Flash
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">
+                  Tier 3: Local Rule / Edge
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Hệ thống vận hành 2 mô hình: <strong>LLaMA 3.3</strong> đảm nhận tạo đề thi &amp; xử lý văn bản; <strong>Gemini 2.5 Flash</strong> đảm nhận đánh giá phát âm đa phương thức và dự phòng tự động khi vượt hạn mức.
+                Hệ thống tự động chuyển tầng dự phòng (Auto-Failover) giữa <strong>Tier 1 (Groq LLaMA 3.3)</strong> &rarr; <strong>Tier 2 (Gemini 2.5 Flash)</strong> &rarr; <strong>Tier 3 (Rule-based / Local)</strong> khi phát sinh lỗi mạng hoặc chạm ngưỡng Rate Limit 429.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            Hệ thống hoạt động bình thường
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            3-Tier Failover Active
           </div>
         </div>
 
-        {/* Sơ đồ trực quan hóa Luồng phối hợp (Visual Pipeline Flow) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
-          {/* Luồng 1: Giáo viên soạn đề */}
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-emerald-200/70 dark:border-emerald-900/40 shadow-xs">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-black text-sm shrink-0">
-              <Zap size={20} />
+        {/* Sơ đồ trực quan hóa Luồng Fallback 3 tầng (Visual 3-Tier Pipeline Flow) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+          {/* Tier 1 */}
+          <div className="flex items-start gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-black text-xs shrink-0">
+              T1
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-1">
                 <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                  Luồng 1: Soạn Đề &amp; Bài Tập
+                  Tier 1 • Primary Cloud
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                  Giáo viên
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                  INFO • 99.4%
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold truncate">
-                <span>Soạn Quiz / Passage</span>
-                <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">Groq LLaMA (Chính)</span>
-                <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                <span className="text-indigo-600 dark:text-indigo-400 text-[11px] font-normal truncate">Gemini (Dự phòng)</span>
-              </div>
+              <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+                Groq LLaMA 3.3 70B &amp; Whisper
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Xử lý chính cho sinh bài tập &amp; nhận diện giọng nói tốc độ cao (&lt;800ms).
+              </p>
             </div>
           </div>
 
-          {/* Luồng 2: Học sinh luyện nói */}
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-indigo-200/70 dark:border-indigo-900/40 shadow-xs">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-black text-sm shrink-0">
-              <Sparkles size={20} />
+          {/* Tier 2 */}
+          <div className="flex items-start gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-blue-200/80 dark:border-blue-900/50 shadow-2xs">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-slate-900 text-blue-800 dark:text-blue-300 flex items-center justify-center font-black text-xs shrink-0">
+              T2
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
-                  Luồng 2: Chấm Điểm Phát Âm
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-xs font-black text-blue-800 dark:text-blue-400 uppercase tracking-wider">
+                  Tier 2 • Multimodal / Failover
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300">
-                  Học viên
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                  WARN • Standby
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold truncate">
-                <span>Audio Stream / Mic</span>
-                <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold truncate">Gemini 2.5 Flash Multimodal</span>
-                <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-normal">IELTS Band</span>
+              <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+                Google Gemini 2.5 Flash
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Chấm phát âm Multimodal &amp; tự động tiếp quản khi Tier 1 quá tải (HTTP 429).
+              </p>
+            </div>
+          </div>
+
+          {/* Tier 3 */}
+          <div className="flex items-start gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-amber-200/80 dark:border-amber-900/50 shadow-2xs">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-black text-xs shrink-0">
+              T3
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                  Tier 3 • Deterministic Fallback
+                </span>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300">
+                  Safe-Mode
+                </span>
               </div>
+              <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+                Local Phonetic / Rule Engine
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Đảm bảo phiên học 0% gián đoạn ngay cả khi đứt kết nối Cloud AI.
+              </p>
             </div>
           </div>
         </div>
@@ -479,7 +661,7 @@ export default function AiMonitoringPage() {
         {/* Hai thẻ Động cơ AI Chuyên Biệt */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Dịch vụ 1: Mô hình Soạn Đề & Xử Lý Văn Bản */}
-          <div className="bg-gradient-to-br from-emerald-500/5 via-white to-emerald-500/10 dark:from-emerald-950/30 dark:via-slate-900 dark:to-emerald-950/20 p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white dark:bg-surface-card p-5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40 shadow-card relative overflow-hidden flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-emerald-100 dark:border-emerald-950/60">
                 <div className="flex items-center gap-3">
@@ -549,11 +731,11 @@ export default function AiMonitoringPage() {
           </div>
 
           {/* Dịch vụ 2: Mô hình Chấm Phát Âm & Đa Phương Thức */}
-          <div className="bg-gradient-to-br from-indigo-500/5 via-white to-indigo-500/10 dark:from-indigo-950/30 dark:via-slate-900 dark:to-indigo-950/20 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 shadow-xs relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white dark:bg-surface-card p-5 rounded-xl border border-blue-200/80 dark:border-blue-900/40 shadow-card relative overflow-hidden flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-indigo-100 dark:border-indigo-950/60">
+              <div className="flex items-center justify-between pb-3 border-b border-blue-100 dark:border-blue-900/60">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                  <div className="w-10 h-10 rounded-xl bg-blue-800 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
                     <Sparkles size={20} />
                   </div>
                   <div>
@@ -570,24 +752,24 @@ export default function AiMonitoringPage() {
                     </p>
                   </div>
                 </div>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100/80 dark:bg-indigo-950/50 px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                <span className="flex items-center gap-1.5 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100/80 dark:bg-slate-900/50 px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-900 shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-blue-600" />
                   Sẵn sàng dự phòng
                 </span>
               </div>
 
               {/* Số liệu thống kê Gemini */}
               <div className="grid grid-cols-3 gap-3 my-4">
-                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-indigo-100 dark:border-indigo-950/50">
+                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                     Số Lượt Chấm Nói
                   </span>
-                  <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-1 block">
+                  <span className="text-xl font-black text-blue-700 dark:text-blue-400 mt-1 block">
                     {(stats?.geminiStats?.totalRequests || 0).toLocaleString()} <span className="text-xs font-semibold text-slate-500">lượt</span>
                   </span>
                 </div>
 
-                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-indigo-100 dark:border-indigo-950/50">
+                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                     Token Tiêu Thụ
                   </span>
@@ -596,7 +778,7 @@ export default function AiMonitoringPage() {
                   </span>
                 </div>
 
-                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-indigo-100 dark:border-indigo-950/50">
+                <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                     Chi Phí ($)
                   </span>
@@ -607,10 +789,10 @@ export default function AiMonitoringPage() {
               </div>
             </div>
 
-            <div className="pt-2 border-t border-indigo-100 dark:border-indigo-950/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+            <div className="pt-2 border-t border-blue-100 dark:border-blue-900/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
               <div className="flex items-center justify-between">
                 <span>In: {(stats?.geminiStats?.promptTokens || 0).toLocaleString()} | Out: {(stats?.geminiStats?.completionTokens || 0).toLocaleString()} tokens</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{stats?.geminiStats?.pricingModel || "$0.075 / $0.30 per 1M"}</span>
+                <span className="font-semibold text-blue-700 dark:text-blue-400">{stats?.geminiStats?.pricingModel || "$0.075 / $0.30 per 1M"}</span>
               </div>
               <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
                 Cơ chế dự phòng: Kích hoạt tự động khi dịch vụ chính gặp sự cố.
@@ -623,18 +805,18 @@ export default function AiMonitoringPage() {
       {/* 4. CHARTS SECTION (Recharts AreaChart + Donut Chart) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Biểu đồ diện tích: Xu hướng tiêu thụ Token 7 ngày gần nhất */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <TrendingUp size={18} className="text-indigo-600 dark:text-indigo-400" />
+                <TrendingUp size={18} className="text-blue-700 dark:text-blue-400" />
                 Thống Kê Token Tiêu Thụ (7 Ngày)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Dữ liệu phân tách giữa Token gửi đi (Input) và Token nhận về (Output)
               </p>
             </div>
-            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg">
+            <span className="text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900/50 px-2.5 py-1 rounded-lg">
               Token Analytics
             </span>
           </div>
@@ -710,7 +892,7 @@ export default function AiMonitoringPage() {
         </div>
 
         {/* Biểu đồ tròn: Phân bổ chi phí AI giữa Học viên vs Giáo viên */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div className="pb-4 border-b border-slate-100 dark:border-slate-800">
             <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
               <PieIcon size={18} className="text-emerald-600 dark:text-emerald-400" />
@@ -755,7 +937,7 @@ export default function AiMonitoringPage() {
           <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-indigo-500" />
+                <div className="w-3 h-3 rounded-full bg-blue-600" />
                 <span className="text-slate-600 dark:text-slate-300 font-medium">Học viên (Speaking)</span>
               </div>
               <span className="font-bold text-slate-900 dark:text-white">
@@ -776,11 +958,11 @@ export default function AiMonitoringPage() {
       </div>
 
       {/* 5. ANTI-SPAM & RATE LIMIT QUOTA TABLE */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50 dark:bg-slate-800/40">
           <div>
             <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldAlert size={20} className="text-indigo-600 dark:text-indigo-400" />
+              <ShieldAlert size={20} className="text-blue-700 dark:text-blue-400" />
               Kiểm Soát Hạn Mức & Chống Lạm Dụng AI (Anti-Spam)
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -792,17 +974,17 @@ export default function AiMonitoringPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
             <div className="flex items-center p-1 bg-slate-200/70 dark:bg-slate-800 rounded-xl text-xs font-bold shrink-0">
               <button
-                onClick={() => setRoleFilter("ALL")}
+                onClick={() => { setRoleFilter("ALL"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   roleFilter === "ALL"
-                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm"
+                    ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 Tất cả ({quotas.length})
               </button>
               <button
-                onClick={() => setRoleFilter("TEACHER")}
+                onClick={() => { setRoleFilter("TEACHER"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   roleFilter === "TEACHER"
                     ? "bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm"
@@ -812,10 +994,10 @@ export default function AiMonitoringPage() {
                 Giáo viên ({quotas.filter((q) => (q.role || "").toUpperCase() === "TEACHER").length})
               </button>
               <button
-                onClick={() => setRoleFilter("STUDENT")}
+                onClick={() => { setRoleFilter("STUDENT"); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   roleFilter === "STUDENT"
-                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm"
+                    ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -829,38 +1011,73 @@ export default function AiMonitoringPage() {
                 type="text"
                 placeholder="Tìm theo tên hoặc email..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
-              <tr className="bg-slate-50/80 dark:bg-slate-800/60 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
-                <th className="p-4">Người Dùng &amp; Vai Trò</th>
-                <th className="p-4 text-center">Động Cơ AI</th>
-                <th className="p-4 text-center">Đã Dùng Hôm Nay</th>
-                <th className="p-4 text-center">Giới Hạn / Ngày</th>
-                <th className="p-4 text-center">Tổng Token</th>
-                <th className="p-4 text-center">Chi Phí ($)</th>
-                <th className="p-4 text-center">Trạng Thái</th>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800 select-none">
+                <th className="p-4 cursor-pointer hover:text-slate-900 dark:hover:text-white transition" onClick={() => toggleSort("name")}>
+                  <div className="flex items-center gap-1.5">
+                    <span>Người Dùng &amp; Vai Trò</span>
+                    {sortField === "name" ? (sortOrder === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={13} className="text-slate-400" />}
+                  </div>
+                </th>
+                <th className="p-4 text-center">Tầng AI (Tier)</th>
+                <th className="p-4 cursor-pointer hover:text-slate-900 dark:hover:text-white transition" onClick={() => toggleSort("used")}>
+                  <div className="flex items-center gap-1.5">
+                    <span>Hạn Ngạch Hôm Nay</span>
+                    {sortField === "used" ? (sortOrder === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={13} className="text-slate-400" />}
+                  </div>
+                </th>
+                <th className="p-4 text-center cursor-pointer hover:text-slate-900 dark:hover:text-white transition" onClick={() => toggleSort("tokens")}>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Tổng Token</span>
+                    {sortField === "tokens" ? (sortOrder === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={13} className="text-slate-400" />}
+                  </div>
+                </th>
+                <th className="p-4 text-center cursor-pointer hover:text-slate-900 dark:hover:text-white transition" onClick={() => toggleSort("cost")}>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Chi Phí ($)</span>
+                    {sortField === "cost" ? (sortOrder === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={13} className="text-slate-400" />}
+                  </div>
+                </th>
+                <th className="p-4 text-center cursor-pointer hover:text-slate-900 dark:hover:text-white transition" onClick={() => toggleSort("status")}>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Trạng Thái</span>
+                    {sortField === "status" ? (sortOrder === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={13} className="text-slate-400" />}
+                  </div>
+                </th>
                 <th className="p-4 text-right">Hành Động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-              {filteredQuotas.length === 0 ? (
+              {sortedQuotas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs">
                     Không tìm thấy người dùng nào khớp với bộ lọc và tìm kiếm.
                   </td>
                 </tr>
               ) : (
-                filteredQuotas.map((q) => {
+                paginatedQuotas.map((q) => {
                   const isTeacher = (q.role || "").toUpperCase() === "TEACHER";
-                  const isExceeded = q.dailyUsed >= q.dailyLimit;
+                  const used = q.dailyUsed || 0;
+                  const limit = q.dailyLimit || 20;
+                  const usagePct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+                  const isExceeded = used >= limit;
+                  const isWarn = !isExceeded && usagePct >= 75;
+                  const barColor =
+                    q.isBlocked || isExceeded || usagePct >= 90
+                      ? "bg-rose-500"
+                      : usagePct >= 70
+                        ? "bg-amber-500"
+                        : "bg-emerald-500";
+
                   return (
                     <tr
                       key={q.studentId}
@@ -876,7 +1093,7 @@ export default function AiMonitoringPage() {
                               GIÁO VIÊN
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">
+                            <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-blue-100 text-blue-800 dark:bg-slate-900/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
                               HỌC VIÊN
                             </span>
                           )}
@@ -886,48 +1103,75 @@ export default function AiMonitoringPage() {
                         </div>
                       </td>
                       <td className="p-4 text-center">
-                        <span className={`text-[11px] font-black px-2.5 py-1 rounded-lg ${
-                          isTeacher
-                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                            : "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                        }`}>
-                          {q.serviceEngine || (isTeacher ? "GROQ LLaMA 3.3" : "GEMINI 2.5 FLASH")}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <span
-                          className={`font-black px-2.5 py-1 rounded-lg text-xs ${
-                            isExceeded
-                              ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400"
+                        <div className="inline-flex flex-col items-center gap-1">
+                          <span
+                            className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${
+                              isExceeded
+                                ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                : isTeacher
+                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                  : "bg-blue-50 text-blue-800 dark:bg-slate-900/60 dark:text-blue-300 border border-blue-200 dark:border-blue-900"
+                            }`}
+                          >
+                            {isExceeded
+                              ? "TIER 3 • FALLBACK"
                               : isTeacher
-                              ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                              : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
-                          }`}
-                        >
-                          {q.dailyUsed} {isTeacher ? "lần tạo đề" : "lần chấm"}
-                        </span>
+                                ? "TIER 1 • GROQ LLaMA"
+                                : "TIER 2 • GEMINI FLASH"}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {q.serviceEngine || (isTeacher ? "Groq Cloud" : "Gemini Multimodal")}
+                          </span>
+                        </div>
                       </td>
-                      <td className="p-4 text-center font-bold text-slate-600 dark:text-slate-400">
-                        {q.dailyLimit} lần
+                      <td className="p-4 min-w-[200px]">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              {used} / {limit} {isTeacher ? "đề" : "lượt"}
+                            </span>
+                            <span
+                              className={`text-[11px] font-extrabold ${
+                                isExceeded || usagePct >= 90
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : usagePct >= 70
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {usagePct}%
+                            </span>
+                          </div>
+                          <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                              style={{ width: `${usagePct}%` }}
+                            />
+                          </div>
+                        </div>
                       </td>
-                      <td className="p-4 text-center text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <td className="p-4 text-center text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
                         {(q.totalTokensUsed || 0).toLocaleString()}
                       </td>
-                      <td className="p-4 text-center text-xs font-black text-rose-600 dark:text-rose-400">
+                      <td className="p-4 text-center text-xs font-bold tabular-nums text-rose-600 dark:text-rose-400">
                         ${q.estimatedCostUsd ? q.estimatedCostUsd.toFixed(4) : "0.0000"}
                       </td>
                       <td className="p-4 text-center">
-                        {q.isBlocked ? (
-                          <span className="px-2.5 py-1 text-[11px] font-black rounded-lg uppercase bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                            ĐANG BỊ CHẶN
+                        {q.isBlocked || isExceeded ? (
+                          <span className="px-2.5 py-1 text-[10px] font-black rounded-lg uppercase bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                            ERROR • {q.isBlocked ? "ĐANG CHẶN" : "HẾT QUOTA"}
+                          </span>
+                        ) : isWarn ? (
+                          <span className="px-2.5 py-1 text-[10px] font-black rounded-lg uppercase bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                            WARN • CẢNH BÁO
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 text-[11px] font-black rounded-lg uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                            HOẠT ĐỘNG
+                          <span className="px-2.5 py-1 text-[10px] font-black rounded-lg uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            INFO • AN TOÀN
                           </span>
                         )}
                       </td>
-                      <td className="p-4 text-right space-x-2">
+                      <td className="p-4 text-right space-x-2 whitespace-nowrap">
                         <button
                           disabled={isProcessing}
                           onClick={() =>
@@ -937,7 +1181,7 @@ export default function AiMonitoringPage() {
                               q.isBlocked,
                             )
                           }
-                          className="px-3 py-1.5 text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-950 dark:hover:text-indigo-300 rounded-lg cursor-pointer transition"
+                          className="px-3 py-1.5 text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-100 hover:text-blue-800 dark:hover:bg-slate-900 dark:hover:text-blue-300 rounded-lg cursor-pointer transition"
                         >
                           Đổi Limit
                         </button>

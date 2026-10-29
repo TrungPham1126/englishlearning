@@ -39,6 +39,8 @@ export default function TeacherClassDetailPage() {
   // Quản lý upload file & video
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [dragOverLessonId, setDragOverLessonId] = useState<string | null>(null);
+  const [uploadTypeLabel, setUploadTypeLabel] = useState<"VIDEO_HLS" | "DOCUMENT">("VIDEO_HLS");
   const [uploadFeedback, setUploadFeedback] = useState<{
     type: "success" | "error";
     message: string;
@@ -106,6 +108,7 @@ export default function TeacherClassDetailPage() {
   // Kích hoạt chọn file tài liệu
   const triggerDocUpload = (lessonId: string) => {
     setSelectedLessonId(lessonId);
+    setUploadTypeLabel("DOCUMENT");
     setUploadFeedback(null);
     docInputRef.current?.click();
   };
@@ -113,8 +116,50 @@ export default function TeacherClassDetailPage() {
   // Kích hoạt chọn file video
   const triggerVideoUpload = (lessonId: string) => {
     setSelectedLessonId(lessonId);
+    setUploadTypeLabel("VIDEO_HLS");
     setUploadFeedback(null);
     videoInputRef.current?.click();
+  };
+
+  // Xử lý kéo thả trực tiếp file Video HLS hoặc Tài liệu vào thẻ bài giảng
+  const handleLessonDrop = async (e: React.DragEvent<HTMLDivElement>, lessonId: string) => {
+    e.preventDefault();
+    setDragOverLessonId(null);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || isUploading) return;
+
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name);
+    setSelectedLessonId(lessonId);
+    setUploadTypeLabel(isVideo ? "VIDEO_HLS" : "DOCUMENT");
+    setUploadFeedback(null);
+
+    try {
+      setIsUploading(true);
+      if (isVideo) {
+        await teacherApi.uploadLessonVideo(lessonId, file);
+        setUploadFeedback({
+          type: "success",
+          message: `Đã tải lên video bài giảng: "${file.name}". Hệ thống đang xử lý mã hóa HLS (.m3u8).`,
+        });
+      } else {
+        await teacherApi.uploadLessonDocument(lessonId, file);
+        setUploadFeedback({
+          type: "success",
+          message: `Đã upload thành công tài liệu: "${file.name}"`,
+        });
+      }
+      await loadLessons();
+    } catch (err: any) {
+      setUploadFeedback({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          `Không thể tải lên tệp "${file.name}". Vui lòng thử lại.`,
+      });
+    } finally {
+      setIsUploading(false);
+      setSelectedLessonId(null);
+    }
   };
 
   // Xử lý upload tài liệu
@@ -288,7 +333,7 @@ export default function TeacherClassDetailPage() {
               onClick={() => setActiveSubTab("lessons")}
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "lessons"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
                   : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -300,7 +345,7 @@ export default function TeacherClassDetailPage() {
               onClick={() => setActiveSubTab("announcements")}
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "announcements"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
                   : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -337,11 +382,43 @@ export default function TeacherClassDetailPage() {
         </div>
       )}
 
-      {/* Loading Overlay khi đang upload */}
+      {/* Thanh trạng thái xử lý bất đồng bộ (Async HLS Video Transcoding / Document Storage) */}
       {isUploading && (
-        <div className="flex items-center space-x-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-3.5 text-xs text-indigo-700 dark:text-indigo-300">
-          <Loader2 className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
-          <span>Hệ thống đang tải lên tệp tin và lưu trữ vào kho học liệu, vui lòng đợi trong giây lát...</span>
+        <div className="rounded-xl bg-blue-50/90 dark:bg-slate-900/40 border border-blue-200 dark:border-blue-600/30 p-4 space-y-3 shadow-sm animate-in fade-in">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5 font-bold text-blue-800 dark:text-blue-300">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-700 dark:text-blue-400" />
+              <span>
+                {uploadTypeLabel === "VIDEO_HLS"
+                  ? "Đang tải lên Video & Khởi chạy tiến trình mã hóa HLS (.m3u8)..."
+                  : "Đang tải lên Tài liệu bài giảng (PDF/Word) vào kho lưu trữ đám mây..."}
+              </span>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider">
+              Async Pipeline
+            </span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-blue-100 dark:bg-slate-800 overflow-hidden">
+            <div className="h-full w-2/3 rounded-full bg-brand-600 animate-pulse" />
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-600 dark:text-slate-400 pt-0.5">
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span>1. Kiểm tra định dạng &amp; tải lên</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+              <span>
+                {uploadTypeLabel === "VIDEO_HLS"
+                  ? "2. Phân mảnh HLS Adaptive Stream"
+                  : "2. Đồng bộ kho học liệu số"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-700" />
+              <span>3. Gắn vào bài giảng &amp; kiểm duyệt</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -353,16 +430,16 @@ export default function TeacherClassDetailPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-                <BookOpen className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
+                <BookOpen className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
                 Khung Chương Trình & Tài Liệu Bài Giảng
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Các bài giảng chính thống kèm giáo án số, video bài giảng và tài liệu PDF
+                Các bài giảng chính thống kèm giáo án số, video bài giảng HLS và tài liệu PDF (Hỗ trợ Kéo &amp; Thả trực tiếp)
               </p>
             </div>
             <button
               onClick={() => setShowLessonModal(true)}
-              className="inline-flex items-center space-x-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition"
+              className="inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-blue-600 transition cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               <span>Tạo Bài Giảng Mới</span>
@@ -371,21 +448,21 @@ export default function TeacherClassDetailPage() {
 
           {/* Loading State */}
           {lessonsLoading && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mb-3" />
+            <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-slate-400">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
               <p className="text-xs">Đang tải danh mục bài giảng của lớp...</p>
             </div>
           )}
 
           {/* Error State */}
           {!lessonsLoading && lessonsError && (
-            <div className="flex items-center space-x-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-xs text-red-600 dark:text-red-300">
+            <div className="flex items-center space-x-3 rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-xs text-red-600 dark:text-red-300">
               <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />
               <div>
                 <p className="font-semibold">{lessonsError}</p>
                 <button
                   onClick={loadLessons}
-                  className="mt-2 text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-500"
+                  className="mt-2 text-blue-700 dark:text-blue-400 underline hover:text-blue-600"
                 >
                   Thử tải lại
                 </button>
@@ -395,7 +472,7 @@ export default function TeacherClassDetailPage() {
 
           {/* Empty State */}
           {!lessonsLoading && !lessonsError && lessons.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-[#162033] text-slate-400 mb-3">
                 <BookOpen className="h-6 w-6" />
               </div>
@@ -405,7 +482,7 @@ export default function TeacherClassDetailPage() {
               </p>
               <button
                 onClick={() => setShowLessonModal(true)}
-                className="mt-4 inline-flex items-center space-x-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition"
+                className="mt-4 inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Soạn bài học đầu tiên</span>
@@ -415,78 +492,131 @@ export default function TeacherClassDetailPage() {
 
           {/* Lessons List */}
           {!lessonsLoading && !lessonsError && lessons.length > 0 && (
-            <div className="grid grid-cols-1 gap-3.5">
-              {lessons.map((lesson, idx) => (
-                <div
-                  key={lesson.id}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm space-y-3"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-start sm:items-center space-x-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-xs font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                        #{lesson.orderIndex || idx + 1}
-                      </span>
-                      <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base">
-                          {lesson.title}
-                        </h3>
-                        {lesson.objectives && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
-                            {lesson.objectives}
-                          </p>
+            <div className="grid grid-cols-1 gap-4">
+              {lessons.map((lesson, idx) => {
+                const isDragActive = dragOverLessonId === lesson.id;
+                const isCurrentLessonUploading = isUploading && selectedLessonId === lesson.id;
+
+                return (
+                  <div
+                    key={lesson.id}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverLessonId !== lesson.id) setDragOverLessonId(lesson.id);
+                    }}
+                    onDragLeave={() => setDragOverLessonId(null)}
+                    onDrop={(e) => handleLessonDrop(e, lesson.id)}
+                    className={`rounded-xl border p-5 transition-all shadow-xs space-y-4 ${
+                      isDragActive
+                        ? "border-2 border-dashed border-blue-600 bg-blue-50/50 dark:bg-slate-900/30 ring-4 ring-blue-600/10"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-start sm:items-center space-x-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-600/10 text-xs font-extrabold text-blue-700 dark:text-blue-400 border border-blue-200/70 dark:border-blue-600/20">
+                          #{lesson.orderIndex || idx + 1}
+                        </span>
+                        <div>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                            {lesson.title}
+                          </h3>
+                          {lesson.objectives && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
+                              {lesson.objectives}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {lesson.hasVideo ? (
+                          <span className="flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                            <Video className="h-3.5 w-3.5 mr-1.5" />
+                            Đã có Video HLS
+                          </span>
+                        ) : (
+                          <span className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-slate-500 dark:text-slate-400 font-medium">
+                            Chưa có Video
+                          </span>
                         )}
+
+                        <span className="flex items-center rounded-lg bg-blue-50 dark:bg-blue-600/10 px-2.5 py-1 font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/20">
+                          <FileText className="h-3.5 w-3.5 mr-1.5" />
+                          {lesson.documentsCount || 0} tài liệu
+                        </span>
+
+                        <button
+                          onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
+                          title="Xóa bài học này"
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition ml-1 cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      {lesson.hasVideo ? (
-                        <span className="flex items-center rounded-lg bg-emerald-500/10 px-2.5 py-1 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          <Video className="h-3.5 w-3.5 mr-1" />
-                          Đã có Video
+                    {/* Interactive Drag & Drop Upload Zones for Document & HLS Video */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={() => triggerDocUpload(lesson.id)}
+                        disabled={isUploading}
+                        className="group flex items-center justify-between rounded-xl border border-dashed border-blue-300 dark:border-blue-600/30 bg-blue-50/40 dark:bg-slate-900/20 hover:bg-blue-50 dark:hover:bg-slate-900/40 hover:border-blue-600 px-4 py-3 text-left transition cursor-pointer disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-800/10 text-blue-700 dark:text-blue-400 group-hover:scale-105 transition-transform">
+                            {isCurrentLessonUploading && uploadTypeLabel === "DOCUMENT" ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="h-4 w-4" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 dark:text-white">
+                              Tải Lên Tài Liệu (PDF / Word / Slide)
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Kéo thả file hoặc bấm để chọn từ máy tính
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-600/30">
+                          Chọn File
                         </span>
-                      ) : (
-                        <span className="flex items-center rounded-lg bg-slate-100 dark:bg-[#162033] px-2.5 py-1 text-slate-500 dark:text-slate-400">
-                          Chưa có Video
-                        </span>
-                      )}
-
-                      <span className="flex items-center rounded-lg bg-slate-100 dark:bg-[#162033] px-2.5 py-1 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/40">
-                        <FileText className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
-                        {lesson.documentsCount || 0} tài liệu
-                      </span>
+                      </button>
 
                       <button
-                        onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
-                        title="Xóa bài học này"
-                        className="p-1 text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition ml-1"
+                        type="button"
+                        onClick={() => triggerVideoUpload(lesson.id)}
+                        disabled={isUploading}
+                        className="group flex items-center justify-between rounded-xl border border-dashed border-rose-300 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-500 px-4 py-3 text-left transition cursor-pointer disabled:opacity-50"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 group-hover:scale-105 transition-transform">
+                            {isCurrentLessonUploading && uploadTypeLabel === "VIDEO_HLS" ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Video className="h-4 w-4" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 dark:text-white">
+                              Upload Video Bài Giảng (HLS Adaptive)
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Kéo thả MP4/MOV • Tự động băm luồng HLS
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">
+                          Upload HLS
+                        </span>
                       </button>
                     </div>
                   </div>
-
-                  {/* Attachment Actions */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                    <button
-                      onClick={() => triggerDocUpload(lesson.id)}
-                      disabled={isUploading}
-                      className="flex items-center space-x-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/80 transition disabled:opacity-50"
-                    >
-                      <Upload className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>Upload Tài Liệu (PDF/Word)</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerVideoUpload(lesson.id)}
-                      disabled={isUploading}
-                      className="flex items-center space-x-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033] px-3.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/80 transition disabled:opacity-50"
-                    >
-                      <Video className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
-                      <span>Upload Video Bài Giảng</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -498,10 +628,10 @@ export default function TeacherClassDetailPage() {
       {activeSubTab === "announcements" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5 space-y-4">
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-4 shadow-sm">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-4 shadow-sm">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
-                  <Send className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
+                  <Send className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
                   Phát Thông Báo Mới
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -536,7 +666,7 @@ export default function TeacherClassDetailPage() {
                     placeholder="Ví dụ: Lịch nộp bài kiểm tra Speaking Tuần 3"
                     value={annTitle}
                     onChange={(e) => setAnnTitle(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600 transition"
                     required
                   />
                 </div>
@@ -549,14 +679,14 @@ export default function TeacherClassDetailPage() {
                     placeholder="Nhập chi tiết nội dung cần dặn dò, lưu ý hoặc dời lịch..."
                     value={annContent}
                     onChange={(e) => setAnnContent(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600 transition"
                     required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={sendingAnn}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-indigo-600 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-blue-800 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-blue-600 transition disabled:opacity-50"
                 >
                   {sendingAnn ? (
                     <>
@@ -577,26 +707,26 @@ export default function TeacherClassDetailPage() {
           <div className="lg:col-span-7 space-y-3.5">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
-                <Bell className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400" />
+                <Bell className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
                 Lịch Sử Thông Báo ({announcements.length})
               </h2>
               <button
                 onClick={loadAnnouncements}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-500"
+                className="text-xs text-blue-700 dark:text-blue-400 hover:text-blue-600"
               >
                 Làm mới
               </button>
             </div>
 
             {annLoading && (
-              <div className="flex items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mr-2" />
+              <div className="flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-slate-400">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
                 <span className="text-xs">Đang tải lịch sử thông báo...</span>
               </div>
             )}
 
             {!annLoading && announcements.length === 0 && (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center">
                 <Inbox className="h-8 w-8 text-slate-400 mb-2" />
                 <p className="text-xs text-slate-500 dark:text-slate-400">Chưa có thông báo nào được phát trong lớp này.</p>
               </div>
@@ -607,7 +737,7 @@ export default function TeacherClassDetailPage() {
                 {announcements.map((ann, idx) => (
                   <div
                     key={ann.id || idx}
-                    className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm"
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm"
                   >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-900 dark:text-white text-sm">
@@ -635,7 +765,7 @@ export default function TeacherClassDetailPage() {
       {/* ================================================================= */}
       {showLessonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 shadow-elevated space-y-4">
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Soạn Bài Giảng Mới</h2>
             <form onSubmit={handleCreateLesson} className="space-y-3.5 text-xs">
               <div>
@@ -647,7 +777,7 @@ export default function TeacherClassDetailPage() {
                   placeholder="Ví dụ: Unit 3: Conditionals & Mixed Sentences"
                   value={lessonTitle}
                   onChange={(e) => setLessonTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600"
                   required
                 />
               </div>
@@ -661,7 +791,7 @@ export default function TeacherClassDetailPage() {
                   placeholder="Mô tả kỹ năng, từ vựng hoặc điểm ngữ pháp trọng tâm..."
                   value={lessonObjectives}
                   onChange={(e) => setLessonObjectives(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600"
                 />
               </div>
 
@@ -676,7 +806,7 @@ export default function TeacherClassDetailPage() {
                 <button
                   type="submit"
                   disabled={isCreatingLesson}
-                  className="inline-flex items-center space-x-1.5 rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+                  className="inline-flex items-center space-x-1.5 rounded-xl bg-blue-800 px-4 py-2 font-semibold text-white hover:bg-blue-600 shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
                 >
                   {isCreatingLesson ? (
                     <>

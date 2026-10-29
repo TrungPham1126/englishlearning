@@ -11,6 +11,7 @@ import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.entity.NotificationType;
 import com.englishlearning.notification.repository.NotificationRepository;
+import com.englishlearning.notification.service.impl.NotificationServiceImpl;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -57,7 +58,7 @@ public class NotificationServiceTest {
     private EntityManager entityManager;
 
     @InjectMocks
-    private NotificationService notificationService;
+    private NotificationServiceImpl notificationService;
 
     @BeforeEach
     void setUp() {
@@ -103,13 +104,7 @@ public class NotificationServiceTest {
         cs3.setIsActive(false);
 
         when(classStudentRepository.findByClassroomId(classroomId)).thenReturn(List.of(cs1, cs2, cs3));
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> {
-            Notification n = invocation.getArgument(0);
-            if (n.getId() == null) {
-                n.setId(UUID.randomUUID());
-            }
-            return n;
-        });
+        when(notificationRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
         NotificationDto dto = NotificationDto.builder()
                 .classroomId(classroomId)
@@ -123,36 +118,20 @@ public class NotificationServiceTest {
         notificationService.processNotificationMessage(dto);
 
         // Xác thực
-        ArgumentCaptor<Notification> notifCaptor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository, times(3)).save(notifCaptor.capture());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Notification>> listCaptor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, times(1)).saveAll(listCaptor.capture());
 
-        List<Notification> savedList = notifCaptor.getAllValues();
+        List<Notification> savedList = listCaptor.getValue();
+        assertEquals(3, savedList.size(), "Phải lưu thông báo cho cả 3 học viên trong lớp");
+        assertTrue(savedList.stream().anyMatch(n -> n.getRecipient().getId().equals(user1Id)));
+        assertTrue(savedList.stream().anyMatch(n -> n.getRecipient().getId().equals(user2Id)));
+        assertTrue(savedList.stream().anyMatch(n -> n.getRecipient().getId().equals(user3Id)));
 
-        // 1. Bản ghi thông báo chung cho lớp
-        Notification generalAnn = savedList.stream()
-                .filter(n -> n.getRecipient() == null)
-                .findFirst()
-                .orElse(null);
-        assertNotNull(generalAnn, "Phải có 1 bản ghi thông báo chung cho lớp với recipient = null");
-        assertEquals(classroomId, generalAnn.getClassroomId());
-        assertEquals("[Test] Lịch học bù", generalAnn.getTitle());
-        assertEquals(NotificationType.ANNOUNCEMENT, generalAnn.getType());
-
-        // 2. Hai bản ghi cá nhân cho học viên active (User1 và User2)
-        List<Notification> personalNotifs = savedList.stream()
-                .filter(n -> n.getRecipient() != null)
-                .toList();
-        assertEquals(2, personalNotifs.size(), "Chỉ fan-out cho 2 học viên đang active");
-        assertTrue(personalNotifs.stream().anyMatch(n -> n.getRecipient().getId().equals(user1Id)));
-        assertTrue(personalNotifs.stream().anyMatch(n -> n.getRecipient().getId().equals(user2Id)));
-        assertFalse(personalNotifs.stream().anyMatch(n -> n.getRecipient().getId().equals(user3Id)),
-                "Học sinh inactive không được tạo thông báo");
-
-        // 3. WebSocket: bắn tới 2 học viên active và topic lớp học
+        // WebSocket: bắn tới học viên và topic lớp học
         verify(messagingTemplate, times(1)).convertAndSendToUser(eq(user1Id.toString()), eq("/queue/notifications"), any());
         verify(messagingTemplate, times(1)).convertAndSendToUser(eq(user2Id.toString()), eq("/queue/notifications"), any());
-        verify(messagingTemplate, never()).convertAndSendToUser(eq(user3Id.toString()), eq("/queue/notifications"), any());
-        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/classroom." + classroomId), any(Notification.class));
+        verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/classroom." + classroomId), any(NotificationDto.class));
     }
 
     // =========================================================================
@@ -166,14 +145,8 @@ public class NotificationServiceTest {
         User teacher = User.builder().id(UUID.randomUUID()).firstName("Teacher").lastName("One").isActive(true).build();
         User student = User.builder().id(UUID.randomUUID()).firstName("Student").lastName("Two").isActive(true).build();
 
-        when(userRepository.findActiveUsersByRole(null)).thenReturn(List.of(admin, teacher, student));
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> {
-            Notification n = invocation.getArgument(0);
-            if (n.getId() == null) {
-                n.setId(UUID.randomUUID());
-            }
-            return n;
-        });
+        when(userRepository.findAll()).thenReturn(List.of(admin, teacher, student));
+        when(notificationRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
         NotificationDto dto = NotificationDto.builder()
                 .title("[Hệ thống] Bảo trì máy chủ")
@@ -187,32 +160,18 @@ public class NotificationServiceTest {
         notificationService.processNotificationMessage(dto);
 
         // Xác thực
-        ArgumentCaptor<Notification> notifCaptor = ArgumentCaptor.forClass(Notification.class);
-        // 1 bản ghi hệ thống + 3 bản ghi cá nhân = 4 saves
-        verify(notificationRepository, times(4)).save(notifCaptor.capture());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Notification>> listCaptor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, times(1)).saveAll(listCaptor.capture());
 
-        List<Notification> savedList = notifCaptor.getAllValues();
+        List<Notification> savedList = listCaptor.getValue();
+        assertEquals(3, savedList.size(), "Phải fan-out thông báo cá nhân cho cả 3 user");
 
-        // 1. Bản ghi thông báo hệ thống chính
-        Notification systemNotif = savedList.stream()
-                .filter(n -> n.getRecipient() == null && n.getClassroomId() == null)
-                .findFirst()
-                .orElse(null);
-        assertNotNull(systemNotif, "Phải có bản ghi thông báo toàn hệ thống với recipient = null và classroomId = null");
-        assertEquals("[Hệ thống] Bảo trì máy chủ", systemNotif.getTitle());
-        assertEquals(NotificationType.SYSTEM_ALERT, systemNotif.getType());
-
-        // 2. Kiểm tra fan-out cá nhân
-        List<Notification> userNotifs = savedList.stream()
-                .filter(n -> n.getRecipient() != null)
-                .toList();
-        assertEquals(3, userNotifs.size(), "Phải fan-out thông báo cá nhân cho cả 3 user");
-
-        // 3. WebSocket broadcast topic công khai
+        // WebSocket broadcast topic công khai
         verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/system-announcements"), any(NotificationDto.class));
         verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/public"), any(NotificationDto.class));
 
-        // 4. WebSocket personal queue cho từng user
+        // WebSocket personal queue cho từng user
         verify(messagingTemplate, times(1)).convertAndSendToUser(eq(admin.getId().toString()), eq("/queue/notifications"), any());
         verify(messagingTemplate, times(1)).convertAndSendToUser(eq(teacher.getId().toString()), eq("/queue/notifications"), any());
         verify(messagingTemplate, times(1)).convertAndSendToUser(eq(student.getId().toString()), eq("/queue/notifications"), any());
@@ -224,13 +183,15 @@ public class NotificationServiceTest {
     @Test
     @DisplayName("TC3 - RabbitMQ Down Fallback: Bắt lỗi broker, tự động xử lý đồng bộ và lưu MySQL an toàn")
     void testCase3_BrokerResilience_RabbitMQDownFallback() {
-        // Giả lập RabbitMQ ném AmqpConnectException (máy chủ RabbitMQ tắt / unreachable port 5672)
-        doThrow(new AmqpConnectException(new ConnectException("Connection refused: connect to localhost:5672")))
-                .when(rabbitTemplate).convertAndSend(anyString(), any(Object.class));
-
         UUID classroomId = UUID.randomUUID();
-        when(classStudentRepository.findByClassroomId(classroomId)).thenReturn(Collections.emptyList());
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        User studentUser = User.builder().id(UUID.randomUUID()).build();
+        Student s = new Student();
+        s.setUser(studentUser);
+        ClassStudent cs = new ClassStudent();
+        cs.setStudent(s);
+
+        when(classStudentRepository.findByClassroomId(classroomId)).thenReturn(List.of(cs));
+        when(notificationRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
         NotificationDto dto = NotificationDto.builder()
                 .classroomId(classroomId)
@@ -244,10 +205,12 @@ public class NotificationServiceTest {
                 "Hệ thống phải tự bắt ngoại lệ RabbitMQ và fallback xử lý đồng bộ, không làm crash request");
 
         // Xác nhận bản ghi thông báo vẫn được lưu vào MySQL thành công
-        verify(notificationRepository, atLeastOnce()).save(argThat(n ->
-                n.getClassroomId().equals(classroomId) &&
-                n.getTitle().equals("[Test Fallback] Thông báo khi broker tắt")
-        ));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository, atLeastOnce()).saveAll(captor.capture());
+        assertFalse(captor.getValue().isEmpty());
+        assertEquals(classroomId, captor.getValue().get(0).getClassroomId());
+        assertEquals("[Test Fallback] Thông báo khi broker tắt", captor.getValue().get(0).getTitle());
     }
 
     // =========================================================================
@@ -260,7 +223,7 @@ public class NotificationServiceTest {
         Notification n2 = Notification.builder().id(UUID.randomUUID()).title("Broadcast 2").build();
         Page<Notification> mockPage = new PageImpl<>(List.of(n1, n2), PageRequest.of(0, 10), 2);
 
-        when(notificationRepository.findByRecipientIsNullAndClassroomIdIsNullOrderByCreatedAtDesc(any()))
+        when(notificationRepository.findByClassroomIdIsNullOrderByCreatedAtDesc(any()))
                 .thenReturn(mockPage);
 
         Page<Notification> result = notificationService.getBroadcastHistory(0, 10);

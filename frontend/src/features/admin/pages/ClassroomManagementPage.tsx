@@ -100,7 +100,7 @@ export default function ClassroomManagementPage() {
   if (loading)
     return (
       <div className="flex justify-center p-20">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <Loader2 className="animate-spin text-blue-700" size={32} />
       </div>
     );
 
@@ -110,7 +110,7 @@ export default function ClassroomManagementPage() {
       {pendingVideoCount > 0 && (
         <div
           onClick={() => navigate("/admin/video-moderation")}
-          className="bg-rose-50 border-2 border-rose-400 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in slide-in-from-top cursor-pointer hover:border-rose-500 transition"
+          className="bg-rose-50 border-2 border-rose-400 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in slide-in-from-top cursor-pointer hover:border-rose-500 transition"
         >
           <div className="flex items-center gap-4">
             <div className="bg-rose-600 text-white p-3.5 rounded-xl shadow-md animate-pulse">
@@ -133,7 +133,7 @@ export default function ClassroomManagementPage() {
       {/* Clean Open Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <School size={14} />
             <span>Chương Trình Đào Tạo</span>
           </div>
@@ -146,14 +146,14 @@ export default function ClassroomManagementPage() {
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+          className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
         >
           <Plus size={18} /> Khởi tạo Lớp Mới
         </button>
       </div>
 
       {/* FILTER CONTROLS */}
-      <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-white dark:bg-[#111827] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+      <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-white dark:bg-[#111827] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
         {/* Status Filter */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto">
           {[
@@ -168,7 +168,7 @@ export default function ClassroomManagementPage() {
               onClick={() => setStatusFilter(st.value)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 statusFilter === st.value
-                  ? "bg-indigo-600 text-white shadow-sm"
+                  ? "bg-blue-800 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
@@ -182,7 +182,7 @@ export default function ClassroomManagementPage() {
           <select
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
-            className="border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-600 bg-white dark:bg-[#0b1120]"
+            className="border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-700 bg-white dark:bg-[#0b1120]"
           >
             <option value="ALL">Tất cả Trình độ</option>
             <option value="A1">Level A1</option>
@@ -199,14 +199,14 @@ export default function ClassroomManagementPage() {
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="Tìm theo tên lớp, GV..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-600"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-blue-700"
             />
           </div>
         </div>
       </div>
 
       {filteredClasses.length === 0 ? (
-        <div className="bg-white dark:bg-[#111827] p-16 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm transition-colors">
+        <div className="bg-white dark:bg-[#111827] p-16 rounded-xl border border-slate-200 dark:border-slate-800 text-center shadow-sm transition-colors">
           <School size={48} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
           <h4 className="text-base font-bold text-slate-800 dark:text-white">Không tìm thấy lớp học nào</h4>
           <p className="text-xs text-slate-400 mt-1">
@@ -219,10 +219,10 @@ export default function ClassroomManagementPage() {
             <div
               key={cls.id}
               onClick={() => navigate(`/admin/classrooms/${cls.id}`)}
-              className="group bg-white dark:bg-[#111827] rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col h-full relative transition cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md"
+              className="group bg-white dark:bg-[#111827] rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col h-full relative transition cursor-pointer hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md"
             >
               <div className="flex justify-between items-start mb-4">
-                <div className="bg-indigo-50 dark:bg-indigo-500/15 p-3 rounded-xl text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <div className="bg-blue-50 dark:bg-blue-600/15 p-3 rounded-xl text-blue-700 dark:text-blue-400 group-hover:bg-blue-800 group-hover:text-white transition-colors">
                   <School size={24} />
                 </div>
                 <span
@@ -232,7 +232,7 @@ export default function ClassroomManagementPage() {
                 </span>
               </div>
 
-              <h3 className="text-lg font-black text-slate-900 dark:text-white mb-1 leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white mb-1 leading-tight group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
                 {cls.name}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-5 line-clamp-2">
@@ -256,7 +256,7 @@ export default function ClassroomManagementPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs font-bold text-indigo-600 dark:text-indigo-400">
+              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs font-bold text-blue-700 dark:text-blue-400">
                 Truy cập quản trị <ChevronRight size={14} className="ml-1" />
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function ClassroomManagementPage() {
       {/* MODAL TẠO LỚP HỌC */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl shadow-card w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-[#162033]">
               <h2 className="text-lg font-black text-slate-900 dark:text-white">
                 Tạo Lớp Học Mới
@@ -291,7 +291,7 @@ export default function ClassroomManagementPage() {
                   onChange={(e) =>
                     setClassForm({ ...classForm, name: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900 dark:text-slate-100"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 dark:text-slate-100"
                   placeholder="VD: IELTS Intensive K01"
                 />
               </div>
@@ -305,7 +305,7 @@ export default function ClassroomManagementPage() {
                     onChange={(e) =>
                       setClassForm({ ...classForm, level: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900 dark:text-slate-100"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 dark:text-slate-100"
                   >
                     <option value="A1">A1</option>
                     <option value="A2">A2</option>
@@ -327,7 +327,7 @@ export default function ClassroomManagementPage() {
                         maxStudents: Number(e.target.value),
                       })
                     }
-                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900 dark:text-slate-100"
+                    className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -342,7 +342,7 @@ export default function ClassroomManagementPage() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer shadow-sm disabled:opacity-50"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {isSaving ? (
                     <Loader2 size={16} className="animate-spin" />

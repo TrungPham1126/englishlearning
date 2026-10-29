@@ -2,6 +2,7 @@ package com.englishlearning.video.controller;
 
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.video.dto.VideoUploadResponse;
 import com.englishlearning.video.dto.WatchProgressRequest;
 import com.englishlearning.video.entity.Video;
@@ -36,16 +37,41 @@ public class VideoController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<VideoUploadResponse>> uploadVideo(
-            @RequestParam("lessonId") UUID lessonId,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "lessonId", required = false) UUID lessonId,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "video", required = false) MultipartFile videoFile,
+            @RequestParam(value = "title", required = false) String title,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        VideoUploadResponse res = videoService.uploadOriginalVideo(lessonId, file, userDetails.getId());
+        MultipartFile targetFile = (file != null && !file.isEmpty()) ? file : videoFile;
+        if (targetFile == null || targetFile.isEmpty()) {
+            throw new BadRequestException("Vui lòng đính kèm file video bài giảng.");
+        }
+        if (lessonId == null) {
+            throw new BadRequestException("Thiếu mã bài học (lessonId).");
+        }
+        VideoUploadResponse res = videoService.uploadOriginalVideo(lessonId, targetFile, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(res));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<Video>> getVideoDetails(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(videoService.getVideoById(id)));
+    }
+
+    @GetMapping("/{id}/raw")
+    public ResponseEntity<Resource> serveRawVideo(@PathVariable UUID id) {
+        Video video = videoService.getVideoById(id);
+        if (video == null || video.getRawStorageUrl() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        File file = new File(video.getRawStorageUrl());
+        if (!file.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
+                .contentType(MediaType.valueOf("video/mp4"))
+                .body(new FileSystemResource(file));
     }
 
     @PostMapping("/{id}/progress")
@@ -77,7 +103,11 @@ public class VideoController {
 
     @GetMapping("/lesson/{lessonId}")
     public ResponseEntity<ApiResponse<Video>> getVideoByLesson(@PathVariable UUID lessonId) {
-        return ResponseEntity.ok(ApiResponse.success(videoService.getVideoByLessonId(lessonId)));
+        Video video = videoService.getVideoByLessonId(lessonId);
+        if (video == null) {
+            return ResponseEntity.ok(ApiResponse.success("Bài học chưa có video", null));
+        }
+        return ResponseEntity.ok(ApiResponse.success(video));
     }
 
     @GetMapping("/{id}/progress")

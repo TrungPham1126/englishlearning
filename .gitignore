@@ -78,3 +78,12 @@ test_audio_cache/
 uploads/
 !uploads/.gitkeep
 
+### Agent & Assistant Metadata ###
+.claude/
+.impeccable/
+.github/
+AGENTS.md
+DESIGN.md
+PRODUCT.md
+
+

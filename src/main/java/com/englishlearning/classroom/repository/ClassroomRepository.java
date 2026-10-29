@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -16,4 +17,6 @@ public interface ClassroomRepository extends JpaRepository<Classroom, UUID> {
     long countByStatus(ClassStatus status);
     List<Classroom> findByTeacherId(UUID teacherId);
     boolean existsByNameIgnoreCase(String name);
+    Optional<Classroom> findByJoinCode(String joinCode);
+    boolean existsByJoinCode(String joinCode);
 }

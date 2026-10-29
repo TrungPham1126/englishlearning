@@ -47,7 +47,7 @@ export default function AdminReportsPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500">
-        <Loader2 className="animate-spin text-indigo-600 mb-3" size={36} />
+        <Loader2 className="animate-spin text-blue-700 mb-3" size={36} />
         <p className="text-sm font-semibold">Đang tổng hợp báo cáo trung tâm...</p>
       </div>
     );
@@ -78,7 +78,7 @@ export default function AdminReportsPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent print:hidden">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
             <BarChart3 size={14} />
             <span>Báo Cáo Học Vụ & Hiệu Quả</span>
           </div>
@@ -92,7 +92,7 @@ export default function AdminReportsPage() {
 
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-xs"
+          className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-xs"
         >
           <Printer size={16} /> In Báo Cáo
         </button>
@@ -100,7 +100,7 @@ export default function AdminReportsPage() {
 
       {/* 2. CENTER HIGH-LEVEL SUMMARY CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Học viên toàn hệ thống
           </span>
@@ -112,11 +112,11 @@ export default function AdminReportsPage() {
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Đội ngũ Giảng viên
           </span>
-          <span className="text-3xl font-black text-indigo-600 block mt-2">
+          <span className="text-3xl font-black text-blue-700 block mt-2">
             {stats?.totalTeachers || 0}
           </span>
           <span className="text-xs text-slate-500 mt-1 block">
@@ -124,7 +124,7 @@ export default function AdminReportsPage() {
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Lớp đang giảng dạy
           </span>
@@ -136,7 +136,7 @@ export default function AdminReportsPage() {
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
             Lượt nộp bài tập
           </span>
@@ -150,11 +150,11 @@ export default function AdminReportsPage() {
       </div>
 
       {/* 3. CEFR LEVEL DISTRIBUTION */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
             <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-              <Layers size={18} className="text-indigo-600" /> Phân Bổ Quy Mô Theo Trình Độ (CEFR Level)
+              <Layers size={18} className="text-blue-700" /> Phân Bổ Quy Mô Theo Trình Độ (CEFR Level)
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Số lượng lớp và học viên đang theo học theo từng cấp độ
@@ -171,11 +171,11 @@ export default function AdminReportsPage() {
             return (
               <div
                 key={level}
-                className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between"
+                className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
+                    <span className="text-xs font-black text-blue-800 bg-blue-100 px-2.5 py-1 rounded-lg">
                       {level}
                     </span>
                     <span className="text-xs font-bold text-slate-500">{pct}%</span>
@@ -191,7 +191,7 @@ export default function AdminReportsPage() {
 
                 <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-4">
                   <div
-                    className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                    className="bg-blue-800 h-full rounded-full transition-all duration-500"
                     style={{ width: `${Math.max(pct, 5)}%` }}
                   />
                 </div>
@@ -202,10 +202,10 @@ export default function AdminReportsPage() {
       </div>
 
       {/* 4. TEACHER WORKLOAD ROSTER */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-            <GraduationCap size={18} className="text-indigo-600" /> Báo Cáo Phân Công & Tải Giảng Dạy Của Giảng Viên
+            <GraduationCap size={18} className="text-blue-700" /> Báo Cáo Phân Công & Tải Giảng Dạy Của Giảng Viên
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Danh sách giáo viên, các lớp phụ trách và tổng số học sinh đang theo học
@@ -215,7 +215,7 @@ export default function AdminReportsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-200">
+              <tr className="bg-slate-50 dark:bg-slate-800/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-700">
                 <th className="p-4 pl-6">Giảng Viên</th>
                 <th className="p-4">Email</th>
                 <th className="p-4">Lớp Học Đang Phụ Trách</th>
@@ -231,7 +231,7 @@ export default function AdminReportsPage() {
                   0,
                 );
                 return (
-                  <tr key={teacher.id} className="hover:bg-slate-50/80 transition">
+                  <tr key={teacher.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition">
                     <td className="p-4 pl-6 font-bold text-slate-900">
                       {teacher.lastName} {teacher.firstName}
                     </td>

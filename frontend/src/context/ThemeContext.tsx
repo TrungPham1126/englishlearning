@@ -83,8 +83,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [themeMode]);
 
   const setTheme = (newTheme: Theme) => {
+    applyThemeToDOM(newTheme);
     setThemeModeState(newTheme);
     setThemeState(newTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+      localStorage.setItem("elp_theme", newTheme);
+    } catch {}
   };
 
   const setThemeMode = (mode: ThemeMode) => {
@@ -95,17 +100,31 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         window.matchMedia &&
         window.matchMedia("(prefers-color-scheme: dark)").matches;
       const next = prefersDark ? "dark" : "light";
+      applyThemeToDOM(next);
       setThemeState(next);
-      localStorage.setItem(THEME_STORAGE_KEY, "system");
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, "system");
+        localStorage.setItem("elp_theme", "system");
+      } catch {}
     } else {
+      applyThemeToDOM(mode);
       setThemeState(mode);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, mode);
+        localStorage.setItem("elp_theme", mode);
+      } catch {}
     }
   };
 
   const toggleTheme = () => {
     setThemeState((prev) => {
       const next = prev === "dark" ? "light" : "dark";
+      applyThemeToDOM(next);
       setThemeModeState(next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+        localStorage.setItem("elp_theme", next);
+      } catch {}
       return next;
     });
   };

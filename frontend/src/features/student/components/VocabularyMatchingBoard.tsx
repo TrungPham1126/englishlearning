@@ -516,10 +516,10 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
   return (
     <div className="space-y-6">
       {/* Header Bảng Điều Khiển Nối Từ */}
-      <div className="bg-gradient-to-r from-indigo-500/10 via-emerald-500/10 to-teal-500/10 dark:from-indigo-950/40 dark:via-emerald-950/30 dark:to-teal-950/30 p-5 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/80 backdrop-blur-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-surface-card p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-600 text-white flex items-center gap-1 shadow-xs">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-800 text-white flex items-center gap-1 shadow-xs">
               <Sparkles size={12} /> BÀI TẬP NỐI TỪ VỰNG TƯƠNG TÁC (MATCHING)
             </span>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -535,11 +535,11 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
         <div className="w-full md:w-auto flex items-center gap-3">
           <div className="w-full md:w-48 bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5">
             <div
-              className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+              className="bg-brand-600 h-full rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 shrink-0">
+          <span className="text-xs font-black text-blue-800 dark:text-blue-300 shrink-0">
             {matchedCount}/{leftItems.length} cặp ({progressPercent}%)
           </span>
           {!isReview && matchedCount > 0 && (
@@ -558,7 +558,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
       {/* KHUNG BÀI LÀM 2 CỘT KÈM LỚP SVG VẼ TIA NỐI (INTERACTIVE BOARD OVERLAY) */}
       <div
         ref={containerRef}
-        className="relative bg-slate-50/50 dark:bg-slate-950/40 p-6 md:p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+        className="relative bg-slate-50/50 dark:bg-slate-950/40 p-6 md:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs"
       >
         {/* LỚP SVG PHỦ TOÀN KHUNG ĐỂ VẼ TIA NỐI TRỰC QUAN */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible">
@@ -630,7 +630,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
           <div className="w-full md:w-1/2 space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-black">
+                <span className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 flex items-center justify-center text-xs font-black">
                   A
                 </span>
                 <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
@@ -672,10 +672,10 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                             : "border-rose-500 bg-rose-50/70 dark:bg-rose-950/30"
                           : "border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/20"
                         : isSelected
-                        ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 shadow-md ring-2 ring-indigo-500/20"
+                        ? "border-blue-700 bg-blue-50/80 dark:bg-slate-900/60 shadow-md ring-2 ring-blue-600/20"
                         : isMatched
                         ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 hover:border-emerald-600"
-                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-850"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-400 dark:hover:border-blue-700 hover:bg-slate-50 dark:hover:bg-slate-850"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -691,7 +691,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                             : isMatched
                             ? "bg-emerald-600 text-white"
                             : isSelected
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-blue-800 text-white"
                             : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                         }`}
                       >
@@ -703,7 +703,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                         {/* 1. Bấm vào chữ Tiếng Anh để phát âm */}
                         <span
                           onClick={(e) => handlePlayAudio(item.word, item.audioUrl, e)}
-                          className="text-base md:text-lg font-black text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
+                          className="text-base md:text-lg font-black text-slate-900 dark:text-slate-100 hover:text-blue-700 dark:hover:text-blue-400 transition cursor-pointer"
                           title="Bấm để nghe phát âm"
                         >
                           {item.word}
@@ -713,7 +713,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                         {item.ipa && (
                           <span
                             onClick={(e) => handlePlayAudio(item.word, item.audioUrl, e)}
-                            className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/80 transition cursor-pointer"
+                            className="text-xs font-mono font-bold text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-slate-900/60 hover:bg-blue-100 dark:hover:bg-blue-950 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/80 transition cursor-pointer"
                             title="Phiên âm IPA - Bấm để nghe phát âm chuẩn"
                           >
                             {item.ipa}
@@ -729,14 +729,14 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                         onClick={(e) => handlePlayAudio(item.word, item.audioUrl, e)}
                         className={`p-1.5 rounded-lg border transition cursor-pointer ${
                           isPlaying
-                            ? "bg-indigo-600 text-white border-indigo-600 animate-pulse"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            ? "bg-blue-800 text-white border-blue-700 animate-pulse"
+                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-700 dark:hover:text-blue-400"
                         }`}
                         title="Nghe phát âm chuẩn bản xứ"
                       >
                         <Volume2
                           size={15}
-                          className={isPlaying ? "animate-bounce" : ""}
+                          className={isPlaying ? "scale-105 transition-transform" : ""}
                         />
                       </button>
 
@@ -771,7 +771,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                           : isMatched
                           ? "border-emerald-500 bg-emerald-500 ring-2 ring-emerald-200 dark:ring-emerald-900/40"
                           : isSelected
-                          ? "border-indigo-600 bg-indigo-600 ring-4 ring-indigo-200 dark:ring-indigo-900/60 animate-pulse"
+                          ? "border-blue-700 bg-blue-800 ring-4 ring-blue-500 dark:ring-blue-700/60 animate-pulse"
                           : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                       }`}
                     />
@@ -826,7 +826,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                             : "border-rose-500 bg-rose-50/70 dark:bg-rose-950/30"
                           : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 opacity-80"
                         : isSelected
-                        ? "border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 shadow-md ring-2 ring-indigo-500/20"
+                        ? "border-blue-700 bg-blue-50/80 dark:bg-slate-900/60 shadow-md ring-2 ring-blue-600/20"
                         : isMatched
                         ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 hover:border-emerald-600"
                         : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-850"
@@ -847,7 +847,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                           : isMatched
                           ? "border-emerald-500 bg-emerald-500 ring-2 ring-emerald-200 dark:ring-emerald-900/40"
                           : isSelected
-                          ? "border-indigo-600 bg-indigo-600 ring-4 ring-indigo-200 dark:ring-indigo-900/60 animate-pulse"
+                          ? "border-blue-700 bg-blue-800 ring-4 ring-blue-500 dark:ring-blue-700/60 animate-pulse"
                           : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                       }`}
                     />
@@ -864,7 +864,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                             : isMatched
                             ? "bg-emerald-600 text-white"
                             : isSelected
-                            ? "bg-indigo-600 text-white"
+                            ? "bg-blue-800 text-white"
                             : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                         }`}
                       >
@@ -907,7 +907,7 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                           <Check size={12} />
                         </span>
                       ) : isSelected ? (
-                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center animate-pulse shadow-xs">
+                        <span className="w-5 h-5 rounded-full bg-blue-800 text-white flex items-center justify-center animate-pulse shadow-xs">
                           <Sparkles size={11} />
                         </span>
                       ) : null}
@@ -922,10 +922,10 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
 
       {/* ================= BẢNG ĐỐI CHIẾU ĐÁP ÁN & GIẢI THÍCH CHI TIẾT (REVIEW MODE) ================= */}
       {isReview && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              <div className="p-2 rounded-xl bg-blue-50 dark:bg-slate-900/60 text-blue-700 dark:text-blue-400">
                 <BookOpen size={20} />
               </div>
               <div>
@@ -990,14 +990,14 @@ export const VocabularyMatchingBoard: React.FC<VocabularyMatchingBoardProps> = (
                         {item.word}
                       </span>
                       {item.ipa && (
-                        <span className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                        <span className="text-xs font-mono font-bold text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-slate-900/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
                           {item.ipa}
                         </span>
                       )}
                       <button
                         type="button"
                         onClick={(e) => handlePlayAudio(item.word, item.audioUrl, e)}
-                        className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                        className="p-1 rounded-md text-slate-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-slate-800 transition cursor-pointer"
                         title="Nghe lại phát âm"
                       >
                         <Volume2 size={14} />

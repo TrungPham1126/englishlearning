@@ -22,6 +22,7 @@ public class ClassroomResponse {
     private LocalDate startDate;
     private LocalDate endDate;
     private Integer maxStudents;
+    private String joinCode;
     private long currentStudentsCount;
     private UUID teacherId;
     private String teacherName;

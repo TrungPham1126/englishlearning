@@ -132,7 +132,7 @@ export default function VideoModerationPage() {
       </div>
 
       {/* 2. FILTER TABS */}
-      <div className="flex items-center gap-2 bg-white dark:bg-[#111827] p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto transition-colors">
+      <div className="flex items-center gap-2 bg-white dark:bg-[#111827] p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto transition-colors">
         <button
           onClick={() => setStatusFilter("PENDING_REVIEW")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
@@ -167,7 +167,7 @@ export default function VideoModerationPage() {
           onClick={() => setStatusFilter("ALL")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
             statusFilter === "ALL"
-              ? "bg-indigo-600 text-white shadow-md"
+              ? "bg-blue-800 text-white shadow-md"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
@@ -178,11 +178,11 @@ export default function VideoModerationPage() {
       {/* 3. VIDEOS LIST / GRID */}
       {loading ? (
         <div className="p-20 flex flex-col items-center justify-center text-slate-400">
-          <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
+          <Loader2 className="animate-spin text-blue-700 mb-2" size={32} />
           <p className="text-xs font-semibold">Đang tải danh sách video...</p>
         </div>
       ) : videos.length === 0 ? (
-        <div className="bg-white dark:bg-[#111827] p-16 rounded-3xl border border-slate-200 dark:border-slate-800 text-center shadow-sm transition-colors">
+        <div className="bg-white dark:bg-[#111827] p-16 rounded-xl border border-slate-200 dark:border-slate-800 text-center shadow-sm transition-colors">
           <CheckCircle2 size={56} className="text-emerald-400 mx-auto mb-3" />
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">
             {statusFilter === "PENDING_REVIEW"
@@ -198,12 +198,12 @@ export default function VideoModerationPage() {
           {videos.map((vid) => (
             <div
               key={vid.id}
-              className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col hover:border-slate-300 dark:hover:border-slate-700 transition"
+              className="bg-white dark:bg-[#111827] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col hover:border-slate-300 dark:hover:border-slate-700 transition"
             >
               {/* Video Player / Preview Area */}
               <div className="bg-black aspect-video relative flex items-center justify-center overflow-hidden">
                 {vid.hlsPlaylistUrl ? (
-                  <VideoPlayer videoId={vid.id} streamUrl={vid.hlsPlaylistUrl} />
+                  <VideoPlayer videoId={vid.id} streamUrl={vid.hlsPlaylistUrl} enableProgressSync={false} />
                 ) : (
                   <div className="text-slate-400 flex flex-col items-center">
                     <PlayCircle size={48} className="text-white/40 mb-2" />
@@ -217,7 +217,7 @@ export default function VideoModerationPage() {
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2 truncate">
-                      <FileVideo size={18} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <FileVideo size={18} className="text-blue-700 dark:text-blue-400 shrink-0" />
                       {vid.originalFileName}
                     </h3>
                     {getStatusBadge(vid.status)}
@@ -243,7 +243,7 @@ export default function VideoModerationPage() {
                     {vid.uploadedBy && (
                       <div className="flex items-center gap-2">
                         <span className="text-slate-400">Tải lên bởi:</span>
-                        <strong className="text-indigo-700 dark:text-indigo-400">
+                        <strong className="text-blue-800 dark:text-blue-400">
                           {vid.uploadedBy.lastName} {vid.uploadedBy.firstName} ({vid.uploadedBy.email})
                         </strong>
                       </div>
@@ -292,7 +292,7 @@ export default function VideoModerationPage() {
       {/* MODAL: TỪ CHỐI KÈM LÝ DO */}
       {rejectingVideo && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl shadow-card w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-[#162033]">
               <h2 className="text-base font-black text-rose-700 dark:text-rose-400 flex items-center gap-2">
                 <AlertCircle size={18} /> Từ Chối Phê Duyệt Video

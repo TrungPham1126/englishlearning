@@ -60,14 +60,14 @@ export default function LessonDetailPage() {
     <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* CỘT TRÁI: Video Player + Tab Content */}
       <div className="lg:col-span-8 space-y-4">
-        <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
-          {video?.hlsPlaylistUrl ? (
-            <VideoPlayer
-              videoId={video.id}
-              streamUrl={video.hlsPlaylistUrl}
-              initialSeconds={progress?.watchedSeconds || 0}
-            />
-          ) : (
+        {video?.hlsPlaylistUrl ? (
+          <VideoPlayer
+            videoId={video.id}
+            streamUrl={video.hlsPlaylistUrl}
+            initialSeconds={progress?.watchedSeconds || 0}
+          />
+        ) : (
+          <div className="relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
             <div className="flex flex-col items-center justify-center">
               <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-slate-300 mb-3 border border-white/10 shadow-inner">
                 <Play size={24} className="translate-x-0.5 fill-slate-300/20 text-slate-300" />
@@ -79,10 +79,10 @@ export default function LessonDetailPage() {
                 Giảng viên chưa tải lên video bài giảng. Vui lòng xem tài liệu hoặc làm bài tập bên dưới.
               </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] rounded-2xl shadow-sm overflow-hidden transition-colors">
+        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] rounded-xl shadow-sm overflow-hidden transition-colors">
           <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 bg-slate-50/50 dark:bg-slate-900/40">
             {[
               { id: "overview", label: "Tổng Quan" },
@@ -98,7 +98,7 @@ export default function LessonDetailPage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
                   activeTab === tab.id
-                    ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 bg-white dark:bg-[#111827]"
+                    ? "border-blue-700 text-blue-700 dark:border-blue-400 dark:text-blue-400 bg-white dark:bg-[#111827]"
                     : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
@@ -204,7 +204,7 @@ export default function LessonDetailPage() {
       </div>
 
       {/* CỘT PHẢI: Danh Sách Bài Học */}
-      <div className="lg:col-span-4 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm overflow-hidden flex flex-col gap-4">
+      <div className="lg:col-span-4 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm overflow-hidden flex flex-col gap-4">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
@@ -226,7 +226,7 @@ export default function LessonDetailPage() {
                 onClick={() => navigate(`/student/lessons/${item.id}`)}
                 className={`p-3 rounded-xl flex items-center justify-between text-xs cursor-pointer transition-all duration-150 ${
                   isCurrent
-                    ? "bg-indigo-50 dark:bg-indigo-950/40 border-l-4 border-indigo-600 dark:border-indigo-400 border-y border-r border-indigo-200 dark:border-indigo-800/60 shadow-sm"
+                    ? "bg-blue-50 dark:bg-slate-900/40 border border-blue-700 dark:border-blue-500 shadow-sm"
                     : "bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
                 }`}
               >
@@ -234,7 +234,7 @@ export default function LessonDetailPage() {
                   <span
                     className={
                       isCurrent
-                        ? "text-indigo-600 dark:text-indigo-400 font-extrabold text-sm"
+                        ? "text-blue-700 dark:text-blue-400 font-extrabold text-sm"
                         : "text-slate-400 dark:text-slate-500 font-semibold text-sm"
                     }
                   >
@@ -243,7 +243,7 @@ export default function LessonDetailPage() {
                   <span
                     className={
                       isCurrent
-                        ? "text-indigo-950 dark:text-indigo-100 font-bold text-sm tracking-tight truncate"
+                        ? "text-blue-950 dark:text-blue-100 font-bold text-sm tracking-tight truncate"
                         : "font-medium truncate"
                     }
                   >
@@ -251,7 +251,7 @@ export default function LessonDetailPage() {
                   </span>
                 </div>
                 {isCurrent ? (
-                  <span className="bg-indigo-600 text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shadow-sm shrink-0">
+                  <span className="bg-blue-800 text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shadow-sm shrink-0">
                     Đang xem
                   </span>
                 ) : (
@@ -269,7 +269,7 @@ export default function LessonDetailPage() {
               onClick={() =>
                 navigate(`/student/courses/${lesson.classId}/daily-plan`)
               }
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl shadow-sm transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-800 text-white font-bold text-xs py-3 rounded-xl shadow-sm transition-colors cursor-pointer"
             >
               <Calendar size={15} />
               <span>Bài Tập Hàng Ngày (Daily Plan)</span>

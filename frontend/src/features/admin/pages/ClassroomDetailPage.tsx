@@ -268,7 +268,7 @@ export default function ClassroomDetailPage() {
   if (loading)
     return (
       <div className="flex justify-center p-20">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <Loader2 className="animate-spin text-blue-700" size={32} />
       </div>
     );
   if (!classroom)
@@ -284,13 +284,13 @@ export default function ClassroomDetailPage() {
       <div className="pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent space-y-4">
         <button
           onClick={() => navigate("/admin/classrooms")}
-          className="inline-flex items-center gap-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 text-xs font-bold transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-slate-500 hover:text-blue-700 dark:text-slate-400 dark:hover:text-blue-400 text-xs font-bold transition cursor-pointer"
         >
           <ArrowLeft size={14} /> Quay lại danh sách
         </button>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/50 mb-2">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
               <School size={14} />
               <span>Chi Tiết Lớp Học</span>
             </div>
@@ -300,7 +300,7 @@ export default function ClassroomDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800 uppercase">
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-slate-900/50 text-blue-800 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900 uppercase">
               Level: {classroom.level}
             </span>
             <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-[#111827] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -317,19 +317,19 @@ export default function ClassroomDetailPage() {
       <div className="flex items-center gap-6 border-b border-slate-200 px-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab("lessons")}
-          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "lessons" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "lessons" ? "border-blue-700 text-blue-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <BookOpen size={16} /> Giáo Trình & Bài Giảng
         </button>
         <button
           onClick={() => setActiveTab("settings")}
-          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "settings" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "settings" ? "border-blue-700 text-blue-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <Settings2 size={16} /> Cấu hình chung
         </button>
         <button
           onClick={() => setActiveTab("students")}
-          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "students" ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`pb-3 text-sm font-black uppercase tracking-wider transition cursor-pointer border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === "students" ? "border-blue-700 text-blue-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <UserPlus size={16} /> Ghi danh Học viên
         </button>
@@ -351,19 +351,19 @@ export default function ClassroomDetailPage() {
       {/* ========================================================= */}
       {activeTab === "lessons" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div>
-              <h2 className="text-lg font-black text-slate-800">
+              <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
                 Cấu trúc Giáo trình
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Tạo các bài giảng (Lesson) để giảng viên có thể tải lên Video và
                 Từ vựng.
               </p>
             </div>
             <button
               onClick={() => setIsLessonModalOpen(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
             >
               <Plus size={16} /> Thêm Bài Giảng
             </button>
@@ -371,7 +371,7 @@ export default function ClassroomDetailPage() {
 
           <div className="grid gap-3">
             {lessons.length === 0 ? (
-              <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500 text-sm font-semibold">
+              <div className="bg-white dark:bg-slate-900 p-12 rounded-xl border border-slate-200 dark:border-slate-800 text-center text-slate-500 dark:text-slate-400 text-sm font-semibold">
                 Lớp học này chưa có bài giảng nào. Hãy bấm "Thêm Bài Giảng" để
                 bắt đầu.
               </div>
@@ -380,17 +380,17 @@ export default function ClassroomDetailPage() {
                 <div
                   key={lesson.id}
                   onClick={() => navigate(`/admin/lessons/${lesson.id}`)}
-                  className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-indigo-400 hover:shadow-md transition cursor-pointer"
+                  className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-blue-400 dark:hover:border-blue-600/50 hover:shadow-md transition cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-700 font-black flex items-center justify-center text-lg">
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 font-black flex items-center justify-center text-lg">
                       {lesson.orderIndex || idx + 1}
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-900 text-base">
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
                         {lesson.title}
                       </h3>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
                         {lesson.objectives || "Chưa có mục tiêu bài học"}
                       </p>
                     </div>
@@ -416,9 +416,9 @@ export default function ClassroomDetailPage() {
       {/* MODAL TẠO BÀI GIẢNG MỚI */}
       {isLessonModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-black text-slate-800">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
+              <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
                 Tạo Bài Giảng Mới
               </h2>
               <button
@@ -444,7 +444,7 @@ export default function ClassroomDetailPage() {
                         orderIndex: Number(e.target.value),
                       })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold"
+                    className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold"
                   />
                 </div>
                 <div className="col-span-3">
@@ -458,7 +458,7 @@ export default function ClassroomDetailPage() {
                     onChange={(e) =>
                       setLessonForm({ ...lessonForm, title: e.target.value })
                     }
-                    className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold"
+                    className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold"
                     placeholder="VD: Unit 1 - Introduction"
                   />
                 </div>
@@ -473,7 +473,7 @@ export default function ClassroomDetailPage() {
                   onChange={(e) =>
                     setLessonForm({ ...lessonForm, objectives: e.target.value })
                   }
-                  className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm"
+                  className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm"
                   placeholder="VD: Học viên nắm được từ vựng chào hỏi cơ bản..."
                 />
               </div>
@@ -488,7 +488,7 @@ export default function ClassroomDetailPage() {
                 <button
                   type="submit"
                   disabled={isProcessing}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer shadow-sm disabled:opacity-50"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {isProcessing && (
                     <Loader2 size={16} className="animate-spin" />
@@ -508,7 +508,7 @@ export default function ClassroomDetailPage() {
       {activeTab === "videos" && (
         <div className="space-y-6">
           {pendingVideos.length === 0 ? (
-            <div className="bg-white p-16 rounded-2xl border border-slate-200 text-center shadow-sm">
+            <div className="bg-white dark:bg-slate-900 p-16 rounded-xl border border-slate-200 dark:border-slate-800 text-center shadow-sm">
               <CheckCircle
                 size={56}
                 className="text-emerald-400 mx-auto mb-4"
@@ -522,13 +522,14 @@ export default function ClassroomDetailPage() {
               {pendingVideos.map((vid) => (
                 <div
                   key={vid.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
+                  className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col"
                 >
                   <div className="bg-black aspect-video relative flex items-center justify-center">
                     {vid.hlsPlaylistUrl ? (
                       <VideoPlayer
                         videoId={vid.id}
                         streamUrl={vid.hlsPlaylistUrl}
+                        enableProgressSync={false}
                       />
                     ) : (
                       <div className="text-white/50 flex flex-col items-center">
@@ -568,14 +569,14 @@ export default function ClassroomDetailPage() {
                           rows={2}
                           value={rejectReason}
                           onChange={(e) => setRejectReason(e.target.value)}
-                          className="w-full text-sm p-2.5 border border-rose-200 rounded-lg outline-none"
+                          className="w-full text-sm p-2.5 border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-lg outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
                           placeholder="Lý do từ chối..."
                         />
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => setRejectingVideoId(null)}
-                            className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-white rounded-lg cursor-pointer"
+                            className="px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
                           >
                             Hủy
                           </button>
@@ -599,15 +600,15 @@ export default function ClassroomDetailPage() {
 
       {activeTab === "settings" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
             <h3 className="font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <Shield size={18} className="text-indigo-600" /> Phân công Giảng
+              <Shield size={18} className="text-blue-700" /> Phân công Giảng
               viên
             </h3>
             <select
               value={selectedTeacherId}
               onChange={(e) => setSelectedTeacherId(e.target.value)}
-              className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900 bg-slate-50"
+              className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 bg-slate-50"
             >
               <option value="" disabled>
                 -- Vui lòng chọn --
@@ -621,20 +622,20 @@ export default function ClassroomDetailPage() {
             <button
               onClick={handleAssignTeacher}
               disabled={isProcessing || !selectedTeacherId}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 cursor-pointer"
+              className="w-full py-3 bg-blue-800 text-white rounded-xl font-bold hover:bg-blue-800 cursor-pointer"
             >
               Lưu Giảng Viên
             </button>
           </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
             <h3 className="font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-              <Settings2 size={18} className="text-indigo-600" /> Đổi trạng thái
+              <Settings2 size={18} className="text-blue-700" /> Đổi trạng thái
               Lớp
             </h3>
             <select
               value={newStatus}
               onChange={(e) => setNewStatus(e.target.value)}
-              className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900 bg-slate-50"
+              className="w-full border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 bg-slate-50"
             >
               <option value="PLANNING">Lên kế hoạch (PLANNING)</option>
               <option value="OPEN">Mở đăng ký (OPEN)</option>
@@ -657,10 +658,10 @@ export default function ClassroomDetailPage() {
         <div className="space-y-6">
           {/* TOP CARDS: ENROLL FORM & CLASS CAPACITY */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
               <div className="mb-4">
                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                  <UserPlus className="text-indigo-600" size={18} /> Ghi Danh Học Viên Mới
+                  <UserPlus className="text-blue-700" size={18} /> Ghi Danh Học Viên Mới
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Nhập Email hoặc Số điện thoại của tài khoản học viên để thêm vào lớp học này.
@@ -672,7 +673,7 @@ export default function ClassroomDetailPage() {
                   type="text"
                   value={enrollIdentifier}
                   onChange={(e) => setEnrollIdentifier(e.target.value)}
-                  className="flex-1 border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-indigo-600 text-sm font-bold text-slate-900"
+                  className="flex-1 border-2 border-slate-200 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900"
                   placeholder="VD: student@example.com hoặc 0912345678"
                 />
                 <button
@@ -685,7 +686,7 @@ export default function ClassroomDetailPage() {
               </form>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                   Sĩ Số Lớp Hiện Tại
@@ -699,7 +700,7 @@ export default function ClassroomDetailPage() {
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mt-4">
                 <div
-                  className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                  className="bg-blue-800 h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${
                       classroom.maxStudents
@@ -718,13 +719,13 @@ export default function ClassroomDetailPage() {
           </div>
 
           {/* BOTTOM TABLE: ENROLLED STUDENTS LIST */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                  <Users className="text-indigo-600" size={18} /> Danh Sách Học Viên Đang Theo Học ({enrolledStudents.length})
+                  <Users className="text-blue-700" size={18} /> Danh Sách Học Viên Đang Theo Học ({enrolledStudents.length})
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Theo dõi tiến độ hoàn thành bài tập, điểm số trung bình và quản lý danh sách lớp.
                 </p>
               </div>
@@ -742,7 +743,7 @@ export default function ClassroomDetailPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-200">
+                    <tr className="bg-slate-50 dark:bg-slate-800/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-700">
                       <th className="p-4 pl-6">Học Viên</th>
                       <th className="p-4">Liên Hệ</th>
                       <th className="p-4">Ngày Ghi Danh</th>
@@ -759,7 +760,7 @@ export default function ClassroomDetailPage() {
                         st.email;
                       const completion = st.completionRate ?? 0;
                       return (
-                        <tr key={st.studentId} className="hover:bg-slate-50/80 transition">
+                        <tr key={st.studentId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition">
                           <td className="p-4 pl-6">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs shadow-inner">

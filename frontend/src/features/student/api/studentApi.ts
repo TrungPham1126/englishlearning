@@ -300,9 +300,13 @@ export const studentApi = {
     return res.data.data;
   },
 
-  repairQuestionAudio: async (questionId: string): Promise<ExerciseAudioResponse> => {
+  repairQuestionAudio: async (
+    questionId: string,
+    payload?: Partial<TtsRequest>,
+  ): Promise<ExerciseAudioResponse> => {
     const res = await axiosClient.post<ApiResponse<ExerciseAudioResponse>>(
-      `/api/v1/ai/tts/questions/${questionId}/repair`
+      `/api/v1/ai/tts/questions/${questionId}/repair`,
+      payload ?? {},
     );
     return res.data.data;
   },

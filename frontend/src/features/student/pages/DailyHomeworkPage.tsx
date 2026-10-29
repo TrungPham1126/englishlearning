@@ -1,21 +1,32 @@
 // src/features/student/pages/DailyHomeworkPage.tsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "@/features/student/api/studentApi";
 import type { DailyHomeworkOverviewResponse } from "@/features/student/types";
 import {
-  Folder,
   PlayCircle,
   ChevronDown,
   ArrowLeft,
   Loader2,
-  AlertCircle,
   CheckCircle2,
   Calendar,
   Lock,
   ExternalLink,
   BookText,
+  Flame,
+  Clock,
+  Sparkles,
+  Trophy,
+  Target,
+  Check,
+  AlertCircle,
+  BookOpen,
+  PenTool,
+  Mic,
+  Headphones,
+  Layers,
 } from "lucide-react";
+import { Card, Badge, Button, EmptyState } from "@/components/ui";
 
 export default function DailyHomeworkPage() {
   const params = useParams();
@@ -53,6 +64,8 @@ export default function DailyHomeworkPage() {
     fetchOverview(dayId);
   };
 
+  const selectedDay = data?.currentSelectedDay;
+
   const handleCompleteCurrentDay = async () => {
     if (!selectedDay?.id) return;
     setIsMarkingComplete(true);
@@ -70,7 +83,7 @@ export default function DailyHomeworkPage() {
 
   if (!classId) {
     return (
-      <div className="p-12 text-center text-rose-600 font-bold bg-white rounded-xl border border-rose-200">
+      <div className="p-12 text-center text-rose-600 dark:text-rose-400 font-bold bg-white dark:bg-[#111827] rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm">
         Không tìm thấy ID lớp học trong đường dẫn URL.
       </div>
     );
@@ -78,25 +91,73 @@ export default function DailyHomeworkPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-24 text-slate-500 font-medium gap-3">
-        <Loader2 className="animate-spin text-indigo-600" size={32} />
-        <span>Đang tải bảng ngày...</span>
+      <div className="flex flex-col items-center justify-center p-24 text-slate-500 dark:text-slate-400 font-semibold gap-3">
+        <Loader2
+          className="animate-spin text-blue-700 dark:text-blue-400"
+          size={36}
+        />
+        <span>Đang tải lộ trình học tập theo ngày...</span>
       </div>
     );
   }
 
   const percentage = data?.completionPercentage ?? 0;
   const days = data?.days ?? [];
-  const selectedDay = data?.currentSelectedDay;
+  const totalDays = data?.totalDays ?? days.length;
+  const completedDaysCount =
+    data?.completedDays ?? days.filter((d) => d.isCompleted).length;
+  const unlockedDaysCount = days.filter((d) => d.isUnlocked).length;
+
+  // Tính chuỗi ngày học liên tiếp (Streak) từ danh sách ngày đã mở khóa
+  const streakCount = (() => {
+    let streak = 0;
+    const unlockedList = days.filter((d) => d.isUnlocked);
+    for (let i = unlockedList.length - 1; i >= 0; i--) {
+      if (unlockedList[i].isCompleted) {
+        streak++;
+      } else if (i !== unlockedList.length - 1) {
+        break;
+      }
+    }
+    return Math.max(streak, completedDaysCount);
+  })();
+
+  // Tính tiến độ hoàn thành các đầu mục bài tập trong ngày đang chọn
+  const allSelectedDayItems =
+    selectedDay?.sections.flatMap((sec) => sec.items) ?? [];
+  const totalDayTasks = allSelectedDayItems.length;
+  const completedDayTasks = selectedDay?.isCompleted
+    ? totalDayTasks
+    : allSelectedDayItems.filter((item) => item.isDone).length;
+  const dayCompletionPct =
+    selectedDay?.isCompleted
+      ? 100
+      : totalDayTasks > 0
+      ? Math.round((completedDayTasks / totalDayTasks) * 100)
+      : 0;
 
   // =========================================================================
-  // LOGIC GOM NHÓM (MERGE) CÁC SECTION
+  // LOGIC GOM NHÓM (MERGE) CÁC SECTION (GIỮ NGUYÊN 100%)
   // Gom tất cả các phần "VOCABULARY", "WRITING", "SPEAKING"... vào chung 1 nhóm lớn
   // =========================================================================
+  const getSectionIcon = (key: string) => {
+    const upper = key.toUpperCase();
+    if (upper.includes("VOCABULARY") || upper.includes("TỪ VỰNG"))
+      return <BookOpen size={16} className="text-blue-700 dark:text-blue-400" />;
+    if (upper.includes("WRITING") || upper.includes("VIẾT"))
+      return <PenTool size={16} className="text-emerald-600 dark:text-emerald-400" />;
+    if (upper.includes("SPEAKING") || upper.includes("NÓI"))
+      return <Mic size={16} className="text-blue-700 dark:text-blue-400" />;
+    if (upper.includes("LISTENING") || upper.includes("NGHE"))
+      return <Headphones size={16} className="text-sky-600 dark:text-sky-400" />;
+    if (upper.includes("READING") || upper.includes("ĐỌC"))
+      return <BookText size={16} className="text-amber-600 dark:text-amber-400" />;
+    return <Layers size={16} className="text-blue-700 dark:text-blue-400" />;
+  };
+
   const getGroupedSections = () => {
     if (!selectedDay) return [];
 
-    // Sử dụng Map để gộp các section có chung từ khóa
     const groupMap = new Map<
       string,
       { mainTitle: string; subSections: typeof selectedDay.sections }
@@ -104,21 +165,30 @@ export default function DailyHomeworkPage() {
 
     selectedDay.sections.forEach((sec) => {
       const upperName = sec.sectionName.toUpperCase();
-      let mainKey = sec.sectionName; // Mặc định giữ nguyên tên ban đầu
+      let mainKey = sec.sectionName;
 
-      // Phân loại và gộp nhóm
-      if (upperName.includes("VOCABULARY") || upperName.includes("VOCAL") || upperName.includes("TỪ VỰNG")) {
-        mainKey = "📚 TỪ VỰNG & NGỮ ÂM (VOCABULARY)";
+      if (
+        upperName.includes("VOCABULARY") ||
+        upperName.includes("VOCAL") ||
+        upperName.includes("TỪ VỰNG")
+      ) {
+        mainKey = "Từ Vựng & Ngữ Âm (Vocabulary)";
       } else if (upperName.includes("WRITING") || upperName.includes("VIẾT")) {
-        mainKey = "✍️ KỸ NĂNG VIẾT (WRITING)";
+        mainKey = "Kỹ Năng Viết (Writing)";
       } else if (upperName.includes("SPEAKING") || upperName.includes("NÓI")) {
-        mainKey = "🎙️ KỸ NĂNG NÓI (SPEAKING)";
-      } else if (upperName.includes("LISTENING") || upperName.includes("NGHE")) {
-        mainKey = "🎧 KỸ NĂNG NGHE (LISTENING)";
+        mainKey = "Kỹ Năng Nói & Phát Âm (Speaking)";
+      } else if (
+        upperName.includes("LISTENING") ||
+        upperName.includes("NGHE")
+      ) {
+        mainKey = "Kỹ Năng Nghe (Listening)";
       } else if (upperName.includes("READING") || upperName.includes("ĐỌC")) {
-        mainKey = "📖 KỸ NĂNG ĐỌC (READING)";
-      } else if (upperName.includes("GRAMMAR") || upperName.includes("NGỮ PHÁP")) {
-        mainKey = "🧩 NGỮ PHÁP (GRAMMAR)";
+        mainKey = "Kỹ Năng Đọc (Reading)";
+      } else if (
+        upperName.includes("GRAMMAR") ||
+        upperName.includes("NGỮ PHÁP")
+      ) {
+        mainKey = "Ngữ Pháp (Grammar)";
       }
 
       if (!groupMap.has(mainKey)) {
@@ -134,189 +204,444 @@ export default function DailyHomeworkPage() {
 
   return (
     <div className="max-w-[1350px] mx-auto space-y-6 pb-12">
-      {/* Top Header Navigation */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
-        <div className="flex items-center gap-3">
+      {/* ================= TOP HEADER NAVIGATION ================= */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
+        <div className="flex items-center gap-3.5">
           <button
+            type="button"
             onClick={() => navigate("/student/courses")}
-            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition cursor-pointer"
+            aria-label="Quay lại danh sách khóa học"
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 dark:hover:bg-slate-800 shadow-2xs transition-all cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Bảng Ngày Học (Daily Plan)
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Hệ thống tự động mở khóa lộ trình vào 00:00 mỗi ngày
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                Lộ Trình Học Theo Ngày
+              </h1>
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-600/15 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-400 border border-blue-200/70 dark:border-blue-600/30">
+                <Sparkles size={11} /> Daily Roadmap
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Hệ thống tự động mở khóa bài học mới vào 00:00 mỗi ngày theo tiến
+              độ lớp học
             </p>
+          </div>
+        </div>
+
+        {/* Nút truy cập nhanh Kho Từ Vựng */}
+        <div className="flex items-center gap-2.5 self-start md:self-center">
+          <button
+            type="button"
+            onClick={() => navigate("/student/vocabulary")}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/80 dark:bg-blue-600/15 px-4 py-2.5 text-xs font-bold text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-600/25 transition cursor-pointer"
+          >
+            <Sparkles size={14} />
+            <span>Luyện Từ Vựng Thông Minh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ================= 3 THẺ THỐNG KÊ TIẾN ĐỘ (PROGRESS & STREAK CARDS) ================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card 1: Tổng tiến độ hoàn thành khóa học */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#111827] p-5 shadow-sm flex items-center justify-between gap-4">
+          <div className="space-y-1.5 flex-1">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+              <Trophy size={13} /> Tiến Độ Toàn Lộ Trình
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                {percentage}%
+              </span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                ({completedDaysCount}/{totalDays} ngày)
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mt-2">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-700 ease-out"
+                style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Radial SVG Mini Gauge */}
+          <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
+            <svg
+              className="w-full h-full transform -rotate-90"
+              viewBox="0 0 100 100"
+            >
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                className="text-slate-100 dark:text-slate-800"
+                strokeWidth="10"
+                stroke="currentColor"
+                fill="transparent"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                className="text-emerald-500 transition-all duration-700 ease-out"
+                strokeWidth="10"
+                strokeDasharray={2 * Math.PI * 40}
+                strokeDashoffset={2 * Math.PI * 40 * (1 - percentage / 100)}
+                strokeLinecap="round"
+                stroke="currentColor"
+                fill="transparent"
+              />
+            </svg>
+            <CheckCircle2
+              size={20}
+              className="absolute text-emerald-600 dark:text-emerald-400"
+            />
+          </div>
+        </div>
+
+        {/* Card 2: Chuỗi ngày học (Streak Card) */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#111827] p-5 shadow-sm flex items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              <Flame size={14} /> Chuỗi Ngày Học (Streak)
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                {streakCount}
+              </span>
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                ngày tích lũy
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Đã mở khóa{" "}
+              <strong className="text-slate-800 dark:text-slate-200">
+                {unlockedDaysCount}/{totalDays}
+              </strong>{" "}
+              chặng bài học
+            </p>
+          </div>
+
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-500 border border-amber-200/70 dark:border-amber-500/30 shadow-xs">
+            <Flame size={28} className="fill-amber-500/20" />
+          </div>
+        </div>
+
+        {/* Card 3: Thanh phần trăm hoàn thành bài học trong ngày đang chọn */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#111827] p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+              <Target size={14} /> Tiến Độ Ngày Đang Chọn
+            </span>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                dayCompletionPct === 100
+                  ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  : "bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300"
+              }`}
+            >
+              {dayCompletionPct}% hoàn thành
+            </span>
+          </div>
+
+          <div className="my-2 flex items-baseline justify-between">
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
+              {selectedDay ? selectedDay.title : "Chưa chọn ngày học"}
+            </span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 shrink-0 ml-2">
+              {completedDayTasks}/{totalDayTasks} nhiệm vụ
+            </span>
+          </div>
+
+          <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                dayCompletionPct === 100
+                  ? "bg-emerald-500"
+                  : "bg-brand-600"
+              }`}
+              style={{ width: `${dayCompletionPct}%` }}
+            />
           </div>
         </div>
       </div>
 
+      {/* ================= MAIN 2-COLUMN ROADMAP & TASKS ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* ================= CỘT TRÁI: GAUGE TIẾN ĐỘ & DANH SÁCH CÁC NGÀY ================= */}
-        <div className="lg:col-span-5 space-y-5">
-          {/* Box 1: Vòng Tròn Hoàn Thành */}
-          <div className="bg-white dark:bg-[#121a2d] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs flex flex-col items-center justify-center text-center">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight mb-5">
-              Tỉ lệ hoàn thành bài tập
-            </h2>
-            <div className="relative w-48 h-48 flex items-center justify-center">
-              <svg
-                className="w-full h-full transform -rotate-90"
-                viewBox="0 0 100 100"
-              >
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="42"
-                  className="text-slate-100 dark:text-slate-800"
-                  strokeWidth="8"
-                  stroke="currentColor"
-                  fill="transparent"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="42"
-                  className="text-[#2eb85c] transition-all duration-700 ease-out"
-                  strokeWidth="8"
-                  strokeDasharray={2 * Math.PI * 42}
-                  strokeDashoffset={2 * Math.PI * 42 * (1 - percentage / 100)}
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="transparent"
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {percentage}%
-                </span>
+        {/* ================= CỘT TRÁI: LEARNING PATH TIMELINE ================= */}
+        <div className="lg:col-span-5">
+          <div className="bg-white dark:bg-[#111827] rounded-xl border border-slate-200/80 dark:border-slate-800/80 overflow-hidden shadow-sm">
+            {/* Timeline Header */}
+            <div className="bg-slate-50/90 dark:bg-[#162033] px-6 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Lộ Trình Học Tập (Learning Path)
+                </h2>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Chọn một chặng ngày học để xem và làm bài tập
+                </p>
               </div>
+              <span className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                {days.length} chặng
+              </span>
             </div>
-          </div>
 
-          {/* Box 2: BẢNG NGÀY List */}
-          <div className="bg-white dark:bg-[#121a2d] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
-            <div className="bg-[#f0f3f8] dark:bg-slate-800/60 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                BÀI TẬP HÀNG NGÀY
-              </h3>
+            {/* Chú thích trạng thái */}
+            <div className="px-6 py-2.5 bg-slate-50/40 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/60 flex flex-wrap items-center gap-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                Đã hoàn thành
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-800 animate-pulse" />
+                Đang mở khóa
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-700" />
+                Đang khóa
+              </span>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800/70 max-h-[550px] overflow-y-auto">
+
+            {/* Timeline Vertical List */}
+            <div className="p-5 max-h-[640px] overflow-y-auto custom-scrollbar">
               {days.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
+                <div className="p-10 text-center text-xs text-slate-400">
                   Chưa có ngày học nào được giao cho lớp này
                 </div>
               ) : (
-                days.map((day) => {
-                  const isSelected = selectedDay?.id === day.id;
-                  const isLocked = !day.isUnlocked;
+                <div className="relative space-y-3">
+                  {days.map((day, idx) => {
+                    const isSelected =
+                      selectedDay?.id === day.id || selectedDayId === day.id;
+                    const isLocked = !day.isUnlocked;
+                    const isCompleted = day.isCompleted;
+                    const isLast = idx === days.length - 1;
 
-                  return (
-                    <div
-                      key={day.id}
-                      onClick={() => !isLocked && handleSelectDay(day.id)}
-                      className={`px-5 py-3.5 flex items-center justify-between transition ${
-                        isLocked
-                          ? "opacity-50 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/30"
-                          : isSelected
-                            ? "bg-slate-100/90 dark:bg-slate-800/70 font-bold cursor-pointer"
-                            : "hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300 cursor-pointer"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 text-xs truncate">
-                        <Folder
-                          size={18}
-                          className={`shrink-0 ${
-                            !day.isCompleted
-                              ? "text-[#d32f2f] fill-[#d32f2f]"
-                              : "text-[#2855af] fill-[#2855af]"
-                          }`}
-                        />
-                        <span
-                          className={`font-black ${
-                            !day.isCompleted
-                              ? "text-[#d32f2f] dark:text-rose-400"
-                              : "text-slate-900 dark:text-white"
+                    return (
+                      <div key={day.id} className="relative flex gap-3.5">
+                        {/* Đường nối dọc của Timeline */}
+                        {!isLast && (
+                          <div
+                            aria-hidden="true"
+                            className={`absolute left-[19px] top-10 -bottom-3 w-0.5 ${
+                              isCompleted
+                                ? "bg-emerald-400 dark:bg-emerald-500/60"
+                                : !isLocked
+                                ? "bg-blue-300 dark:bg-blue-600/40"
+                                : "bg-slate-200 dark:bg-slate-800"
+                            }`}
+                          />
+                        )}
+
+                        {/* Node Tròn Trạng Thái */}
+                        <div className="relative z-10 shrink-0 mt-1">
+                          {isLocked ? (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500">
+                              <Lock size={15} />
+                            </div>
+                          ) : isCompleted ? (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-500/25">
+                              <Check size={18} strokeWidth={2.5} />
+                            </div>
+                          ) : (
+                            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-blue-800 text-white shadow-md shadow-indigo-500/30 ring-4 ring-blue-600/15">
+                              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-white dark:ring-[#111827] animate-pulse" />
+                              <PlayCircle size={18} />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thẻ Nội Dung Ngày Học */}
+                        <div
+                          role="button"
+                          tabIndex={isLocked ? -1 : 0}
+                          aria-disabled={isLocked}
+                          onClick={() => !isLocked && handleSelectDay(day.id)}
+                          onKeyDown={(e) => {
+                            if (
+                              !isLocked &&
+                              (e.key === "Enter" || e.key === " ")
+                            ) {
+                              e.preventDefault();
+                              handleSelectDay(day.id);
+                            }
+                          }}
+                          className={`flex-1 rounded-xl border p-3.5 transition-all duration-200 ${
+                            isLocked
+                              ? "opacity-55 cursor-not-allowed border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/20"
+                              : isSelected
+                              ? "border-blue-600 dark:border-blue-600 bg-blue-50/60 dark:bg-blue-600/15 shadow-sm ring-2 ring-blue-600/15 cursor-pointer"
+                              : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#162033] hover:border-blue-300 dark:hover:border-blue-600/40 hover:bg-slate-50/70 dark:hover:bg-slate-800/60 cursor-pointer"
                           }`}
                         >
-                          {day.title}
-                        </span>
-                        {day.estimatedMinutes && (
-                          <span className="text-slate-500 dark:text-slate-400 font-normal">
-                            ({day.estimatedMinutes} min)
-                          </span>
-                        )}
-                        <span className="text-slate-500 dark:text-slate-400 italic text-[11px] truncate">
-                          {day.dateLabel}
-                        </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={`text-xs font-extrabold ${
+                                    isLocked
+                                      ? "text-slate-500 dark:text-slate-400"
+                                    : isCompleted
+                                      ? "text-slate-900 dark:text-white"
+                                      : "text-blue-800 dark:text-blue-300"
+                                  }`}
+                                >
+                                  {day.title}
+                                </span>
+                                {day.isCurrentDay && !isLocked && (
+                                  <span className="rounded-md bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-700 dark:text-amber-300">
+                                    Hôm nay
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                {day.dateLabel && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar size={11} />
+                                    {day.dateLabel}
+                                  </span>
+                                )}
+                                {day.estimatedMinutes && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock size={11} />
+                                    {day.estimatedMinutes} phút
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Status Pill */}
+                            <div className="shrink-0">
+                              {isLocked ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                  Đang khóa
+                                </span>
+                              ) : isCompleted ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200/70 dark:border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                  Hoàn thành
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-600/20 border border-blue-200/70 dark:border-blue-600/30 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                                  Đang mở
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="shrink-0 ml-3 flex items-center">
-                        {isLocked ? (
-                          <Lock size={14} className="text-slate-400" />
-                        ) : day.isCompleted ? (
-                          <span className="h-3.5 w-3.5 rounded-full bg-[#2eb85c] inline-block shadow-2xs" />
-                        ) : (
-                          <span className="h-3.5 w-3.5 rounded-full bg-[#f03d3d] inline-block shadow-2xs animate-pulse" />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
         </div>
 
         {/* ================= CỘT PHẢI: CHI TIẾT BÀI TẬP THEO SECTION (MERGED) ================= */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-5">
           {!selectedDay ? (
-            <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-2xl p-16 text-center text-slate-400 shadow-xs">
+            <div className="bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 rounded-xl p-16 text-center text-slate-400 shadow-sm">
               <Calendar
-                size={40}
-                className="mx-auto mb-3 opacity-40 text-indigo-600 dark:text-indigo-400"
+                size={44}
+                className="mx-auto mb-3 opacity-40 text-blue-700 dark:text-blue-400"
               />
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                Hãy chọn một ngày bên danh sách để xem chi tiết
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                Hãy chọn một ngày học trên lộ trình bên trái để xem chi tiết
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Các bài tập từ vựng, nghe, nói, đọc, viết sẽ hiển thị tại đây.
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Header của Day đang chọn */}
-              <div className="bg-[#f0f3f8] dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3.5 flex items-center justify-between">
-                <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
-                  {selectedDay.fullHeaderLabel}
-                </h2>
-                {selectedDay.isCompleted ? (
-                  <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-500/20 px-2.5 py-0.5 rounded-full">
-                    <CheckCircle2 size={13} /> Đã Hoàn Thành
-                  </span>
-                ) : (
-                  <button
-                    disabled={isMarkingComplete}
-                    onClick={handleCompleteCurrentDay}
-                    className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    {isMarkingComplete ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <CheckCircle2 size={12} />
-                    )}
-                    Đánh dấu đã học
-                  </button>
-                )}
+            <div className="space-y-5">
+              {/* Header Card của Day đang chọn */}
+              <div className="bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 rounded-xl p-5 sm:p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-lg bg-blue-50 dark:bg-blue-600/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 border border-blue-200/70 dark:border-blue-600/30">
+                        Chặng {selectedDay.dayNumber || ""}
+                      </span>
+                      {selectedDay.estimatedMinutes && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          <Clock size={13} /> ~{selectedDay.estimatedMinutes}{" "}
+                          phút học
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight mt-2">
+                      {selectedDay.fullHeaderLabel}
+                    </h2>
+                  </div>
+
+                  {selectedDay.isCompleted ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 px-3.5 py-2 rounded-xl self-start sm:self-center">
+                      <CheckCircle2 size={15} /> Đã Hoàn Thành Ngày Học
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isMarkingComplete}
+                      onClick={handleCompleteCurrentDay}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer disabled:opacity-50 disabled:pointer-events-none self-start sm:self-center"
+                    >
+                      {isMarkingComplete ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Đang cập nhật...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={14} />
+                          <span>Đánh dấu đã hoàn thành</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* Thanh phần trăm hoàn thành bài học trong ngày */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">
+                      Tiến độ hoàn thành bài học trong ngày
+                    </span>
+                    <span className="font-extrabold text-blue-700 dark:text-blue-400">
+                      {dayCompletionPct}% ({completedDayTasks}/{totalDayTasks}{" "}
+                      đầu mục)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        dayCompletionPct === 100
+                          ? "bg-emerald-500"
+                          : "bg-brand-600"
+                      }`}
+                      style={{ width: `${dayCompletionPct}%` }}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Danh sách các Section & Card bài tập đã được GOM NHÓM */}
               {groupedSections.length === 0 ? (
-                <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl p-12 text-center text-slate-400 text-xs shadow-xs">
-                  Chưa có bài tập được giao cho ngày này
+                <div className="bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 rounded-xl p-12 text-center text-slate-400 text-xs shadow-sm">
+                  <AlertCircle
+                    size={28}
+                    className="mx-auto mb-2 opacity-40 text-slate-400"
+                  />
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">
+                    Chưa có bài tập được giao cho ngày này
+                  </p>
                 </div>
               ) : (
                 groupedSections.map((group, gIdx) => {
-                  // Đếm tổng số bài tập trong nhóm này
                   const totalItems = group.subSections.reduce(
                     (acc, sub) => acc + sub.items.length,
                     0,
@@ -325,16 +650,18 @@ export default function DailyHomeworkPage() {
                   return (
                     <div
                       key={gIdx}
-                      className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4"
+                      className="bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 sm:p-6 shadow-sm space-y-4 transition-all"
                     >
                       {/* Tiêu đề của Nhóm Lớn (VD: VOCABULARY) */}
-                      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
-                        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase flex items-center gap-2">
-                          <BookText size={18} className="text-indigo-600 dark:text-indigo-400" />
-                          {group.mainTitle}
+                      <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 dark:bg-slate-900/60 border border-blue-100 dark:border-blue-900/60 shrink-0">
+                            {getSectionIcon(group.mainTitle)}
+                          </span>
+                          <span>{group.mainTitle}</span>
                         </h3>
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
-                          {totalItems} đầu mục
+                        <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-600/15 border border-blue-200/60 dark:border-blue-600/30 px-2.5 py-1 rounded-xl shrink-0">
+                          {totalItems} nhiệm vụ
                         </span>
                       </div>
 
@@ -343,12 +670,15 @@ export default function DailyHomeworkPage() {
                         {group.subSections.map((sub, sIdx) => {
                           const isMerged = group.subSections.length > 1;
 
-                          // Hiển thị tên Menu Con rõ ràng, chuyên nghiệp
                           let subTitleClean = sub.sectionName;
                           if (subTitleClean.includes(":")) {
-                            subTitleClean = subTitleClean.substring(subTitleClean.indexOf(":") + 1).trim();
+                            subTitleClean = subTitleClean
+                              .substring(subTitleClean.indexOf(":") + 1)
+                              .trim();
                           } else if (subTitleClean.includes(" - ")) {
-                            subTitleClean = subTitleClean.substring(subTitleClean.indexOf(" - ") + 3).trim();
+                            subTitleClean = subTitleClean
+                              .substring(subTitleClean.indexOf(" - ") + 3)
+                              .trim();
                           }
                           const isRequired =
                             sub.sectionName.includes("Bắt buộc");
@@ -357,17 +687,17 @@ export default function DailyHomeworkPage() {
                             <div key={sIdx} className="space-y-2.5">
                               {/* Chỉ hiển thị Header Menu Con nếu nhóm này có nhiều hơn 1 mục */}
                               {isMerged && (
-                                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-3 py-2 rounded-lg">
-                                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                <div className="flex items-center justify-between bg-slate-50/90 dark:bg-[#162033] border border-slate-200/60 dark:border-slate-800 px-3.5 py-2.5 rounded-xl">
+                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                                     <ChevronDown
                                       size={15}
-                                      className="text-slate-400"
+                                      className="text-blue-600"
                                     />
                                     {subTitleClean}
                                   </span>
                                   {isRequired && (
-                                    <span className="text-[#2eb85c] text-[10px] font-bold">
-                                      (Bắt buộc)
+                                    <span className="rounded-md bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200/70 dark:border-emerald-500/30 px-2 py-0.5 text-emerald-700 dark:text-emerald-400 text-[10px] font-extrabold">
+                                      Bắt buộc
                                     </span>
                                   )}
                                 </div>
@@ -377,12 +707,15 @@ export default function DailyHomeworkPage() {
                               <div
                                 className={`space-y-2.5 ${
                                   isMerged
-                                    ? "pl-4 border-l-2 border-slate-100 dark:border-slate-800 ml-2"
+                                    ? "pl-4 border-l-2 border-blue-100 dark:border-slate-800 ml-2"
                                     : ""
                                 }`}
                               >
                                 {sub.items.map((item, idx) => {
                                   const isFirst = idx === 0;
+                                  const isItemDone =
+                                    item.isDone || selectedDay.isCompleted;
+
                                   return (
                                     <div
                                       key={item.id}
@@ -393,25 +726,49 @@ export default function DailyHomeworkPage() {
                                           );
                                         }
                                       }}
-                                      className="group border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-lg p-3.5 flex items-center justify-between cursor-pointer transition bg-white dark:bg-[#0d1322] hover:bg-slate-50/70 dark:hover:bg-slate-800/60 shadow-2xs"
+                                      className={`group rounded-xl border p-4 flex items-center justify-between gap-3 cursor-pointer transition-all duration-200 shadow-2xs ${
+                                        isItemDone
+                                          ? "border-emerald-200/80 dark:border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/10 hover:border-emerald-400"
+                                          : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0d1322] hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50/30 dark:hover:bg-slate-800/60"
+                                      }`}
                                     >
-                                      <div className="flex items-center gap-3">
-                                        <PlayCircle
-                                          size={20}
-                                          className={`shrink-0 ${
-                                            isFirst
-                                              ? "text-[#0088cc]"
-                                              : "text-[#e84e40]"
+                                      <div className="flex items-center gap-3.5 min-w-0">
+                                        <div
+                                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                                            isItemDone
+                                              ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                                              : isFirst
+                                              ? "bg-blue-50 dark:bg-blue-600/15 text-blue-700 dark:text-blue-400"
+                                              : "bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400"
                                           }`}
-                                        />
-                                        <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-                                          {item.title}
-                                        </span>
+                                        >
+                                          {isItemDone ? (
+                                            <CheckCircle2 size={18} />
+                                          ) : (
+                                            <PlayCircle size={18} />
+                                          )}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <span className="block text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 transition truncate">
+                                            {item.title}
+                                          </span>
+                                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            {isItemDone
+                                              ? "Đã hoàn thành nhiệm vụ"
+                                              : "Nhấn để bắt đầu làm bài"}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-3">
+
+                                      <div className="flex items-center gap-2 shrink-0">
                                         {item.assignmentId && (
-                                          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline flex items-center gap-1 bg-indigo-50 dark:bg-indigo-500/15 px-2 py-1 rounded">
-                                            Làm bài <ExternalLink size={12} />
+                                          <span className="text-xs text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1.5 bg-blue-50 dark:bg-blue-600/15 group-hover:bg-blue-800 group-hover:text-white px-3 py-1.5 rounded-xl border border-blue-200/70 dark:border-blue-600/30 transition-all">
+                                            <span>
+                                              {isItemDone
+                                                ? "Làm lại"
+                                                : "Làm bài"}
+                                            </span>
+                                            <ExternalLink size={13} />
                                           </span>
                                         )}
                                       </div>

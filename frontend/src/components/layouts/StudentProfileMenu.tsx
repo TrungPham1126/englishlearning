@@ -1,4 +1,4 @@
-// src/components/StudentProfileMenu.tsx
+// src/components/layouts/StudentProfileMenu.tsx
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -66,7 +66,9 @@ export default function StudentProfileMenu() {
   };
 
   const displayName = user
-    ? (user as any).fullName || `${user.lastName || ""} ${user.firstName || ""}`.trim() || "Học viên"
+    ? (user as any).fullName ||
+      `${user.lastName || ""} ${user.firstName || ""}`.trim() ||
+      "Học viên"
     : "Học viên";
 
   const getInitials = () => {
@@ -97,16 +99,18 @@ export default function StudentProfileMenu() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 text-slate-700 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-slate-800/60 focus:outline-none cursor-pointer"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="flex items-center gap-2.5 rounded-xl border border-transparent hover:border-slate-200/80 dark:hover:border-slate-800 py-1 pl-1.5 pr-3 text-slate-700 dark:text-slate-200 transition-all duration-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 focus:outline-none cursor-pointer"
       >
         {user?.avatarUrl ? (
           <img
             src={resolveAvatarUrl(user.avatarUrl)}
             alt={displayName}
-            className="w-9 h-9 rounded-full object-cover border-2 border-indigo-500/30 shadow-sm"
+            className="w-9 h-9 rounded-xl object-cover border-2 border-blue-600/30 shadow-sm"
           />
         ) : (
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-white font-bold flex items-center justify-center text-sm shadow-sm border border-white/20">
+          <div className="w-9 h-9 rounded-xl bg-brand-600 text-white font-bold flex items-center justify-center text-sm shadow-sm border border-white/20">
             {avatarFallback}
           </div>
         )}
@@ -122,10 +126,13 @@ export default function StudentProfileMenu() {
 
       {/* Popup Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#121a2d] p-4 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+        <div
+          role="menu"
+          className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-xl p-4 shadow-card shadow-slate-900/10 dark:shadow-black/50 z-50 animate-in fade-in zoom-in-95 duration-150"
+        >
           {/* Thông tin User Header */}
-          <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 border border-indigo-500/30 text-lg font-bold text-white shadow-sm">
+          <div className="flex items-center gap-3.5 border-b border-slate-100 dark:border-slate-800/80 pb-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-600 border border-blue-600/30 text-lg font-bold text-white shadow-sm">
               {user?.avatarUrl ? (
                 <img
                   src={resolveAvatarUrl(user.avatarUrl)}
@@ -136,15 +143,16 @@ export default function StudentProfileMenu() {
                 avatarFallback
               )}
             </div>
-            <div className="truncate">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
                 {displayName}
               </h4>
-              <p className="flex items-center gap-1 text-[11px] text-slate-500 truncate">
-                <Mail size={12} /> {user?.email}
+              <p className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                <Mail size={12} className="shrink-0" />
+                <span className="truncate">{user?.email}</span>
               </p>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 dark:bg-blue-600/15 border border-blue-200/70 dark:border-blue-600/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400">
                   <ShieldCheck size={11} />{" "}
                   {user?.roles?.[0]?.replace("ROLE_", "") || "STUDENT"}
                 </span>
@@ -153,54 +161,58 @@ export default function StudentProfileMenu() {
           </div>
 
           {/* Dữ liệu thực từ Database */}
-          <div className="py-3 space-y-2 text-xs">
-            <div className="flex items-center justify-between text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <BookOpen size={14} className="text-indigo-600" />
+          <div className="py-3.5 space-y-2.5 text-xs">
+            <div className="flex items-center justify-between rounded-xl bg-slate-50/80 dark:bg-slate-800/50 px-3 py-2 text-slate-600 dark:text-slate-300">
+              <span className="flex items-center gap-2 font-medium">
+                <BookOpen size={14} className="text-blue-700 dark:text-blue-400" />
                 Khóa học đang tham gia:
               </span>
-              <span className="font-bold text-slate-800">
+              <span className="font-extrabold text-slate-900 dark:text-slate-100">
                 {courseCount} lớp
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-slate-600">
-              <span className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between rounded-xl bg-amber-50/60 dark:bg-amber-500/10 px-3 py-2 text-slate-600 dark:text-slate-300">
+              <span className="flex items-center gap-2 font-medium">
                 <Award size={14} className="text-amber-500" />
                 Tổng điểm năng lực:
               </span>
-              <span className="font-bold text-amber-600">{totalScore} pts</span>
+              <span className="font-extrabold text-amber-600 dark:text-amber-400">
+                {totalScore} pts
+              </span>
             </div>
 
             {user?.phone && (
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between px-3 py-1 text-slate-600 dark:text-slate-300">
+                <span className="flex items-center gap-2">
                   <Phone size={14} className="text-slate-400" />
                   Số điện thoại:
                 </span>
-                <span className="font-medium text-slate-700">{user.phone}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {user.phone}
+                </span>
               </div>
             )}
           </div>
 
           {/* 2 Nút hành động */}
-          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+          <div className="grid grid-cols-2 gap-2.5 border-t border-slate-100 dark:border-slate-800/80 pt-3.5">
             <button
               type="button"
               onClick={() => {
                 setIsOpen(false);
                 navigate("/student/profile");
               }}
-              className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/70 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 transition-all cursor-pointer"
             >
-              <UserCheck size={13} /> Trang cá nhân
+              <UserCheck size={14} /> Trang cá nhân
             </button>
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-rose-50 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-500/10 py-2.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white transition-all cursor-pointer"
             >
-              <LogOut size={13} /> Đăng xuất
+              <LogOut size={14} /> Đăng xuất
             </button>
           </div>
         </div>
