@@ -34,8 +34,10 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
     private final DailyStudyPlanRepository dailyStudyPlanRepository;
     private final DailyPlanItemRepository dailyPlanItemRepository;
     private final StudentDailyProgressRepository progressRepository;
+    private final com.englishlearning.submission.repository.AssignmentAttemptRepository attemptRepository;
     private final EntityManager entityManager;
     private final com.englishlearning.classroom.repository.ClassStudentRepository classStudentRepository;
+    private final com.englishlearning.assignment.repository.AssignmentRepository assignmentRepository;
 
     private static final DateTimeFormatter DATE_SUMMARY_FORMATTER = DateTimeFormatter.ofPattern("EEE dd-MM-yyyy",
             Locale.ENGLISH);
@@ -71,10 +73,47 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
 
         DailyStudyPlan targetPlan = null;
 
+        // Batch fetch items and student completed assignment IDs (eliminates N+1 queries)
+        List<DailyPlanItem> allClassItems = dailyPlanItemRepository.findByClassroomIdWithDailyPlanAndAssignment(classroomId);
+        Map<UUID, List<DailyPlanItem>> itemsByPlanId;
+        if (allClassItems != null && !allClassItems.isEmpty()) {
+            itemsByPlanId = allClassItems.stream()
+                    .filter(it -> it.getDailyPlan() != null && it.getDailyPlan().getId() != null)
+                    .collect(Collectors.groupingBy(it -> it.getDailyPlan().getId(), LinkedHashMap::new, Collectors.toList()));
+        } else {
+            // Fallback hỗ trợ các unit test mock findByDailyPlanIdOrderByOrderIndexAsc
+            itemsByPlanId = new HashMap<>();
+            for (DailyStudyPlan plan : plans) {
+                List<DailyPlanItem> pItems = dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(plan.getId());
+                if (pItems != null && !pItems.isEmpty()) {
+                    itemsByPlanId.put(plan.getId(), pItems);
+                }
+            }
+        }
+
+        Set<UUID> completedAssignmentIds = (studentId != null)
+                ? attemptRepository.findCompletedAssignmentIdsByStudentId(studentId)
+                : Collections.emptySet();
+        if (completedAssignmentIds == null) {
+            completedAssignmentIds = Collections.emptySet();
+        }
+
         for (DailyStudyPlan plan : plans) {
-            Optional<StudentDailyProgress> progressOpt = progressRepository.findByStudentIdAndDailyPlanId(studentId,
-                    plan.getId());
-            boolean isCompleted = progressOpt.map(StudentDailyProgress::getIsCompleted).orElse(false);
+            List<DailyPlanItem> planItems = itemsByPlanId.getOrDefault(plan.getId(), Collections.emptyList());
+            int planCompletedCount = 0;
+            if (studentId != null && !planItems.isEmpty()) {
+                for (DailyPlanItem it : planItems) {
+                    boolean isDone = false;
+                    if (it.getAssignment() != null) {
+                        UUID aId = it.getAssignment().getId();
+                        isDone = completedAssignmentIds.contains(aId) || attemptRepository.countAttempts(aId, studentId) > 0;
+                    }
+                    if (isDone) {
+                        planCompletedCount++;
+                    }
+                }
+            }
+            boolean isCompleted = !planItems.isEmpty() && planCompletedCount >= planItems.size();
 
             boolean isCurrentDay = today.isEqual(plan.getScheduledDate());
             boolean isTodayOrPast = !plan.getScheduledDate().isAfter(today);
@@ -113,7 +152,8 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
 
         int percentage = unlockedCount > 0 ? Math.round(((float) completedCount / unlockedCount) * 100) : 100;
 
-        DayDetailDto currentSelectedDay = buildDayDetailDto(targetPlan, studentId);
+        List<DailyPlanItem> targetItems = itemsByPlanId.getOrDefault(targetPlan.getId(), Collections.emptyList());
+        DayDetailDto currentSelectedDay = buildDayDetailDto(targetPlan, studentId, targetItems, completedAssignmentIds);
 
         return DailyHomeworkOverviewResponse.builder()
                 .completionPercentage(percentage)
@@ -125,26 +165,41 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
     }
 
     private DayDetailDto buildDayDetailDto(DailyStudyPlan plan, UUID studentId) {
-        boolean isPlanCompleted = progressRepository.findByStudentIdAndDailyPlanId(studentId, plan.getId())
-                .map(StudentDailyProgress::getIsCompleted)
-                .orElse(false);
-
         List<DailyPlanItem> items = dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(plan.getId());
+        Set<UUID> completedAssignmentIds = studentId != null
+                ? attemptRepository.findCompletedAssignmentIdsByStudentId(studentId)
+                : Collections.emptySet();
+        return buildDayDetailDto(plan, studentId, items, completedAssignmentIds);
+    }
 
-        // Gom nhóm các items theo sectionName
+    private DayDetailDto buildDayDetailDto(DailyStudyPlan plan, UUID studentId, List<DailyPlanItem> items, Set<UUID> completedAssignmentIds) {
+        int completedCount = 0;
         Map<String, List<TaskItemDto>> grouped = new LinkedHashMap<>();
+
         for (DailyPlanItem item : items) {
+            boolean itemDone = false;
+            if (studentId != null && item.getAssignment() != null) {
+                UUID aId = item.getAssignment().getId();
+                itemDone = (completedAssignmentIds != null && completedAssignmentIds.contains(aId))
+                        || attemptRepository.countAttempts(aId, studentId) > 0;
+            }
+            if (itemDone) {
+                completedCount++;
+            }
+
             TaskItemDto taskDto = TaskItemDto.builder()
                     .id(item.getId())
                     .title(item.getTitle())
                     .itemType(item.getItemType())
                     .orderIndex(item.getOrderIndex())
                     .assignmentId(item.getAssignment() != null ? item.getAssignment().getId() : null)
-                    .isDone(isPlanCompleted)
+                    .isDone(itemDone)
                     .build();
 
             grouped.computeIfAbsent(item.getSectionName(), k -> new ArrayList<>()).add(taskDto);
         }
+
+        boolean isTrulyDayCompleted = !items.isEmpty() && completedCount >= items.size();
 
         List<SectionGroupDto> sections = grouped.entrySet().stream()
                 .map(entry -> SectionGroupDto.builder()
@@ -164,7 +219,7 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                 .fullHeaderLabel(fullHeaderLabel)
                 .scheduledDate(plan.getScheduledDate())
                 .estimatedMinutes(plan.getEstimatedMinutes())
-                .isCompleted(isPlanCompleted)
+                .isCompleted(isTrulyDayCompleted)
                 .sections(sections)
                 .build();
     }
@@ -225,9 +280,67 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
      */
     @Transactional(readOnly = true)
     public List<DailyStudyPlan> getPlansByClassroom(UUID classroomId) {
-        List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
-        plans.sort(Comparator.comparing(DailyStudyPlan::getDayNumber));
+        List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdWithItems(classroomId);
+        if (plans == null || plans.isEmpty()) {
+            plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
+            plans.sort(Comparator.comparing(DailyStudyPlan::getDayNumber));
+        }
+        for (DailyStudyPlan p : plans) {
+            if (p.getItems() != null) {
+                for (DailyPlanItem it : p.getItems()) {
+                    if (it.getAssignment() != null) {
+                        try {
+                            it.getAssignment().getTitle();
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        }
         return plans;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Assignment> getAssignmentsByDailyPlan(UUID planId) {
+        DailyStudyPlan plan = dailyStudyPlanRepository.findById(planId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngày học: " + planId));
+
+        List<DailyPlanItem> items = dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(planId);
+        List<Assignment> result = new ArrayList<>();
+        Set<UUID> addedIds = new HashSet<>();
+
+        for (DailyPlanItem item : items) {
+            if (item.getAssignment() != null && addedIds.add(item.getAssignment().getId())) {
+                result.add(item.getAssignment());
+            }
+        }
+
+        if (plan.getClassroom() != null) {
+            UUID classroomId = plan.getClassroom().getId();
+            List<Assignment> classroomAssignments = assignmentRepository.findByClassroomId(classroomId);
+            String dayPrefix = "day " + plan.getDayNumber();
+            String dayPrefixVn = "ngày " + plan.getDayNumber();
+            LocalDate planDate = plan.getScheduledDate();
+
+            for (Assignment a : classroomAssignments) {
+                if (addedIds.contains(a.getId())) {
+                    continue;
+                }
+                boolean dateMatch = false;
+                if (a.getDueDate() != null && planDate != null) {
+                    LocalDate dueDate = a.getDueDate().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                    dateMatch = dueDate.isEqual(planDate);
+                }
+                String titleLower = a.getTitle() != null ? a.getTitle().toLowerCase() : "";
+                boolean titleMatch = titleLower.contains(dayPrefix) || titleLower.contains(dayPrefixVn);
+
+                if (dateMatch || titleMatch) {
+                    result.add(a);
+                    addedIds.add(a.getId());
+                }
+            }
+        }
+        return result;
     }
 
     /**

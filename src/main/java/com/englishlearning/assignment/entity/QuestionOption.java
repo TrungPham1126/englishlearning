@@ -31,6 +31,9 @@ public class QuestionOption {
     @Column(name = "option_text", columnDefinition = "TEXT", nullable = false)
     private String optionText;
 
+    @Column(name = "match_text", columnDefinition = "TEXT")
+    private String matchText;
+
     @Column(name = "is_correct", nullable = false)
     @Builder.Default
     private Boolean isCorrect = false;

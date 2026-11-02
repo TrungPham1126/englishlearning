@@ -95,6 +95,16 @@ public class DailyStudyPlanController {
         return ResponseEntity.ok(ApiResponse.success("Xóa ngày học thành công", null));
     }
 
+    @GetMapping("/{planId}/assignments")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
+    @Operation(summary = "Lấy danh sách bài tập của một Ngày học từ database")
+    public ResponseEntity<ApiResponse<java.util.List<com.englishlearning.assignment.entity.Assignment>>> getAssignmentsByDailyPlan(
+            @PathVariable UUID planId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy bài tập của ngày thành công",
+                dailyStudyPlanService.getAssignmentsByDailyPlan(planId)));
+    }
+
     @PostMapping("/{planId}/items")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     @Operation(summary = "Thêm một bài tập (Section / Item) vào Ngày học")

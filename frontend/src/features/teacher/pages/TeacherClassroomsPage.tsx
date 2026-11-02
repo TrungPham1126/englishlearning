@@ -10,11 +10,10 @@ import {
   Search,
   Filter,
   GraduationCap,
-  Sparkles,
+  Award,
   ChevronRight,
   LayoutGrid,
   List,
-  FolderKanban,
   CheckCircle2,
   Clock,
 } from "lucide-react";
@@ -94,10 +93,6 @@ export default function TeacherClassroomsPage() {
       {/* 1. Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80">
         <div>
-          <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 dark:bg-slate-900/60 px-2.5 py-0.5 text-xs font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60 mb-2">
-            <FolderKanban className="h-3.5 w-3.5" />
-            <span>Quản Lý Giảng Dạy &amp; Lộ Trình</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
             <GraduationCap className="h-7 w-7 text-blue-700 dark:text-blue-400" />
             Lớp Học Phụ Trách
@@ -278,7 +273,7 @@ export default function TeacherClassroomsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <Badge variant="primary" size="sm">
-                      <Sparkles size={11} className="mr-1" />
+                      <Award size={11} className="mr-1" />
                       CEFR {cls.level || "General"}
                     </Badge>
                     <Badge

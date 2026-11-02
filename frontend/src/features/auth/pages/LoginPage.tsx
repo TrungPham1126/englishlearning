@@ -81,7 +81,10 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       const serverMessage =
-        err.response?.data?.message || "Email hoặc mật khẩu không chính xác.";
+        err.response?.data?.message ||
+        (err.message === "Network Error" || !err.response
+          ? "Không thể kết nối đến máy chủ backend. Vui lòng kiểm tra kết nối mạng."
+          : "Email hoặc mật khẩu không chính xác.");
       setErrors({ general: serverMessage });
     } finally {
       setIsLoading(false);

@@ -1,5 +1,5 @@
 // src/features/student/pages/LessonDetailPage.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "../api/studentApi";
 import VideoPlayer from "../components/VideoPlayer";
@@ -9,7 +9,7 @@ import type {
   VideoWatchHistory,
   LessonSummary,
 } from "../types";
-import { Play, FileText, ChevronRight, Download, Calendar } from "lucide-react";
+import { Play, FileText, ChevronRight, Download, Calendar, CheckCircle2, Clock } from "lucide-react";
 
 export default function LessonDetailPage() {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -23,7 +23,10 @@ export default function LessonDetailPage() {
   >("overview");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Stable initial seek seconds to prevent re-seek loop
+  const initialSeekSecondsRef = useRef<number | null>(null);
+
+  const fetchLessonData = () => {
     if (!lessonId) return;
     Promise.all([
       studentApi.getLessonDetail(lessonId),
@@ -43,10 +46,39 @@ export default function LessonDetailPage() {
             .getVideoProgress(videoData.id)
             .catch(() => null);
           setProgress(prog);
+          if (initialSeekSecondsRef.current === null) {
+            initialSeekSecondsRef.current = prog?.watchedSeconds ?? lessonData?.watchedSeconds ?? 0;
+          }
+        } else if (initialSeekSecondsRef.current === null && lessonData?.watchedSeconds != null) {
+          initialSeekSecondsRef.current = lessonData.watchedSeconds;
         }
       })
       .finally(() => setLoading(false));
-  }, [lessonId]);
+  };
+
+  useEffect(() => {
+    initialSeekSecondsRef.current = null;
+    fetchLessonData();
+
+    const handleProgressUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        videoId: string;
+        completed: boolean;
+        watchedSeconds: number;
+      }>;
+      if (customEvent.detail && customEvent.detail.videoId === video?.id) {
+        setProgress({
+          watchedSeconds: customEvent.detail.watchedSeconds,
+          completed: customEvent.detail.completed,
+        });
+      }
+    };
+    window.addEventListener("student-progress-updated", handleProgressUpdate);
+
+    return () => {
+      window.removeEventListener("student-progress-updated", handleProgressUpdate);
+    };
+  }, [lessonId, video?.id]);
 
   if (loading || !lesson) {
     return (
@@ -56,6 +88,13 @@ export default function LessonDetailPage() {
     );
   }
 
+  const isCompleted =
+    lesson.completed ||
+    (lesson.progressPercentage ?? 0) >= 100 ||
+    progress?.completed;
+
+  const currentWatchedSeconds = progress?.watchedSeconds ?? lesson.watchedSeconds ?? 0;
+
   return (
     <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* CỘT TRÁI: Video Player + Tab Content */}
@@ -64,7 +103,7 @@ export default function LessonDetailPage() {
           <VideoPlayer
             videoId={video.id}
             streamUrl={video.hlsPlaylistUrl}
-            initialSeconds={progress?.watchedSeconds || 0}
+            initialSeconds={initialSeekSecondsRef.current ?? 0}
           />
         ) : (
           <div className="relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
@@ -110,9 +149,20 @@ export default function LessonDetailPage() {
           <div className="p-6">
             {activeTab === "overview" && (
               <div className="space-y-3">
-                <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {lesson.title}
-                </h1>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-lg font-bold text-slate-900 dark:text-white">
+                    {lesson.title}
+                  </h1>
+                  {isCompleted ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 text-[10px] font-bold">
+                      <CheckCircle2 size={12} /> Đã hoàn thành
+                    </span>
+                  ) : currentWatchedSeconds > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 px-2 py-0.5 text-[10px] font-bold">
+                      <Clock size={12} /> Đang học (xem đến {Math.floor(currentWatchedSeconds / 60)}p{currentWatchedSeconds % 60}s)
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                   Mục tiêu bài học:{" "}
                   {lesson.objectives || "Nắm vững kiến thức trọng tâm"}
@@ -220,6 +270,8 @@ export default function LessonDetailPage() {
         <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
           {playlist.map((item, idx) => {
             const isCurrent = item.id === lessonId;
+            const itemDone = item.completed || item.isCompleted || (item.progressPercentage ?? 0) >= 100;
+
             return (
               <div
                 key={item.id}
@@ -250,8 +302,10 @@ export default function LessonDetailPage() {
                     {item.title}
                   </span>
                 </div>
-                {isCurrent ? (
-                  <span className="bg-blue-800 text-white text-[11px] font-semibold px-2 py-0.5 rounded-full shadow-sm shrink-0">
+                {itemDone ? (
+                  <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                ) : isCurrent ? (
+                  <span className="bg-blue-800 text-white text-[11px] font-semibold px-2 py-0.5 rounded-md shadow-xs shrink-0">
                     Đang xem
                   </span>
                 ) : (
@@ -269,7 +323,7 @@ export default function LessonDetailPage() {
               onClick={() =>
                 navigate(`/student/courses/${lesson.classId}/daily-plan`)
               }
-              className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-800 text-white font-bold text-xs py-3 rounded-xl shadow-sm transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs py-3 rounded-xl shadow-sm transition-colors cursor-pointer"
             >
               <Calendar size={15} />
               <span>Bài Tập Hàng Ngày (Daily Plan)</span>

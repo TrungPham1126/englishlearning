@@ -1,6 +1,7 @@
 package com.englishlearning.ai.service;
 
 import com.englishlearning.ai.entity.AiGeneratedExercise;
+import com.englishlearning.assignment.entity.QuestionType;
 
 import java.util.UUID;
 
@@ -15,5 +16,17 @@ public interface ExerciseGenerationService {
             int questionCount,
             UUID teacherId,
             boolean generateAudio
+    );
+
+    /**
+     * Sinh câu hỏi theo loại hình chuyên biệt (MATCHING, MULTIPLE_CHOICE, ...).
+     */
+    AiGeneratedExercise generateQuestionsFromPrompt(
+            String prompt,
+            String targetCefr,
+            int questionCount,
+            UUID teacherId,
+            boolean generateAudio,
+            QuestionType questionType
     );
 }

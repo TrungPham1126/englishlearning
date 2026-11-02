@@ -78,6 +78,36 @@ export interface SpeakingAiEvaluationResult {
   generalFeedback: string;
 }
 
+export type FullSpeakingAiResult = SpeakingAiEvaluationResult & {
+  isOffTopic?: boolean;
+  taskAchievement?: {
+    score?: number;
+    addressedPoints?: string[];
+    missingPoints?: string[];
+  };
+};
+
+export interface SpeakingAssignmentItem {
+  id: string; // assignmentId
+  title: string;
+  isShadowing: boolean;
+  description?: string;
+  dueDate?: string;
+  isCompleted: boolean;
+  highestScore?: number | null;
+  attemptsCount: number;
+}
+
+export interface DaySpeakingGroup {
+  id: string; // planId
+  dayNumber: number; // 1, 2, 3, 4...
+  title: string; // "DAY 1", "Ngày 1"...
+  scheduledDate?: string;
+  isCompleted: boolean;
+  isCurrentDay: boolean;
+  speakingTasks: SpeakingAssignmentItem[];
+}
+
 export interface WritingAiEvaluationResult {
   wordCount: number;
   isOffTopic?: boolean;
@@ -102,15 +132,22 @@ export interface MyCourseResponse {
   status: string;
   enrolledAt: string;
   progressPercentage?: number;
+  completedTasks?: number;
+  totalTasks?: number;
 }
 
 export interface LessonSummary {
   id: string;
   title: string;
   orderIndex: number;
+  completed?: boolean;
   isCompleted?: boolean;
+  progressPercentage?: number;
+  watchedSeconds?: number;
   objectives?: string;
 }
+
+export type Lesson = LessonSummary;
 
 export interface DocumentResponse {
   id: string;
@@ -149,6 +186,9 @@ export interface LessonDetailResponse {
   objectives?: string;
   content?: string;
   orderIndex: number;
+  completed?: boolean;
+  progressPercentage?: number;
+  watchedSeconds?: number;
   updatedAt?: string;
   documents: DocumentResponse[];
   vocabularies: VocabularyResponse[];
@@ -174,6 +214,7 @@ export interface QuestionOptionDetail {
   optionLabel?: string;
   optionText?: string;
   text?: string;
+  matchText?: string;
   isCorrect?: boolean;
 }
 
@@ -194,6 +235,7 @@ export interface QuestionResultDetail {
   transcript?: string;
   selectedOptionId?: string;
   correctAnswer?: string;
+  matchText?: string;
   explanation?: string;
   isCorrect?: boolean;
   options?: QuestionOptionDetail[];
@@ -216,6 +258,10 @@ export interface AttemptResponse {
   totalScore?: number;
   aiFeedback?: string;
   teacherFeedback?: string;
+  timeLimitMinutes?: number;
+  passScore?: number;
+  maxAllowedErrorPercent?: number;
+  maxAttempts?: number;
   startedAt?: string;
   submittedAt?: string;
   questions?: QuestionResultDetail[];
@@ -242,6 +288,8 @@ export interface StudentSkillProfile {
   writingScore: number;
   grammarScore: number;
   vocabularyScore: number;
+  pronunciationScore?: number;
+  fluencyScore?: number;
   aiRecommendedPath?: string;
 }
 
@@ -348,5 +396,3 @@ export interface KokoroVoice {
   pipeline: string;
   isDefault: boolean;
 }
-
-

@@ -88,25 +88,25 @@ export default function VideoModerationPage() {
     switch (status) {
       case "PENDING_REVIEW":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
             <Clock size={12} /> Chờ Kiểm Duyệt
           </span>
         );
       case "APPROVED":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle2 size={12} /> Đã Phê Duyệt
           </span>
         );
       case "REJECTED":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
             <XCircle size={12} /> Bị Từ Chối
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
             {status}
           </span>
         );
@@ -118,10 +118,6 @@ export default function VideoModerationPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/50 mb-2">
-            <Video size={14} />
-            <span>Kiểm Duyệt Nội Dung</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Duyệt Video Bài Giảng Của Giáo Viên
           </h1>
@@ -137,7 +133,7 @@ export default function VideoModerationPage() {
           onClick={() => setStatusFilter("PENDING_REVIEW")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
             statusFilter === "PENDING_REVIEW"
-              ? "bg-amber-500 text-white shadow-md shadow-amber-500/20"
+              ? "bg-amber-500 text-white shadow-xs"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
@@ -147,7 +143,7 @@ export default function VideoModerationPage() {
           onClick={() => setStatusFilter("APPROVED")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
             statusFilter === "APPROVED"
-              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              ? "bg-emerald-600 text-white shadow-xs"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
@@ -157,7 +153,7 @@ export default function VideoModerationPage() {
           onClick={() => setStatusFilter("REJECTED")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
             statusFilter === "REJECTED"
-              ? "bg-rose-600 text-white shadow-md shadow-rose-600/20"
+              ? "bg-rose-600 text-white shadow-xs"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >

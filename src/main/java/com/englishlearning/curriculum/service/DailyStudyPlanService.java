@@ -26,4 +26,6 @@ public interface DailyStudyPlanService {
     void markDayAsCompleted(UUID studentId, UUID planId);
 
     List<DailyProgressStatResponse> getDailyProgressStatsMatrix(UUID classroomId);
+
+    java.util.List<com.englishlearning.assignment.entity.Assignment> getAssignmentsByDailyPlan(UUID planId);
 }

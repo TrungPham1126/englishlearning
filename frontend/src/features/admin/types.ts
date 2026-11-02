@@ -51,13 +51,17 @@ export interface NotificationBroadcastRequest {
   notificationType: string;
   redirectUrl?: string;
 }
-// src/features/admin/types.ts
-// ... (Giữ nguyên các DTO cũ)
 
 export interface DailySubmissionTrend {
   date: string;
   submissions: number;
   graded: number;
+}
+
+export interface CompletionDistributionDto {
+  high: number;    // >= 80%
+  medium: number;  // 50% - 79%
+  low: number;     // < 50%
 }
 
 // --- DASHBOARD STATS ---
@@ -78,6 +82,8 @@ export interface AdminDashboardStats {
   pendingGrading?: number;
   completionRate?: number;
   weeklySubmissionsTrend?: DailySubmissionTrend[];
+  averageSkillScores?: Record<string, number>;
+  completionDistribution?: CompletionDistributionDto;
 }
 
 // --- AI MONITORING STATS ---

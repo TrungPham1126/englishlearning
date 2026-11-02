@@ -20,4 +20,8 @@ public class MyCourseResponse {
     private String teacherName;
     private Instant enrolledAt;
     private double progressPercentage;
+    private Integer completedLessons;
+    private Integer totalLessons;
+    private Integer completedTasks;
+    private Integer totalTasks;
 }

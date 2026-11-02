@@ -62,7 +62,7 @@ export const WordHighlightToken = memo<WordHighlightTokenProps>(
     const style = COLOR_STYLE_MAP[token.color] ?? COLOR_STYLE_MAP.GRAY;
 
     return (
-      <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-center gap-1">
         <button
           type="button"
           onClick={() => onSelect(cleanKey)}
@@ -70,22 +70,22 @@ export const WordHighlightToken = memo<WordHighlightTokenProps>(
           aria-label={`Từ ${token.word}${ipaText ? `, phiên âm ${ipaText}` : ""}, trạng thái: ${
             style.srStatus
           }${score !== undefined ? `, điểm ${score} trên 100` : ""}`}
-          className={`group relative inline-flex flex-col items-center px-3.5 py-2 rounded-xl border-2 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:focus-visible:ring-blue-500 ${
+          className={`group relative inline-flex flex-col items-center px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg border transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:focus-visible:ring-blue-500 ${
             style.container
           } ${
             isSelected
-              ? "ring-2 ring-blue-700 dark:ring-blue-500 shadow-md -translate-y-0.5"
+              ? "ring-2 ring-blue-700 dark:ring-blue-500 shadow-xs -translate-y-0.5"
               : "hover:-translate-y-0.5 shadow-2xs"
           }`}
         >
           <span
-            className={`text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight underline-offset-8 ${style.underline}`}
+            className={`text-xs sm:text-sm lg:text-base font-bold tracking-tight underline-offset-4 ${style.underline}`}
           >
             {token.word}
           </span>
 
           {(ipaText || style.badge || score !== undefined) && (
-            <span className="mt-1 flex items-center gap-1 text-[11px] sm:text-xs font-mono opacity-85">
+            <span className="mt-0.5 flex items-center gap-1 text-[9px] sm:text-[10px] font-mono opacity-85">
               {ipaText && <span>/{ipaText}/</span>}
               {score !== undefined && score > 0 && (
                 <span className="font-bold">({score}%)</span>
@@ -93,7 +93,7 @@ export const WordHighlightToken = memo<WordHighlightTokenProps>(
               {style.badge && (
                 <span
                   aria-hidden="true"
-                  className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-black bg-current/15"
+                  className="inline-flex items-center justify-center w-3 h-3 rounded-full text-[8px] font-black bg-current/15"
                 >
                   {style.badge}
                 </span>
@@ -106,7 +106,7 @@ export const WordHighlightToken = memo<WordHighlightTokenProps>(
           <span
             aria-label="Ký hiệu nối âm"
             title="Nối âm (Liaison)"
-            className="text-blue-700 dark:text-blue-400 font-black text-xl px-0.5 select-none"
+            className="text-blue-700 dark:text-blue-400 font-bold text-sm px-0.5 select-none"
           >
             ‿
           </span>
@@ -116,7 +116,7 @@ export const WordHighlightToken = memo<WordHighlightTokenProps>(
           <span
             aria-label="Ký hiệu ngắt nhịp"
             title="Ngắt nhịp (Pause)"
-            className="text-slate-500 dark:text-slate-400 font-black text-sm px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 select-none"
+            className="text-slate-500 dark:text-slate-400 font-bold text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 select-none"
           >
             ||
           </span>

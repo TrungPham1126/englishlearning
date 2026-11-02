@@ -11,9 +11,13 @@ import com.englishlearning.video.entity.VideoWatchHistory;
 import com.englishlearning.video.service.VideoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -32,7 +37,32 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class VideoController {
 
+    private static final long CHUNK_SIZE = 1024 * 1024 * 8L; // 8MB Chunk - Tải đệm dồi dào liên tục
+
     private final VideoService videoService;
+
+    @Value("${app.storage.upload-dir:uploads/videos}")
+    private String uploadBaseDir;
+
+    private File resolveRawVideoFile(String rawPath) {
+        if (rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        File direct = new File(rawPath);
+        if (direct.exists() && direct.isFile()) {
+            return direct;
+        }
+        try {
+            Path p = Paths.get(rawPath);
+            String fileName = p.getFileName().toString();
+            Path inUploadDir = Paths.get(uploadBaseDir, "raw", fileName);
+            if (Files.exists(inUploadDir) && Files.isRegularFile(inUploadDir)) {
+                return inUploadDir.toFile();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
@@ -59,19 +89,38 @@ public class VideoController {
     }
 
     @GetMapping("/{id}/raw")
-    public ResponseEntity<Resource> serveRawVideo(@PathVariable UUID id) {
+    public ResponseEntity<ResourceRegion> serveRawVideo(
+            @PathVariable UUID id,
+            @RequestHeader(required = false) HttpHeaders headers) {
         Video video = videoService.getVideoById(id);
         if (video == null || video.getRawStorageUrl() == null) {
             return ResponseEntity.notFound().build();
         }
-        File file = new File(video.getRawStorageUrl());
-        if (!file.exists()) {
+        File file = resolveRawVideoFile(video.getRawStorageUrl());
+        if (file == null || !file.exists()) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok()
+
+        FileSystemResource resource = new FileSystemResource(file);
+        long contentLength = file.length();
+        HttpRange range = (headers != null && !headers.getRange().isEmpty()) ? headers.getRange().get(0) : null;
+
+        ResourceRegion region;
+        if (range != null) {
+            long start = range.getRangeStart(contentLength);
+            long end = range.getRangeEnd(contentLength);
+            long rangeLength = Math.min(CHUNK_SIZE, end - start + 1);
+            region = new ResourceRegion(resource, start, rangeLength);
+        } else {
+            long rangeLength = Math.min(CHUNK_SIZE, contentLength);
+            region = new ResourceRegion(resource, 0, rangeLength);
+        }
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
                 .contentType(MediaType.valueOf("video/mp4"))
-                .body(new FileSystemResource(file));
+                .body(region);
     }
 
     @PostMapping("/{id}/progress")

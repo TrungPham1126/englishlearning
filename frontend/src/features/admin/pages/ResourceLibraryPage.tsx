@@ -68,10 +68,6 @@ export default function ResourceLibraryPage() {
       {/* Clean Open Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
-            <Database size={14} />
-            <span>Kho Tri Thức & Học Liệu</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Kho Học Liệu Tập Trung (Global Bank)
           </h1>

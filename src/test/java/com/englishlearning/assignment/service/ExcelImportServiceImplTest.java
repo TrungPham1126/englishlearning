@@ -54,7 +54,7 @@ class ExcelImportServiceImplTest {
     }
 
     @Test
-    @DisplayName("Import thành công danh sách câu hỏi khi cấu trúc file Excel hợp lệ")
+    @DisplayName("Import thành công danh sách câu hỏi khi cấu trúc file Excel hợp lệ (Legacy 8 cột)")
     void should_ParseAndImportQuestionsFromExcel_when_FileFormatIsValid() throws IOException {
         // Given: Tạo file Excel chuẩn hoàn toàn trong bộ nhớ RAM (cleanly-create-test-data.md)
         byte[] excelBytes = createValidExcelBytes(
@@ -95,6 +95,46 @@ class ExcelImportServiceImplTest {
         ArgumentCaptor<List<AssignmentQuestion>> captor = ArgumentCaptor.forClass(List.class);
         verify(assignmentQuestionRepository, times(1)).saveAll(captor.capture());
         assertThat(captor.getValue()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Import thành công file Excel mẫu chuẩn 12 cột mới với Banner ở Hàng 1-2 và bỏ qua dòng trống kẻ sẵn")
+    void should_ParseAndImportQuestions_when_Using12ColumnTemplateWithBannersAndBlankRows() throws IOException {
+        byte[] templateBytes = excelImportService.generateSampleTemplate("READING");
+        assertThat(templateBytes).isNotEmpty();
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "Mau_Giao_Bai_Tap_Chuan.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                templateBytes
+        );
+
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        // When: Import từ file mẫu vừa sinh ra (chứa 6 câu mẫu và 41 dòng kẻ sẵn)
+        List<AssignmentQuestion> questions = excelImportService.importQuestionsFromExcel(file, assignmentId);
+
+        // Then: Đúng 6 câu mẫu được nhận diện, 41 dòng kẻ sẵn (prompt rỗng) bị bỏ qua sạch sẽ
+        assertThat(questions).hasSize(6);
+
+        // Kiểm tra câu 1: Multiple choice
+        AssignmentQuestion q1 = questions.get(0);
+        assertThat(q1.getQuestionType()).isEqualTo(QuestionType.MULTIPLE_CHOICE);
+        assertThat(q1.getOptions()).hasSize(4);
+        assertThat(q1.getOptions().get(1).getIsCorrect()).isTrue(); // B là đáp án đúng
+
+        // Kiểm tra câu 3: Listen and type (FILL_IN_BLANK) có transcript TTS
+        AssignmentQuestion q3 = questions.get(2);
+        assertThat(q3.getQuestionType()).isEqualTo(QuestionType.FILL_IN_BLANK);
+        assertThat(q3.getCorrectAnswer()).isEqualTo("since");
+        assertThat(q3.getTranscript()).contains("She has worked at the tech laboratory since 2015.");
+
+        // Kiểm tra câu 4: MATCHING
+        AssignmentQuestion q4 = questions.get(3);
+        assertThat(q4.getQuestionType()).isEqualTo(QuestionType.MATCHING);
+        assertThat(q4.getPromptText()).isEqualTo("Resilient");
+        assertThat(q4.getCorrectAnswer()).contains("Kiên cường");
     }
 
     @Test

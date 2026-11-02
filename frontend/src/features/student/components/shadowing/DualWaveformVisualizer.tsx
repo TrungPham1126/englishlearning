@@ -155,12 +155,12 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
     return (
       <section
         aria-label="Khung hiển thị sóng âm song song giữa người bản xứ và người học"
-        className="w-full grid grid-cols-1 md:grid-cols-2 gap-4"
+        className="w-full grid grid-cols-1 md:grid-cols-2 gap-2.5"
       >
         {/* Sóng âm người bản xứ (Native Speaker Wave) */}
-        <div className="flex flex-col gap-2.5 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+        <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={onTogglePlayNative}
@@ -169,25 +169,25 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
                     ? "Tạm dừng âm thanh mẫu"
                     : "Phát âm thanh mẫu bản xứ"
                 }
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-800 hover:bg-blue-600 text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-800 hover:bg-blue-600 text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 {isPlayingNative ? (
-                  <Pause className="w-4 h-4" aria-hidden="true" />
+                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
                 ) : (
-                  <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+                  <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
                 )}
               </button>
               <div>
-                <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
                   Native Speaker Wave
                 </span>
-                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
                   Sóng âm chuẩn bản xứ
                 </span>
               </div>
             </div>
 
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30">
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30">
               {isPlayingNative ? "Đang phát..." : "16kHz Neural"}
             </span>
           </div>
@@ -195,17 +195,17 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
           <canvas
             ref={nativeCanvasRef}
             width={440}
-            height={60}
+            height={36}
             role="img"
             aria-label="Biểu đồ sóng âm của giọng mẫu bản xứ"
-            className="w-full h-14"
+            className="w-full h-8 sm:h-9"
           />
         </div>
 
         {/* Sóng âm học viên (Learner Real-time Wave) */}
-        <div className="flex flex-col gap-2.5 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+        <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={onTogglePlayLearner}
@@ -215,23 +215,23 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
                     ? "Tạm dừng bản ghi âm của bạn"
                     : "Nghe lại bản ghi âm của bạn"
                 }
-                className={`inline-flex items-center justify-center w-8 h-8 rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+                className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
                   !recordedAudioUrl || recordingState === "recording"
                     ? "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
                     : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
                 }`}
               >
                 {isPlayingLearner ? (
-                  <Pause className="w-4 h-4" aria-hidden="true" />
+                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
                 ) : (
-                  <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+                  <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
                 )}
               </button>
               <div>
-                <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
                   Learner Wave (Bạn)
                 </span>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
                   {recordingState === "recording"
                     ? "Đang thu trực tiếp 60 FPS"
                     : recordedAudioUrl
@@ -243,7 +243,7 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
 
             <span
               aria-live="polite"
-              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
                 recordingState === "recording"
                   ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30 animate-pulse"
                   : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
@@ -256,10 +256,10 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
           <canvas
             ref={learnerCanvasRef}
             width={440}
-            height={60}
+            height={36}
             role="img"
             aria-label="Biểu đồ sóng âm giọng đọc của bạn"
-            className="w-full h-14"
+            className="w-full h-8 sm:h-9"
           />
         </div>
       </section>

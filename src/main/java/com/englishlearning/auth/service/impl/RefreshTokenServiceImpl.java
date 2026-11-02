@@ -8,6 +8,7 @@ import com.englishlearning.common.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,5 +66,20 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             token.setRevoked(true);
             refreshTokenRepository.save(token);
         });
+    }
+
+    /**
+     * Dọn dẹp định kỳ vào lúc 02:00:00 sáng mỗi ngày các refresh token đã hết hạn hoặc bị thu hồi
+     * Giữ bảng refresh_tokens gọn gàng, tăng tốc độ truy vấn kiểm tra token
+     */
+    @Scheduled(cron = "0 0 2 * * ?")
+    @Transactional
+    public void cleanupExpiredTokens() {
+        try {
+            refreshTokenRepository.deleteExpiredOrRevoked(Instant.now());
+            log.info("[TOKEN-CLEANUP] Dọn dẹp định kỳ các refresh token đã hết hạn hoặc thu hồi hoàn tất.");
+        } catch (Exception e) {
+            log.error("[TOKEN-CLEANUP] Lỗi dọn dẹp refresh token định kỳ: {}", e.getMessage(), e);
+        }
     }
 }

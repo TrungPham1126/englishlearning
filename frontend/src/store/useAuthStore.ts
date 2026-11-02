@@ -11,11 +11,21 @@ interface AuthState {
   logout: () => void;
 }
 
+// Hàm đọc user an toàn tránh crash toàn bộ ứng dụng khi localStorage bị hỏng
+const getInitialUser = (): UserSummaryDto | null => {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.warn("Không thể parse thông tin user từ localStorage, xóa cache auth lỗi", error);
+    localStorage.removeItem("user");
+    return null;
+  }
+};
+
 export const useAuthStore = create<AuthState>((set) => ({
   accessToken: localStorage.getItem("accessToken"),
-  user: localStorage.getItem("user")
-    ? JSON.parse(localStorage.getItem("user")!)
-    : null,
+  user: getInitialUser(),
   isAuthenticated: Boolean(localStorage.getItem("accessToken")),
 
   setAuth: (token, user) => {

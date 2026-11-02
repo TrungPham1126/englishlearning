@@ -10,7 +10,6 @@ import type {
   StudentAssignmentSummaryResponse,
   AttemptResponse,
   StudentSkillProfile,
-  VocabularyResponse,
   SpeakingAiEvaluationResult,
   ShadowingEvaluationResponse,
   WritingAiEvaluationResult,
@@ -21,6 +20,8 @@ import type {
   ExerciseAudioResponse,
   KokoroVoice,
 } from "../types";
+
+let cachedMyCourses: { data: MyCourseResponse[]; timestamp: number } | null = null;
 
 export const studentApi = {
   updateProfile: async (data: {
@@ -53,14 +54,25 @@ export const studentApi = {
 
 
   // ================= 1. LỚP HỌC (CLASSROOMS) =================
-  getMyCourses: async (): Promise<MyCourseResponse[]> => {
+  getMyCourses: async (forceRefresh = false): Promise<MyCourseResponse[]> => {
+    const now = Date.now();
+    if (!forceRefresh && cachedMyCourses && now - cachedMyCourses.timestamp < 60000) {
+      return cachedMyCourses.data;
+    }
     const res = await axiosClient.get<ApiResponse<MyCourseResponse[]>>(
       "/api/student/classrooms/my-courses",
     );
-    return res.data.data || [];
+    const data = res.data.data || [];
+    cachedMyCourses = { data, timestamp: now };
+    return data;
+  },
+
+  invalidateCoursesCache: () => {
+    cachedMyCourses = null;
   },
 
   leaveCourse: async (classId: string): Promise<void> => {
+    cachedMyCourses = null;
     await axiosClient.post(`/api/student/classrooms/${classId}/leave`);
   },
 
@@ -226,27 +238,31 @@ export const studentApi = {
     return res.data.data;
   },
 
-  // ================= 5. TỪ VỰNG FLASHCARDS (SPACED REPETITION) =================
-  getDueFlashcards: async (
-    limit: number = 20,
-  ): Promise<PageResponse<VocabularyResponse>> => {
-    const res = await axiosClient.get<
-      ApiResponse<PageResponse<VocabularyResponse>>
-    >(`/api/v1/student/vocabularies/due?limit=${limit}`);
+  // 4.4. Đánh giá phát âm từ vựng / câu qua Whisper AI (0 - 100 điểm)
+  evaluatePronunciationAI: async (
+    audioBlob: Blob,
+    referenceText: string,
+  ): Promise<{
+    overallScore: number;
+    feedback?: string;
+    wordScores?: { word: string; score: number; isAccurate: boolean; note?: string }[];
+  }> => {
+    const formData = new FormData();
+    const filename = audioBlob.type.includes("wav") ? "pronunciation.wav" : "pronunciation.webm";
+    formData.append("audio", audioBlob, filename);
+    formData.append("referenceText", referenceText);
+
+    const res = await axiosClient.post<
+      ApiResponse<{
+        overallScore: number;
+        feedback?: string;
+        wordScores?: { word: string; score: number; isAccurate: boolean; note?: string }[];
+      }>
+    >("/api/v1/ai/pronunciation/whisper-evaluate", formData);
     return res.data.data;
   },
 
-  reviewFlashcard: async (
-    vocabularyId: string,
-    grade: 0 | 1 | 2 | 3,
-  ): Promise<void> => {
-    await axiosClient.post(
-      `/api/v1/student/vocabularies/${vocabularyId}/review`,
-      { grade },
-    );
-  },
-
-  // ================= 6. HỒ SƠ NĂNG LỰC (ANALYTICS) =================
+  // ================= 5. HỒ SƠ NĂNG LỰC (ANALYTICS) =================
   getSkillProfile: async (): Promise<StudentSkillProfile> => {
     const res = await axiosClient.get<ApiResponse<StudentSkillProfile>>(
       "/api/v1/analytics/my-profile",
@@ -273,10 +289,7 @@ export const studentApi = {
     return res.data.data || [];
   },
 
-  markDailyPlanComplete: async (planId: string): Promise<void> => {
-    await axiosClient.post(`/api/v1/curriculum/daily-plans/${planId}/complete`);
-  },
-
+  
   // 8. ĐÁNH GIÁ ĐỌC HIỂU CÂU TRẢ LỜI NGẮN (READING SHORT ANSWER AI)
   evaluateReadingShortAnswerAI: async (
     passage: string,

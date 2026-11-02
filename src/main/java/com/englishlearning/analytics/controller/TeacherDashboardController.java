@@ -1,8 +1,15 @@
 package com.englishlearning.analytics.controller;
 
 import com.englishlearning.analytics.dto.TeacherDashboardResponse;
+import com.englishlearning.assignment.entity.Assignment;
+import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.auth.service.CustomUserDetails;
+import com.englishlearning.classroom.entity.Classroom;
+import com.englishlearning.classroom.repository.ClassStudentRepository;
+import com.englishlearning.classroom.repository.ClassroomRepository;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.submission.entity.AttemptStatus;
+import com.englishlearning.submission.repository.AssignmentAttemptRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +31,10 @@ import java.util.UUID;
 public class TeacherDashboardController {
 
     private final EntityManager entityManager;
+    private final ClassroomRepository classroomRepository;
+    private final AssignmentRepository assignmentRepository;
+    private final ClassStudentRepository classStudentRepository;
+    private final AssignmentAttemptRepository assignmentAttemptRepository;
 
     @GetMapping("/stats")
     @Transactional(readOnly = true)
@@ -47,7 +58,7 @@ public class TeacherDashboardController {
         Long pendingGrading = (Long) entityManager.createQuery(
                 "SELECT COUNT(a) FROM AssignmentAttempt a WHERE a.assignment.classroom.teacher.id = :tId AND a.status = :status")
                 .setParameter("tId", teacherId)
-                .setParameter("status", com.englishlearning.submission.entity.AttemptStatus.SUBMITTED)
+                .setParameter("status", AttemptStatus.SUBMITTED)
                 .getSingleResult();
 
         // 4. Lấy danh sách việc cần làm (Bài nộp mới nhất)
@@ -56,7 +67,7 @@ public class TeacherDashboardController {
                         "FROM AssignmentAttempt a WHERE a.assignment.classroom.teacher.id = :tId AND a.status = :status ORDER BY a.submittedAt ASC",
                 Object[].class)
                 .setParameter("tId", teacherId)
-                .setParameter("status", com.englishlearning.submission.entity.AttemptStatus.SUBMITTED)
+                .setParameter("status", AttemptStatus.SUBMITTED)
                 .setMaxResults(3)
                 .getResultList();
 
@@ -81,20 +92,29 @@ public class TeacherDashboardController {
                     .build());
         }
 
-        // 5. Thống kê tỷ lệ hoàn thành thực tế từ dữ liệu bài nộp
+        // 5. Thống kê tỷ lệ hoàn thành thực tế từ dữ liệu bài nộp cho từng lớp học
         Double avgCompletionRate = 0.0;
         try {
-            Long totalAttempts = (Long) entityManager.createQuery(
-                    "SELECT COUNT(a) FROM AssignmentAttempt a WHERE a.assignment.classroom.teacher.id = :tId")
-                    .setParameter("tId", teacherId)
-                    .getSingleResult();
-            Long totalGradedAttempts = (Long) entityManager.createQuery(
-                    "SELECT COUNT(a) FROM AssignmentAttempt a WHERE a.assignment.classroom.teacher.id = :tId AND a.status = :status")
-                    .setParameter("tId", teacherId)
-                    .setParameter("status", com.englishlearning.submission.entity.AttemptStatus.COMPLETED)
-                    .getSingleResult();
-            if (totalAttempts != null && totalAttempts > 0) {
-                avgCompletionRate = Math.round(((double) totalGradedAttempts / totalAttempts * 100.0) * 10.0) / 10.0;
+            List<Classroom> classrooms = classroomRepository.findByTeacherId(teacherId);
+            long totalExpectedSubmissionsAll = 0;
+            long actualSubmittedCountAll = 0;
+
+            for (Classroom c : classrooms) {
+                long studentCount = classStudentRepository.countByClassroomIdAndIsActiveTrue(c.getId());
+                List<Assignment> assignments = assignmentRepository.findByClassroomId(c.getId());
+                long totalExpectedSubmissions = studentCount * assignments.size();
+                long actualSubmittedCount = assignmentAttemptRepository.countCompletedByClassroomId(c.getId());
+
+                // Tính tỷ lệ hoàn thành thực tế của từng lớp
+                double completionRate = totalExpectedSubmissions == 0 ? 0.0
+                        : Math.min(100.0, Math.round((actualSubmittedCount * 1000.0) / totalExpectedSubmissions) / 10.0);
+
+                totalExpectedSubmissionsAll += totalExpectedSubmissions;
+                actualSubmittedCountAll += actualSubmittedCount;
+            }
+
+            if (totalExpectedSubmissionsAll > 0) {
+                avgCompletionRate = Math.min(100.0, Math.round((actualSubmittedCountAll * 1000.0) / totalExpectedSubmissionsAll) / 10.0);
             }
         } catch (Exception ignored) {
         }

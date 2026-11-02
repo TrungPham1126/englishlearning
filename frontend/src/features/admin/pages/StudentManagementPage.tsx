@@ -195,10 +195,6 @@ export default function StudentManagementPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
-            <Users size={14} />
-            <span>Học Viên & Tuyển Sinh</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Quản Lý Học Viên Trung Tâm
           </h1>
@@ -313,7 +309,7 @@ export default function StudentManagementPage() {
                             <p className="font-bold text-slate-900 dark:text-white">
                               {student.lastName} {student.firstName}
                             </p>
-                            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 rounded-md inline-block mt-0.5">
                               Học Viên ELP
                             </span>
                           </div>
@@ -332,7 +328,7 @@ export default function StudentManagementPage() {
                       <td className="p-4 text-center">
                         <button
                           onClick={() => handleToggleStatus(student)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition cursor-pointer ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold border transition cursor-pointer ${
                             isActive
                               ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
                               : "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200"

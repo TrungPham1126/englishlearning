@@ -110,6 +110,12 @@ phonetics-service/test_*.json
 phonetics-service/inspect_current.py
 phonetics-service/vocab_dump.json
 !phonetics-service/requirements.txt
+scratch/
+reading_dump.txt
+find_top_audio.py
+skills-lock.json
+tests/
+.agents/
 
 
 

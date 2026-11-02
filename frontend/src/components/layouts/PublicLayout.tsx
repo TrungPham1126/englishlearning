@@ -1,6 +1,6 @@
 // src/components/layouts/PublicLayout.tsx
 import { Outlet } from "react-router-dom";
-import { GraduationCap, Sparkles } from "lucide-react";
+import { GraduationCap, Award } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle";
 
 export default function PublicLayout() {
@@ -28,7 +28,7 @@ export default function PublicLayout() {
                 ELP LEARNING
               </span>
               <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/50">
-                <Sparkles size={11} /> AI EdTech
+                <Award size={11} /> AI EdTech
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">

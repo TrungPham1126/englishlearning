@@ -4,8 +4,12 @@ import com.englishlearning.auth.entity.RoleName;
 import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.repository.UserRepository;
 import com.englishlearning.classroom.entity.ClassStudent;
+import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
+import com.englishlearning.classroom.repository.ClassroomRepository;
+import com.englishlearning.notification.dto.NotificationClassroomDto;
 import com.englishlearning.notification.dto.NotificationDto;
+import com.englishlearning.notification.dto.NotificationRecipientDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.entity.NotificationType;
 import com.englishlearning.notification.repository.NotificationRepository;
@@ -33,6 +37,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final RabbitTemplate rabbitTemplate;
     private final NotificationRepository notificationRepository;
     private final ClassStudentRepository classStudentRepository;
+    private final ClassroomRepository classroomRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final EntityManager entityManager;
@@ -50,21 +55,35 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public void sendSystemNotification(UUID recipientUserId, String title, String message, String type,
             String redirectUrl) {
+        sendSystemNotification(recipientUserId, title, message, type, null, redirectUrl, null);
+    }
+
+    @Override
+    public void sendSystemNotification(String title, String message, String type, String redirectUrl) {
+        sendSystemNotification(null, title, message, type, null, redirectUrl, null);
+    }
+
+    @Override
+    public void sendSystemNotification(UUID recipientUserId, String title, String message, String type,
+            String actionType, String targetUrl, Object referenceId) {
         NotificationDto dto = NotificationDto.builder()
                 .recipientUserId(recipientUserId)
                 .title(title)
                 .message(message)
                 .content(message)
                 .notificationType(type)
-                .redirectUrl(redirectUrl)
-                .targetUrl(redirectUrl)
+                .actionType(actionType)
+                .redirectUrl(targetUrl)
+                .targetUrl(targetUrl)
+                .referenceId(referenceId != null ? referenceId.toString() : null)
                 .build();
         dispatchNotification(dto);
     }
 
     @Override
-    public void sendSystemNotification(String title, String message, String type, String redirectUrl) {
-        sendSystemNotification(null, title, message, type, redirectUrl);
+    public void sendSystemNotification(String title, String message, String type,
+            String actionType, String targetUrl, Object referenceId) {
+        sendSystemNotification(null, title, message, type, actionType, targetUrl, referenceId);
     }
 
     private NotificationType resolveNotificationType(String typeStr, UUID classroomId) {
@@ -102,10 +121,44 @@ public class NotificationServiceImpl implements NotificationService {
                         ? dto.getContent().trim()
                         : safeTitle);
 
+        String actionType = dto.getActionType() != null && !dto.getActionType().isBlank()
+                ? dto.getActionType()
+                : "TEXT_ANNOUNCEMENT";
+        String referenceId = dto.getReferenceId();
+
         // =========================================================================
-        // Nhánh 1: Thông báo Lớp học (Classroom broadcast - dto.getClassroomId() != null)
+        // Nhánh 1: Gửi đến TỪNG CÁ NHÂN (dto.getRecipientUserId() != null)
         // =========================================================================
-        if (dto.getClassroomId() != null) {
+        if (dto.getRecipientUserId() != null) {
+            User recipient = userRepository.findById(dto.getRecipientUserId())
+                    .orElseGet(() -> entityManager.getReference(User.class, dto.getRecipientUserId()));
+
+            Notification notification = Notification.builder()
+                    .title(safeTitle)
+                    .message(content)
+                    .type(type)
+                    .targetUrl(targetUrl)
+                    .actionType(actionType)
+                    .referenceId(referenceId)
+                    .recipient(recipient)
+                    .classroomId(dto.getClassroomId())
+                    .isRead(false)
+                    .build();
+
+            Notification saved = notificationRepository.save(notification);
+
+            try {
+                messagingTemplate.convertAndSendToUser(dto.getRecipientUserId().toString(), "/queue/notifications", saved);
+            } catch (Exception ex) {
+                log.warn("Không thể gửi WebSocket tới recipient {}: {}", dto.getRecipientUserId(), ex.getMessage());
+            }
+            return;
+        }
+
+        // =========================================================================
+        // Nhánh 2: Gửi TOÀN LỚP HỌC (dto.getClassroomId() != null)
+        // =========================================================================
+        else if (dto.getClassroomId() != null) {
             List<ClassStudent> classStudents = classStudentRepository.findByClassroomId(dto.getClassroomId());
             if (classStudents != null && !classStudents.isEmpty()) {
                 List<Notification> notifs = new ArrayList<>();
@@ -117,6 +170,8 @@ public class NotificationServiceImpl implements NotificationService {
                                 .message(content)
                                 .type(type)
                                 .targetUrl(targetUrl)
+                                .actionType(actionType)
+                                .referenceId(referenceId)
                                 .recipient(studentUser)
                                 .classroomId(dto.getClassroomId())
                                 .isRead(false)
@@ -149,9 +204,9 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         // =========================================================================
-        // Nhánh 2: Admin Broadcast toàn hệ thống (dto.getClassroomId() == null && dto.getRecipientUserId() == null)
+        // Nhánh 3: Gửi TOÀN ROLE hoặc TOÀN HỆ THỐNG
         // =========================================================================
-        else if (dto.getRecipientUserId() == null) {
+        else {
             List<User> allUsers = userRepository.findAll();
             if (allUsers == null || allUsers.isEmpty()) {
                 log.warn("Không tìm thấy user nào trong hệ thống để phát thông báo.");
@@ -159,12 +214,14 @@ public class NotificationServiceImpl implements NotificationService {
             }
 
             RoleName targetRole = null;
-            if (dto.getTargetAudience() != null) {
+            if (dto.getTargetAudience() != null && !dto.getTargetAudience().isBlank()) {
                 String aud = dto.getTargetAudience().trim().toUpperCase();
-                if (aud.contains("STUDENT")) {
+                if (aud.equals("ROLE_STUDENT") || aud.equals("STUDENT")) {
                     targetRole = RoleName.ROLE_STUDENT;
-                } else if (aud.contains("TEACHER")) {
+                } else if (aud.equals("ROLE_TEACHER") || aud.equals("TEACHER")) {
                     targetRole = RoleName.ROLE_TEACHER;
+                } else if (aud.equals("ROLE_ADMIN") || aud.equals("ADMIN")) {
+                    targetRole = RoleName.ROLE_ADMIN;
                 }
             }
 
@@ -174,22 +231,16 @@ public class NotificationServiceImpl implements NotificationService {
                     .filter(u -> roleFilter == null || (u.getRoles() != null && u.getRoles().stream().anyMatch(r -> r.getName() == roleFilter)))
                     .toList());
 
-            if (recipients.isEmpty()) {
+            if (recipients.isEmpty() && roleFilter == null) {
                 recipients = new ArrayList<>(allUsers);
-            }
-
-            for (User u : allUsers) {
-                if (u.getRoles() != null && u.getRoles().stream().anyMatch(r -> r.getName() == RoleName.ROLE_ADMIN)) {
-                    if (!recipients.contains(u)) {
-                        recipients.add(u);
-                    }
-                }
             }
 
             final String msgToSave = content;
             final NotificationType finalType = type;
             final String finalTargetUrl = targetUrl;
             final String finalTitle = safeTitle;
+            final String finalActionType = actionType;
+            final String finalReferenceId = referenceId;
 
             List<Notification> userNotifs = recipients.stream()
                     .map(u -> Notification.builder()
@@ -197,6 +248,8 @@ public class NotificationServiceImpl implements NotificationService {
                             .message(msgToSave)
                             .type(finalType)
                             .targetUrl(finalTargetUrl)
+                            .actionType(finalActionType)
+                            .referenceId(finalReferenceId)
                             .recipient(u)
                             .classroomId(null)
                             .isRead(false)
@@ -225,34 +278,86 @@ public class NotificationServiceImpl implements NotificationService {
             } catch (Exception ex) {
                 log.warn("Lỗi gửi WebSocket broadcast tới topic hệ thống: {}", ex.getMessage());
             }
-            return;
+        }
+    }
+
+    @Override
+    public List<NotificationRecipientDto> searchRecipients(String query, String role) {
+        String cleanQuery = query != null ? query.trim().toLowerCase() : "";
+        RoleName targetRole = null;
+        if (role != null && !role.isBlank()) {
+            String r = role.trim().toUpperCase();
+            if (r.contains("STUDENT")) targetRole = RoleName.ROLE_STUDENT;
+            else if (r.contains("TEACHER")) targetRole = RoleName.ROLE_TEACHER;
+            else if (r.contains("ADMIN")) targetRole = RoleName.ROLE_ADMIN;
         }
 
-        // =========================================================================
-        // Nhánh 3: Thông báo đích danh cho 1 user (dto.getRecipientUserId() != null)
-        // =========================================================================
-        else {
-            User recipient = userRepository.findById(dto.getRecipientUserId())
-                    .orElseGet(() -> entityManager.getReference(User.class, dto.getRecipientUserId()));
+        final RoleName finalRole = targetRole;
+        return userRepository.findAll().stream()
+                .filter(u -> u.getIsActive() == null || Boolean.TRUE.equals(u.getIsActive()))
+                .filter(u -> finalRole == null || (u.getRoles() != null && u.getRoles().stream().anyMatch(ro -> ro.getName() == finalRole)))
+                .filter(u -> {
+                    if (cleanQuery.isEmpty()) return true;
+                    String fullName = ((u.getLastName() != null ? u.getLastName() : "") + " " +
+                                       (u.getFirstName() != null ? u.getFirstName() : "")).toLowerCase();
+                    String email = u.getEmail() != null ? u.getEmail().toLowerCase() : "";
+                    return fullName.contains(cleanQuery) || email.contains(cleanQuery);
+                })
+                .limit(50)
+                .map(u -> {
+                    String fn = ((u.getLastName() != null ? u.getLastName() : "") + " " +
+                                 (u.getFirstName() != null ? u.getFirstName() : "")).trim();
+                    if (fn.isEmpty()) fn = u.getEmail();
+                    String userRole = u.getRoles() != null && !u.getRoles().isEmpty()
+                            ? u.getRoles().iterator().next().getName().name()
+                            : "ROLE_STUDENT";
+                    return NotificationRecipientDto.builder()
+                            .id(u.getId())
+                            .fullName(fn)
+                            .email(u.getEmail())
+                            .role(userRole)
+                            .avatarUrl(u.getAvatarUrl())
+                            .build();
+                })
+                .toList();
+    }
 
-            Notification notification = Notification.builder()
-                    .title(safeTitle)
-                    .message(content)
-                    .type(type)
-                    .targetUrl(targetUrl)
-                    .recipient(recipient)
-                    .classroomId(null)
-                    .isRead(false)
-                    .build();
+    @Override
+    public List<NotificationClassroomDto> getAvailableClassrooms(UUID currentUserId) {
+        List<Classroom> classrooms;
+        if (currentUserId != null) {
+            User user = userRepository.findById(currentUserId).orElse(null);
+            boolean isAdmin = user != null && user.getRoles() != null &&
+                    user.getRoles().stream().anyMatch(r -> r.getName() == RoleName.ROLE_ADMIN);
 
-            Notification saved = notificationRepository.save(notification);
-
-            try {
-                messagingTemplate.convertAndSendToUser(dto.getRecipientUserId().toString(), "/queue/notifications", saved);
-            } catch (Exception ex) {
-                log.warn("Không thể gửi WebSocket tới recipient {}: {}", dto.getRecipientUserId(), ex.getMessage());
+            if (isAdmin) {
+                classrooms = classroomRepository.findAll();
+            } else {
+                classrooms = classroomRepository.findByTeacherId(currentUserId);
+                if (classrooms.isEmpty()) {
+                    classrooms = classroomRepository.findAll();
+                }
             }
+        } else {
+            classrooms = classroomRepository.findAll();
         }
+
+        return classrooms.stream().map(c -> {
+            String teacherName = "Chưa phân công";
+            if (c.getTeacher() != null && c.getTeacher().getUser() != null) {
+                User tu = c.getTeacher().getUser();
+                teacherName = ((tu.getLastName() != null ? tu.getLastName() : "") + " " +
+                               (tu.getFirstName() != null ? tu.getFirstName() : "")).trim();
+            }
+            int count = c.getClassStudents() != null ? c.getClassStudents().size() : 0;
+            return NotificationClassroomDto.builder()
+                    .id(c.getId())
+                    .name(c.getName())
+                    .joinCode(c.getJoinCode())
+                    .teacherName(teacherName)
+                    .studentCount(count)
+                    .build();
+        }).toList();
     }
 
     @Override

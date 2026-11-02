@@ -45,7 +45,7 @@ export function resolveFullAudioUrl(url?: string | null): string {
   ) {
     return trimmed;
   }
-  const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+  const base = import.meta.env.VITE_API_BASE_URL || "";
   return `${base}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
 }
 

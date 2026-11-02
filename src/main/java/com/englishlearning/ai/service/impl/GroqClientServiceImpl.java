@@ -35,7 +35,7 @@ public class GroqClientServiceImpl implements GroqClientService {
     private final ObjectMapper objectMapper;
     private final AiMonitoringService aiMonitoringService;
     private final UserRepository userRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     /**
      * Bóc băng âm thanh sang văn bản bằng Groq Whisper-large-v3

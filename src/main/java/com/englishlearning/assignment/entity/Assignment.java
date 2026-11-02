@@ -2,6 +2,7 @@ package com.englishlearning.assignment.entity;
 
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.curriculum.entity.Lesson;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -19,6 +20,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "classroom", "lesson"})
 public class Assignment {
 
     @Id
@@ -48,11 +50,15 @@ public class Assignment {
 
     @Column(name = "max_attempts")
     @Builder.Default
-    private Integer maxAttempts = 1;
+    private Integer maxAttempts = 3;
 
     @Column(name = "pass_score")
     @Builder.Default
-    private Double passScore = 5.0;
+    private Double passScore = 8.0;
+
+    @Column(name = "max_allowed_error_percent")
+    @Builder.Default
+    private Double maxAllowedErrorPercent = 20.0;
 
     @Column(name = "due_date")
     private Instant dueDate;

@@ -27,7 +27,9 @@ public class QuotaManagementServiceImpl implements QuotaManagementService {
     @Override
     @Transactional
     public StudentAiQuota deductAiQuota(UUID studentId, int count) {
-        StudentAiQuota quota = getOrCreateQuota(studentId);
+        // Khóa bi quan PESSIMISTIC_WRITE để triệt tiêu 100% rủi ro Race Condition khi gửi yêu cầu AI đồng thời
+        StudentAiQuota quota = studentAiQuotaRepository.findByStudentIdWithLock(studentId)
+                .orElseGet(() -> getOrCreateQuota(studentId));
 
         // Reset tự động khi qua ngày mới
         LocalDate today = LocalDate.now();

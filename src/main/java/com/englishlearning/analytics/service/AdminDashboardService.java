@@ -5,4 +5,8 @@ import com.englishlearning.analytics.dto.AdminDashboardStats;
 public interface AdminDashboardService {
 
     AdminDashboardStats getDashboardStats();
+
+    default AdminDashboardStats getSystemStats() {
+        return getDashboardStats();
+    }
 }

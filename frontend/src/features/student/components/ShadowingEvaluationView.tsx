@@ -1,7 +1,7 @@
 // src/features/student/components/ShadowingEvaluationView.tsx
 import React, { useState } from "react";
 import type { ShadowingEvaluationResponse } from "@/features/student/types";
-import { Zap, CheckCircle2, XCircle, Sparkles, Layers } from "lucide-react";
+import { Zap, CheckCircle2, XCircle, Mic, Layers } from "lucide-react";
 
 interface Props {
   readonly data: ShadowingEvaluationResponse;
@@ -91,8 +91,8 @@ export default function ShadowingEvaluationView({ data }: Props) {
                   size={14}
                 />{" "}
                 {data.evaluatedBy === "PYTHON_ACOUSTIC_ENGINE"
-                  ? "Acoustic AI Engine (Praat F1/F2)"
-                  : "Groq AI Engine <2s"}
+                  ? "Phân tích âm học"
+                  : "Phân tích phát âm"}
               </span>
               <span
                 className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-black border-2 shadow-sm ${
@@ -143,7 +143,7 @@ export default function ShadowingEvaluationView({ data }: Props) {
       <div className="rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 md:p-8 shadow-sm space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-slate-100 dark:border-slate-800 pb-4 gap-4">
           <span className="text-base lg:text-lg font-black text-slate-800 dark:text-white uppercase tracking-widest flex items-center gap-2">
-            <Sparkles
+            <Mic
               aria-hidden="true"
               className="text-blue-700 dark:text-blue-400"
               size={20}

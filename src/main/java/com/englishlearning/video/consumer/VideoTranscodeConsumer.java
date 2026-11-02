@@ -20,6 +20,8 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -45,11 +47,17 @@ public class VideoTranscodeConsumer {
     private boolean hlsEnabled;
 
     private String resolveFfmpegExecutable() {
-        String[] candidates = new String[] {
-                ffmpegPath,
-                "D:\\taixuong\\ffmpeg-8.0-full_build\\bin\\ffmpeg.exe",
-                "D:\\HocTap_DoAn\\doanchuyennganh\\phonetics-service\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg.exe"
-        };
+        List<String> candidates = new ArrayList<>();
+        if (ffmpegPath != null && !ffmpegPath.isBlank()) {
+            candidates.add(ffmpegPath.trim());
+        }
+        // Thử các binary tiêu chuẩn cross-platform (Linux, Mac, Windows)
+        candidates.add("ffmpeg");
+        candidates.add("ffmpeg.exe");
+        candidates.add("/usr/bin/ffmpeg");
+        candidates.add("/usr/local/bin/ffmpeg");
+        candidates.add("/opt/homebrew/bin/ffmpeg");
+
         for (String candidate : candidates) {
             if (candidate == null || candidate.isBlank()) {
                 continue;
@@ -92,7 +100,7 @@ public class VideoTranscodeConsumer {
             try {
                 Path localRawPath = Paths.get(rawUrl);
                 String fileName = localRawPath.getFileName().toString();
-                playableUrl = "http://localhost:8080/uploads/videos/raw/" + fileName;
+                playableUrl = "/api/v1/videos/" + video.getId() + "/raw";
 
                 if (Files.exists(localRawPath)) {
                     String rawPrefix = "raw/" + video.getId() + "/" + fileName;
@@ -114,7 +122,7 @@ public class VideoTranscodeConsumer {
             }
         }
 
-        if (playableUrl == null || playableUrl.isBlank()) {
+        if (playableUrl == null || playableUrl.isBlank() || playableUrl.contains("localhost:8080")) {
             playableUrl = "/api/v1/videos/" + video.getId() + "/raw";
         }
 

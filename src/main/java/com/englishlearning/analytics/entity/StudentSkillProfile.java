@@ -53,6 +53,14 @@ public class StudentSkillProfile {
     @Builder.Default
     private Double vocabularyScore = 0.0;
 
+    @Column(name = "pronunciation_score")
+    @Builder.Default
+    private Double pronunciationScore = 0.0;
+
+    @Column(name = "fluency_score")
+    @Builder.Default
+    private Double fluencyScore = 0.0;
+
     @Column(name = "ai_recommended_path", columnDefinition = "TEXT")
     private String aiRecommendedPath;
 

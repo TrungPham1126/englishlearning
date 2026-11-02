@@ -1,5 +1,6 @@
 // src/components/ui/Modal.tsx
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,20 +26,70 @@ export function Modal({
   className,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    previousActiveElement.current = document.activeElement as HTMLElement | null;
+
+    // Focus the first focusable element inside the modal
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const focusTimer = setTimeout(() => {
+      if (modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>(focusableSelector);
+        if (focusables.length > 0) {
+          focusables[0].focus();
+        } else {
+          modalRef.current.focus();
+        }
+      }
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
+      if (e.key === "Escape") {
         onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll<HTMLElement>(focusableSelector)
+        );
+        if (focusables.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
+      clearTimeout(focusTimer);
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === "function") {
+        previousActiveElement.current.focus();
+      }
     };
   }, [isOpen, onClose]);
 
@@ -52,15 +103,15 @@ export function Modal({
     full: "max-w-[95vw] h-[90vh]",
   };
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        className="fixed inset-0 bg-slate-900/70 dark:bg-black/85 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
         aria-hidden="true"
         onClick={() => closeOnBackdropClick && onClose()}
       />
@@ -69,7 +120,7 @@ export function Modal({
       <div
         ref={modalRef}
         className={cn(
-          "relative w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0e1526] text-slate-900 dark:text-slate-100 shadow-elevated z-10 overflow-hidden flex flex-col animate-in zoom-in-95 fade-in duration-150",
+          "relative w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0e1526] text-slate-900 dark:text-slate-100 shadow-elevated z-10 overflow-hidden flex flex-col animate-in zoom-in-95 fade-in duration-150 my-auto",
           sizeStyles[size],
           className,
         )}
@@ -105,4 +156,8 @@ export function Modal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }

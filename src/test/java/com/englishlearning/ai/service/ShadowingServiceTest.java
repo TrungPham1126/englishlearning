@@ -35,6 +35,8 @@ public class ShadowingServiceTest {
         @Mock
         private AiEvaluationRepository aiEvaluationRepository;
         @Mock
+        private com.englishlearning.notification.service.NotificationService notificationService;
+        @Mock
         private EntityManager entityManager;
         @Mock
         private AnalyticsService analyticsService;
@@ -50,6 +52,7 @@ public class ShadowingServiceTest {
                                 geminiClientService,
                                 pythonIntegrationService,
                                 aiEvaluationRepository,
+                                notificationService,
                                 entityManager,
                                 objectMapper,
                                 analyticsService);

@@ -26,6 +26,7 @@ public class AssignmentRequest {
     private Instant dueDate;
     private Integer maxAttempts;
     private Double passScore;
+    private Double maxAllowedErrorPercent;
     private String audioUrl;
     private String listeningScript;
 
@@ -49,6 +50,8 @@ public class AssignmentRequest {
         @NotBlank
         private String optionText;
         
+        private String matchText;
+
         @com.fasterxml.jackson.annotation.JsonProperty("isCorrect")
         private Boolean isCorrect;
 

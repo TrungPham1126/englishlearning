@@ -34,4 +34,7 @@ public class StudentDailyProgress {
     private Integer completedItemsCount;
     private Integer totalItemsCount;
     private Instant completedAt;
+
+    @Column(name = "time_spent_seconds")
+    private Integer timeSpentSeconds;
 }

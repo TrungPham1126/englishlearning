@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Volume2,
-  Sparkles,
   CheckCircle2,
   XCircle,
   RotateCcw,
@@ -220,11 +219,20 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
     if (isGlobalMatching) {
       // Tập hợp tất cả các nghĩa từ các câu hỏi, xáo trộn thứ tự
       const allMeanings = wordItems.map((w) => {
+        const opt0 = w.options[0] as any;
         const text =
-          w.options[0]?.text || w.correctAnswer || w.explanation || "Định nghĩa";
+          opt0?.matchText ||
+          opt0?.meaning ||
+          opt0?.definition ||
+          (w as any).meaning ||
+          (w as any).matchText ||
+          w.correctAnswer ||
+          w.explanation ||
+          opt0?.text ||
+          "";
         return {
-          questionId: w.questionId,
-          optionId: w.options[0]?.id || w.questionId,
+          questionId: String(w.questionId),
+          optionId: String(w.options[0]?.id || w.questionId),
           text,
         };
       });
@@ -235,8 +243,8 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
     // Nếu mỗi question có 4 options: Hiển thị các options của từ đang chọn (Cột Phải tương tác trực tiếp)
     if (currentActiveItem) {
       return currentActiveItem.options.map((opt) => ({
-        questionId: currentActiveItem.questionId,
-        optionId: opt.id,
+        questionId: String(currentActiveItem.questionId),
+        optionId: String(opt.id),
         text: opt.text,
         isCorrect: opt.isCorrect,
       }));
@@ -246,11 +254,19 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
 
   // Đếm tiến độ số từ đã nối
   const matchedCount = useMemo(() => {
-    return wordItems.filter(
-      (w) =>
-        Boolean(answers[w.questionId]?.selectedOptionId) ||
-        Boolean(answers[w.questionId]?.textAnswer)
-    ).length;
+    return wordItems.filter((w) => {
+      const qId = String(w.questionId);
+      const ans = answers[qId] || answers[w.questionId];
+      const hasOpt =
+        ans?.selectedOptionId !== undefined &&
+        ans?.selectedOptionId !== null &&
+        String(ans.selectedOptionId).trim() !== "";
+      const hasText =
+        ans?.textAnswer !== undefined &&
+        ans?.textAnswer !== null &&
+        String(ans.textAnswer).trim() !== "";
+      return hasOpt || hasText;
+    }).length;
   }, [wordItems, answers]);
 
   const progressPercent = Math.round(
@@ -333,28 +349,32 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
     meaningText: string
   ) => {
     if (disabled || isReview) return;
+    const qId = String(targetQuestionId);
 
-    // Cập nhật câu trả lời vào state answers
-    onUpdateAnswer(targetQuestionId, {
-      selectedOptionId: optionId,
-      textAnswer: meaningText,
+    // Cập nhật câu trả lời vào state answers (đảm bảo chiều questionId -> optionId & text)
+    onUpdateAnswer(qId, {
+      selectedOptionId: String(optionId),
+      textAnswer: String(meaningText).trim(),
     });
 
     // Tự động phát âm từ vừa chọn
-    const matchedItem = wordItems.find((w) => w.questionId === targetQuestionId);
+    const matchedItem = wordItems.find((w) => String(w.questionId) === qId);
     if (matchedItem) {
       handlePlayPronunciation(matchedItem.word, matchedItem.audioUrl);
     }
 
     // Tự động chuyển tiêu điểm sang từ tiếp theo chưa được nối
-    const remainingUnmatched = wordItems.find(
-      (w) =>
-        w.questionId !== targetQuestionId &&
-        !answers[w.questionId]?.selectedOptionId &&
-        !answers[w.questionId]?.textAnswer
-    );
+    const remainingUnmatched = wordItems.find((w) => {
+      const wid = String(w.questionId);
+      const ans = answers[wid] || answers[w.questionId];
+      return (
+        wid !== qId &&
+        (!ans?.selectedOptionId || String(ans.selectedOptionId).trim() === "") &&
+        (!ans?.textAnswer || String(ans.textAnswer).trim() === "")
+      );
+    });
     if (remainingUnmatched) {
-      setActiveWordId(remainingUnmatched.questionId);
+      setActiveWordId(String(remainingUnmatched.questionId));
     }
   };
 
@@ -392,8 +412,8 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
       <div className="bg-white dark:bg-surface-card p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-800 text-white flex items-center gap-1 shadow-xs">
-              <Sparkles size={12} /> BÀI TẬP NỐI TỪ VỰNG (VOCABULARY MATCHING)
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-blue-800 text-white flex items-center gap-1.5 shadow-xs">
+              <BookOpen size={12} /> BÀI TẬP NỐI TỪ VỰNG (VOCABULARY MATCHING)
             </span>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               {wordItems.length} cặp từ vựng
@@ -457,8 +477,9 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
               const isPlayingThisWord = playingWord === item.word;
 
               // Trích xuất văn bản nghĩa đã nối
+              const optId = currentAns?.selectedOptionId ? String(currentAns.selectedOptionId) : undefined;
               const matchedOption = item.options.find(
-                (o) => o.id === currentAns?.selectedOptionId
+                (o) => optId !== undefined && String(o.id) === optId
               );
               const matchedMeaningText =
                 matchedOption?.text || currentAns?.textAnswer || "";
@@ -634,11 +655,15 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
                   meaning.text;
 
               // Kiểm tra xem ý nghĩa này đã được nối với từ nào chưa
-              const linkedWordItem = wordItems.find(
-                (w) =>
-                  answers[w.questionId]?.selectedOptionId === meaning.optionId ||
-                  answers[w.questionId]?.textAnswer === meaning.text
-              );
+              const targetMeaningOptId = String(meaning.optionId);
+              const targetMeaningText = meaning.text.trim().toLowerCase();
+              const linkedWordItem = wordItems.find((w) => {
+                const wAns = answers[String(w.questionId)] || answers[w.questionId];
+                if (!wAns) return false;
+                const optMatch = wAns.selectedOptionId && String(wAns.selectedOptionId) === targetMeaningOptId;
+                const textMatch = wAns.textAnswer && wAns.textAnswer.trim().toLowerCase() === targetMeaningText;
+                return Boolean(optMatch || textMatch);
+              });
 
               return (
                 <div

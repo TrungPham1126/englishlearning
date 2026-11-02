@@ -2,12 +2,15 @@ package com.englishlearning.notification.controller;
 
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.notification.dto.NotificationClassroomDto;
 import com.englishlearning.notification.dto.NotificationDto;
+import com.englishlearning.notification.dto.NotificationRecipientDto;
 import com.englishlearning.notification.entity.Notification;
 import com.englishlearning.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -58,10 +61,31 @@ public class NotificationController {
                 notificationService.getBroadcastHistory(adminId, page, size)));
     }
 
+    @GetMapping("/recipients")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<List<NotificationRecipientDto>>> searchRecipients(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String role) {
+        return ResponseEntity.ok(ApiResponse.success(
+                notificationService.searchRecipients(query, role)));
+    }
+
+    @GetMapping("/classrooms")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<List<NotificationClassroomDto>>> getAvailableClassrooms(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        UUID currentUserId = userDetails != null ? userDetails.getId() : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                notificationService.getAvailableClassrooms(currentUserId)));
+    }
+
     @PostMapping("/broadcast")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<String>> broadcastNotification(@RequestBody NotificationDto dto) {
         try {
+            if (dto.getActionType() == null || dto.getActionType().isBlank()) {
+                dto.setActionType("TEXT_ANNOUNCEMENT");
+            }
             notificationService.dispatchNotification(dto);
             return ResponseEntity.ok(ApiResponse.success("Phát thông báo thành công", null));
         } catch (Exception e) {

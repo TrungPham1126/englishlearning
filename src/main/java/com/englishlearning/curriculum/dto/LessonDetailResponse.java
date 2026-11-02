@@ -1,5 +1,6 @@
 package com.englishlearning.curriculum.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,4 +25,13 @@ public class LessonDetailResponse {
     private List<DocumentResponse> documents;
     private List<VocabularyResponse> vocabularies;
     private List<GrammarTopicResponse> grammarTopics;
+
+    private boolean completed;
+    private int progressPercentage;
+    private int watchedSeconds;
+
+    @JsonProperty("isCompleted")
+    public boolean getIsCompleted() {
+        return completed;
+    }
 }

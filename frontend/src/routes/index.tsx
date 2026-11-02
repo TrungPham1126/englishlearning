@@ -1,50 +1,69 @@
 // src/routes/index.tsx
+import React, { Suspense, lazy } from "react";
+import type { ComponentType } from "react";
 import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 
-// Layouts
-import AdminLessonDetailPage from "@/features/admin/pages/AdminLessonDetailPage";
+// Phân hệ Public nạp Eagerly để First Contentful Paint tức thì
 import PublicLayout from "@/components/layouts/PublicLayout";
-import StudentLayout from "@/components/layouts/StudentLayout";
-import TeacherLayout from "@/components/layouts/TeacherLayout";
-import AdminLayout from "@/components/layouts/AdminLayout";
-import ProtectedRoute from "@/routes/ProtectedRoute";
-import ClassroomDetailPage from "@/features/admin/pages/ClassroomDetailPage";
-
-// Phân hệ Auth
 import LoginPage from "@/features/auth/pages/LoginPage";
-import RegisterPage from "@/features/auth/pages/RegisterPage";
+import ProtectedRoute from "@/routes/ProtectedRoute";
 
-// Phân hệ Admin
-import AdminDashboardPage from "@/features/admin/pages/AdminDashboardPage";
-import UserManagementPage from "@/features/admin/pages/UserManagementPage";
-import TeacherManagementPage from "@/features/admin/pages/TeacherManagementPage";
-import StudentManagementPage from "@/features/admin/pages/StudentManagementPage";
-import ClassroomManagementPage from "@/features/admin/pages/ClassroomManagementPage";
-import VideoModerationPage from "@/features/admin/pages/VideoModerationPage";
-import AdminReportsPage from "@/features/admin/pages/AdminReportsPage";
-import SystemBroadcastPage from "@/features/admin/pages/SystemBroadcastPage";
-import AuditLogPage from "@/features/admin/pages/AuditLogPage";
-import AiMonitoringPage from "@/features/admin/pages/AiMonitoringPage";
-import ResourceLibraryPage from "@/features/admin/pages/ResourceLibraryPage";
+// Loading Fallback hiển thị mượt mà khi stream các route chunk
+const RouteLoadingFallback = () => (
+  <div className="flex min-h-[60vh] w-full items-center justify-center p-8">
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent dark:border-blue-400 dark:border-t-transparent" />
+      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        Đang nạp phân hệ...
+      </span>
+    </div>
+  </div>
+);
 
-// Phân hệ Student
-import StudentCoursesPage from "@/features/student/pages/StudentCoursesPage";
-import ClassLessonsPage from "@/features/student/pages/ClassLessonsPage";
-import LessonDetailPage from "@/features/student/pages/LessonDetailPage";
-import AssignmentTakePage from "@/features/student/pages/AssignmentTakePage";
-import StudentProfilePage from "@/features/student/pages/StudentProfilePage";
-import SpeakingAiEvaluationPage from "@/features/student/pages/SpeakingAiEvaluationPage";
-import DailyHomeworkPage from "@/features/student/pages/DailyHomeworkPage";
-import VocabularyPracticePage from "@/features/student/pages/VocabularyPracticePage";
+const withSuspense = (LazyComponent: ComponentType) => (
+  <Suspense fallback={<RouteLoadingFallback />}>
+    <LazyComponent />
+  </Suspense>
+);
 
-// Phân hệ Teacher
-import TeacherDashboardPage from "@/features/teacher/pages/TeacherDashboardPage";
-import TeacherClassroomsPage from "@/features/teacher/pages/TeacherClassroomsPage";
-import TeacherClassDetailPage from "@/features/teacher/pages/TeacherClassDetailPage";
-import TeacherClassStudentsPage from "@/features/teacher/pages/TeacherClassStudentsPage";
-import TeacherDailyPlanPage from "@/features/teacher/pages/TeacherDailyPlanPage";
-import TeacherGradingPage from "@/features/teacher/pages/TeacherGradingPage";
+// Layouts được lazy-load
+const StudentLayout = lazy(() => import("@/components/layouts/StudentLayout"));
+const TeacherLayout = lazy(() => import("@/components/layouts/TeacherLayout"));
+const AdminLayout = lazy(() => import("@/components/layouts/AdminLayout"));
+
+// Phân hệ Admin (Lazy loaded)
+const AdminDashboardPage = lazy(() => import("@/features/admin/pages/AdminDashboardPage"));
+const UserManagementPage = lazy(() => import("@/features/admin/pages/UserManagementPage"));
+const TeacherManagementPage = lazy(() => import("@/features/admin/pages/TeacherManagementPage"));
+const StudentManagementPage = lazy(() => import("@/features/admin/pages/StudentManagementPage"));
+const ClassroomManagementPage = lazy(() => import("@/features/admin/pages/ClassroomManagementPage"));
+const ClassroomDetailPage = lazy(() => import("@/features/admin/pages/ClassroomDetailPage"));
+const AdminLessonDetailPage = lazy(() => import("@/features/admin/pages/AdminLessonDetailPage"));
+const VideoModerationPage = lazy(() => import("@/features/admin/pages/VideoModerationPage"));
+const AdminReportsPage = lazy(() => import("@/features/admin/pages/AdminReportsPage"));
+const SystemBroadcastPage = lazy(() => import("@/features/admin/pages/SystemBroadcastPage"));
+const AuditLogPage = lazy(() => import("@/features/admin/pages/AuditLogPage"));
+const AiMonitoringPage = lazy(() => import("@/features/admin/pages/AiMonitoringPage"));
+const ResourceLibraryPage = lazy(() => import("@/features/admin/pages/ResourceLibraryPage"));
+
+// Phân hệ Student (Lazy loaded)
+const StudentCoursesPage = lazy(() => import("@/features/student/pages/StudentCoursesPage"));
+const ClassLessonsPage = lazy(() => import("@/features/student/pages/ClassLessonsPage"));
+const ClassAssignmentsPage = lazy(() => import("@/features/student/pages/ClassAssignmentsPage"));
+const LessonDetailPage = lazy(() => import("@/features/student/pages/LessonDetailPage"));
+const AssignmentTakePage = lazy(() => import("@/features/student/pages/AssignmentTakePage"));
+const StudentProfilePage = lazy(() => import("@/features/student/pages/StudentProfilePage"));
+const SpeakingAiEvaluationPage = lazy(() => import("@/features/student/pages/SpeakingAiEvaluationPage"));
+const DailyHomeworkPage = lazy(() => import("@/features/student/pages/DailyHomeworkPage"));
+
+// Phân hệ Teacher (Lazy loaded)
+const TeacherDashboardPage = lazy(() => import("@/features/teacher/pages/TeacherDashboardPage"));
+const TeacherClassroomsPage = lazy(() => import("@/features/teacher/pages/TeacherClassroomsPage"));
+const TeacherClassDetailPage = lazy(() => import("@/features/teacher/pages/TeacherClassDetailPage"));
+const TeacherClassStudentsPage = lazy(() => import("@/features/teacher/pages/TeacherClassStudentsPage"));
+const TeacherDailyPlanPage = lazy(() => import("@/features/teacher/pages/TeacherDailyPlanPage"));
+const TeacherGradingPage = lazy(() => import("@/features/teacher/pages/TeacherGradingPage"));
 
 // Component chuyển hướng tự động sang Daily Plan nếu có ai truy cập URL bài tập lớp cũ
 const RedirectToDailyPlan = () => {
@@ -67,35 +86,34 @@ const routes: RouteObject[] = [
     path: "/student",
     element: (
       <ProtectedRoute allowedRoles={["ROLE_STUDENT"]}>
-        <StudentLayout />
+        {withSuspense(StudentLayout)}
       </ProtectedRoute>
     ),
     children: [
       { index: true, element: <Navigate to="/student/courses" replace /> },
-      { path: "courses", element: <StudentCoursesPage /> },
-      { path: "courses/:classId/lessons", element: <ClassLessonsPage /> },
+      { path: "courses", element: withSuspense(StudentCoursesPage) },
+      { path: "courses/:classId/lessons", element: withSuspense(ClassLessonsPage) },
       {
         path: "courses/:classId/assignments",
-        element: <RedirectToDailyPlan />,
+        element: withSuspense(ClassAssignmentsPage),
       },
       {
         path: "courses/:classId/daily-plan",
-        element: <DailyHomeworkPage />,
+        element: withSuspense(DailyHomeworkPage),
       },
-      { path: "lessons/:lessonId", element: <LessonDetailPage /> },
+      { path: "lessons/:lessonId", element: withSuspense(LessonDetailPage) },
       {
         path: "assignments/:assignmentId/take",
-        element: <AssignmentTakePage />,
+        element: withSuspense(AssignmentTakePage),
       },
-      { path: "vocabulary", element: <VocabularyPracticePage /> },
-      { path: "flashcards", element: <Navigate to="/student/vocabulary" replace /> },
-      { path: "submissions", element: <SpeakingAiEvaluationPage /> },
-      { path: "submissions/:attemptId", element: <SpeakingAiEvaluationPage /> },
+      { path: "submissions", element: withSuspense(SpeakingAiEvaluationPage) },
+      { path: "speaking-ai", element: withSuspense(SpeakingAiEvaluationPage) },
+      { path: "submissions/:attemptId", element: withSuspense(SpeakingAiEvaluationPage) },
       {
         path: "assignments/:assignmentId/submissions/:attemptId",
-        element: <SpeakingAiEvaluationPage />,
+        element: withSuspense(SpeakingAiEvaluationPage),
       },
-      { path: "profile", element: <StudentProfilePage /> },
+      { path: "profile", element: withSuspense(StudentProfilePage) },
       { path: "*", element: <Navigate to="/student/courses" replace /> },
     ],
   },
@@ -105,25 +123,25 @@ const routes: RouteObject[] = [
     path: "/admin",
     element: (
       <ProtectedRoute allowedRoles={["ROLE_ADMIN"]}>
-        <AdminLayout />
+        {withSuspense(AdminLayout)}
       </ProtectedRoute>
     ),
     children: [
       { index: true, element: <Navigate to="/admin/dashboard" replace /> },
-      { path: "dashboard", element: <AdminDashboardPage /> },
-      { path: "teachers", element: <TeacherManagementPage /> },
-      { path: "students", element: <StudentManagementPage /> },
-      { path: "classrooms", element: <ClassroomManagementPage /> },
-      { path: "classrooms/:classId", element: <ClassroomDetailPage /> },
-      { path: "lessons/:lessonId", element: <AdminLessonDetailPage /> },
-      { path: "reports", element: <AdminReportsPage /> },
-      { path: "video-moderation", element: <VideoModerationPage /> },
+      { path: "dashboard", element: withSuspense(AdminDashboardPage) },
+      { path: "teachers", element: withSuspense(TeacherManagementPage) },
+      { path: "students", element: withSuspense(StudentManagementPage) },
+      { path: "classrooms", element: withSuspense(ClassroomManagementPage) },
+      { path: "classrooms/:classId", element: withSuspense(ClassroomDetailPage) },
+      { path: "lessons/:lessonId", element: withSuspense(AdminLessonDetailPage) },
+      { path: "reports", element: withSuspense(AdminReportsPage) },
+      { path: "video-moderation", element: withSuspense(VideoModerationPage) },
 
-      { path: "users", element: <UserManagementPage /> },
-      { path: "resource-library", element: <ResourceLibraryPage /> },
-      { path: "broadcast", element: <SystemBroadcastPage /> },
-      { path: "audit-logs", element: <AuditLogPage /> },
-      { path: "ai-monitoring", element: <AiMonitoringPage /> },
+      { path: "users", element: withSuspense(UserManagementPage) },
+      { path: "resource-library", element: withSuspense(ResourceLibraryPage) },
+      { path: "broadcast", element: withSuspense(SystemBroadcastPage) },
+      { path: "audit-logs", element: withSuspense(AuditLogPage) },
+      { path: "ai-monitoring", element: withSuspense(AiMonitoringPage) },
       { path: "*", element: <Navigate to="/admin/dashboard" replace /> },
     ],
   },
@@ -133,44 +151,42 @@ const routes: RouteObject[] = [
     path: "/teacher",
     element: (
       <ProtectedRoute allowedRoles={["ROLE_TEACHER", "ROLE_ADMIN"]}>
-        <TeacherLayout />
+        {withSuspense(TeacherLayout)}
       </ProtectedRoute>
     ),
     children: [
       { index: true, element: <Navigate to="/teacher/dashboard" replace /> },
-      // Dashboard tổng quan thống kê lớp, điểm yếu & việc cần làm
       {
         path: "dashboard",
-        element: <TeacherDashboardPage />,
+        element: withSuspense(TeacherDashboardPage),
       },
-      // Quản lý danh sách lớp học
       {
         path: "classrooms",
-        element: <TeacherClassroomsPage />,
+        element: withSuspense(TeacherClassroomsPage),
       },
-      // Quản lý chi tiết bài giảng, tài liệu, video & thông báo của lớp
       {
         path: "classrooms/:classId",
-        element: <TeacherClassDetailPage />,
+        element: withSuspense(TeacherClassDetailPage),
       },
-      // Quản lý học sinh, xem tiến độ & điểm yếu của lớp
       {
         path: "classrooms/:classId/students",
-        element: <TeacherClassStudentsPage />,
+        element: withSuspense(TeacherClassStudentsPage),
       },
-      // Lộ trình học hàng ngày, giao bài, đặt deadline & đính kèm tài liệu
       {
         path: "classrooms/:classId/plans",
-        element: <TeacherDailyPlanPage />,
+        element: withSuspense(TeacherDailyPlanPage),
       },
-      // Chấm bài & xem bài làm học sinh (hỗ trợ cả grading và submissions từ sidebar)
       {
         path: "grading",
-        element: <TeacherGradingPage />,
+        element: withSuspense(TeacherGradingPage),
       },
       {
         path: "submissions",
-        element: <TeacherGradingPage />,
+        element: withSuspense(TeacherGradingPage),
+      },
+      {
+        path: "broadcast",
+        element: withSuspense(SystemBroadcastPage),
       },
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],

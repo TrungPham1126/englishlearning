@@ -91,6 +91,9 @@ services:
     ports:
       # Mặc định mở port 3000 khi chạy Docker để không xung đột với port 5173 của npm run dev local
       - "${FRONTEND_PORT:-3000}:80"
+    volumes:
+      # Mount trực tiếp thư mục uploads để Nginx phân phối media tĩnh độc lập với Spring Boot
+      - backend_uploads:/var/www/uploads:ro
     depends_on:
       - backend
     networks:

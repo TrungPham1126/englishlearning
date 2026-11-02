@@ -333,7 +333,7 @@ export default function TeacherClassDetailPage() {
               onClick={() => setActiveSubTab("lessons")}
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "lessons"
-                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-xs"
                   : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -345,7 +345,7 @@ export default function TeacherClassDetailPage() {
               onClick={() => setActiveSubTab("announcements")}
               className={`flex items-center space-x-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 activeSubTab === "announcements"
-                  ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-800 text-white shadow-xs"
                   : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
@@ -394,7 +394,7 @@ export default function TeacherClassDetailPage() {
                   : "Đang tải lên Tài liệu bài giảng (PDF/Word) vào kho lưu trữ đám mây..."}
               </span>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider">
+            <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 text-[10px] font-bold uppercase tracking-wider">
               Async Pipeline
             </span>
           </div>
@@ -439,7 +439,7 @@ export default function TeacherClassDetailPage() {
             </div>
             <button
               onClick={() => setShowLessonModal(true)}
-              className="inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-blue-600 transition cursor-pointer"
+              className="inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-600 transition cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               <span>Tạo Bài Giảng Mới</span>
@@ -686,7 +686,7 @@ export default function TeacherClassDetailPage() {
                 <button
                   type="submit"
                   disabled={sendingAnn}
-                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-blue-800 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-blue-600 transition disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-2 rounded-xl bg-blue-800 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-600 transition disabled:opacity-50"
                 >
                   {sendingAnn ? (
                     <>
@@ -806,7 +806,7 @@ export default function TeacherClassDetailPage() {
                 <button
                   type="submit"
                   disabled={isCreatingLesson}
-                  className="inline-flex items-center space-x-1.5 rounded-xl bg-blue-800 px-4 py-2 font-semibold text-white hover:bg-blue-600 shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+                  className="inline-flex items-center space-x-1.5 rounded-xl bg-blue-800 px-4 py-2 font-semibold text-white hover:bg-blue-600 shadow-xs transition disabled:opacity-50"
                 >
                   {isCreatingLesson ? (
                     <>

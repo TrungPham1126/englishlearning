@@ -19,9 +19,15 @@ public class NotificationDto implements Serializable {
     private String content;
     @Builder.Default
     private String notificationType = "ANNOUNCEMENT";
+    private String actionType;
     private String redirectUrl;
     private String targetUrl;
+    private String referenceId;
     private String targetAudience;
+
+    public void setReferenceId(Object id) {
+        this.referenceId = id != null ? id.toString() : null;
+    }
 
     public String getEffectiveMessage() {
         if (message != null && !message.trim().isEmpty()) {

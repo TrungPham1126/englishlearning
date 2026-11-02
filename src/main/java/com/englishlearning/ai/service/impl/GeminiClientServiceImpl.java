@@ -43,7 +43,7 @@ public class GeminiClientServiceImpl implements GeminiClientService {
     private final ObjectMapper objectMapper;
     private final AiMonitoringService aiMonitoringService;
     private final UserRepository userRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Override
     public String generateWithSystemInstruction(String systemInstruction, String userPrompt) {

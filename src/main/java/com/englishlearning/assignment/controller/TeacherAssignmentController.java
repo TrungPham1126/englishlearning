@@ -2,12 +2,18 @@ package com.englishlearning.assignment.controller;
 
 import com.englishlearning.assignment.dto.AssignmentRequest;
 import com.englishlearning.assignment.entity.Assignment;
+import com.englishlearning.assignment.entity.AssignmentQuestion;
+import com.englishlearning.assignment.entity.QuestionType;
+import com.englishlearning.assignment.entity.SkillType;
 import com.englishlearning.assignment.service.AssignmentService;
+import com.englishlearning.assignment.service.ExcelImportService;
 import com.englishlearning.assignment.service.ExerciseAudioService;
 import com.englishlearning.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import com.englishlearning.ai.service.AiLabService;
 import com.englishlearning.curriculum.service.DocumentStorageService;
 import com.englishlearning.curriculum.service.TtsService;
-import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -33,6 +38,7 @@ public class TeacherAssignmentController {
     private final AiLabService aiLabService;
     private final TtsService ttsService;
     private final ExerciseAudioService exerciseAudioService;
+    private final ExcelImportService excelImportService;
 
     // 0. Tải lên file audio bài tập (cho kỹ năng Listening/Speaking)
     @PostMapping(value = "/assignments/upload-audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -52,10 +58,45 @@ public class TeacherAssignmentController {
         return ResponseEntity.ok(ApiResponse.success("Tổng hợp giọng nói thành công", audioUrl));
     }
 
-    // 1. Lấy tất cả bài tập của lớp
+    // 0C. Tải file Excel mẫu chuẩn (.xlsx) có sẵn công thức, dropdown và dữ liệu mẫu đa dạng
+    @GetMapping("/assignments/sample-excel")
+    public ResponseEntity<byte[]> downloadSampleExcel(
+            @RequestParam(value = "skillType", required = false) String skillType) {
+        byte[] excelBytes = excelImportService.generateSampleTemplate(skillType);
+        String filename = (skillType != null && !skillType.isBlank())
+                ? "Mau_Giao_Bai_Tap_" + skillType.toUpperCase() + ".xlsx"
+                : "Mau_Giao_Bai_Tap_Chuan.xlsx";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+    }
+
+    // 0D. Import câu hỏi từ file Excel (.xlsx, .xls) trực tiếp vào bài tập
+    @PostMapping(value = "/assignments/{id}/import-excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<List<AssignmentQuestion>>> importQuestionsFromExcel(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file) {
+        List<AssignmentQuestion> questions = excelImportService.importQuestionsFromExcel(file, id);
+        return ResponseEntity.ok(ApiResponse.success("Import danh sách câu hỏi từ Excel thành công", questions));
+    }
+
+    // 1. Lấy tất cả bài tập của lớp (hỗ trợ lọc riêng cho việc chấm bài viết/nói)
     @GetMapping("/classrooms/{classroomId}/assignments")
-    public ResponseEntity<ApiResponse<List<Assignment>>> getAssignmentsByClassroom(@PathVariable UUID classroomId) {
+    public ResponseEntity<ApiResponse<List<Assignment>>> getAssignmentsByClassroom(
+            @PathVariable UUID classroomId,
+            @RequestParam(value = "gradingOnly", required = false, defaultValue = "false") boolean gradingOnly) {
         List<Assignment> assignments = assignmentService.getAssignmentsByClassroom(classroomId);
+        if (gradingOnly && assignments != null) {
+            assignments = assignments.stream()
+                    .filter(a -> a.getSkillType() == SkillType.WRITING
+                            || a.getSkillType() == SkillType.SPEAKING
+                            || (a.getQuestions() != null && a.getQuestions().stream().anyMatch(q ->
+                                    q.getQuestionType() == QuestionType.ESSAY
+                                    || q.getQuestionType() == QuestionType.AUDIO_RESPONSE)))
+                    .toList();
+        }
         return ResponseEntity.ok(ApiResponse.success("Assignments retrieved successfully", assignments));
     }
 

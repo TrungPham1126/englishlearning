@@ -359,10 +359,6 @@ export default function AuditLogPage() {
       {/* 1. Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800/80">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60 mb-2">
-            <Activity size={13} />
-            <span>Kiểm Toán Hệ Thống &amp; Điều Phối AI</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
             Nhật Ký Kiểm Toán (Audit Logs)
           </h1>

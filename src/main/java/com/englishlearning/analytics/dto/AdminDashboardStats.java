@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -28,6 +29,8 @@ public class AdminDashboardStats {
     private long pendingGrading;
     private double completionRate;
     private List<DailySubmissionTrendDto> weeklySubmissionsTrend;
+    private Map<String, Double> averageSkillScores;
+    private CompletionDistributionDto completionDistribution;
 
     @Data
     @Builder
@@ -37,5 +40,15 @@ public class AdminDashboardStats {
         private String date;
         private long submissions;
         private long graded;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CompletionDistributionDto {
+        private double high;    // >= 80%
+        private double medium;  // 50% - 79%
+        private double low;     // < 50%
     }
 }

@@ -42,6 +42,9 @@ public class VideoServiceImpl implements VideoService {
     private final RabbitTemplate rabbitTemplate;
     private final EntityManager entityManager;
     private final VideoTranscodeConsumer videoTranscodeConsumer;
+    private final com.englishlearning.curriculum.repository.DailyPlanItemRepository dailyPlanItemRepository;
+    private final com.englishlearning.curriculum.repository.StudentDailyProgressRepository studentDailyProgressRepository;
+    private final com.englishlearning.curriculum.service.UserStreakService userStreakService;
 
     @Value("${app.storage.upload-dir:uploads/videos}")
     private String uploadBaseDir;
@@ -146,12 +149,32 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    private void normalizePlaybackUrl(Video video) {
+        if (video == null) {
+            return;
+        }
+        healIfFfmpegTechnicalError(video);
+
+        String hls = video.getHlsPlaylistUrl();
+        if (hls != null && hls.contains("http://localhost:8080")) {
+            String normalized = "/api/v1/videos/" + video.getId() + "/raw";
+            log.info("[VIDEO_PIPELINE] Chuẩn hóa URL từ localhost:8080 sang relative URL cho video ID {}: {} -> {}",
+                    video.getId(), hls, normalized);
+            video.setHlsPlaylistUrl(normalized);
+            videoRepository.save(video);
+        } else if ((hls == null || hls.isBlank()) && video.getRawStorageUrl() != null && video.getStatus() == VideoStatus.APPROVED) {
+            String fallback = "/api/v1/videos/" + video.getId() + "/raw";
+            video.setHlsPlaylistUrl(fallback);
+            videoRepository.save(video);
+        }
+    }
+
     @Override
     @Transactional
     public Video getVideoById(UUID videoId) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy video: " + videoId));
-        healIfFfmpegTechnicalError(video);
+        normalizePlaybackUrl(video);
         return video;
     }
 
@@ -177,18 +200,67 @@ public class VideoServiceImpl implements VideoService {
                 : 0.0f;
         history.setCompletionPercentage(percentage);
 
-        if (Boolean.TRUE.equals(request.getCompleted()) || percentage >= 80.0f) {
+        boolean isCompleted = Boolean.TRUE.equals(request.getCompleted()) || percentage >= 80.0f;
+        if (isCompleted) {
             history.setIsCompleted(true);
         }
 
         watchHistoryRepository.save(history);
+
+        // Khi xem xong video (completed == true hoặc watchedSeconds >= video.duration * 0.8)
+        if (isCompleted && video.getLesson() != null) {
+            updateDailyProgressOnLessonCompletion(studentId, video.getLesson(), history.getWatchedSeconds());
+            try {
+                userStreakService.recordActivity(studentId);
+            } catch (Exception streakEx) {
+                log.warn("Không thể cập nhật streak cho học sinh {}: {}", studentId, streakEx.getMessage());
+            }
+        }
+    }
+
+    private void updateDailyProgressOnLessonCompletion(UUID studentId, Lesson lesson, Integer watchedSeconds) {
+        try {
+            List<com.englishlearning.curriculum.entity.DailyPlanItem> items = dailyPlanItemRepository
+                    .findByLessonIdWithDailyPlan(lesson.getId());
+
+            for (var item : items) {
+                var plan = item.getDailyPlan();
+                if (plan != null) {
+                    var progress = studentDailyProgressRepository.findByStudentIdAndDailyPlanId(studentId, plan.getId())
+                            .orElseGet(() -> com.englishlearning.curriculum.entity.StudentDailyProgress.builder()
+                                    .student(entityManager.getReference(Student.class, studentId))
+                                    .dailyPlan(plan)
+                                    .totalItemsCount(plan.getItems() != null ? plan.getItems().size() : 1)
+                                    .completedItemsCount(0)
+                                    .isCompleted(false)
+                                    .build());
+
+                    int total = (plan.getItems() != null && !plan.getItems().isEmpty()) ? plan.getItems().size() : 1;
+                    progress.setCompletedItemsCount(total);
+                    progress.setTotalItemsCount(total);
+                    progress.setIsCompleted(true);
+                    progress.setCompletedAt(java.time.Instant.now());
+
+                    int currentSpent = progress.getTimeSpentSeconds() != null ? progress.getTimeSpentSeconds() : 0;
+                    if (watchedSeconds != null && watchedSeconds > 0) {
+                        progress.setTimeSpentSeconds(currentSpent + watchedSeconds);
+                    }
+
+                    studentDailyProgressRepository.save(progress);
+                    log.info("Cập nhật tiến độ ngày {} cho học sinh {}: đã hoàn thành qua video bài học {}",
+                            plan.getDayNumber(), studentId, lesson.getId());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Không thể cập nhật tiến độ Daily Study Plan từ video xem bài học: {}", e.getMessage());
+        }
     }
 
     @Override
     @Transactional
     public Video getVideoByLessonId(UUID lessonId) {
         Video video = videoRepository.findByLessonId(lessonId).orElse(null);
-        healIfFfmpegTechnicalError(video);
+        normalizePlaybackUrl(video);
         return video;
     }
 
@@ -232,7 +304,7 @@ public class VideoServiceImpl implements VideoService {
     public List<Video> getVideosByStatus(VideoStatus status) {
         List<Video> allVideos = videoRepository.findAll();
         for (Video v : allVideos) {
-            healIfFfmpegTechnicalError(v);
+            normalizePlaybackUrl(v);
         }
         if (status != null) {
             return videoRepository.findByStatus(status);

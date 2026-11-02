@@ -6,7 +6,7 @@ import {
   Users,
   BookOpen,
   GraduationCap,
-  Sparkles,
+  Award,
   Layers,
   ChevronRight,
   ShieldCheck,
@@ -105,7 +105,7 @@ export default function ClassroomHeaderNav({
           <Link
             to="/teacher/classrooms"
             title="Quay lại danh sách lớp học"
-            className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:border-blue-600 hover:bg-blue-800 hover:text-white hover:shadow-lg hover:shadow-indigo-500/20"
+            className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:border-blue-600 hover:bg-blue-800 hover:text-white hover:shadow-xs"
           >
             <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
           </Link>
@@ -128,15 +128,15 @@ export default function ClassroomHeaderNav({
               </h1>
 
               {classroom?.level && (
-                <span className="inline-flex items-center rounded-full border border-blue-200 dark:border-blue-600/30 bg-blue-50 dark:bg-blue-600/10 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
-                  <Sparkles className="mr-1 h-3 w-3" />
+                <span className="inline-flex items-center rounded-md border border-blue-200 dark:border-blue-600/30 bg-blue-50 dark:bg-blue-600/10 px-2 py-0.5 text-xs font-bold text-blue-700 dark:text-blue-300">
+                  <Award className="mr-1 h-3 w-3" />
                   {classroom.level}
                 </span>
               )}
 
               {classroom?.status && (
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border ${
                     classroom.status === "OPEN"
                       ? "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : classroom.status === "PLANNING"
@@ -190,7 +190,7 @@ export default function ClassroomHeaderNav({
                 to={tab.path}
                 className={`group relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
                   isActive
-                    ? "bg-blue-800 text-white shadow-md shadow-indigo-600/30"
+                    ? "bg-blue-800 text-white shadow-xs"
                     : "border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-900 dark:hover:text-white shadow-xs"
                 }`}
               >

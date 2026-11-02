@@ -3,13 +3,13 @@ import type { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { ApiResponse, AuthResponse } from "@/types/api";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 export const axiosClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
   },
   withCredentials: true,
 });
@@ -17,13 +17,17 @@ export const axiosClient = axios.create({
 // Request Interceptor: Tự động đính kèm accessToken kèm Fallback
 axiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Đảm bảo header bỏ qua màn hình chờ của ngrok khi gọi API
+    if (config.headers) {
+      config.headers["ngrok-skip-browser-warning"] = "true";
+    }
+
     // 1. Đọc token từ bộ nhớ Zustand
     let token = useAuthStore.getState().accessToken;
 
     // 2. FALLBACK: Nếu Zustand chưa kịp load xong (F5 trang), đọc thẳng từ localStorage
     if (!token) {
       try {
-        // Lưu ý: Đổi tên 'auth-storage' thành tên key bạn đang cấu hình trong persist của Zustand nếu khác
         const authStorageStr = localStorage.getItem("auth-storage");
         if (authStorageStr) {
           const { state } = JSON.parse(authStorageStr);
@@ -107,7 +111,12 @@ axiosClient.interceptors.response.use(
         const res = await axios.post<ApiResponse<AuthResponse>>(
           `${API_BASE_URL}/api/v1/auth/refresh-token`,
           {},
-          { withCredentials: true },
+          {
+            withCredentials: true,
+            headers: {
+              "ngrok-skip-browser-warning": "true",
+            },
+          },
         );
 
         const newAccessToken = res.data.data.accessToken;

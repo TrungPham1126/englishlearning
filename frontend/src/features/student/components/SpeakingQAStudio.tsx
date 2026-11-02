@@ -7,7 +7,6 @@ import {
   Pause,
   RotateCcw,
   Volume2,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -228,7 +227,7 @@ export default function SpeakingQAStudio({
       const errMsg =
         err.response?.data?.message ||
         err.message ||
-        "Lỗi chấm điểm Speaking bằng AI. Vui lòng thử lại.";
+        "Không thể chấm điểm bài Speaking. Vui lòng thử lại.";
       setEvalError(errMsg);
       onAudioSubmitted(blob);
     } finally {
@@ -288,9 +287,9 @@ export default function SpeakingQAStudio({
           </div>
           <div>
             <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-              Speaking Q&A: Hỏi - Đáp Phỏng Vấn AI
-              <span className="text-[10px] uppercase bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 rounded-full font-black border border-blue-200 dark:border-blue-600/30">
-                AI Examiner • IELTS / Cambridge
+              Speaking Q&A: Hỏi - Đáp Phỏng Vấn
+              <span className="text-[10px] uppercase bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-2.5 py-0.5 rounded-md font-black border border-blue-200 dark:border-blue-600/30">
+                IELTS / Cambridge
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -328,7 +327,7 @@ export default function SpeakingQAStudio({
                 ? "bg-blue-800 border-blue-600 text-white animate-pulse"
                 : "bg-blue-50 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-blue-200 dark:border-slate-700 text-blue-800 dark:text-slate-200"
             }`}
-            title="Nghe giám khảo AI đọc câu hỏi"
+            title="Nghe đọc câu hỏi"
           >
             <Volume2 className="h-4 w-4" />
             <span>{isReadingPrompt ? "Đang đọc..." : "Nghe câu hỏi"}</span>
@@ -446,11 +445,11 @@ export default function SpeakingQAStudio({
               <button
                 type="button"
                 onClick={stopRecording}
-                aria-label="Dừng ghi âm và gửi chấm điểm AI"
+                aria-label="Dừng ghi âm và gửi chấm điểm"
                 className="relative z-10 flex items-center space-x-2.5 px-7 py-3.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-card shadow-rose-600/40 transition hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <Square className="h-4 w-4 fill-white" />
-                <span>Hoàn Thành & Chấm Điểm AI</span>
+                <span>Hoàn Thành & Chấm Điểm</span>
               </button>
             </div>
           )}
@@ -492,8 +491,8 @@ export default function SpeakingQAStudio({
             onClick={() => triggerAiEvaluation()}
             className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline pt-1 cursor-pointer"
           >
-            <Sparkles className="h-4 w-4" />
-            Bấm vào đây để gửi chấm điểm lại bằng AI
+            <RotateCcw className="h-4 w-4" />
+            Bấm vào đây để gửi chấm điểm lại
           </button>
         )}
       </div>
@@ -503,10 +502,10 @@ export default function SpeakingQAStudio({
         <div className="p-8 rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/60 dark:bg-slate-900/30 flex flex-col items-center justify-center space-y-3 text-center animate-in fade-in">
           <Loader2 className="h-9 w-9 text-blue-700 dark:text-blue-400 animate-spin" />
           <h4 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-            Giám khảo AI đang phân tích giọng nói & chấm điểm...
+            Đang phân tích giọng nói & chấm điểm...
           </h4>
           <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md leading-relaxed">
-            Groq Whisper STT đang bóc băng phát âm & AI Examiner đang đối chiếu câu hỏi, đánh giá Pronunciation, Fluency, Grammar và Lexical Resource.
+            Đang ghi lại lời nói và đánh giá Pronunciation, Fluency, Grammar và Lexical Resource.
           </p>
         </div>
       )}
@@ -545,7 +544,7 @@ export default function SpeakingQAStudio({
                   </span>
                   <span className="text-xs font-bold text-blue-200">/ 9.0</span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-xs bg-white/15 text-white px-2.5 py-0.5 rounded-full font-bold mt-2">
+                <span className="inline-flex items-center gap-1 text-xs bg-white/15 text-white px-2.5 py-0.5 rounded-md font-bold mt-2">
                   <Award className="h-3.5 w-3.5" />
                   CEFR: {aiResult.estimatedCefr || "B2"}
                 </span>
@@ -720,7 +719,7 @@ export default function SpeakingQAStudio({
               <div className="space-y-2">
                 <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
                   <BookOpen className="h-4 w-4 text-blue-700 dark:text-blue-400" />
-                  Bản Bóc Băng Giọng Nói (Whisper STT Transcript)
+                  Bản Ghi Lời Nói (Transcript)
                 </span>
                 <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed italic bg-white dark:bg-slate-900/80 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
                   "{aiResult.transcript || "(Không nhận diện được giọng nói rõ ràng)"}"
@@ -732,8 +731,8 @@ export default function SpeakingQAStudio({
             {aiResult.correctedText && (
               <div className="p-4 sm:p-5 rounded-xl border border-emerald-200 dark:border-emerald-500/25 bg-emerald-50/40 dark:bg-emerald-500/5 space-y-2.5">
                 <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Câu Trả Lời Nâng Cấp Chuẩn Band 8.0+ (Model Answer)
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Câu Trả Lời Gợi Ý Chuẩn Mực (Model Answer)
                 </span>
                 <p className="text-sm text-slate-800 dark:text-emerald-100 leading-relaxed bg-white dark:bg-slate-900/80 p-3.5 rounded-xl border border-emerald-200/70 dark:border-emerald-500/20 font-medium">
                   "{aiResult.correctedText}"
@@ -764,7 +763,7 @@ export default function SpeakingQAStudio({
                         {m.correction}
                       </span>
                       {m.type && (
-                        <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold ml-auto">
+                        <span className="text-[10px] uppercase px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold ml-auto">
                           {m.type}
                         </span>
                       )}
@@ -784,7 +783,7 @@ export default function SpeakingQAStudio({
           {(aiResult.generalFeedback || (aiResult.suggestions && aiResult.suggestions.length > 0)) && (
             <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 space-y-3">
               <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                Lời Nhận Xét & Lộ Trình Cải Thiện Từ Giám Khảo AI
+                Nhận Xét & Lộ Trình Cải Thiện
               </span>
               {aiResult.generalFeedback && (
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">

@@ -105,17 +105,22 @@ export function normalizeQuestionType(
   }
   const t = String(rawType).trim().toUpperCase();
 
-  // 1. True / False / Not Given
+  // 1. Matching (Nối thẻ, ghép cặp từ vựng)
+  if (t.includes("MATCH") || t.includes("NỐI") || t.includes("GHÉP") || t.includes("NOI") || t.includes("GHEP")) {
+    return "MATCHING";
+  }
+
+  // 2. True / False / Not Given
   if (t.includes("TRUE") || t.includes("FALSE") || t.includes("NOT GIVEN") || t.includes("ĐÚNG SAI") || t.includes("DUNG SAI")) {
     return "TRUE_FALSE";
   }
 
-  // 2. Error identification -> Map sang Multiple Choice
+  // 3. Error identification -> Map sang Multiple Choice
   if (t.includes("ERROR") || t.includes("LỖI") || t.includes("LOI")) {
     return "MULTIPLE_CHOICE";
   }
 
-  // 3. Điền từ, chia động từ, viết lại câu, sentence transformation
+  // 4. Điền từ, chia động từ, viết lại câu, nghe chép chính tả (LISTEN_AND_TYPE)
   if (
     t.includes("BLANK") ||
     t.includes("FILL") ||
@@ -124,6 +129,8 @@ export function normalizeQuestionType(
     t.includes("CLOZE") ||
     t.includes("GAP") ||
     t.includes("DICTATION") ||
+    t.includes("LISTEN_AND_TYPE") ||
+    t.includes("LISTEN") ||
     t.includes("TRANSFORMATION") ||
     t.includes("VIẾT LẠI") ||
     t.includes("VIET LAI") ||
@@ -133,7 +140,7 @@ export function normalizeQuestionType(
     return "FILL_IN_BLANK";
   }
 
-  // 4. Nói, phát âm, Shadowing, Audio response
+  // 5. Nói, phát âm, Shadowing, Audio response
   if (
     t.includes("AUDIO") ||
     t.includes("VOICE") ||
@@ -147,12 +154,12 @@ export function normalizeQuestionType(
     return "AUDIO_RESPONSE";
   }
 
-  // 5. Viết luận Essay
-  if (t.includes("ESSAY") || t.includes("VIẾT") || t.includes("PARAGRAPH") || t.includes("TASK") || t.includes("BÀI LUẬN") || t.includes("BAI LUAN")) {
+  // 6. Viết luận Essay
+  if (t.includes("ESSAY") || t.includes("VIẾT") || t.includes("PARAGRAPH") || t.includes("TASK") || t.includes("BÀI LUẬN") || t.includes("BAI LUAN") || t.includes("WRITING")) {
     return "ESSAY";
   }
 
-  // 6. Flashcard từ vựng (Fallback tự động về MULTIPLE_CHOICE theo yêu cầu)
+  // 7. Flashcard từ vựng
   if (t.includes("FLASHCARD")) {
     return "MULTIPLE_CHOICE";
   }
@@ -160,7 +167,7 @@ export function normalizeQuestionType(
     return optionsCount >= 2 ? "MULTIPLE_CHOICE" : "FILL_IN_BLANK";
   }
 
-  // 7. Trắc nghiệm Multiple Choice
+  // 8. Trắc nghiệm Multiple Choice
   if (t.includes("CHOICE") || t.includes("MULTIPLE") || t.includes("TRẮC NGHIỆM") || t.includes("TRAC NGHIEM") || t.includes("MC")) {
     return "MULTIPLE_CHOICE";
   }
@@ -189,376 +196,318 @@ function getRowField(row: Record<string, any>, candidateNames: string[]): string
   return "";
 }
 
-// 13 CỘT TIÊU ĐỀ CHUẨN ĐỒNG NHẤT
+// 12 CỘT TIÊU ĐỀ CHUẨN ĐỒNG NHẤT
 export const EXCEL_HEADERS = [
   "STT",
-  "Kỹ năng",
-  "Dạng câu hỏi",
-  "Đề bài / Câu hỏi",
+  "Loại câu hỏi (*)",
+  "Kỹ năng (*)",
+  "Nội dung câu hỏi / Transcript / Đề bài (*)",
+  "Điểm (*)",
   "Lựa chọn A",
   "Lựa chọn B",
   "Lựa chọn C",
   "Lựa chọn D",
-  "Đáp án đúng",
-  "Giải thích",
-  "Bài đọc / Kịch bản (Passage/Transcript)",
-  "Từ khóa / IPA",
-  "Điểm số",
+  "Đáp án đúng (*)",
+  "Giải thích / Gợi ý chấm AI",
+  "Văn bản đọc TTS (Audio Script)",
 ];
 
 // CẤU HÌNH ĐỘ RỘNG CỘT TỰ ĐỘNG (!cols)
 export const STANDARD_COL_WIDTHS = [
   { wch: 6 },  // STT
-  { wch: 15 }, // Kỹ năng
-  { wch: 24 }, // Dạng câu hỏi
-  { wch: 48 }, // Đề bài / Câu hỏi
-  { wch: 28 }, // Lựa chọn A
-  { wch: 28 }, // Lựa chọn B
-  { wch: 28 }, // Lựa chọn C
-  { wch: 28 }, // Lựa chọn D
-  { wch: 30 }, // Đáp án đúng
-  { wch: 38 }, // Giải thích
-  { wch: 55 }, // Bài đọc / Kịch bản
-  { wch: 28 }, // Từ khóa / IPA
-  { wch: 10 }, // Điểm số
+  { wch: 20 }, // Loại câu hỏi
+  { wch: 14 }, // Kỹ năng
+  { wch: 45 }, // Nội dung
+  { wch: 8 },  // Điểm
+  { wch: 20 }, // Lựa chọn A
+  { wch: 20 }, // Lựa chọn B
+  { wch: 20 }, // Lựa chọn C
+  { wch: 20 }, // Lựa chọn D
+  { wch: 25 }, // Đáp án đúng
+  { wch: 35 }, // Giải thích
+  { wch: 35 }, // TTS Script
 ];
 
-// DỮ LIỆU SHEET HƯỚNG DẪN 0_Huong_Dan_Chung
+// DỮ LIỆU SHEET HƯỚNG DẪN 0_Huong_Dan
 export const GUIDE_SHEET_DATA: (string | number)[][] = [
   ["HƯỚNG DẪN QUY CHUẨN NHẬP DỮ LIỆU BÀI TẬP BẰNG FILE EXCEL (.XLSX)"],
-  ["Hệ thống hỗ trợ tự động nhận diện tất cả 6 Kỹ năng và các dạng bài tập tương ứng trong nền tảng English Learning."],
+  ["Hệ thống hỗ trợ tự động nhận diện tất cả 6 Kỹ năng và các Studio học tập tương ứng trong nền tảng English Learning."],
   [""],
-  ["1. Ý NGHĨA VÀ QUY CÁCH ĐIỀN 13 CỘT DỮ LIỆU CHUẨN:"],
+  ["1. Ý NGHĨA VÀ QUY CÁCH ĐIỀN 12 CỘT DỮ LIỆU CHUẨN:"],
   ["STT", "Tên Cột", "Tính Chất", "Mô Tả & Quy Cách Điền", "Áp Dụng Cho Dạng Bài"],
   [1, "STT", "Tùy chọn", "Số thứ tự dòng (1, 2, 3...) để dễ quản lý trong bảng tính.", "Tất cả các dạng"],
-  [2, "Kỹ năng", "Bắt buộc", "Mã kỹ năng chuẩn: VOCABULARY, GRAMMAR, LISTENING, READING, SPEAKING, WRITING.", "Tất cả các dạng"],
-  [3, "Dạng câu hỏi", "Bắt buộc", "Mã dạng: MULTIPLE_CHOICE, FILL_IN_BLANK, TRUE_FALSE, AUDIO_RESPONSE, ESSAY (hoặc alias: SHADOWING, ERROR_IDENTIFICATION, SENTENCE_TRANSFORMATION).", "Tất cả các dạng"],
-  [4, "Đề bài / Câu hỏi", "Bắt buộc", "Nội dung câu hỏi hoặc yêu cầu bài làm. Câu điền từ dùng ký hiệu '______'. Câu tìm lỗi sai đánh dấu các vị trí (A), (B), (C), (D).", "Tất cả các dạng"],
-  [5, "Lựa chọn A", "Theo dạng", "BẮT BUỘC cho câu Trắc nghiệm & Tìm lỗi sai (tối thiểu phương án A, B). ĐỂ TRỐNG cho bài Điền từ, Viết luận, Nói.", "Trắc nghiệm, Tìm lỗi sai"],
-  [6, "Lựa chọn B", "Theo dạng", "Phương án B. BẮT BUỘC cho câu Trắc nghiệm.", "Trắc nghiệm, Tìm lỗi sai"],
-  [7, "Lựa chọn C", "Theo dạng", "Phương án C. Thường dùng cho câu Trắc nghiệm 3-4 phương án.", "Trắc nghiệm, Tìm lỗi sai"],
-  [8, "Lựa chọn D", "Theo dạng", "Phương án D. Thường dùng cho câu Trắc nghiệm 4 phương án.", "Trắc nghiệm, Tìm lỗi sai"],
-  [9, "Đáp án đúng", "Bắt buộc", "Trắc nghiệm: có thể ghi chữ cái 'A', 'B', 'C', 'D' HOẶC ghi trọn vẹn text phương án đúng. True/False: ghi 'TRUE', 'FALSE' hoặc 'NOT GIVEN'. Điền từ: ghi từ/cụm từ cần điền. Shadowing: ghi lại câu mẫu.", "Tất cả các dạng"],
-  [10, "Giải thích", "Khuyến khích", "Lời giải thích chi tiết, mẹo ngữ pháp, phiên âm và quy tắc nối âm, hoặc dàn ý gợi ý & tiêu chí chấm cho bài Viết/Nói.", "Tất cả các dạng"],
-  [11, "Bài đọc / Kịch bản (Passage/Transcript)", "Kế thừa", "Đoạn văn bài đọc (Reading Passage) hoặc kịch bản nghe liên tục (Listening Script). MẸO: Nếu nhiều câu hỏi chung 1 bài đọc/nghe, CHỈ CẦN ĐIỀN Ở CÂU ĐẦU TIÊN, các câu sau để trống hệ thống sẽ tự động kế thừa!", "Reading, Listening, Shadowing"],
-  [12, "Từ khóa / IPA", "Tùy chọn", "Từ vựng mục tiêu kèm ký âm quốc tế IPA (VD: enormous | /ɪˈnɔːməs/). Dùng cho kỹ năng Vocabulary và Speaking Shadowing.", "Vocabulary, Speaking Shadowing"],
-  [13, "Điểm số", "Tùy chọn", "Điểm số của câu (mặc định 2.5 nếu để trống; Speaking/Writing thường là 5.0 hoặc 10.0).", "Tất cả các dạng"],
+  [2, "Loại câu hỏi (*)", "Bắt buộc", "Mã dạng: MULTIPLE_CHOICE, FILL_IN_BLANK, MATCHING, AUDIO_RESPONSE, ESSAY, TRUE_FALSE (hoặc alias: LISTEN_AND_TYPE, SPEAKING, SPEAKING_QA, WRITING).", "Tất cả các dạng"],
+  [3, "Kỹ năng (*)", "Bắt buộc", "Mã kỹ năng chuẩn: VOCABULARY, GRAMMAR, LISTENING, READING, SPEAKING, WRITING.", "Tất cả các dạng"],
+  [4, "Nội dung câu hỏi / Transcript / Đề bài (*)", "Bắt buộc", "Nội dung câu hỏi, từ vựng cần nối, câu mẫu Shadowing hoặc đề bài tự luận. Câu điền từ dùng ký hiệu '___' để tạo chỗ trống.", "Tất cả các dạng"],
+  [5, "Điểm (*)", "Tùy chọn", "Điểm số của câu (mặc định 1 hoặc 2; Speaking/Writing là 5.0 hoặc 10.0).", "Tất cả các dạng"],
+  [6, "Lựa chọn A", "Theo dạng", "BẮT BUỘC cho trắc nghiệm (tối thiểu A, B). ĐỂ TRỐNG cho Matching, Điền từ, Shadowing, Viết luận.", "Trắc nghiệm, Tìm lỗi sai"],
+  [7, "Lựa chọn B", "Theo dạng", "Phương án B. BẮT BUỘC cho câu trắc nghiệm.", "Trắc nghiệm, Tìm lỗi sai"],
+  [8, "Lựa chọn C", "Theo dạng", "Phương án C. Thường dùng cho câu trắc nghiệm 3-4 phương án.", "Trắc nghiệm, Tìm lỗi sai"],
+  [9, "Lựa chọn D", "Theo dạng", "Phương án D. Thường dùng cho câu trắc nghiệm 4 phương án.", "Trắc nghiệm, Tìm lỗi sai"],
+  [10, "Đáp án đúng (*)", "Bắt buộc", "Trắc nghiệm: ghi chữ cái 'A', 'B', 'C', 'D' HOẶC ghi toàn văn lựa chọn đúng. Matching: ghi nghĩa tiếng Việt tương ứng. Điền từ: ghi từ cần điền. Shadowing: ghi lại câu mẫu.", "Tất cả các dạng"],
+  [11, "Giải thích / Gợi ý chấm AI", "Khuyến khích", "Lời giải thích chi tiết, phiên âm IPA cho từ vựng, mẹo ngữ pháp hoặc Rubric tiêu chí chấm điểm tự luận AI.", "Tất cả các dạng"],
+  [12, "Văn bản đọc TTS (Audio Script)", "Tùy chọn", "Đoạn văn bài nghe hoặc câu tiếng Anh cần phát âm. Hệ thống sẽ tự động tổng hợp giọng đọc chuẩn US Native qua Kokoro TTS!", "Listening, Shadowing, Vocab"],
   [""],
-  ["2. BẢNG MÃ KỸ NĂNG VÀ DẠNG CÂU HỎI TƯƠNG ỨNG:"],
-  ["Kỹ Năng", "Mã Kỹ Năng", "Dạng Bài Tập Hỗ Trợ", "Ghi Chú Chi Tiết"],
-  ["Từ vựng", "VOCABULARY", "MULTIPLE_CHOICE, FILL_IN_BLANK, AUDIO_RESPONSE", "Có thể điền cột 'Từ khóa / IPA' để luyện phát âm US Native và nhận diện giọng nói AI."],
-  ["Ngữ pháp", "GRAMMAR", "MULTIPLE_CHOICE, FILL_IN_BLANK, ERROR_IDENTIFICATION", "Hỗ trợ chia động từ, trắc nghiệm cấu trúc và tìm lỗi sai trong câu."],
-  ["Nghe hiểu", "LISTENING", "MULTIPLE_CHOICE, FILL_IN_BLANK, TRUE_FALSE", "Điền lời thoại vào cột 'Bài đọc / Kịch bản' để hệ thống tự động sinh audio Neural TTS."],
-  ["Đọc hiểu", "READING", "MULTIPLE_CHOICE, TRUE_FALSE, FILL_IN_BLANK", "Điền đoạn văn dài vào cột 'Bài đọc / Kịch bản'. Hiển thị cố định ở đầu bài làm."],
-  ["Nói & Phát âm", "SPEAKING", "SHADOWING, AUDIO_RESPONSE", "Shadowing luyện câu mẫu; Audio Response trả lời chủ đề phỏng vấn mở."],
-  ["Kỹ năng Viết", "WRITING", "ESSAY, SENTENCE_TRANSFORMATION, FILL_IN_BLANK", "Essay viết đoạn văn/bài luận; Sentence Transformation viết lại câu hoàn chỉnh."],
-  [""],
-  ["3. LƯU Ý KHI SỬ DỤNG:"],
-  ["• Bạn có thể nhập dữ liệu vào Sheet Kỹ năng tương ứng trong file này hoặc gộp chung vào 1 Sheet."],
-  ["• Hệ thống sẽ tự động bỏ qua Sheet '0_Huong_Dan_Chung' này khi phân tích dữ liệu, bạn không cần phải xóa sheet này."],
-  ["• Với câu hỏi trắc nghiệm, cột Đáp án đúng chỉ cần gõ chữ cái 'A' hoặc 'B' hoặc 'C' hoặc 'D', hệ thống tự động đối chiếu nội dung lựa chọn tương ứng."],
-  ["• Hỗ trợ định dạng file: .xlsx, .xls, .csv."],
+  ["2. HƯỚNG DẪN CHI TIẾT THEO TỪNG STUDIO HỌC TẬP:"],
+  ["Studio / Giao Diện Học Tập", "Loại Câu Hỏi", "Kỹ Năng", "Cách Điền Cột D, J, L", "Gợi Ý & Mẹo"],
+  ["MultipleChoiceRenderer (Trắc nghiệm)", "MULTIPLE_CHOICE", "READING, GRAMMAR, LISTENING", "Cột D: Câu hỏi. Cột F, G, H, I: Lựa chọn A, B, C, D. Cột J: Ghi 'A', 'B', 'C', 'D' hoặc toàn văn lựa chọn.", "Hệ thống tự động nhận diện chữ cái hoặc khớp text."],
+  ["FillInBlankRenderer (Điền từ khuyết)", "FILL_IN_BLANK", "GRAMMAR, VOCABULARY, READING", "Cột D: Câu chứa '___' (3 gạch dưới). Cột J: Từ/cụm từ cần điền đúng. Lựa chọn A-D: Để trống.", "Không phân biệt hoa thường khi chấm."],
+  ["ListenAndTypeRenderer (Nghe chép chính tả)", "LISTEN_AND_TYPE", "LISTENING", "Cột D: Câu chứa '___'. Cột J: Từ cần gõ. Cột L: Đoạn kịch bản nghe để Kokoro TTS tự tạo audio.", "Hệ thống tự động sinh audio phát âm chuẩn bản ngữ US Native."],
+  ["VocabularyMatchingStudio (Ghép cặp từ vựng)", "MATCHING", "VOCABULARY", "Cột D: Từ vựng tiếng Anh (VD: Resilient). Cột J: Nghĩa tiếng Việt. Cột K: Phiên âm IPA.", "Học sinh sẽ chơi màn lật thẻ hoặc nối từ vựng tương ứng."],
+  ["SpeakingShadowingStudio (Luyện nhại âm)", "SPEAKING", "SPEAKING", "Cột D: Câu mẫu cần nhại. Cột J: Câu mẫu. Cột L: Câu tiếng Anh để AI sinh file audio chuẩn.", "Học sinh nghe người bản ngữ đọc rồi nói lại, AI chấm điểm phát âm & ngữ điệu."],
+  ["SpeakingQAStudio / Essay Studio (Tự luận)", "SPEAKING_QA hoặc WRITING", "SPEAKING, WRITING", "Cột D: Chủ đề phỏng vấn / Đề bài luận. Cột K: Tiêu chí chấm AI (Rubric, dàn ý gợi ý).", "AI Lab sẽ đánh giá theo Rubric: Fluency, Lexical resource, Grammar, Task Response."],
 ];
 
-// CÁC DÒNG DỮ LIỆU MẪU THEO TỪNG KỸ NĂNG VÀ DẠNG BÀI CỤ THỂ
+// CÁC DÒNG MẪU ĐIỀN SẴN THEO TỪNG KỸ NĂNG
 export const SAMPLE_ROWS_BY_SKILL: Record<SkillKey, any[][]> = {
-  VOCABULARY: [
-    [
-      1,
-      "VOCABULARY",
-      "MULTIPLE_CHOICE",
-      "Choose the word CLOSEST in meaning to 'enormous' in the sentence: 'The startup received an enormous funding round from venture capitalists.'",
-      "huge",
-      "tiny",
-      "fragile",
-      "obscure",
-      "A",
-      "'enormous' mang nghĩa to lớn, khổng lồ, đồng nghĩa với 'huge' hoặc 'immense'.",
-      "",
-      "enormous | /ɪˈnɔːməs/",
-      2.5,
-    ],
-    [
-      2,
-      "VOCABULARY",
-      "FILL_IN_BLANK",
-      "Her remarkable ______ (creativity) was unanimously recognized by all project evaluators.",
-      "",
-      "",
-      "",
-      "",
-      "creativity",
-      "Sau tính từ 'remarkable' cần một danh từ: 'creativity' (sự sáng tạo).",
-      "",
-      "creativity | /ˌkriː.eɪˈtɪv.ə.t̬i/",
-      2.5,
-    ],
-  ],
-  GRAMMAR: [
-    [
-      1,
-      "GRAMMAR",
-      "MULTIPLE_CHOICE",
-      "Neither the senior architect nor the system engineers ______ aware of the critical database migration yesterday.",
-      "was",
-      "were",
-      "is",
-      "are",
-      "B",
-      "Quy tắc hòa hợp chủ vị 'Neither... nor...': Động từ chia theo danh từ gần nhất ('the system engineers' là số nhiều trong quá khứ -> 'were').",
-      "",
-      "",
-      2.5,
-    ],
-    [
-      2,
-      "GRAMMAR",
-      "FILL_IN_BLANK",
-      "If the security team ______ (inspect) the access logs yesterday, the data breach would have been prevented.",
-      "",
-      "",
-      "",
-      "",
-      "had inspected",
-      "Câu điều kiện loại 3 (Third Conditional): If + S + had + V3/ed, S + would have + V3/ed (giả định trái ngược quá khứ).",
-      "",
-      "",
-      2.5,
-    ],
-    [
-      3,
-      "GRAMMAR",
-      "ERROR_IDENTIFICATION",
-      "Although (A) the severe weather conditions, the search-and-rescue team managed (B) to locate (C) the lost hikers safely (D).",
-      "Although",
-      "managed",
-      "to locate",
-      "safely",
-      "A",
-      "Lỗi sai ở vị trí (A) 'Although'. Vì đứng trước một cụm danh từ ('the severe weather conditions'), ta phải dùng giới từ 'Despite' hoặc 'In spite of' thay vì liên từ 'Although'.",
-      "",
-      "",
-      2.5,
-    ],
-  ],
-  LISTENING: [
-    [
-      1,
-      "LISTENING",
-      "MULTIPLE_CHOICE",
-      "What primary engineering challenge in offshore wind energy does Dr. Aris highlight in his symposium address?",
-      "High turbine blade manufacturing costs",
-      "Saltwater corrosion and long-distance transmission losses",
-      "Shortage of qualified marine electrical technicians",
-      "Public opposition from regional coastal tourism",
-      "B",
-      "Tiến sĩ Aris nhấn mạnh: 'Our foremost technical hurdle is mitigating saltwater galvanic corrosion and reducing long-distance high-voltage transmission losses across subsea power lines.'",
-      "Dr. Aris: Good morning delegates and welcome to the Renewable Energy Summit. Today I want to focus on offshore wind farms. Our foremost technical hurdle is mitigating saltwater galvanic corrosion and reducing long-distance high-voltage transmission losses across subsea power lines. To combat this, our multidisciplinary team engineered an advanced zinc-alloy protective coating that successfully repels marine salt crusts.",
-      "",
-      2.5,
-    ],
-    [
-      2,
-      "LISTENING",
-      "FILL_IN_BLANK",
-      "The multidisciplinary team introduced an advanced zinc-alloy coating to minimize ______ on marine wind structures.",
-      "",
-      "",
-      "",
-      "",
-      "corrosion",
-      "Trong bài nghe, diễn giả phát âm rõ ràng: 'engineered an advanced zinc-alloy protective coating that successfully repels marine salt crusts to minimize corrosion'.",
-      "",
-      "corrosion | /kəˈroʊ.ʒən/",
-      2.5,
-    ],
-    [
-      3,
-      "LISTENING",
-      "TRUE_FALSE",
-      "Dr. Aris claims that high-voltage subsea power lines have already eliminated all transmission losses entirely.",
-      "TRUE",
-      "FALSE",
-      "NOT GIVEN",
-      "",
-      "FALSE",
-      "Bài nghe khẳng định transmission losses (hao hụt truyền tải) vẫn là một 'foremost technical hurdle' (thách thức kỹ thuật hàng đầu), chưa hề được loại bỏ hoàn toàn -> FALSE.",
-      "",
-      "",
-      2.5,
-    ],
-  ],
   READING: [
     [
       1,
-      "READING",
       "MULTIPLE_CHOICE",
-      "According to paragraph 1, what fundamental property enables quantum computers to solve complex problems exponentially faster than classical supercomputers?",
-      "Qubits consume zero electrical energy during computation.",
-      "Qubits can exploit superposition to exist in combinations of both 0 and 1 simultaneously.",
-      "Classical bits function considerably faster in low-temperature biological environments.",
-      "Classical bits store infinite numerical states using optical light pulses.",
+      "READING",
+      "What is the primary factor driving modern renewable energy adoption?",
+      2.0,
+      "Government subsidy reduction",
+      "Technological cost decline and efficiency gains",
+      "Fossil fuel abundance",
+      "Short-term speculative investment",
       "B",
-      "Đoạn 1 nêu rõ: 'In stark contrast, quantum systems harness quantum bits, or qubits, exploiting the quantum mechanical principle of superposition to exist in combinations of both states simultaneously.'",
-      "Quantum computing represents a fundamental paradigm shift in information processing. Traditional computers utilize binary bits, which exist in one of two definite states: 0 or 1. In stark contrast, quantum systems harness quantum bits, or qubits, exploiting the quantum mechanical principle of superposition to exist in combinations of both states simultaneously. This fundamental characteristic enables quantum architectures to evaluate vast combinatorial possibilities exponentially faster than the most capable silicon supercomputers.",
-      "",
-      2.5,
+      "Lựa chọn B chính xác vì sự suy giảm chi phí công nghệ và hiệu suất cao là động lực cốt lõi thúc đẩy năng lượng tái tạo.",
+      "Renewable energy adoption has accelerated globally due to falling technological costs.",
     ],
     [
       2,
-      "READING",
-      "TRUE_FALSE",
-      "Traditional silicon supercomputers can evaluate complex combinatorial problems just as fast as quantum computers.",
-      "TRUE",
-      "FALSE",
-      "NOT GIVEN",
-      "",
-      "FALSE",
-      "Bài đọc nêu rõ quantum architectures giải bài toán tổ hợp 'exponentially faster' (nhanh hơn theo hàm mũ) so với silicon supercomputers -> Đáp án là FALSE.",
-      "",
-      "",
-      2.5,
-    ],
-    [
-      3,
-      "READING",
       "FILL_IN_BLANK",
-      "Quantum computers exploit the physical principle known as ______ to evaluate immense combinatorial possibilities simultaneously.",
+      "READING",
+      "Quantum computers exploit the physical principle known as ___ to evaluate combinatorial possibilities simultaneously.",
+      2.0,
       "",
       "",
       "",
       "",
       "superposition",
-      "Dựa vào đoạn văn: 'exploiting the quantum mechanical principle of superposition to exist in combinations of both states simultaneously'.",
+      "Dựa vào bài đọc: 'exploiting the quantum mechanical principle of superposition to evaluate vast possibilities'.",
       "",
-      "superposition | /ˌsuː.pɚ.pəˈzɪʃ.ən/",
-      2.5,
+    ],
+  ],
+  GRAMMAR: [
+    [
+      1,
+      "MULTIPLE_CHOICE",
+      "GRAMMAR",
+      "Neither the senior architect nor the system engineers ___ aware of the database migration yesterday.",
+      2.0,
+      "was",
+      "were",
+      "is",
+      "are",
+      "B",
+      "Quy tắc hòa hợp chủ vị 'Neither... nor...': Động từ chia theo danh từ gần nhất ('system engineers' số nhiều ở quá khứ -> 'were').",
+      "",
+    ],
+    [
+      2,
+      "FILL_IN_BLANK",
+      "GRAMMAR",
+      "If she had checked the train schedule earlier, she ___ (not miss) the morning seminar.",
+      2.0,
+      "",
+      "",
+      "",
+      "",
+      "would not have missed",
+      "Câu điều kiện loại 3: If + S + had + V3/ed, S + would have + V3/ed.",
+      "",
+    ],
+  ],
+  LISTENING: [
+    [
+      1,
+      "LISTEN_AND_TYPE",
+      "LISTENING",
+      "Listen and type the missing word: She has worked at the tech laboratory ___ 2015.",
+      2.0,
+      "",
+      "",
+      "",
+      "",
+      "since",
+      "Dùng 'since' trước mốc thời gian cụ thể (2015) trong thì hiện tại hoàn thành.",
+      "She has worked at the tech laboratory since 2015.",
+    ],
+    [
+      2,
+      "MULTIPLE_CHOICE",
+      "LISTENING",
+      "What primary engineering challenge in offshore wind energy does Dr. Aris highlight?",
+      2.0,
+      "High turbine blade manufacturing costs",
+      "Saltwater corrosion and long-distance transmission losses",
+      "Shortage of qualified marine electrical technicians",
+      "Public opposition from regional coastal tourism",
+      "B",
+      "Tiến sĩ Aris nhấn mạnh: 'Our foremost technical hurdle is mitigating saltwater galvanic corrosion and transmission losses'.",
+      "Good morning delegates. Today our foremost technical hurdle is mitigating saltwater galvanic corrosion and reducing long-distance transmission losses across subsea power lines.",
     ],
   ],
   SPEAKING: [
     [
       1,
       "SPEAKING",
-      "SHADOWING",
-      "Continuous practice empowers learners to speak with unwavering confidence.",
-      "",
-      "",
-      "",
-      "",
-      "Continuous practice empowers learners to speak with unwavering confidence.",
-      "Luyện tập ngữ điệu xuống ở cuối câu trần thuật. Chú ý trọng âm các từ: conTINuous, emPOWers, unWAvering, CONfidence. Nối âm mượt mà giữa 'empowers' và 'learners'.",
-      "Continuous practice empowers learners to speak with unwavering confidence.",
-      "confidence | /ˈkɑːn.fɪ.dəns/",
+      "SPEAKING",
+      "Consistency is the key to mastering any new skill.",
       5.0,
+      "",
+      "",
+      "",
+      "",
+      "Consistency is the key to mastering any new skill.",
+      "Chú ý nối âm 'is the', trọng âm 'conSIStency', 'MAStering'. Ngữ điệu xuống ở cuối câu trần thuật.",
+      "Consistency is the key to mastering any new skill.",
     ],
     [
       2,
+      "SPEAKING_QA",
       "SPEAKING",
-      "AUDIO_RESPONSE",
-      "Describe an environmentally friendly initiative in your local community that you admire. You should speak for 1 to 2 minutes.",
-      "",
-      "",
-      "",
-      "",
-      "Sample Outline: 1. Overview of the community tree-planting program; 2. Youth volunteer leadership and local resident participation; 3. Long-term impacts: lowered urban temperatures and reinforced community solidarity.",
-      "Thời lượng nói yêu cầu: 1 - 2 phút. AI sẽ chấm điểm dựa trên độ trôi chảy (Fluency), phát âm (Pronunciation), vốn từ vựng (Lexical Resource) và độ chính xác ngữ pháp (Grammar).",
-      "",
-      "",
+      "Describe an environmental challenge facing your city and propose a practical community solution.",
       5.0,
+      "",
+      "",
+      "",
+      "",
+      "Sample response covering issue analysis, local impact, and actionable community mitigation steps.",
+      "Rubric chấm AI: 1. Fluency & Coherence, 2. Lexical Resource, 3. Grammatical Range, 4. Task Response.",
+      "",
+    ],
+  ],
+  VOCABULARY: [
+    [
+      1,
+      "MATCHING",
+      "VOCABULARY",
+      "Resilient",
+      2.0,
+      "",
+      "",
+      "",
+      "",
+      "Kiên cường, có khả năng phục hồi nhanh trước khó khăn",
+      "/rɪˈzɪl.jənt/ (adj): able to recover quickly from difficult conditions.",
+      "Resilient individuals adapt swiftly to adverse circumstances.",
+    ],
+    [
+      2,
+      "MATCHING",
+      "VOCABULARY",
+      "Perseverance",
+      2.0,
+      "",
+      "",
+      "",
+      "",
+      "Tính kiên trì, sự bền chí theo đuổi mục tiêu",
+      "/ˌpɜː.sɪˈvɪə.rəns/ (noun): persistence in doing something despite difficulty.",
+      "Perseverance is essential to achieve long-term success.",
+    ],
+    [
+      3,
+      "MATCHING",
+      "VOCABULARY",
+      "Innovative",
+      2.0,
+      "",
+      "",
+      "",
+      "",
+      "Có tính đổi mới, sáng tạo đột phá",
+      "/ˈɪn.ə.və.tɪv/ (adj): featuring new methods; advanced and original.",
+      "The tech company is famous for its innovative products.",
     ],
   ],
   WRITING: [
     [
       1,
       "WRITING",
-      "ESSAY",
-      "Some educators argue that artificial intelligence tools should be banned in classrooms, while others believe they enhance personalized education. Discuss both views and give your opinion. (Write at least 250 words).",
-      "",
-      "",
-      "",
-      "",
-      "Sample Academic Response Structure: Paragraph 1: Introduction & Thesis Statement; Paragraph 2: Arguments regarding academic integrity and over-reliance risks; Paragraph 3: Benefits of adaptive tutoring and customized learning pace; Paragraph 4: Balanced conclusion advocating ethical AI integration.",
-      "Yêu cầu tối thiểu: 250 từ. Tiêu chí chấm AI: Task Response (trả lời đầy đủ 2 quan điểm + nêu rõ lập trường), Coherence & Cohesion (mạch lạc, liên kết câu), Lexical Resource (từ vựng C1), Grammatical Range & Accuracy.",
-      "",
-      "",
-      10.0,
-    ],
-    [
-      2,
       "WRITING",
-      "SENTENCE_TRANSFORMATION",
-      "Complete the second sentence so that it has a similar meaning: 'They started constructing the renewable energy facility two years ago.' -> 'The renewable energy facility has ______.'",
+      "Write a short paragraph (80-120 words) discussing whether technology enhances or hinders classroom learning.",
+      10.0,
       "",
       "",
       "",
       "",
-      "been under construction for two years",
-      "Chuyển đổi từ thì Quá khứ đơn 'started constructing... two years ago' sang cấu trúc Hiện tại hoàn thành với cụm giới từ 'has been under construction for two years'.",
+      "Sample response: Technology has revolutionized modern classrooms by providing access to boundless educational resources...",
+      "Rubric chấm AI: 1. Task Achievement (80-120 từ, đúng trọng tâm), 2. Coherence & Cohesion, 3. Lexical Resource, 4. Grammatical Range & Accuracy.",
       "",
-      "",
-      5.0,
     ],
   ],
 };
 
-function createSkillWorksheet(rows: any[][]): XLSX.WorkSheet {
-  const ws = XLSX.utils.aoa_to_sheet([EXCEL_HEADERS, ...rows]);
-  ws["!cols"] = STANDARD_COL_WIDTHS;
-  return ws;
-}
+// 6 DÒNG MẪU TỔNG HỢP BAO QUÁT 6 STUDIO HỌC TẬP
+export const DIVERSE_SAMPLE_ROWS: any[][] = [
+  ...SAMPLE_ROWS_BY_SKILL.READING.slice(0, 1),
+  ...SAMPLE_ROWS_BY_SKILL.GRAMMAR.slice(1, 2),
+  ...SAMPLE_ROWS_BY_SKILL.LISTENING.slice(0, 1),
+  ...SAMPLE_ROWS_BY_SKILL.VOCABULARY.slice(0, 1),
+  ...SAMPLE_ROWS_BY_SKILL.SPEAKING.slice(0, 1),
+  ...SAMPLE_ROWS_BY_SKILL.WRITING.slice(0, 1),
+];
 
 /**
- * 1. XUẤT FILE EXCEL MẪU TRỌN BỘ 7 SHEETS CHUẨN ĐẦY ĐỦ TẤT CẢ KỸ NĂNG (.XLSX)
- */
-export function downloadExcelTemplate(): void {
-  const wb = XLSX.utils.book_new();
-
-  // Sheet 1: 0_Huong_Dan_Chung
-  const wsGuide = XLSX.utils.aoa_to_sheet(GUIDE_SHEET_DATA);
-  wsGuide["!cols"] = [{ wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 65 }, { wch: 35 }];
-  XLSX.utils.book_append_sheet(wb, wsGuide, "0_Huong_Dan_Chung");
-
-  // Sheet 2: 1_Tu_Vung_Vocabulary
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.VOCABULARY), "1_Tu_Vung_Vocabulary");
-
-  // Sheet 3: 2_Ngu_Phap_Grammar
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.GRAMMAR), "2_Ngu_Phap_Grammar");
-
-  // Sheet 4: 3_Nghe_Listening
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.LISTENING), "3_Nghe_Listening");
-
-  // Sheet 5: 4_Doc_Reading
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.READING), "4_Doc_Reading");
-
-  // Sheet 6: 5_Noi_Phat_Am_Speaking
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.SPEAKING), "5_Noi_Phat_Am_Speaking");
-
-  // Sheet 7: 6_Viet_Writing
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(SAMPLE_ROWS_BY_SKILL.WRITING), "6_Viet_Writing");
-
-  XLSX.writeFile(wb, "Mau_Nhap_Bai_Tap_Tat_Ca_Ky_Nang.xlsx");
-}
-
-/**
- * XUẤT FILE EXCEL MẪU THEO KỸ NĂNG ĐANG CHỌN (GỒM HƯỚNG DẪN + SHEET KỸ NĂNG TƯƠNG ỨNG)
+ * 1. TẢI FILE EXCEL MẪU THEO KỸ NĂNG ĐANG CHỌN (.XLSX)
+ * Xuất file nhị phân chuẩn OpenXML (.xlsx) trực tiếp trên Client bằng SheetJS
  */
 export function downloadSkillExcelTemplate(skill: SkillKey = "READING"): void {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: 0_Huong_Dan_Chung
+  // Sheet 1: Hướng dẫn
   const wsGuide = XLSX.utils.aoa_to_sheet(GUIDE_SHEET_DATA);
-  wsGuide["!cols"] = [{ wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 65 }, { wch: 35 }];
-  XLSX.utils.book_append_sheet(wb, wsGuide, "0_Huong_Dan_Chung");
+  wsGuide["!cols"] = [{ wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 50 }, { wch: 35 }];
+  XLSX.utils.book_append_sheet(wb, wsGuide, "0_Huong_Dan");
 
-  // Sheet 2: Mau_${skill}
+  // Sheet 2: Mẫu nhập bài tập
   const rows = SAMPLE_ROWS_BY_SKILL[skill] || SAMPLE_ROWS_BY_SKILL.READING;
-  XLSX.utils.book_append_sheet(wb, createSkillWorksheet(rows), `Mau_${skill}`);
+  const wsData = XLSX.utils.aoa_to_sheet([EXCEL_HEADERS, ...rows]);
+  wsData["!cols"] = STANDARD_COL_WIDTHS;
+  XLSX.utils.book_append_sheet(wb, wsData, `Mau_Giao_Bai_${skill}`);
 
-  XLSX.writeFile(wb, `Mau_Nhap_Bai_Tap_${skill}.xlsx`);
+  // Xuất file chuẩn XLSX nhị phân
+  XLSX.writeFile(wb, `Mau_Giao_Bai_Tap_${skill}.xlsx`, { bookType: "xlsx", type: "binary" });
 }
 
 /**
- * Đọc file bảng tính Excel/CSV sang mảng Object các dòng (Hỗ trợ quét đa sheet thông minh)
+ * 2. TẢI FILE EXCEL MẪU TỔNG HỢP TOÀN BỘ KỸ NĂNG (.XLSX)
+ * Xuất file nhị phân chuẩn OpenXML (.xlsx) trực tiếp trên Client bằng SheetJS
+ */
+export function downloadExcelTemplate(): void {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Hướng dẫn
+  const wsGuide = XLSX.utils.aoa_to_sheet(GUIDE_SHEET_DATA);
+  wsGuide["!cols"] = [{ wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 50 }, { wch: 35 }];
+  XLSX.utils.book_append_sheet(wb, wsGuide, "0_Huong_Dan");
+
+  // Sheet 2: Tổng hợp đa dạng các Studio
+  const wsAll = XLSX.utils.aoa_to_sheet([EXCEL_HEADERS, ...DIVERSE_SAMPLE_ROWS]);
+  wsAll["!cols"] = STANDARD_COL_WIDTHS;
+  XLSX.utils.book_append_sheet(wb, wsAll, "Mau_Tong_Hop");
+
+  // Thêm từng Sheet theo kỹ năng riêng biệt để giáo viên tiện soạn theo môn
+  const skills: SkillKey[] = ["VOCABULARY", "GRAMMAR", "LISTENING", "READING", "SPEAKING", "WRITING"];
+  skills.forEach((sk) => {
+    const sRows = SAMPLE_ROWS_BY_SKILL[sk];
+    if (sRows && sRows.length > 0) {
+      const wsSkill = XLSX.utils.aoa_to_sheet([EXCEL_HEADERS, ...sRows]);
+      wsSkill["!cols"] = STANDARD_COL_WIDTHS;
+      XLSX.utils.book_append_sheet(wb, wsSkill, `Mau_${sk}`);
+    }
+  });
+
+  // Xuất file chuẩn XLSX nhị phân
+  XLSX.writeFile(wb, "Mau_Giao_Bai_Tap_Chuan.xlsx", { bookType: "xlsx", type: "binary" });
+}
+
+/**
+ * Đọc file bảng tính Excel/CSV sang mảng Object các dòng (Hỗ trợ quét đa sheet & nhận diện thông minh dòng Header)
  */
 export async function readSpreadsheetFile(file: File): Promise<Record<string, any>[]> {
   const buffer = await file.arrayBuffer();
@@ -584,7 +533,35 @@ export async function readSpreadsheetFile(file: File): Promise<Record<string, an
   for (const sheetName of sheetsToScan) {
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) continue;
+
+    // Quét tìm dòng header thực sự từ dòng 0 đến dòng 10 (kể cả khi dòng 0-1 là banner gộp ô)
+    const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: "" });
+    let headerRowIndex = 0;
+    const maxScan = Math.min(10, rawData.length);
+    for (let r = 0; r < maxScan; r++) {
+      const row = rawData[r] || [];
+      const rowStr = row.map((cell) => String(cell || "").toLowerCase()).join(" ");
+      const hasQuestion =
+        rowStr.includes("câu hỏi") ||
+        rowStr.includes("question") ||
+        rowStr.includes("nội dung") ||
+        rowStr.includes("đề bài") ||
+        rowStr.includes("prompt");
+      const hasType =
+        rowStr.includes("loại") || rowStr.includes("type") || rowStr.includes("dạng");
+      const hasAnswer =
+        rowStr.includes("đáp án") ||
+        rowStr.includes("correct") ||
+        rowStr.includes("answer") ||
+        rowStr.includes("nghĩa");
+      if (hasQuestion && (hasType || hasAnswer)) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+
     const sheetRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+      range: headerRowIndex,
       defval: "",
       raw: false,
     });
@@ -592,6 +569,9 @@ export async function readSpreadsheetFile(file: File): Promise<Record<string, an
     // Kiểm tra xem sheet này có dòng dữ liệu câu hỏi thực sự hay không
     const hasData = sheetRows.some((r) => {
       const promptVal = getRowField(r, [
+        "Nội dung câu hỏi / Transcript / Đề bài (*)",
+        "Nội dung câu hỏi / Câu mẫu Shadowing / Từ vựng (*)",
+        "Nội dung câu hỏi",
         "Đề bài / Câu hỏi",
         "Đề bài",
         "Câu hỏi",
@@ -605,13 +585,13 @@ export async function readSpreadsheetFile(file: File): Promise<Record<string, an
     if (hasData) {
       sheetRows.forEach((r, idx) => {
         r._sheetName = sheetName;
-        r._rowNum = idx + 2; // Dòng 1 là Header
+        r._rowNum = headerRowIndex + idx + 2;
       });
       allRows.push(...sheetRows);
     }
   }
 
-  // Fallback: nếu allRows vẫn trống (ví dụ file chỉ có 1 sheet duy nhất dù tên gì)
+  // Fallback nếu allRows vẫn trống
   if (allRows.length === 0) {
     for (const sheetName of workbook.SheetNames) {
       const worksheet = workbook.Sheets[sheetName];
@@ -635,7 +615,7 @@ export async function readSpreadsheetFile(file: File): Promise<Record<string, an
 }
 
 /**
- * 2. BƯỚC 2: PHÂN TÍCH FILE EXCEL VỚI SMART CORRECT ANSWER VÀ BÁO CÁO LỖI TỪNG DÒNG
+ * 3. PHÂN TÍCH FILE EXCEL VỚI SMART CORRECT ANSWER, HỖ TRỢ ĐA DẠNG STUDIO VÀ BÁO CÁO LỖI TỪNG DÒNG
  */
 export function parseExcelRows(
   rows: Record<string, any>[],
@@ -651,7 +631,6 @@ export function parseExcelRows(
 
   // Kế thừa bài đọc / kịch bản nghe liên tiếp cho các câu dùng chung
   const lastPassageBySkill: Record<string, string> = {};
-
   let totalDataRows = 0;
 
   rows.forEach((row, idx) => {
@@ -667,44 +646,91 @@ export function parseExcelRows(
     if (allValues.every((v) => v === "")) {
       return;
     }
-    totalDataRows++;
 
     // 2. Trích xuất các trường theo nhiều biến thể tên cột
-    const rawSkill = getRowField(row, ["Kỹ năng", "Ky nang", "Skill", "SkillType"]);
-    const rawType = getRowField(row, ["Dạng câu hỏi", "Dang cau hoi", "Question Type", "QuestionType", "Type", "Loại câu hỏi"]);
-    const rawPrompt = getRowField(row, ["Đề bài / Câu hỏi", "Đề bài", "De bai", "Câu hỏi", "Question", "Prompt", "PromptText"]);
+    const rawSkill = getRowField(row, ["Kỹ năng (*)", "Kỹ năng", "Ky nang", "Skill", "SkillType"]);
+    const rawType = getRowField(row, [
+      "Loại câu hỏi (*)",
+      "Loại câu hỏi",
+      "Loại",
+      "Dạng câu hỏi",
+      "Dang cau hoi",
+      "Question Type",
+      "QuestionType",
+      "Type",
+    ]);
+    const rawPrompt = getRowField(row, [
+      "Nội dung câu hỏi / Transcript / Đề bài (*)",
+      "Nội dung câu hỏi / Câu mẫu Shadowing / Từ vựng (*)",
+      "Nội dung câu hỏi",
+      "Đề bài / Câu hỏi",
+      "Đề bài",
+      "De bai",
+      "Câu hỏi",
+      "Question",
+      "Prompt",
+      "PromptText",
+    ]);
     const optA = getRowField(row, ["Lựa chọn A", "Option A", "A", "Phương án A", "Đáp án A", "Choice A"]);
     const optB = getRowField(row, ["Lựa chọn B", "Option B", "B", "Phương án B", "Đáp án B", "Choice B"]);
     const optC = getRowField(row, ["Lựa chọn C", "Option C", "C", "Phương án C", "Đáp án C", "Choice C"]);
     const optD = getRowField(row, ["Lựa chọn D", "Option D", "D", "Phương án D", "Đáp án D", "Choice D"]);
-    const rawAnswer = getRowField(row, ["Đáp án đúng", "Dap an dung", "Correct Answer", "CorrectAnswer", "Answer", "Key", "Đáp án"]);
-    const rawExplanation = getRowField(row, ["Giải thích", "Giai thich", "Explanation", "Explain", "Gợi ý", "Note"]);
-    const rawPassage = getRowField(row, [
+    const rawAnswer = getRowField(row, [
+      "Đáp án đúng (*)",
+      "Đáp án đúng / Từ điền / Nghĩa ghép cặp (*)",
+      "Đáp án đúng",
+      "Dap an dung",
+      "Correct Answer",
+      "CorrectAnswer",
+      "Answer",
+      "Key",
+      "Đáp án",
+    ]);
+    const rawExplanation = getRowField(row, [
+      "Giải thích / Gợi ý chấm AI",
+      "Giải thích / Gợi ý chấm AI (Rubric/Hint)",
+      "Giải thích",
+      "Giai thich",
+      "Explanation",
+      "Explain",
+      "Gợi ý",
+      "Rubric",
+      "Note",
+    ]);
+    const rawAudioScript = getRowField(row, [
+      "Văn bản đọc TTS (Audio Script)",
+      "Văn bản tạo Audio (Kokoro TTS Script)",
+      "Văn bản tạo Audio",
+      "Audio Script",
+      "Kokoro TTS Script",
+      "Kokoro TTS",
       "Bài đọc / Kịch bản (Passage/Transcript)",
       "Đoạn văn / Kịch bản (Passage/Transcript)",
-      "Đoạn văn / Kịch bản",
       "Passage",
       "Transcript",
       "Bài đọc",
       "Kịch bản nghe",
-      "Listening Script",
-      "Kịch bản",
     ]);
     const rawIpa = getRowField(row, ["Từ khóa / IPA", "Từ vựng / IPA", "IPA", "Target Word", "Word", "Từ khóa", "Từ vựng"]);
-    const rawPoints = getRowField(row, ["Điểm số", "Diem so", "Points", "Điểm", "Score"]);
+    const rawPoints = getRowField(row, ["Điểm (*)", "Điểm số", "Diem so", "Points", "Điểm", "Score"]);
 
-    // 3. Kiểm tra tính hợp lệ tối thiểu của đề bài
-    if (!rawPrompt) {
+    // 3. Nếu đề bài trống hoàn toàn:
+    if (!rawPrompt.trim()) {
+      if (!optA && !optB && !rawAnswer) {
+        return;
+      }
       errors.push(`${rowLoc}: Thiếu nội dung đề bài / câu hỏi.`);
       return;
     }
+
+    totalDataRows++;
 
     const skill = normalizeSkill(rawSkill, defaultSkill);
     const optionsRaw = [optA, optB, optC, optD].filter((o) => o !== "");
     const questionType = normalizeQuestionType(rawType, optionsRaw.length);
 
-    // Kế thừa bài đọc / kịch bản nếu dòng hiện tại để trống
-    let passage = rawPassage;
+    // Kế thừa bài đọc / kịch bản nghe nếu dòng hiện tại để trống
+    let passage = rawAudioScript;
     if (passage) {
       lastPassageBySkill[skill] = passage;
     } else if (lastPassageBySkill[skill]) {
@@ -722,18 +748,17 @@ export function parseExcelRows(
       }
       finalOptions = [optA, optB, optC, optD].filter((o) => o !== "");
 
-      // Nếu giáo viên ghi A, B, C, D (hoặc A., B), (A)) -> tự động gán text của option tương ứng
+      // Nhận diện chữ cái A, B, C, D hoặc "Đáp án A", "1", "2"
       const ansUpper = finalAnswer.toUpperCase().replace(/[\.\)\(\[\]]/g, "").trim();
-      if (ansUpper === "A" && optA) {
+      if ((ansUpper === "A" || ansUpper === "1" || ansUpper.includes("ĐÁP ÁN A") || ansUpper.includes("LỰA CHỌN A")) && optA) {
         finalAnswer = optA;
-      } else if (ansUpper === "B" && optB) {
+      } else if ((ansUpper === "B" || ansUpper === "2" || ansUpper.includes("ĐÁP ÁN B") || ansUpper.includes("LỰA CHỌN B")) && optB) {
         finalAnswer = optB;
-      } else if (ansUpper === "C" && optC) {
+      } else if ((ansUpper === "C" || ansUpper === "3" || ansUpper.includes("ĐÁP ÁN C") || ansUpper.includes("LỰA CHỌN C")) && optC) {
         finalAnswer = optC;
-      } else if (ansUpper === "D" && optD) {
+      } else if ((ansUpper === "D" || ansUpper === "4" || ansUpper.includes("ĐÁP ÁN D") || ansUpper.includes("LỰA CHỌN D")) && optD) {
         finalAnswer = optD;
       } else {
-        // Nếu ghi trực tiếp text đáp án, kiểm tra xem có khớp phương án nào không
         const matched = finalOptions.find(
           (o) => o.toLowerCase().trim() === finalAnswer.toLowerCase()
         );
@@ -750,6 +775,12 @@ export function parseExcelRows(
             finalAnswer = finalOptions[0] || optA;
           }
         }
+      }
+    } else if (questionType === "MATCHING") {
+      finalOptions = [];
+      if (!finalAnswer) {
+        errors.push(`${rowLoc}: Dạng ghép cặp (MATCHING) yêu cầu phải có nghĩa hoặc cặp ghép ở cột 'Đáp án đúng'.`);
+        return;
       }
     } else if (questionType === "TRUE_FALSE") {
       finalOptions = ["TRUE", "FALSE", "NOT GIVEN"];
@@ -774,7 +805,7 @@ export function parseExcelRows(
     } else if (questionType === "ESSAY") {
       finalOptions = [];
       if (!finalAnswer) {
-        finalAnswer = "Sample high-band academic response structure";
+        finalAnswer = "Sample academic response structure";
       }
     }
 
@@ -787,13 +818,18 @@ export function parseExcelRows(
         rawPrompt.toLowerCase().includes("repeat") ||
         rawPrompt.toLowerCase().includes("lặp lại") ||
         rawPrompt.toLowerCase().includes("đọc to") ||
-        (rawType && rawType.toLowerCase().includes("shadow"));
-      speakingMode = isShadowingPrompt ? "SHADOWING" : "QA";
+        (rawType && (rawType.toLowerCase().includes("shadow") || rawType.toUpperCase() === "SPEAKING"));
+      const isQA =
+        (rawType && rawType.toUpperCase().includes("QA")) ||
+        rawPrompt.toLowerCase().includes("describe") ||
+        rawPrompt.toLowerCase().includes("tell me") ||
+        rawPrompt.toLowerCase().includes("what do you think");
+      speakingMode = isQA ? "QA" : isShadowingPrompt ? "SHADOWING" : "QA";
     }
 
     // 6. Điểm số
     const parsedPoints = parseFloat(rawPoints);
-    const points = !isNaN(parsedPoints) && parsedPoints > 0 ? parsedPoints : skill === "WRITING" ? 10.0 : skill === "SPEAKING" ? 5.0 : 2.5;
+    const points = !isNaN(parsedPoints) && parsedPoints > 0 ? parsedPoints : skill === "WRITING" ? 10.0 : skill === "SPEAKING" ? 5.0 : 2.0;
 
     // 7. Tạo QuestionDraft chuẩn
     const qDraft: QuestionDraft = {
@@ -803,9 +839,9 @@ export function parseExcelRows(
       options: finalOptions,
       correctAnswer: finalAnswer,
       explanation: rawExplanation,
-      transcript: passage,
+      transcript: passage || rawAudioScript || undefined,
       ipa: rawIpa,
-      targetWord: rawIpa.split("|")[0]?.trim() || "",
+      targetWord: questionType === "MATCHING" ? rawPrompt : rawIpa.split("|")[0]?.trim() || "",
       points,
     };
 
@@ -854,8 +890,7 @@ export function parseExcelRows(
 }
 
 /**
- * 3. BƯỚC 3: XÂY DỰNG BỘ PHÂN TÍCH CÚ PHÁP VĂN BẢN THÔ TỨC THÌ (INSTANT REGEX TEXT PARSER)
- * Hoạt động thuần túy client-side trong < 10ms, không phụ thuộc vào Gemini AI.
+ * 4. BỘ PHÂN TÍCH CÚ PHÁP VĂN BẢN THÔ (RAW TEXT PARSER)
  */
 export function parseRawText(
   rawText: string,
@@ -879,7 +914,6 @@ export function parseRawText(
     };
   }
 
-  // Tách đoạn văn bài đọc / kịch bản nghe nếu có đánh dấu [Passage], [Bài đọc], [Transcript]
   let passage = "";
   let cleanText = text;
 
@@ -892,7 +926,6 @@ export function parseRawText(
     cleanText = text.replace(passageMatch[0], "").trim();
   }
 
-  // Tách thành từng khối câu hỏi theo định dạng "Câu 1:", "Question 1:", "1.", "1/"
   const questionSplitRegex = /(?:^|\n+)(?=(?:(?:Câu|Question)\s*\d+[:\.]?|\d+[\.\/\)]\s+))/i;
   const rawBlocks = cleanText
     .split(questionSplitRegex)
@@ -902,7 +935,6 @@ export function parseRawText(
   const parsedQuestions: QuestionDraft[] = [];
 
   rawBlocks.forEach((block, idx) => {
-    // Trích xuất Đề bài / Câu hỏi
     let prompt = "";
     const promptMatch = block.match(
       /^(?:(?:Câu|Question)\s*\d+[:\.]?|\d+[\.\/\)])\s*([^\n\r]+)/i
@@ -921,7 +953,6 @@ export function parseRawText(
       return;
     }
 
-    // Trích xuất các phương án A, B, C, D
     const options: string[] = [];
     const optRegex = /(?:^|\n+)\s*(?:([A-D])[.)]|\(([A-D])\)|\[([A-D])\])\s*([^\n\r]+)/gi;
     const optMatches = Array.from(block.matchAll(optRegex));
@@ -932,7 +963,6 @@ export function parseRawText(
       if (optText) options.push(optText);
     });
 
-    // Trích xuất Đáp án đúng
     let answer = "";
     const ansMatch = block.match(
       /(?:^|\n+)\s*(?:Đáp án|Dap an|Answer|Key)[:\s]+([^\n\r]+)/i
@@ -941,7 +971,6 @@ export function parseRawText(
       answer = ansMatch[1].trim();
     }
 
-    // Trích xuất Lời giải thích
     let explanation = "";
     const expMatch = block.match(
       /(?:^|\n+)\s*(?:Giải thích|Giai thich|Explanation|Explain)[:\s]+([^\n\r]+)/i
@@ -950,7 +979,6 @@ export function parseRawText(
       explanation = expMatch[1].trim();
     }
 
-    // Trích xuất Từ khóa / IPA
     let ipa = "";
     let targetWord = "";
     const ipaMatch = block.match(
@@ -962,7 +990,6 @@ export function parseRawText(
       targetWord = rawIpaStr.split("|")[0]?.trim() || "";
     }
 
-    // Xác định dạng câu hỏi
     const hasBlanks = prompt.includes("______") || prompt.includes("___") || prompt.includes("[...]");
     let questionType: QuestionDraft["questionType"] = "MULTIPLE_CHOICE";
 
@@ -1008,7 +1035,7 @@ export function parseRawText(
       transcript: passage,
       ipa,
       targetWord,
-      points: defaultSkill === "WRITING" ? 10.0 : defaultSkill === "SPEAKING" ? 5.0 : 2.5,
+      points: defaultSkill === "WRITING" ? 10.0 : defaultSkill === "SPEAKING" ? 5.0 : 2.0,
     });
   });
 

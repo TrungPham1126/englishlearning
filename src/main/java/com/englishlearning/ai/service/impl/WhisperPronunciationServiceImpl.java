@@ -25,7 +25,7 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
 
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Override
     public PhoneticEvaluationResponse evaluatePronunciation(MultipartFile audioFile, String referenceText) {

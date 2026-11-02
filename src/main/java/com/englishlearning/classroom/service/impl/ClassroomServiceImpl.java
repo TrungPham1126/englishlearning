@@ -1,5 +1,7 @@
 package com.englishlearning.classroom.service.impl;
 
+import com.englishlearning.assignment.entity.Assignment;
+import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.auth.entity.Student;
 import com.englishlearning.auth.entity.Teacher;
 import com.englishlearning.auth.entity.User;
@@ -16,6 +18,17 @@ import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.PageResponse;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.curriculum.entity.DailyStudyPlan;
+import com.englishlearning.curriculum.entity.Lesson;
+import com.englishlearning.curriculum.entity.StudentDailyProgress;
+import com.englishlearning.curriculum.repository.DailyPlanItemRepository;
+import com.englishlearning.curriculum.repository.DailyStudyPlanRepository;
+import com.englishlearning.curriculum.repository.LessonRepository;
+import com.englishlearning.curriculum.repository.StudentDailyProgressRepository;
+import com.englishlearning.submission.entity.AssignmentAttempt;
+import com.englishlearning.submission.repository.AssignmentAttemptRepository;
+import com.englishlearning.video.entity.VideoWatchHistory;
+import com.englishlearning.video.repository.VideoWatchHistoryRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,6 +52,13 @@ public class ClassroomServiceImpl implements ClassroomService {
     private final StudentRepository studentRepository;
     private final UserRepository userRepository;
     private final EntityManager entityManager;
+    private final DailyStudyPlanRepository dailyStudyPlanRepository;
+    private final DailyPlanItemRepository dailyPlanItemRepository;
+    private final StudentDailyProgressRepository studentDailyProgressRepository;
+    private final VideoWatchHistoryRepository videoWatchHistoryRepository;
+    private final AssignmentRepository assignmentRepository;
+    private final AssignmentAttemptRepository assignmentAttemptRepository;
+    private final LessonRepository lessonRepository;
 
     @Override
     @Transactional
@@ -205,12 +223,101 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Transactional(readOnly = true)
     public List<MyCourseResponse> getStudentCourses(UUID studentUserId) {
         List<ClassStudent> enrollments = classStudentRepository.findActiveEnrollmentsWithClassroom(studentUserId);
+        if (enrollments.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Lấy toàn bộ bài nộp hoàn thành của học sinh
+        List<AssignmentAttempt> completedAttempts = assignmentAttemptRepository.findCompletedAttemptsByStudentId(studentUserId);
+        Set<UUID> submittedAssignmentIds = completedAttempts.stream()
+                .filter(a -> a.getAssignment() != null)
+                .map(a -> a.getAssignment().getId())
+                .collect(Collectors.toSet());
+
+        // Lấy tiến độ các ngày học của học sinh
+        List<StudentDailyProgress> studentProgresses = studentDailyProgressRepository.findByStudentId(studentUserId);
+        Map<UUID, StudentDailyProgress> progressByPlanId = studentProgresses.stream()
+                .filter(p -> p.getDailyPlan() != null)
+                .collect(Collectors.toMap(p -> p.getDailyPlan().getId(), p -> p, (p1, p2) -> p1));
+
+        // Lấy lịch sử xem video đã hoàn thành của học sinh
+        List<VideoWatchHistory> completedVideos = videoWatchHistoryRepository.findByStudentIdAndIsCompletedTrue(studentUserId);
+        Set<UUID> completedLessonIdsByVideo = completedVideos.stream()
+                .filter(v -> v.getVideo() != null && v.getVideo().getLesson() != null)
+                .map(v -> v.getVideo().getLesson().getId())
+                .collect(Collectors.toSet());
+
         return enrollments.stream().map(enrollment -> {
             Classroom c = enrollment.getClassroom();
             String teacherName = "Chưa phân công";
             if (c.getTeacher() != null && c.getTeacher().getUser() != null) {
                 teacherName = c.getTeacher().getUser().getFirstName() + " " + c.getTeacher().getUser().getLastName();
             }
+
+            // 1. Danh sách Assignment của lớp
+            List<Assignment> classAssignments = assignmentRepository.findByClassroomId(c.getId());
+
+            // 2. Danh sách DailyStudyPlan và DailyPlanItem của lớp
+            List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdWithItems(c.getId());
+            int totalDailyPlanItems = plans.stream()
+                    .mapToInt(p -> p.getItems() != null ? p.getItems().size() : 0)
+                    .sum();
+
+            // 3. Danh sách Lesson của lớp
+            List<Lesson> lessons = lessonRepository.findByClassroomIdOrderByOrderIndexAsc(c.getId());
+            int totalLessons = lessons.size();
+
+            // 4. Tính totalTasks = Tổng số Assignment + Tổng số DailyPlanItem (hoặc tổng số Lesson nếu chưa có bài tập/kế hoạch)
+            int totalTasks = classAssignments.size() + totalDailyPlanItems;
+            if (totalTasks == 0 && totalLessons > 0) {
+                totalTasks = totalLessons;
+            }
+
+            // 5. Tính completedTasks:
+            // - Số bài tập đã nộp (AssignmentAttempt SUBMITTED / GRADING / COMPLETED)
+            long completedAssignmentsCount = classAssignments.stream()
+                    .filter(a -> submittedAssignmentIds.contains(a.getId()))
+                    .count();
+
+            // - Số DailyPlanItem đã hoàn thành (StudentDailyProgress completed = true hoặc số items hoàn thành)
+            int completedPlanItemsCount = 0;
+            for (DailyStudyPlan plan : plans) {
+                StudentDailyProgress prog = progressByPlanId.get(plan.getId());
+                if (prog != null) {
+                    if (Boolean.TRUE.equals(prog.getIsCompleted())) {
+                        completedPlanItemsCount += (plan.getItems() != null ? plan.getItems().size() : 0);
+                    } else if (prog.getCompletedItemsCount() != null) {
+                        completedPlanItemsCount += prog.getCompletedItemsCount();
+                    }
+                }
+            }
+
+            int completedTasks = (int) (completedAssignmentsCount + completedPlanItemsCount);
+
+            // 6. Tính completedLessons:
+            // Số Lesson mà học sinh đã xem xong video (VideoWatchHistory.isCompleted = true)
+            // hoặc đã hoàn thành bài tập gắn với lesson đó
+            Set<UUID> completedLessonIdsByAssignment = classAssignments.stream()
+                    .filter(a -> a.getLesson() != null && submittedAssignmentIds.contains(a.getId()))
+                    .map(a -> a.getLesson().getId())
+                    .collect(Collectors.toSet());
+
+            int completedLessons = 0;
+            for (Lesson lesson : lessons) {
+                if (completedLessonIdsByVideo.contains(lesson.getId()) || completedLessonIdsByAssignment.contains(lesson.getId())) {
+                    completedLessons++;
+                }
+            }
+
+            if (classAssignments.isEmpty() && totalDailyPlanItems == 0 && totalLessons > 0) {
+                completedTasks = completedLessons;
+            }
+
+            // 7. Tính progressPercentage = totalTasks == 0 ? 0.0 : Math.min(100.0, Math.round((completedTasks * 1000.0) / totalTasks) / 10.0)
+            double progressPercentage = totalTasks == 0
+                    ? 0.0
+                    : Math.min(100.0, Math.round((completedTasks * 1000.0) / totalTasks) / 10.0);
+
             return MyCourseResponse.builder()
                     .classId(c.getId())
                     .className(c.getName())
@@ -218,7 +325,11 @@ public class ClassroomServiceImpl implements ClassroomService {
                     .status(c.getStatus())
                     .teacherName(teacherName)
                     .enrolledAt(enrollment.getEnrolledAt())
-                    .progressPercentage(0.0)
+                    .progressPercentage(progressPercentage)
+                    .completedLessons(completedLessons)
+                    .totalLessons(totalLessons)
+                    .completedTasks(completedTasks)
+                    .totalTasks(totalTasks)
                     .build();
         }).collect(Collectors.toList());
     }
@@ -297,11 +408,17 @@ public class ClassroomServiceImpl implements ClassroomService {
                 .setParameter("classId", classId)
                 .getResultList();
 
-        List<com.englishlearning.curriculum.entity.DailyStudyPlan> plans = entityManager.createQuery(
-                "SELECT DISTINCT p FROM DailyStudyPlan p LEFT JOIN FETCH p.items WHERE p.classroom.id = :classId ORDER BY p.dayNumber ASC",
-                com.englishlearning.curriculum.entity.DailyStudyPlan.class)
-                .setParameter("classId", classId)
-                .getResultList();
+        List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdWithItems(classId);
+        List<Assignment> classAssignments = assignmentRepository.findByClassroomId(classId);
+        List<Lesson> classLessons = lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId);
+
+        int totalPlanItems = plans.stream()
+                .mapToInt(p -> p.getItems() != null ? p.getItems().size() : 0)
+                .sum();
+        int totalClassTasks = classAssignments.size() + totalPlanItems;
+        if (totalClassTasks == 0 && !classLessons.isEmpty()) {
+            totalClassTasks = classLessons.size();
+        }
 
         List<UUID> studentIds = new ArrayList<>();
         for (Object[] row : results) {
@@ -309,20 +426,17 @@ public class ClassroomServiceImpl implements ClassroomService {
                 studentIds.add((UUID) row[0]);
         }
 
-        List<com.englishlearning.curriculum.entity.StudentDailyProgress> allProgress = new ArrayList<>();
-        List<com.englishlearning.submission.entity.AssignmentAttempt> allAttempts = new ArrayList<>();
-        if (!studentIds.isEmpty()) {
-            allProgress = entityManager.createQuery(
-                    "SELECT p FROM StudentDailyProgress p WHERE p.student.id IN :studentIds",
-                    com.englishlearning.curriculum.entity.StudentDailyProgress.class)
-                    .setParameter("studentIds", studentIds)
-                    .getResultList();
-            allAttempts = entityManager.createQuery(
-                    "SELECT a FROM AssignmentAttempt a JOIN FETCH a.assignment WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')",
-                    com.englishlearning.submission.entity.AssignmentAttempt.class)
-                    .setParameter("studentIds", studentIds)
-                    .getResultList();
-        }
+        final List<StudentDailyProgress> allProgress = studentIds.isEmpty()
+                ? Collections.emptyList()
+                : studentDailyProgressRepository.findByStudentIdIn(studentIds);
+
+        final List<AssignmentAttempt> allAttempts = studentIds.isEmpty()
+                ? Collections.emptyList()
+                : entityManager.createQuery(
+                        "SELECT a FROM AssignmentAttempt a JOIN FETCH a.assignment WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')",
+                        AssignmentAttempt.class)
+                        .setParameter("studentIds", studentIds)
+                        .getResultList();
 
         List<StudentProgressResponse> responseList = new ArrayList<>();
 
@@ -330,6 +444,7 @@ public class ClassroomServiceImpl implements ClassroomService {
             UUID studentId = row[0] != null ? (UUID) row[0] : null;
             if (studentId == null)
                 continue;
+            final UUID currentStudentId = studentId;
 
             String fName = row[1] != null ? row[1].toString() : "";
             String lName = row[2] != null ? row[2].toString() : "";
@@ -342,23 +457,19 @@ public class ClassroomServiceImpl implements ClassroomService {
             String enrolledAt = row[5] != null ? row[5].toString() : "N/A";
 
             List<StudentProgressResponse.DailyProgressDetail> dailyProgressDetails = new ArrayList<>();
-            int totalTasks = 0;
-            int totalCompletedTasks = 0;
             int totalStudyMinutes = 0;
             double totalScoreSum = 0.0;
             int scoredAttemptsCount = 0;
 
-            for (com.englishlearning.curriculum.entity.DailyStudyPlan plan : plans) {
+            for (DailyStudyPlan plan : plans) {
                 int planTotalItems = plan.getItems() != null ? plan.getItems().size() : 0;
-                totalTasks += planTotalItems;
-
                 int planCompletedTasks = 0;
                 int planDurationSeconds = 0;
                 double planScoreSum = 0.0;
                 int planScoredCount = 0;
 
-                com.englishlearning.curriculum.entity.StudentDailyProgress progress = allProgress.stream()
-                        .filter(p -> p.getStudent().getId().equals(studentId)
+                StudentDailyProgress progress = allProgress.stream()
+                        .filter(p -> p.getStudent().getId().equals(currentStudentId)
                                 && p.getDailyPlan().getId().equals(plan.getId()))
                         .findFirst().orElse(null);
 
@@ -367,11 +478,11 @@ public class ClassroomServiceImpl implements ClassroomService {
                     planDurationSeconds = plan.getEstimatedMinutes() != null ? plan.getEstimatedMinutes() * 60
                             : 30 * 60;
                 } else if (plan.getItems() != null) {
-                    for (com.englishlearning.curriculum.entity.DailyPlanItem item : plan.getItems()) {
+                    for (var item : plan.getItems()) {
                         if (item.getAssignment() != null) {
                             UUID assignId = item.getAssignment().getId();
-                            com.englishlearning.submission.entity.AssignmentAttempt attempt = allAttempts.stream()
-                                     .filter(a -> a.getStudent().getId().equals(studentId)
+                            AssignmentAttempt attempt = allAttempts.stream()
+                                    .filter(a -> a.getStudent().getId().equals(currentStudentId)
                                             && a.getAssignment().getId().equals(assignId))
                                     .findFirst().orElse(null);
                             if (attempt != null) {
@@ -393,7 +504,6 @@ public class ClassroomServiceImpl implements ClassroomService {
                     }
                 }
 
-                totalCompletedTasks += planCompletedTasks;
                 totalStudyMinutes += (planDurationSeconds / 60);
                 totalScoreSum += planScoreSum;
                 scoredAttemptsCount += planScoredCount;
@@ -409,8 +519,39 @@ public class ClassroomServiceImpl implements ClassroomService {
                         .build());
             }
 
-            int completionRate = totalTasks > 0 ? (int) Math.round(((double) totalCompletedTasks / totalTasks) * 100)
+            // Tính tổng số bài tập đã nộp của học sinh
+            long submittedAssignmentsCount = classAssignments.stream()
+                    .filter(a -> allAttempts.stream()
+                            .anyMatch(att -> att.getStudent().getId().equals(currentStudentId) && att.getAssignment().getId().equals(a.getId())))
+                    .count();
+
+            // Tính số nhiệm vụ lộ trình ngày đã hoàn thành
+            int completedPlanItems = 0;
+            for (DailyStudyPlan plan : plans) {
+                StudentDailyProgress progress = allProgress.stream()
+                        .filter(p -> p.getStudent().getId().equals(currentStudentId)
+                                && p.getDailyPlan().getId().equals(plan.getId()))
+                        .findFirst().orElse(null);
+                if (progress != null) {
+                    if (Boolean.TRUE.equals(progress.getIsCompleted())) {
+                        completedPlanItems += (plan.getItems() != null ? plan.getItems().size() : 0);
+                    } else if (progress.getCompletedItemsCount() != null) {
+                        completedPlanItems += progress.getCompletedItemsCount();
+                    }
+                }
+            }
+
+            int studentTotalCompletedTasks = (int) (submittedAssignmentsCount + completedPlanItems);
+            if (classAssignments.isEmpty() && totalPlanItems == 0 && !classLessons.isEmpty()) {
+                // Nếu chưa có bài tập hay lộ trình ngày, tính theo số bài học hoàn thành
+                studentTotalCompletedTasks = 0;
+            }
+
+            // Tính chính xác attendanceRate (tiến độ tổng hợp của học sinh trong lớp)
+            int attendanceRate = totalClassTasks > 0
+                    ? (int) Math.min(100, Math.round(((double) studentTotalCompletedTasks / totalClassTasks) * 100))
                     : 0;
+
             double averageScore = scoredAttemptsCount > 0 ? (totalScoreSum / scoredAttemptsCount) : 0.0;
             averageScore = Math.round(averageScore * 10.0) / 10.0;
 
@@ -420,12 +561,13 @@ public class ClassroomServiceImpl implements ClassroomService {
                     .email(email)
                     .phone(phone)
                     .enrolledAt(enrolledAt)
-                    .completedTasks(totalCompletedTasks)
-                    .totalTasks(totalTasks)
-                    .completionRate(completionRate)
+                    .completedTasks(studentTotalCompletedTasks)
+                    .totalTasks(totalClassTasks)
+                    .completionRate(attendanceRate)
+                    .attendanceRate(attendanceRate)
+                    .attendanceScore(attendanceRate)
                     .averageScore(averageScore)
                     .weaknesses(new ArrayList<>())
-                    .attendanceScore(completionRate > 0 ? completionRate : 100)
                     .totalStudyMinutes(totalStudyMinutes)
                     .dailyProgressDetails(dailyProgressDetails)
                     .build());

@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 
 public class CustomUserDetails implements UserDetails {
 
+    private final User user;
     private final UUID id;
     private final String email;
     private final String password;
@@ -20,6 +21,7 @@ public class CustomUserDetails implements UserDetails {
     private final Set<GrantedAuthority> authorities;
 
     public CustomUserDetails(User user) {
+        this.user = user;
         this.id = user.getId();
         this.email = user.getEmail();
         this.password = user.getPassword();
@@ -32,6 +34,10 @@ public class CustomUserDetails implements UserDetails {
         } else {
             this.authorities = Collections.emptySet();
         }
+    }
+
+    public User getUser() {
+        return user;
     }
 
     public UUID getId() {

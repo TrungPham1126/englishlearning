@@ -124,7 +124,8 @@ export default function SpeakingShadowingStudio({
       onMouseEnter={() => setIsCardFocused(true)}
       onMouseLeave={() => setIsCardFocused(false)}
       onFocus={() => setIsCardFocused(true)}
-      className="elp-card rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 sm:p-8 shadow-card space-y-6 transition-colors duration-200"
+      data-portal="student"
+      className="elp-card student-portal rounded-lg border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950 p-2.5 sm:p-3 shadow-2xs space-y-2.5 transition-colors duration-200"
     >
       {/* Vùng 1 (Top): Thanh tiến trình bài học, chế độ Shadowing/Normal, giọng đọc và nút Back */}
       <ShadowingTopBar

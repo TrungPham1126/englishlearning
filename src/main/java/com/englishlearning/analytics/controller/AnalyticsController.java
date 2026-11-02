@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class AnalyticsController {
     private final AnalyticsService analyticsService;
 
-    @GetMapping("/my-profile")
+    @GetMapping({"/my-profile", "/student/me"})
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ApiResponse<StudentSkillProfile>> getMyProfile(
             @AuthenticationPrincipal CustomUserDetails user) {

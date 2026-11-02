@@ -53,6 +53,12 @@ public class UserStreakServiceImpl implements UserStreakService {
     }
 
     @Override
+    @Transactional
+    public int recordActivity(UUID studentId) {
+        return updateStreakOnPlanCompletion(studentId, LocalDate.now());
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public int getCurrentStreak(UUID studentId) {
         return studentRepository.findById(studentId)

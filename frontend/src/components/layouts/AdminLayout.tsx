@@ -6,6 +6,7 @@ import axiosClient from "@/lib/axiosClient";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import { adminApi } from "@/features/admin/api/adminApi";
 import ThemeToggle from "@/components/common/ThemeToggle";
+import { NotificationBell } from "@/components/notification/NotificationBell";
 import {
   LayoutDashboard,
   Users,
@@ -24,7 +25,6 @@ import {
   Camera,
   Menu,
   X,
-  Sparkles,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -125,7 +125,7 @@ export default function AdminLayout() {
                   ELP CENTER
                 </span>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
-                  <Sparkles size={9} /> Admin
+                  <ShieldCheck size={9} /> Admin
                 </span>
               </div>
               <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 block truncate">
@@ -341,6 +341,7 @@ export default function AdminLayout() {
                 <span>{pendingVideoCount} video chờ duyệt</span>
               </button>
             )}
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </header>

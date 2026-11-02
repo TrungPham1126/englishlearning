@@ -8,7 +8,7 @@ import {
   LogOut,
   GraduationCap,
   Award,
-  Sparkles,
+  Radio,
   Camera,
   Menu,
   X,
@@ -16,6 +16,7 @@ import {
 import axiosClient from "@/lib/axiosClient";
 import { resolveAvatarUrl } from "@/lib/avatar";
 import ThemeToggle from "@/components/common/ThemeToggle";
+import { NotificationBell } from "@/components/notification/NotificationBell";
 
 export default function TeacherLayout() {
   const { user, setAuth, accessToken, logout } = useAuthStore();
@@ -108,7 +109,7 @@ export default function TeacherLayout() {
                     ELP TEACHER
                   </span>
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
-                    <Sparkles size={9} /> Giảng Viên
+                    <GraduationCap size={9} /> Giảng Viên
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate">
@@ -144,6 +145,11 @@ export default function TeacherLayout() {
             <NavLink to="/teacher/grading" className={navLinkClass}>
               <Award className="h-4 w-4 shrink-0" />
               <span>Chấm bài &amp; Đánh giá</span>
+            </NavLink>
+
+            <NavLink to="/teacher/broadcast" className={navLinkClass}>
+              <Radio className="h-4 w-4 shrink-0" />
+              <span>Phát thông báo</span>
             </NavLink>
           </nav>
         </div>
@@ -227,6 +233,7 @@ export default function TeacherLayout() {
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </header>

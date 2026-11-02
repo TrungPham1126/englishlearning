@@ -14,7 +14,14 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "assignment_attempts")
+@Table(
+        name = "assignment_attempts",
+        indexes = {
+                @Index(name = "idx_attempt_student_status", columnList = "student_id, status"),
+                @Index(name = "idx_attempt_assignment_student", columnList = "assignment_id, student_id"),
+                @Index(name = "idx_attempt_assignment_submitted", columnList = "assignment_id, submitted_at")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor

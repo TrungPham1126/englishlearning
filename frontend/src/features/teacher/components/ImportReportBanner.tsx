@@ -59,7 +59,7 @@ export default function ImportReportBanner({
               </h4>
 
               {groups.length > 1 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                   <Layers className="h-3 w-3" />
                   Phát hiện {groups.length} nhóm kỹ năng
                 </span>

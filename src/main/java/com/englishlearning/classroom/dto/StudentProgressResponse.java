@@ -16,6 +16,7 @@ public class StudentProgressResponse {
     private Integer completedTasks;
     private Integer totalTasks;
     private Integer completionRate;
+    private Integer attendanceRate;
     private Double averageScore;
     private List<String> weaknesses;
     private Integer attendanceScore;

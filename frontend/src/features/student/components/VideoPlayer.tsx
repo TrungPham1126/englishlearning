@@ -43,6 +43,11 @@ function formatTime(seconds: number): string {
   return `${pad(m)}:${pad(s)}`;
 }
 
+export function normalizeStreamUrl(url: string): string {
+  if (!url) return "";
+  return url.replace(/^http:\/\/localhost:8080/, "");
+}
+
 export default function VideoPlayer({
   videoId,
   streamUrl,
@@ -51,8 +56,13 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const bgVideoRef = useRef<HTMLVideoElement | null>(null);
   const scrubberRef = useRef<HTMLDivElement | null>(null);
+
+  // Guards & Timers
+  const hasAppliedInitialSeekRef = useRef<boolean>(false);
+  const bufferingTimerRef = useRef<number | null>(null);
+  const hideControlsTimerRef = useRef<number | null>(null);
+  const lastSyncRef = useRef<number>(initialSeconds);
 
   // Video State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -73,78 +83,84 @@ export default function VideoPlayer({
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
 
-  const hideControlsTimerRef = useRef<number | null>(null);
-  const lastSyncRef = useRef<number>(initialSeconds);
+  const normalizedStreamUrl = normalizeStreamUrl(streamUrl);
 
-  // ==========================================
-  // SYNC FOREGROUND & BACKGROUND VIDEO PLAYBACK
-  // ==========================================
-  const syncVideos = useCallback(
-    (action: "play" | "pause" | "seek" | "rate", val?: number) => {
-      const main = videoRef.current;
-      const bg = bgVideoRef.current;
-      if (!main) return;
-
-      if (action === "play") {
-        main.play().catch(() => {});
-        if (bg) {
-          bg.currentTime = main.currentTime;
-          bg.play().catch(() => {});
-        }
-      } else if (action === "pause") {
-        main.pause();
-        if (bg) bg.pause();
-      } else if (action === "seek" && typeof val === "number") {
-        main.currentTime = val;
-        if (bg) bg.currentTime = val;
-      } else if (action === "rate" && typeof val === "number") {
-        main.playbackRate = val;
-        if (bg) bg.playbackRate = val;
-      }
-    },
-    [],
-  );
-
-  // Initial resume position
+  // Reset seek guard when switching to another video
   useEffect(() => {
-    if (videoRef.current && initialSeconds > 0) {
-      videoRef.current.currentTime = initialSeconds;
-      if (bgVideoRef.current) {
-        bgVideoRef.current.currentTime = initialSeconds;
-      }
-    }
-  }, [initialSeconds]);
+    hasAppliedInitialSeekRef.current = false;
+    lastSyncRef.current = initialSeconds;
+  }, [videoId]);
 
-  // Sync background drift on timeupdate
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (bufferingTimerRef.current) {
+        window.clearTimeout(bufferingTimerRef.current);
+      }
+      if (hideControlsTimerRef.current) {
+        window.clearTimeout(hideControlsTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Buffer progress handler: Updates buffered range as chunks arrive over the network
+  const updateBufferedProgress = () => {
+    if (!videoRef.current) return;
+    const b = videoRef.current.buffered;
+    if (b && b.length > 0) {
+      const curr = videoRef.current.currentTime;
+      let targetEnd = 0;
+      // Tìm dải buffer đang chứa currentTime hoặc mút xa nhất đã tải
+      for (let i = 0; i < b.length; i++) {
+        if (curr >= b.start(i) && curr <= b.end(i)) {
+          targetEnd = b.end(i);
+          break;
+        }
+      }
+      if (targetEnd === 0) {
+        targetEnd = b.end(b.length - 1);
+      }
+      setBufferedEnd(targetEnd);
+    }
+  };
+
+  // Time update handler
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     const curr = videoRef.current.currentTime;
     setCurrentTime(curr);
-
-    // Update buffered progress
-    if (videoRef.current.buffered.length > 0) {
-      const buffEnd =
-        videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
-      setBufferedEnd(buffEnd);
-    }
-
-    // Keep background video synced without drift
-    if (bgVideoRef.current) {
-      const drift = Math.abs(bgVideoRef.current.currentTime - curr);
-      if (drift > 0.3) {
-        bgVideoRef.current.currentTime = curr;
-      }
-    }
+    updateBufferedProgress();
   };
 
+  // One-time initial seek on loadedmetadata
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
     const dur = videoRef.current.duration || 0;
     setDuration(dur);
-    if (initialSeconds > 0) {
+    if (initialSeconds > 0 && !hasAppliedInitialSeekRef.current) {
       videoRef.current.currentTime = initialSeconds;
-      if (bgVideoRef.current) bgVideoRef.current.currentTime = initialSeconds;
+      hasAppliedInitialSeekRef.current = true;
     }
+    updateBufferedProgress();
+  };
+
+  // Debounced buffering state (250ms delay to prevent flickering spinner)
+  const handleWaiting = () => {
+    if (bufferingTimerRef.current) {
+      window.clearTimeout(bufferingTimerRef.current);
+    }
+    bufferingTimerRef.current = window.setTimeout(() => {
+      setIsBuffering(true);
+    }, 250);
+  };
+
+  const handlePlaying = () => {
+    if (bufferingTimerRef.current) {
+      window.clearTimeout(bufferingTimerRef.current);
+      bufferingTimerRef.current = null;
+    }
+    setIsBuffering(false);
+    setIsPlaying(true);
   };
 
   // ==========================================
@@ -164,6 +180,11 @@ export default function VideoPlayer({
           try {
             await studentApi.updateVideoProgress(videoId, current, isFinished);
             if (isFinished) setCompleted(true);
+            window.dispatchEvent(
+              new CustomEvent("student-progress-updated", {
+                detail: { videoId, completed: isFinished, watchedSeconds: current },
+              }),
+            );
           } catch (e) {
             console.error("Không thể cập nhật tiến độ video:", e);
           }
@@ -180,10 +201,10 @@ export default function VideoPlayer({
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      syncVideos("play");
+      videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     } else {
-      syncVideos("pause");
+      videoRef.current.pause();
       setIsPlaying(false);
     }
     resetHideControlsTimer();
@@ -195,7 +216,7 @@ export default function VideoPlayer({
       0,
       Math.min(videoRef.current.currentTime + seconds, duration),
     );
-    syncVideos("seek", target);
+    videoRef.current.currentTime = target;
     setCurrentTime(target);
     resetHideControlsTimer();
   };
@@ -233,7 +254,9 @@ export default function VideoPlayer({
 
   const changePlaybackSpeed = (speed: number) => {
     setPlaybackSpeed(speed);
-    syncVideos("rate", speed);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
+    }
     setIsSpeedMenuOpen(false);
     resetHideControlsTimer();
   };
@@ -271,7 +294,6 @@ export default function VideoPlayer({
     if (hideControlsTimerRef.current) {
       window.clearTimeout(hideControlsTimerRef.current);
     }
-    // Only auto-hide if playing and speed menu is not open
     if (isPlaying && !isSpeedMenuOpen) {
       hideControlsTimerRef.current = window.setTimeout(() => {
         setControlsVisible(false);
@@ -312,14 +334,16 @@ export default function VideoPlayer({
 
   const handleScrubberMouseDown = (e: ReactMouseEvent) => {
     e.preventDefault();
+    if (!videoRef.current) return;
     setIsScrubbing(true);
     const target = calculateScrubPosition(e);
-    syncVideos("seek", target);
+    videoRef.current.currentTime = target;
     setCurrentTime(target);
 
     const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!videoRef.current) return;
       const nextTarget = calculateScrubPosition(moveEvent);
-      syncVideos("seek", nextTarget);
+      videoRef.current.currentTime = nextTarget;
       setCurrentTime(nextTarget);
     };
 
@@ -351,7 +375,6 @@ export default function VideoPlayer({
   // ==========================================
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in form inputs
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (
         activeTag === "input" ||
@@ -362,7 +385,6 @@ export default function VideoPlayer({
         return;
       }
 
-      // Check if container or child has focus or mouse is over it
       if (!containerRef.current?.contains(document.activeElement)) {
         return;
       }
@@ -420,21 +442,18 @@ export default function VideoPlayer({
         !controlsVisible && isPlaying ? "cursor-none" : "cursor-default"
       }`}
     >
-      {/* 1. BACKGROUND VIDEO: Fill mờ nền (Pillarbox/Letterbox blurred fill) */}
-      <video
-        ref={bgVideoRef}
-        src={streamUrl}
-        muted
-        playsInline
+      {/* 1. BACKGROUND GRADIENT: Thay thế hoàn toàn video nền thứ 2 gây nghẽn băng thông */}
+      <div
         aria-hidden="true"
-        tabIndex={-1}
-        className="absolute inset-0 w-full h-full object-cover scale-125 blur-3xl opacity-50 pointer-events-none"
+        className="absolute inset-0 bg-gradient-to-br from-zinc-950 via-slate-900 to-black pointer-events-none"
       />
 
-      {/* 2. FOREGROUND VIDEO: Video phát chính */}
+      {/* 2. FOREGROUND VIDEO: Video phát chính duy nhất */}
       <video
         ref={videoRef}
-        src={streamUrl}
+        src={normalizedStreamUrl}
+        preload="auto"
+        crossOrigin="anonymous"
         playsInline
         controls={false}
         onClick={togglePlay}
@@ -442,12 +461,26 @@ export default function VideoPlayer({
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
+        onProgress={updateBufferedProgress}
         onLoadedMetadata={handleLoadedMetadata}
-        onWaiting={() => setIsBuffering(true)}
-        onPlaying={() => setIsBuffering(false)}
-        onEnded={() => {
+        onWaiting={handleWaiting}
+        onPlaying={handlePlaying}
+        onEnded={async () => {
           setIsPlaying(false);
           setCompleted(true);
+          if (enableProgressSync && videoRef.current) {
+            const dur = Math.floor(videoRef.current.duration || currentTime);
+            try {
+              await studentApi.updateVideoProgress(videoId, dur, true);
+              window.dispatchEvent(
+                new CustomEvent("student-progress-updated", {
+                  detail: { videoId, completed: true, watchedSeconds: dur },
+                }),
+              );
+            } catch (e) {
+              console.error("Không thể cập nhật tiến độ video khi kết thúc:", e);
+            }
+          }
         }}
         className="relative z-10 w-full h-full object-contain cursor-pointer"
       />
@@ -474,7 +507,7 @@ export default function VideoPlayer({
 
       {/* 4. COMPLETED BADGE (Top right) */}
       {completed && (
-        <div className="absolute top-4 right-4 z-30 flex items-center gap-1.5 rounded-full bg-emerald-600/90 px-3.5 py-1.5 text-xs font-bold text-white backdrop-blur-md shadow-lg border border-emerald-400/40 animate-in fade-in duration-300">
+        <div className="absolute top-4 right-4 z-30 flex items-center gap-1.5 rounded-md bg-emerald-600/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md shadow-md border border-emerald-400/40 animate-in fade-in duration-300">
           <CheckCircle2 size={15} className="text-emerald-200" />
           <span>Hoàn thành bài học</span>
         </div>

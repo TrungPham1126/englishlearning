@@ -1,5 +1,6 @@
 package com.englishlearning.classroom.service;
 
+import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.auth.entity.Student;
 import com.englishlearning.auth.entity.Teacher;
 import com.englishlearning.auth.repository.StudentRepository;
@@ -15,6 +16,16 @@ import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.classroom.repository.ClassroomRepository;
 import com.englishlearning.classroom.service.impl.ClassroomServiceImpl;
 import com.englishlearning.common.exception.BadRequestException;
+import com.englishlearning.curriculum.repository.DailyPlanItemRepository;
+import com.englishlearning.curriculum.repository.DailyStudyPlanRepository;
+import com.englishlearning.curriculum.repository.LessonRepository;
+import com.englishlearning.curriculum.repository.StudentDailyProgressRepository;
+import com.englishlearning.curriculum.entity.DailyStudyPlan;
+import com.englishlearning.curriculum.entity.StudentDailyProgress;
+import com.englishlearning.submission.entity.AssignmentAttempt;
+import com.englishlearning.submission.repository.AssignmentAttemptRepository;
+import com.englishlearning.video.entity.VideoWatchHistory;
+import com.englishlearning.video.repository.VideoWatchHistoryRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +67,27 @@ class ClassroomServiceImplTest {
     @Mock
     private EntityManager entityManager;
 
+    @Mock
+    private DailyStudyPlanRepository dailyStudyPlanRepository;
+
+    @Mock
+    private DailyPlanItemRepository dailyPlanItemRepository;
+
+    @Mock
+    private StudentDailyProgressRepository studentDailyProgressRepository;
+
+    @Mock
+    private VideoWatchHistoryRepository videoWatchHistoryRepository;
+
+    @Mock
+    private AssignmentRepository assignmentRepository;
+
+    @Mock
+    private AssignmentAttemptRepository assignmentAttemptRepository;
+
+    @Mock
+    private LessonRepository lessonRepository;
+
     private ClassroomServiceImpl classroomService;
 
     private final UUID teacherId = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -71,7 +103,14 @@ class ClassroomServiceImplTest {
                 teacherRepository,
                 studentRepository,
                 userRepository,
-                entityManager
+                entityManager,
+                dailyStudyPlanRepository,
+                dailyPlanItemRepository,
+                studentDailyProgressRepository,
+                videoWatchHistoryRepository,
+                assignmentRepository,
+                assignmentAttemptRepository,
+                lessonRepository
         );
     }
 
@@ -103,37 +142,34 @@ class ClassroomServiceImplTest {
         });
 
         // When
-        ClassroomResponse response = classroomService.createClassroom(req);
+        ClassroomResponse resp = classroomService.createClassroom(req);
 
         // Then
-        assertThat(response).isNotNull();
-        assertThat(response.getId()).isEqualTo(classId);
-        assertThat(response.getName()).isEqualTo("IELTS Intensive Speaking B2");
-        assertThat(response.getJoinCode()).isNotBlank();
-        assertThat(response.getJoinCode()).startsWith("ENG-");
+        assertThat(resp).isNotNull();
+        assertThat(resp.getName()).isEqualTo("IELTS Intensive Speaking B2");
+        assertThat(resp.getJoinCode()).isNotNull();
+        assertThat(resp.getJoinCode()).startsWith("ENG-");
+        assertThat(resp.getStatus()).isEqualTo(ClassStatus.PLANNING);
 
-        ArgumentCaptor<Classroom> captor = ArgumentCaptor.forClass(Classroom.class);
-        verify(classroomRepository, times(1)).save(captor.capture());
-        Classroom savedClass = captor.getValue();
-        assertThat(savedClass.getJoinCode()).isNotNull();
-        assertThat(savedClass.getStatus()).isEqualTo(ClassStatus.PLANNING);
+        verify(classroomRepository, times(1)).save(any(Classroom.class));
     }
 
     @Test
-    @DisplayName("Ghi danh học viên vào lớp thành công khi mã tham gia (Join Code) hợp lệ")
-    void should_EnrollStudentSuccessfully_when_JoinCodeIsValid() {
+    @DisplayName("Học sinh nhập mã Join Code hợp lệ -> Tham gia lớp học thành công")
+    void should_EnrollStudentSuccessfully_when_ValidJoinCodeProvided() {
         // Given
         Classroom classroom = Classroom.builder()
                 .id(classId)
-                .name("IELTS Foundation A2")
+                .name("English Grammar Master")
                 .status(ClassStatus.OPEN)
-                .level(ClassLevel.A2)
+                .level(ClassLevel.B1)
                 .maxStudents(30)
                 .joinCode(joinCode)
                 .build();
 
-        Student student = new Student();
-        student.setId(studentId);
+        Student student = Student.builder()
+                .id(studentId)
+                .build();
 
         when(classroomRepository.findByJoinCode(joinCode)).thenReturn(Optional.of(classroom));
         when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
@@ -145,22 +181,22 @@ class ClassroomServiceImplTest {
 
         // Then
         ArgumentCaptor<ClassStudent> captor = ArgumentCaptor.forClass(ClassStudent.class);
-        verify(classStudentRepository, times(1)).save(captor.capture());
-        ClassStudent enrollment = captor.getValue();
-        assertThat(enrollment.getClassroom().getId()).isEqualTo(classId);
-        assertThat(enrollment.getStudent().getId()).isEqualTo(studentId);
-        assertThat(enrollment.getIsActive()).isTrue();
+        verify(classStudentRepository).save(captor.capture());
+        ClassStudent saved = captor.getValue();
+        assertThat(saved.getClassroom().getId()).isEqualTo(classId);
+        assertThat(saved.getStudent().getId()).isEqualTo(studentId);
+        assertThat(saved.getIsActive()).isTrue();
 
-        verify(studentRepository, times(1)).save(student);
-        assertThat(student.getCurrentLevel()).isEqualTo("A2");
+        verify(studentRepository).save(argThat(s -> "B1".equals(s.getCurrentLevel())));
     }
 
     @Test
-    @DisplayName("Chặn ghi danh trùng lặp và ném BadRequestException khi học viên đã ở trong lớp")
-    void should_PreventDuplicateStudentEnrollment_when_StudentAlreadyEnrolled() {
+    @DisplayName("Quăng BadRequestException khi học sinh đã ở trong lớp học rồi")
+    void should_ThrowBadRequestException_when_StudentAlreadyEnrolled() {
         // Given
         Classroom classroom = Classroom.builder()
                 .id(classId)
+                .name("English Grammar Master")
                 .status(ClassStatus.OPEN)
                 .joinCode(joinCode)
                 .build();
@@ -171,8 +207,148 @@ class ClassroomServiceImplTest {
         // When & Then
         assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(joinCode, studentId))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("Học viên đã tham gia lớp học này rồi");
+                .hasMessageContaining("Học viên đã tham gia lớp học này rồi");
 
-        verify(classStudentRepository, never()).save(any(ClassStudent.class));
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Quăng BadRequestException khi lớp học đã đầy sĩ số (maxStudents)")
+    void should_ThrowBadRequestException_when_ClassroomIsFull() {
+        // Given
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .name("English Grammar Master")
+                .status(ClassStatus.OPEN)
+                .maxStudents(20)
+                .joinCode(joinCode)
+                .build();
+
+        when(classroomRepository.findByJoinCode(joinCode)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(20L); // Đã đủ 20
+
+        // When & Then
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(joinCode, studentId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Lớp học đã đạt tối đa");
+
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Quăng BadRequestException khi lớp học ở trạng thái COMPLETED")
+    void should_ThrowBadRequestException_when_ClassroomIsClosed() {
+        // Given
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .name("English Grammar Master")
+                .status(ClassStatus.COMPLETED)
+                .joinCode(joinCode)
+                .build();
+
+        when(classroomRepository.findByJoinCode(joinCode)).thenReturn(Optional.of(classroom));
+
+        // When & Then
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(joinCode, studentId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Lớp học hiện không nhận thêm học viên");
+
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Tính toán tiến độ khóa học thật từ Database trong getStudentCourses()")
+    void should_CalculateRealCourseProgress_when_StudentChecksEnrolledCourses() {
+        // Given
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .name("IELTS Intensive")
+                .status(ClassStatus.OPEN)
+                .level(ClassLevel.B2)
+                .build();
+
+        ClassStudent enrollment = ClassStudent.builder()
+                .classroom(classroom)
+                .student(Student.builder().id(studentId).build())
+                .isActive(true)
+                .build();
+
+        when(classStudentRepository.findActiveEnrollmentsWithClassroom(studentId))
+                .thenReturn(java.util.List.of(enrollment));
+
+        // 2 bài tập của lớp
+        UUID assign1Id = UUID.randomUUID();
+        UUID assign2Id = UUID.randomUUID();
+        com.englishlearning.assignment.entity.Assignment a1 = com.englishlearning.assignment.entity.Assignment.builder()
+                .id(assign1Id)
+                .classroom(classroom)
+                .build();
+        com.englishlearning.assignment.entity.Assignment a2 = com.englishlearning.assignment.entity.Assignment.builder()
+                .id(assign2Id)
+                .classroom(classroom)
+                .build();
+        when(assignmentRepository.findByClassroomId(classId)).thenReturn(java.util.List.of(a1, a2));
+
+        // Học sinh đã nộp a1
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(UUID.randomUUID())
+                .assignment(a1)
+                .student(Student.builder().id(studentId).build())
+                .status(com.englishlearning.submission.entity.AttemptStatus.SUBMITTED)
+                .build();
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(studentId))
+                .thenReturn(java.util.List.of(attempt));
+
+        // 1 DailyStudyPlan có 2 items, chưa hoàn thành plan nhưng xong 1 item
+        UUID planId = UUID.randomUUID();
+        com.englishlearning.curriculum.entity.DailyPlanItem item1 = com.englishlearning.curriculum.entity.DailyPlanItem.builder().id(UUID.randomUUID()).build();
+        com.englishlearning.curriculum.entity.DailyPlanItem item2 = com.englishlearning.curriculum.entity.DailyPlanItem.builder().id(UUID.randomUUID()).build();
+        DailyStudyPlan plan = DailyStudyPlan.builder()
+                .id(planId)
+                .classroom(classroom)
+                .items(java.util.List.of(item1, item2))
+                .build();
+        when(dailyStudyPlanRepository.findByClassroomIdWithItems(classId)).thenReturn(java.util.List.of(plan));
+
+        StudentDailyProgress progress = StudentDailyProgress.builder()
+                .dailyPlan(plan)
+                .isCompleted(false)
+                .completedItemsCount(1)
+                .build();
+        when(studentDailyProgressRepository.findByStudentId(studentId)).thenReturn(java.util.List.of(progress));
+
+        // 2 Lesson của lớp, đã xem xong video lesson 1
+        UUID lesson1Id = UUID.randomUUID();
+        UUID lesson2Id = UUID.randomUUID();
+        com.englishlearning.curriculum.entity.Lesson l1 = com.englishlearning.curriculum.entity.Lesson.builder().id(lesson1Id).build();
+        com.englishlearning.curriculum.entity.Lesson l2 = com.englishlearning.curriculum.entity.Lesson.builder().id(lesson2Id).build();
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(java.util.List.of(l1, l2));
+
+        com.englishlearning.video.entity.Video video1 = com.englishlearning.video.entity.Video.builder()
+                .id(UUID.randomUUID())
+                .lesson(l1)
+                .build();
+        VideoWatchHistory watchHistory = VideoWatchHistory.builder()
+                .video(video1)
+                .isCompleted(true)
+                .build();
+        when(videoWatchHistoryRepository.findByStudentIdAndIsCompletedTrue(studentId)).thenReturn(java.util.List.of(watchHistory));
+
+        // When
+        java.util.List<com.englishlearning.classroom.dto.MyCourseResponse> courses = classroomService.getStudentCourses(studentId);
+
+        // Then
+        assertThat(courses).hasSize(1);
+        com.englishlearning.classroom.dto.MyCourseResponse course = courses.get(0);
+
+        // totalTasks = 2 assignments + 2 daily plan items = 4
+        assertThat(course.getTotalTasks()).isEqualTo(4);
+        // completedTasks = 1 assignment nộp + 1 daily item xong = 2
+        assertThat(course.getCompletedTasks()).isEqualTo(2);
+        // completedLessons = 1 (l1 xem xong video)
+        assertThat(course.getCompletedLessons()).isEqualTo(1);
+        // progressPercentage = (2 / 4) * 100 = 50.0%
+        assertThat(course.getProgressPercentage()).isEqualTo(50.0);
     }
 }

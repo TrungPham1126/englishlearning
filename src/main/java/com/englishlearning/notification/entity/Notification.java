@@ -10,7 +10,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "notifications")
+@Table(
+        name = "notifications",
+        indexes = {
+                @Index(name = "idx_notif_recipient_read_created", columnList = "recipient_id, is_read, created_at"),
+                @Index(name = "idx_notif_classroom", columnList = "classroom_id")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -42,6 +48,12 @@ public class Notification {
 
     @Column(name = "target_url", length = 500)
     private String targetUrl;
+
+    @Column(name = "action_type", length = 50)
+    private String actionType;
+
+    @Column(name = "reference_id", length = 100)
+    private String referenceId;
 
     @Column(name = "is_read", nullable = false)
     @Builder.Default

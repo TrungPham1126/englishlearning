@@ -15,9 +15,9 @@
     --border-default: #e2e8f0;
     --border-strong: #cbd5e1;
     --border-hover: #94a3b8;
-    --text-main: #0f172a;
-    --text-secondary: #334155;
-    --text-muted: #64748b;
+    --text-main: #020617;
+    --text-secondary: #1e293b;
+    --text-muted: #334155;
     --accent-primary: #1e40af;
     --accent-primary-hover: #1d4ed8;
     --accent-glow: rgba(30, 64, 175, 0.12);
@@ -42,12 +42,26 @@
   }
 
   html {
-    @apply antialiased scroll-smooth;
+    @apply scroll-smooth;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
+  /* Khôi phục render nét chữ ClearType / Subpixel cho chế độ sáng để không bị mờ nhạt */
+  html:not(.dark),
+  html:not(.dark) body {
+    -webkit-font-smoothing: subpixel-antialiased;
+    -moz-osx-font-smoothing: auto;
+    text-rendering: optimizeLegibility;
+  }
+
+  .dark html,
+  .dark body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
-    @apply bg-[var(--bg-app)] text-slate-900 dark:text-slate-100 antialiased transition-colors duration-150 ease-in-out;
+    @apply bg-[var(--bg-app)] text-slate-900 dark:text-slate-100 transition-colors duration-150 ease-in-out;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -61,6 +75,35 @@
   ::selection {
     background-color: #1e40af;
     color: #ffffff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    .animate-spin {
+      animation: none !important;
+      opacity: 0.75;
+    }
+
+    .animate-pulse {
+      animation: none !important;
+      opacity: 0.85;
+    }
+
+    .animate-ping {
+      animation: none !important;
+      display: none !important;
+    }
   }
 }
 
@@ -88,5 +131,23 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-400 dark:bg-slate-600;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .touch-target-44 {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }

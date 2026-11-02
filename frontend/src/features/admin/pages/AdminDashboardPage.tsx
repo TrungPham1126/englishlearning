@@ -16,7 +16,7 @@ import {
   ArrowRight,
   PlusCircle,
   BarChart3,
-  Sparkles,
+  Radio,
   ShieldAlert,
   TrendingUp,
   Award,
@@ -96,10 +96,6 @@ export default function AdminDashboardPage() {
       {/* 1. CLEAN OPEN HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-slate-900/40 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/50 mb-2">
-            <Sparkles size={14} />
-            <span>Quản Trị Hoạt Động Trung Tâm</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Bảng Điều Khiển Trung Tâm Đào Tạo
           </h1>
@@ -133,7 +129,7 @@ export default function AdminDashboardPage() {
               className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-200 dark:border-rose-900/60 rounded-xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-rose-400 transition group"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-md shadow-rose-600/30">
+                <div className="w-12 h-12 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-xs">
                   <Video size={24} />
                 </div>
                 <div>
@@ -152,7 +148,7 @@ export default function AdminDashboardPage() {
           {pendingGradingCount > 0 && (
             <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-200 dark:border-amber-900/60 rounded-xl p-5 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-500/30">
+                <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
                   <Clock size={24} />
                 </div>
                 <div>
@@ -504,7 +500,7 @@ export default function AdminDashboardPage() {
             className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 transition text-left cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold mb-3 group-hover:scale-105 transition-transform">
-              <Sparkles size={20} />
+              <Radio size={20} />
             </div>
             <h4 className="text-sm font-bold text-slate-900 dark:text-white">Phát Thông Báo</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Gửi thông báo tới toàn trung tâm</p>

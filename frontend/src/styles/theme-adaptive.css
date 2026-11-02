@@ -64,7 +64,7 @@ html.dark body {
 
 html:not(.dark) body {
   background-color: #f8fafc;
-  color: #0f172a;
+  color: #020617;
 }
 
 /* 2. Khung phát video bài giảng: Luôn giữ phong cách rạp phim tối để tập trung */
@@ -96,6 +96,142 @@ html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([class*="bg
 html:not(.dark) select:not([class*="bg-"]):not([class*="dark:bg-"]),
 html:not(.dark) textarea:not([class*="bg-"]):not([class*="dark:bg-"]) {
   background-color: #ffffff;
-  color: #0f172a;
+  color: #020617;
   border-color: #cbd5e1;
+}
+
+/* ==========================================================================
+   5. PHÂN HỆ HỌC VIÊN: HIỆU CHỈNH ĐỘ NÉT VÀ ĐỘ ĐẬM CỦA CHỮ TRONG CHẾ ĐỘ SÁNG
+   Khắc phục hiện tượng chữ bị mờ, nhạt màu (washed out) khi ở chế độ Sáng
+   ========================================================================== */
+
+/* 5.1. Khôi phục render chữ sắc nét ClearType / Subpixel antialiased cho chế độ sáng */
+html:not(.dark) .student-portal,
+html:not(.dark) [data-portal="student"] {
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  color: #090d16;
+}
+
+/* 5.2. Nâng tông màu văn bản trong chế độ sáng để mọi text đều sắc nét, đậm rõ, không bị mờ */
+html:not(.dark) .student-portal p,
+html:not(.dark) .student-portal span,
+html:not(.dark) .student-portal li,
+html:not(.dark) .student-portal dt,
+html:not(.dark) .student-portal dd,
+html:not(.dark) .student-portal td,
+html:not(.dark) .student-portal th,
+html:not(.dark) .student-portal label,
+html:not(.dark) [data-portal="student"] p,
+html:not(.dark) [data-portal="student"] span,
+html:not(.dark) [data-portal="student"] li,
+html:not(.dark) [data-portal="student"] label {
+  --tw-text-opacity: 1;
+}
+
+/* Nâng tông tương phản mạnh mẽ cho các class màu xám */
+html:not(.dark) .student-portal .text-slate-400:not([class*="dark:"]),
+html:not(.dark) [data-portal="student"] .text-slate-400:not([class*="dark:"]) {
+  color: #475569 !important; /* Slate-600 thay vì Slate-400 nhạt nhòa */
+}
+
+html:not(.dark) .student-portal .text-slate-500,
+html:not(.dark) [data-portal="student"] .text-slate-500 {
+  color: #334155 !important; /* Slate-700 (tương phản 10:1 trên nền trắng) */
+}
+
+html:not(.dark) .student-portal .text-slate-600,
+html:not(.dark) [data-portal="student"] .text-slate-600 {
+  color: #1e293b !important; /* Slate-800 */
+}
+
+html:not(.dark) .student-portal .text-slate-700,
+html:not(.dark) [data-portal="student"] .text-slate-700 {
+  color: #0f172a !important; /* Slate-900 */
+}
+
+html:not(.dark) .student-portal .text-slate-800,
+html:not(.dark) .student-portal .text-slate-900,
+html:not(.dark) [data-portal="student"] .text-slate-800,
+html:not(.dark) [data-portal="student"] .text-slate-900 {
+  color: #020617 !important; /* Slate-950 (Mực đen sâu sắc nét) */
+}
+
+html:not(.dark) .student-portal .text-gray-400:not([class*="dark:"]),
+html:not(.dark) [data-portal="student"] .text-gray-400:not([class*="dark:"]) {
+  color: #475569 !important;
+}
+
+html:not(.dark) .student-portal .text-gray-500,
+html:not(.dark) [data-portal="student"] .text-gray-500 {
+  color: #334155 !important;
+}
+
+html:not(.dark) .student-portal .text-gray-600,
+html:not(.dark) [data-portal="student"] .text-gray-600 {
+  color: #1e293b !important;
+}
+
+html:not(.dark) .student-portal .text-gray-700,
+html:not(.dark) [data-portal="student"] .text-gray-700 {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .student-portal .text-gray-800,
+html:not(.dark) .student-portal .text-gray-900,
+html:not(.dark) [data-portal="student"] .text-gray-800,
+html:not(.dark) [data-portal="student"] .text-gray-900 {
+  color: #020617 !important;
+}
+
+/* Tiêu đề & phụ đề */
+html:not(.dark) .student-portal h1,
+html:not(.dark) .student-portal h2,
+html:not(.dark) .student-portal h3,
+html:not(.dark) .student-portal h4,
+html:not(.dark) .student-portal h5,
+html:not(.dark) .student-portal h6,
+html:not(.dark) [data-portal="student"] h1,
+html:not(.dark) [data-portal="student"] h2,
+html:not(.dark) [data-portal="student"] h3 {
+  color: #020617;
+  font-weight: 800;
+}
+
+html:not(.dark) .student-portal h1 + p,
+html:not(.dark) .student-portal h2 + p,
+html:not(.dark) .student-portal h3 + p,
+html:not(.dark) .student-portal .elp-muted,
+html:not(.dark) [data-portal="student"] h1 + p,
+html:not(.dark) [data-portal="student"] h2 + p,
+html:not(.dark) [data-portal="student"] h3 + p,
+html:not(.dark) [data-portal="student"] .elp-muted {
+  color: #334155 !important;
+  font-weight: 500;
+}
+
+/* Cỡ chữ nhỏ (10px, 11px, xs) tăng nhẹ độ dày và khoảng cách để không bị nhòe */
+html:not(.dark) .student-portal .text-\[10px\],
+html:not(.dark) .student-portal .text-\[11px\],
+html:not(.dark) .student-portal .text-xs,
+html:not(.dark) [data-portal="student"] .text-\[10px\],
+html:not(.dark) [data-portal="student"] .text-\[11px\],
+html:not(.dark) [data-portal="student"] .text-xs {
+  font-weight: 600;
+}
+
+/* Input, Select, Textarea placeholder rõ ràng hơn */
+html:not(.dark) .student-portal input::placeholder,
+html:not(.dark) .student-portal textarea::placeholder,
+html:not(.dark) [data-portal="student"] input::placeholder,
+html:not(.dark) [data-portal="student"] textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+/* Đường link và navigation inactive trong chế độ sáng */
+html:not(.dark) .student-portal a:not([class*="text-"]):not([class*="bg-"]),
+html:not(.dark) [data-portal="student"] a:not([class*="text-"]):not([class*="bg-"]) {
+  color: #1e293b;
 }

@@ -91,9 +91,10 @@ export const teacherApi = {
   },
 
   // 4. Lộ trình & Assignment
-  getClassAssignments: (classId: string) =>
+  getClassAssignments: (classId: string, params?: { gradingOnly?: boolean }) =>
     axiosClient.get<{ data: any[] }>(
       `/api/v1/teacher/classrooms/${classId}/assignments`,
+      { params },
     ),
 
   uploadAudioFile: (audioFile: File) => {
@@ -110,6 +111,15 @@ export const teacherApi = {
 
   createAssignment: (data: any) =>
     axiosClient.post(`/api/v1/teacher/assignments`, data),
+
+  getAssignment: (id: string) =>
+    axiosClient.get<{ data: any }>(`/api/v1/teacher/assignments/${id}`),
+
+  updateAssignment: (id: string, data: any) =>
+    axiosClient.put(`/api/v1/teacher/assignments/${id}`, data),
+
+  deleteAssignment: (id: string) =>
+    axiosClient.delete(`/api/v1/teacher/assignments/${id}`),
 
   createDailyPlan: (classId: string, data: any) =>
     axiosClient.post(`/api/v1/curriculum/daily-plans`, {
@@ -140,6 +150,10 @@ export const teacherApi = {
   getDailyPlans: (classId: string) =>
     axiosClient.get(
       `/api/v1/curriculum/daily-plans/classrooms/${classId}`,
+    ),
+  getDayAssignments: (planId: string) =>
+    axiosClient.get<{ data: any[] }>(
+      `/api/v1/curriculum/daily-plans/${planId}/assignments`,
     ),
   getDailyProgressStats: (classId: string) =>
     axiosClient.get(

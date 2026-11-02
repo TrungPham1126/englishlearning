@@ -9,7 +9,7 @@ import {
   Award,
   Clock,
   ArrowUpRight,
-  Sparkles,
+  Bot,
   Loader2,
 } from "lucide-react";
 
@@ -49,7 +49,7 @@ export default function TeacherDashboardPage() {
       value: data?.totalClasses || 0,
       subText: "Đang hoạt động",
       icon: BookOpen,
-      color: "from-blue-500/15 to-blue-500/15",
+      color: "bg-blue-50 dark:bg-blue-950/40",
       textColor: "text-blue-600 dark:text-blue-400",
       border: "border-slate-200 dark:border-blue-500/30",
     },
@@ -58,7 +58,7 @@ export default function TeacherDashboardPage() {
       value: data?.totalStudents || 0,
       subText: "Trên toàn bộ các lớp",
       icon: Users,
-      color: "from-emerald-500/15 to-teal-500/15",
+      color: "bg-emerald-50 dark:bg-emerald-950/40",
       textColor: "text-emerald-600 dark:text-emerald-400",
       border: "border-slate-200 dark:border-emerald-500/30",
     },
@@ -67,7 +67,7 @@ export default function TeacherDashboardPage() {
       value: data?.pendingGrading || 0,
       subText: "Nhiệm vụ ưu tiên cao",
       icon: FileCheck,
-      color: "from-amber-500/15 to-orange-500/15",
+      color: "bg-amber-50 dark:bg-amber-950/40",
       textColor: "text-amber-600 dark:text-amber-400",
       border: "border-slate-200 dark:border-amber-500/30",
       actionLink: "/teacher/grading",
@@ -77,7 +77,7 @@ export default function TeacherDashboardPage() {
       value: `${data?.avgCompletionRate || 0}%`,
       subText: "Tiến độ học tập",
       icon: TrendingUp,
-      color: "from-blue-500/15 to-pink-500/15",
+      color: "bg-indigo-50 dark:bg-indigo-950/40",
       textColor: "text-blue-700 dark:text-blue-400",
       border: "border-slate-200 dark:border-blue-500/30",
     },
@@ -88,11 +88,7 @@ export default function TeacherDashboardPage() {
       {/* Welcome Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div className="space-y-1.5 max-w-2xl">
-          <div className="inline-flex items-center space-x-2 rounded-full border border-blue-200 dark:border-blue-600/20 bg-blue-50 dark:bg-blue-600/10 px-3 py-1 text-xs font-semibold text-blue-700 dark:text-blue-400">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>ELP Educator Portal • Fall 2026</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mt-1">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Chào mừng trở lại, Giảng viên!
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -115,7 +111,7 @@ export default function TeacherDashboardPage() {
                   {item.label}
                 </span>
                 <div
-                  className={`rounded-xl p-2.5 bg-gradient-to-br ${item.color}`}
+                  className={`rounded-xl p-2.5 ${item.color}`}
                 >
                   <Icon className={`h-5 w-5 ${item.textColor}`} />
                 </div>
@@ -182,7 +178,7 @@ export default function TeacherDashboardPage() {
             ))}
           </div>
           <div className="rounded-xl border border-blue-200 dark:border-blue-600/20 bg-blue-50/60 dark:bg-blue-600/5 p-4 text-xs text-slate-700 dark:text-slate-300 flex items-start space-x-3">
-            <Sparkles className="h-5 w-5 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
+            <Bot className="h-5 w-5 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold text-blue-800 dark:text-blue-300 block mb-0.5">
                 Khuyến nghị từ trợ lý AI cho giáo viên:

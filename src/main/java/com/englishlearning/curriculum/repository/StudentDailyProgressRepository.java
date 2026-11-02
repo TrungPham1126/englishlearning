@@ -14,5 +14,7 @@ public interface StudentDailyProgressRepository extends JpaRepository<StudentDai
 
     List<StudentDailyProgress> findByStudentId(UUID studentId);
 
+    List<StudentDailyProgress> findByStudentIdIn(List<UUID> studentIds);
+
     boolean existsByStudentIdAndDailyPlanId(UUID studentId, UUID dailyPlanId);
 }

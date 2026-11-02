@@ -10,7 +10,7 @@ export function resolveAvatarUrl(url?: string | null): string {
   ) {
     return trimmed;
   }
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
   const cleanBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const cleanPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   return `${cleanBase}${cleanPath}`;

@@ -9,6 +9,7 @@ import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
 import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.entity.AiEvaluationType;
 import com.englishlearning.ai.repository.AiEvaluationRepository;
+import com.englishlearning.notification.service.NotificationService;
 import com.englishlearning.analytics.service.AnalyticsService;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import com.englishlearning.submission.entity.StudentAnswer;
@@ -33,6 +34,7 @@ public class ShadowingServiceImpl implements ShadowingService {
     private final GeminiClientService geminiClientService;
     private final PythonIntegrationService pythonIntegrationService;
     private final AiEvaluationRepository aiEvaluationRepository;
+    private final NotificationService notificationService;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final AnalyticsService analyticsService;

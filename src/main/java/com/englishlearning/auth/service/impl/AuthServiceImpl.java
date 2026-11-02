@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,13 +105,23 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResult login(LoginRequest request) {
-        authenticationManager.authenticate(
+        Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BadRequestException("Email hoặc mật khẩu không chính xác"));
+        // Lấy User từ CustomUserDetails nếu có, hoặc tra cứu theo email nếu là String (trong unit tests)
+        Object principal = authentication.getPrincipal();
+        User user;
+        UserDetails userDetails;
+        if (principal instanceof CustomUserDetails customUserDetails) {
+            userDetails = customUserDetails;
+            user = customUserDetails.getUser();
+        } else {
+            String email = principal instanceof UserDetails ud ? ud.getUsername() : String.valueOf(principal);
+            user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new BadRequestException("Email hoặc mật khẩu không chính xác"));
+            userDetails = new CustomUserDetails(user);
+        }
 
-        CustomUserDetails userDetails = new CustomUserDetails(user);
         String accessToken = jwtService.generateAccessToken(userDetails);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 

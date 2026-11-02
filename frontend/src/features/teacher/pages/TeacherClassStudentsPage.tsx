@@ -6,7 +6,7 @@ import ClassroomHeaderNav from "../components/ClassroomHeaderNav";
 import {
   Search,
   AlertTriangle,
-  Sparkles,
+  Bot,
   X,
   Cpu,
   Ban,
@@ -355,15 +355,15 @@ export default function TeacherClassStudentsPage() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         {student.completionRate >= 75 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                             <CheckCircle2 className="h-3 w-3" /> Tích cực
                           </span>
                         ) : student.completionRate >= 40 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
                             <Clock className="h-3 w-3" /> Đang theo học
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">
                             <AlertTriangle className="h-3 w-3" /> Cần nhắc nhở
                           </span>
                         )}
@@ -641,7 +641,7 @@ export default function TeacherClassStudentsPage() {
 
             <div className="rounded-xl border border-blue-200 dark:border-blue-600/20 bg-blue-50/50 dark:bg-blue-600/5 p-4 space-y-3">
               <div className="flex items-center text-xs font-bold text-blue-800 dark:text-blue-300">
-                <Sparkles className="h-4 w-4 mr-1.5 text-blue-700 dark:text-blue-400" /> Điểm
+                <Bot className="h-4 w-4 mr-1.5 text-blue-700 dark:text-blue-400" /> Điểm
                 Yếu Cần Cải Thiện (AI Phân Tích)
               </div>
               {selectedStudent.weaknesses.length === 0 ? (

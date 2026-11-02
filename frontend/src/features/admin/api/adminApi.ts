@@ -31,6 +31,22 @@ export const adminApi = {
     >(url);
     return res.data.data;
   },
+  getNotificationRecipients: async (
+    query?: string,
+    role?: string,
+  ): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (query) params.append("query", query);
+    if (role) params.append("role", role);
+    const res = await axiosClient.get(
+      `/api/v1/notifications/recipients?${params.toString()}`,
+    );
+    return res.data?.data || [];
+  },
+  getNotificationClassrooms: async (): Promise<any[]> => {
+    const res = await axiosClient.get("/api/v1/notifications/classrooms");
+    return res.data?.data || [];
+  },
   createUser: async (
     data: UserCreateByAdminRequest,
   ): Promise<UserSummaryDto> => {
@@ -146,6 +162,9 @@ export const adminApi = {
       targetAudience: data.targetAudience || "ALL",
       targetUrl: data.targetUrl || data.redirectUrl || "/student/courses",
       redirectUrl: data.redirectUrl || data.targetUrl || "/student/courses",
+      recipientUserId: data.recipientUserId || null,
+      classroomId: data.classroomId || null,
+      actionType: data.actionType || "TEXT_ANNOUNCEMENT",
     };
     const res = await axiosClient.post("/api/v1/notifications/broadcast", payload);
     return res.data;

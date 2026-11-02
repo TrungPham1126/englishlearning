@@ -29,6 +29,10 @@ public class AttemptResponse {
     private String audioUrl;
     private String listeningScript;
     private String passage;
+    private Integer timeLimitMinutes;
+    private Double passScore;
+    private Double maxAllowedErrorPercent;
+    private Integer maxAttempts;
     private List<QuestionResultDetail> questions;
 
     @Data
@@ -39,6 +43,7 @@ public class AttemptResponse {
         private UUID id;
         private String optionLabel;
         private String optionText;
+        private String matchText;
         private Boolean isCorrect;
     }
 
@@ -61,6 +66,7 @@ public class AttemptResponse {
         private List<OptionDetail> options; // Danh sách A, B, C, D
         private UUID selectedOptionId;
         private String correctAnswer;
+        private String matchText;
         private String explanation;
         private Boolean isCorrect;
         private String evalFeedback;
