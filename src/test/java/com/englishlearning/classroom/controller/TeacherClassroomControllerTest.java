@@ -8,11 +8,13 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.classroom.dto.ClassroomResponse;
+import com.englishlearning.classroom.dto.StudentProgressResponse;
 import com.englishlearning.classroom.entity.ClassLevel;
 import com.englishlearning.classroom.entity.ClassStatus;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.config.SecurityConfig;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -133,5 +135,87 @@ class TeacherClassroomControllerTest {
         // When & Then: Không có SecurityContext / token
         mockMvc.perform(get("/api/teacher/classrooms"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms - Principal không phải CustomUserDetails -> HTTP 401 Unauthorized")
+    void getAssignedClasses_whenPrincipalNotCustomUserDetails_returns401() throws Exception {
+        mockMvc.perform(get("/api/teacher/classrooms")
+                        .with(user("plainTeacher").roles("TEACHER")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id} - Trả chi tiết lớp hoặc 404 / 403")
+    void getClassDetail_whenAuthorizedAndMissing_returns200Or404Or403() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        ClassroomResponse response = ClassroomResponse.builder()
+                .id(classId)
+                .name("IELTS Speaking Mastery B2")
+                .level(ClassLevel.B2)
+                .status(ClassStatus.OPEN)
+                .maxStudents(30)
+                .joinCode("ENG-SPEB2")
+                .teacherId(teacherId)
+                .teacherName("Nguyen Giang Vien")
+                .build();
+
+        when(classroomService.getClassroomById(classId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", classId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(classId.toString()))
+                .andExpect(jsonPath("$.data.teacherName").value("Nguyen Giang Vien"));
+
+        UUID missingId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(classroomService.getClassroomById(missingId))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy lớp học"));
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", missingId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Không tìm thấy lớp học"));
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", classId)
+                        .with(user(createStudentUserDetails())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id}/students - Trả ma trận tiến độ học viên")
+    void getClassStudents_whenTeacherOrStudent_returns200Or403() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        StudentProgressResponse sp = StudentProgressResponse.builder()
+                .studentId(studentId)
+                .fullName("Le Minh")
+                .email("minh@test.com")
+                .completedTasks(3)
+                .totalTasks(4)
+                .completionRate(75)
+                .attendanceRate(75)
+                .averageScore(8.8)
+                .totalStudyMinutes(90)
+                .dailyProgressDetails(List.of(
+                        StudentProgressResponse.DailyProgressDetail.builder()
+                                .date("Day 1")
+                                .completedTasks(3)
+                                .studyMinutes(90)
+                                .score(8.8)
+                                .build()))
+                .build();
+
+        when(classroomService.getClassStudentsProgress(classId)).thenReturn(List.of(sp));
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].fullName").value("Le Minh"))
+                .andExpect(jsonPath("$.data[0].averageScore").value(8.8))
+                .andExpect(jsonPath("$.data[0].dailyProgressDetails[0].date").value("Day 1"));
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
+                        .with(user(createStudentUserDetails())))
+                .andExpect(status().isForbidden());
     }
 }

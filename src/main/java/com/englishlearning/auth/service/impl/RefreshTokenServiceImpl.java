@@ -42,7 +42,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public RefreshToken verifyExpiration(String tokenString) {
         RefreshToken token = refreshTokenRepository.findByToken(tokenString)
                 .orElseThrow(() -> new UnauthorizedException("Refresh token không tồn tại trong hệ thống"));

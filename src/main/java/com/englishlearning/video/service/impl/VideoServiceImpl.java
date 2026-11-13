@@ -18,6 +18,7 @@ import com.englishlearning.video.service.VideoService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.Hibernate;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -149,6 +150,21 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    private void initializeVideoRelations(Video video) {
+        if (video == null) {
+            return;
+        }
+        if (video.getLesson() != null) {
+            Hibernate.initialize(video.getLesson());
+            if (video.getLesson().getClassroom() != null) {
+                Hibernate.initialize(video.getLesson().getClassroom());
+            }
+        }
+        if (video.getUploadedBy() != null) {
+            Hibernate.initialize(video.getUploadedBy());
+        }
+    }
+
     private void normalizePlaybackUrl(Video video) {
         if (video == null) {
             return;
@@ -157,7 +173,9 @@ public class VideoServiceImpl implements VideoService {
 
         String hls = video.getHlsPlaylistUrl();
         if (hls != null && hls.contains("http://localhost:8080")) {
-            String normalized = "/api/v1/videos/" + video.getId() + "/raw";
+            String normalized = (hls.contains("/api/v1/videos/") && hls.contains("/hls/"))
+                    ? hls.replace("http://localhost:8080", "")
+                    : "/api/v1/videos/" + video.getId() + "/raw";
             log.info("[VIDEO_PIPELINE] Chuẩn hóa URL từ localhost:8080 sang relative URL cho video ID {}: {} -> {}",
                     video.getId(), hls, normalized);
             video.setHlsPlaylistUrl(normalized);
@@ -175,6 +193,7 @@ public class VideoServiceImpl implements VideoService {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy video: " + videoId));
         normalizePlaybackUrl(video);
+        initializeVideoRelations(video);
         return video;
     }
 
@@ -261,6 +280,7 @@ public class VideoServiceImpl implements VideoService {
     public Video getVideoByLessonId(UUID lessonId) {
         Video video = videoRepository.findByLessonId(lessonId).orElse(null);
         normalizePlaybackUrl(video);
+        initializeVideoRelations(video);
         return video;
     }
 
@@ -302,13 +322,13 @@ public class VideoServiceImpl implements VideoService {
     @Override
     @Transactional
     public List<Video> getVideosByStatus(VideoStatus status) {
-        List<Video> allVideos = videoRepository.findAll();
-        for (Video v : allVideos) {
+        List<Video> videos = (status != null)
+                ? videoRepository.findByStatus(status)
+                : videoRepository.findAll();
+        for (Video v : videos) {
             normalizePlaybackUrl(v);
+            initializeVideoRelations(v);
         }
-        if (status != null) {
-            return videoRepository.findByStatus(status);
-        }
-        return videoRepository.findAll();
+        return videos;
     }
 }

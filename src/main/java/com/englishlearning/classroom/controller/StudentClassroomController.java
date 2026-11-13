@@ -4,6 +4,7 @@ import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.classroom.dto.MyCourseResponse;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +35,9 @@ public class StudentClassroomController {
     @Operation(summary = "Lấy danh sách khóa học của tôi (kèm tiến độ)")
     public ResponseEntity<ApiResponse<List<MyCourseResponse>>> getMyCourses(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
         return ResponseEntity.ok(ApiResponse.success(classroomService.getStudentCourses(userDetails.getId())));
     }
 
@@ -41,6 +45,9 @@ public class StudentClassroomController {
     @Operation(summary = "Học sinh tự rời lớp học")
     public ResponseEntity<ApiResponse<Void>> leaveClass(@PathVariable UUID id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
         classroomService.leaveClass(id, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã rời lớp học", null));
     }

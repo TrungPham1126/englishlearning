@@ -3,6 +3,7 @@ package com.englishlearning.auth.controller;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.auth.service.UserService;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,9 @@ public class UserController {
     public ResponseEntity<ApiResponse<String>> updateAvatar(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam("file") MultipartFile file) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         String avatarUrl = userService.uploadAndSaveAvatar(userDetails.getId(), file);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật avatar thành công", avatarUrl));
     }

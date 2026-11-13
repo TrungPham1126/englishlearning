@@ -1,6 +1,7 @@
 package com.englishlearning.video.service;
 
 import com.englishlearning.common.event.RabbitMqEventPublisher;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.video.entity.Video;
 import com.englishlearning.video.entity.VideoStatus;
 import com.englishlearning.video.repository.VideoRepository;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -89,5 +91,19 @@ class HlsVideoConversionServiceImplTest {
         assertThat(updatedVideo.getRejectionReason()).isNull();
 
         verify(videoRepository, times(1)).save(video);
+    }
+
+    @Test
+    @DisplayName("Ném ResourceNotFoundException khi video không tồn tại ở cả requestVideoTranscoding và completeHlsConversion")
+    void should_ThrowResourceNotFoundException_when_VideoDoesNotExist() {
+        when(videoRepository.findById(videoId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> hlsVideoConversionService.requestVideoTranscoding(videoId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(rabbitMqEventPublisher);
+
+        assertThatThrownBy(() -> hlsVideoConversionService.completeHlsConversion(videoId, "hls.m3u8", "raw.mp4"))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(videoRepository, never()).save(any());
     }
 }

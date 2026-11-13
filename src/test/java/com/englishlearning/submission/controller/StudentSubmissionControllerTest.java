@@ -8,8 +8,13 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.common.config.SecurityConfig;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.submission.dto.AttemptResponse;
+import com.englishlearning.submission.dto.ExamViolationRequest;
+import com.englishlearning.submission.dto.StudentAssignmentSummaryResponse;
+import com.englishlearning.submission.dto.SubmissionRequest;
 import com.englishlearning.submission.service.SubmissionService;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,9 +26,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,6 +40,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -158,5 +167,135 @@ class StudentSubmissionControllerTest {
                         .with(user(createTeacherUserDetails()))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Học sinh ghi nhận vi phạm màn hình phòng thi -> Trả về HTTP 200 OK và violationCount")
+    void should_Return200_when_StudentRecordsExamViolation() throws Exception {
+        AttemptResponse mockResponse = AttemptResponse.builder()
+                .attemptId(attemptId)
+                .assignmentId(assignmentId)
+                .isExam(true)
+                .violationCount(1)
+                .maxViolations(3)
+                .isCheatingFlagged(false)
+                .status("IN_PROGRESS")
+                .build();
+
+        when(submissionService.recordAttemptViolation(eq(studentId), eq(attemptId), any(ExamViolationRequest.class)))
+                .thenReturn(mockResponse);
+
+        String body = """
+                {
+                  "eventType": "FULLSCREEN_EXIT",
+                  "reason": "Thoát toàn màn hình",
+                  "currentAnswers": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/student/assignments/attempts/" + attemptId + "/violation")
+                        .with(user(createStudentUserDetails()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.violationCount").value(1))
+                .andExpect(jsonPath("$.data.isCheatingFlagged").value(false));
+    }
+
+    @Test
+    @DisplayName("Giảng viên gọi API ghi nhận vi phạm thi -> Trả về HTTP 403 Forbidden")
+    void should_Return403_when_TeacherRecordsExamViolation() throws Exception {
+        mockMvc.perform(post("/api/v1/student/assignments/attempts/" + attemptId + "/violation")
+                        .with(user(createTeacherUserDetails()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"eventType\":\"TAB_SWITCH\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Kiểm thử đầy đủ các endpoint học viên: assignments, submit mismatch 400, history, detail 404, upload audio & 401")
+    void studentSubmissionEndpoints_fullContractAndSecurity() throws Exception {
+        UUID classId = UUID.randomUUID();
+        UUID questionId = UUID.randomUUID();
+        CustomUserDetails student = createStudentUserDetails();
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(get("/api/v1/student/classrooms/" + classId + "/assignments"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. GET assignments by class -> 200
+        StudentAssignmentSummaryResponse summary = StudentAssignmentSummaryResponse.builder()
+                .id(assignmentId).title("Unit 1 Quiz").status("NOT_STARTED").attemptsCount(0).build();
+        when(submissionService.getStudentClassAssignments(classId, studentId)).thenReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/v1/student/classrooms/" + classId + "/assignments")
+                        .with(user(student)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].title").value("Unit 1 Quiz"));
+
+        // 3. Submit valid -> 200 & Assignment ID mismatch -> 400
+        AttemptResponse submitted = AttemptResponse.builder()
+                .attemptId(attemptId).assignmentId(assignmentId).status("COMPLETED").score(9.5).build();
+        when(submissionService.submitAttempt(eq(studentId), eq(attemptId), any(SubmissionRequest.class)))
+                .thenReturn(submitted);
+
+        mockMvc.perform(post("/api/v1/student/assignments/" + assignmentId + "/attempts/" + attemptId + "/submit")
+                        .with(user(student))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assignmentId\":\"" + assignmentId + "\",\"answers\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.score").value(9.5));
+
+        UUID otherAssId = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/student/assignments/" + assignmentId + "/attempts/" + attemptId + "/submit")
+                        .with(user(student))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assignmentId\":\"" + otherAssId + "\",\"answers\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Assignment ID mismatch"));
+
+        // 4. Max attempts exceeded on start -> 400
+        when(submissionService.startAttempt(studentId, assignmentId))
+                .thenThrow(new BadRequestException("Đã hết lượt làm bài"));
+        mockMvc.perform(post("/api/v1/student/assignments/" + assignmentId + "/start")
+                        .with(user(student))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        // 5. History & detail (200 and 404)
+        when(submissionService.getStudentAttemptsHistory(assignmentId, studentId)).thenReturn(List.of(submitted));
+        mockMvc.perform(get("/api/v1/student/assignments/" + assignmentId + "/attempts")
+                        .with(user(student)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1));
+
+        when(submissionService.getAttemptDetail(attemptId, studentId, false)).thenReturn(submitted);
+        mockMvc.perform(get("/api/v1/student/assignments/attempts/" + attemptId)
+                        .with(user(student)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attemptId").value(attemptId.toString()));
+
+        UUID missingAttempt = UUID.randomUUID();
+        when(submissionService.getAttemptDetail(missingAttempt, studentId, false))
+                .thenThrow(new ResourceNotFoundException("Not found"));
+        mockMvc.perform(get("/api/v1/student/assignments/attempts/" + missingAttempt)
+                        .with(user(student)))
+                .andExpect(status().isNotFound());
+
+        // 6. Upload speaking audio -> 200
+        MockMultipartFile audio = new MockMultipartFile("audio", "speech.wav", "audio/wav", new byte[]{1, 2, 3, 4});
+        when(submissionService.uploadAudioResponse(eq(studentId), eq(attemptId), eq(questionId), any()))
+                .thenReturn(submitted);
+        mockMvc.perform(multipart("/api/v1/student/assignments/attempts/" + attemptId + "/questions/" + questionId + "/audio")
+                        .file(audio)
+                        .with(user(student))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Upload thành công"));
     }
 }

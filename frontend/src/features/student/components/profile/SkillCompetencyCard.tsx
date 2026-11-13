@@ -1,14 +1,11 @@
 import React from "react";
 import {
   RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
   BookOpen,
   Headphones,
   Mic,
   Award,
   ShieldCheck,
-  Compass,
   ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -92,8 +89,6 @@ export const SkillCompetencyCard: React.FC<SkillCompetencyCardProps> = ({
   const maxSkillScore = Math.max(...skillsList.map((s) => s.value), 0);
   const sortedSkills = [...skillsList].sort((a, b) => b.value - a.value);
   const strongestSkill = sortedSkills[0];
-  const weakestSkills = sortedSkills.filter((s) => s.value <= 3.0);
-  const isImbalanced = strongestSkill.value >= 10.0 && weakestSkills.length >= 2;
 
   // Radar SVG Math
   const chartSize = 280;
@@ -123,91 +118,36 @@ export const SkillCompetencyCard: React.FC<SkillCompetencyCardProps> = ({
   return (
     <div className="p-6 sm:p-8 space-y-6">
       {/* Header Tab Năng Lực & Nút Làm Mới */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-              Biểu Đồ Năng Lực 6 Kỹ Năng
-            </h3>
-            <span className="inline-flex items-center rounded-md bg-blue-50 dark:bg-slate-900/60 px-2.5 py-0.5 text-[10px] font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-              Chuẩn CEFR
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Điểm tích lũy từ kết quả các bài tập
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onRefreshSkills}
-            disabled={isRefreshingSkills}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs transition cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw
-              size={13}
-              className={isRefreshingSkills ? "animate-spin text-blue-700" : ""}
-            />
-            <span>
-              {isRefreshingSkills ? "Đang đồng bộ..." : "Đồng bộ lại"}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* 3 Thẻ Tóm Tắt Năng Lực */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-            Tổng điểm tích lũy
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-3">
+        <div className="flex flex-wrap items-center gap-3 tabular-nums">
+          <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+            Năng lực
+          </h3>
+          <span className="text-xs font-bold text-blue-700 dark:text-blue-400">
+            Tổng: {totalSkillScore.toFixed(1)}đ
           </span>
-          <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-blue-700 dark:text-blue-400">
-              {totalSkillScore.toFixed(1)}
-            </span>
-            <span className="text-xs text-slate-400 font-bold">pts</span>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-            Kỹ năng dẫn đầu
-          </span>
-          <div className="mt-1.5 flex items-center gap-1.5">
-            {strongestSkill && (
-              <>
-                <strongestSkill.icon
-                  size={16}
-                  className={strongestSkill.color}
-                />
-                <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  {strongestSkill.name}
-                </span>
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-400">
-                  ({strongestSkill.value.toFixed(1)} pts)
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-            Độ cân bằng năng lực
-          </span>
-          <div className="mt-1.5 flex items-center gap-1.5">
-            {isImbalanced ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400">
-                <AlertTriangle size={14} /> Lệch kỹ năng đáng kể
+          {strongestSkill && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <strongestSkill.icon size={13} className={strongestSkill.color} />
+              <span>
+                Mạnh nhất: {strongestSkill.name} ({strongestSkill.value.toFixed(1)}đ)
               </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 size={14} /> Phát triển hài hòa
-              </span>
-            )}
-          </div>
+            </span>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={onRefreshSkills}
+          disabled={isRefreshingSkills}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs transition cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+        >
+          <RefreshCw
+            size={13}
+            className={isRefreshingSkills ? "animate-spin text-blue-700" : ""}
+          />
+          <span>{isRefreshingSkills ? "Đang cập nhật..." : "Cập nhật"}</span>
+        </button>
       </div>
 
       {/* Radar Chart & Skill Bars */}
@@ -284,7 +224,7 @@ export const SkillCompetencyCard: React.FC<SkillCompetencyCardProps> = ({
           </svg>
         </div>
 
-        {/* Progress Bars for 6 Skills */}
+        {/* Progress Bars for Skills */}
         <div className="space-y-3.5">
           {skillsList.map((s) => {
             const IconComp = s.icon;
@@ -295,15 +235,9 @@ export const SkillCompetencyCard: React.FC<SkillCompetencyCardProps> = ({
                   <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
                     <IconComp size={14} className={s.color} />
                     <span>{s.name}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      ({s.label})
-                    </span>
                   </span>
-                  <span className="text-slate-900 dark:text-white font-extrabold">
-                    {s.value.toFixed(1)}{" "}
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      pts
-                    </span>
+                  <span className="text-slate-900 dark:text-white font-extrabold tabular-nums">
+                    {s.value.toFixed(1)}đ
                   </span>
                 </div>
                 <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -320,99 +254,32 @@ export const SkillCompetencyCard: React.FC<SkillCompetencyCardProps> = ({
         </div>
       </div>
 
-      {/* Lộ Trình Ôn Tập Đề Xuất */}
-      <div className="rounded-xl border border-blue-200/80 dark:border-blue-900/40 bg-white dark:bg-[#111827] p-5 space-y-3.5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xs text-blue-950 dark:text-blue-200">
-            <Compass size={18} className="text-blue-700 dark:text-blue-400" />
-            <span className="text-sm font-extrabold">
-              Lộ Trình Ôn Tập Đề Xuất
+      {/* Gợi ý & nút lộ trình */}
+      {(profile?.aiRecommendedPath || firstCourse?.classId) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-4">
+          {profile?.aiRecommendedPath ? (
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              {profile.aiRecommendedPath}
+            </p>
+          ) : (
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              Tiếp tục luyện tập hàng ngày
             </span>
-          </div>
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
-            <Compass size={11} /> Gợi ý ôn tập
-          </span>
-        </div>
-
-        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-          {profile?.aiRecommendedPath &&
-          !profile.aiRecommendedPath.includes("Đọc và Từ vựng")
-            ? profile.aiRecommendedPath
-            : isImbalanced
-            ? `Bạn đang có thế mạnh vượt trội ở kỹ năng ${
-                strongestSkill.name
-              } (${strongestSkill.value.toFixed(
-                1,
-              )} pts). Tuy nhiên, các kỹ năng nền tảng như Từ vựng (${skillsList
-                .find((s) => s.label === "Vocabulary")
-                ?.value.toFixed(1)} pts), Nghe (${skillsList
-                .find((s) => s.label === "Listening")
-                ?.value.toFixed(1)} pts) và Ngữ pháp (${skillsList
-                .find((s) => s.label === "Grammar")
-                ?.value.toFixed(
-                  1,
-                )} pts) đang ở mức sơ khai, tạo ra sự chênh lệch lớn trong biểu đồ năng lực. Hãy tăng cường luyện tập các kỹ năng này để phát triển cân bằng hơn.`
-            : `Hồ sơ năng lực của bạn đang phát triển tốt ở kỹ năng ${
-                strongestSkill.name
-              } (${strongestSkill.value.toFixed(
-                1,
-              )} pts). Hãy tiếp tục hoàn thành các bài tập hàng ngày để kéo đều các kỹ năng còn lại lên mức tương đương.`}
-        </p>
-
-        {/* 3 Hành Động Đề Xuất Khắc Phục */}
-        <div className="pt-2 border-t border-blue-100 dark:border-blue-900/40 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
-            <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">
-              Ưu tiên 1 • Cấp bách
-            </span>
-            <p className="font-bold text-slate-900 dark:text-white text-xs">
-              Luyện 20-30 Từ vựng / Ngày
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Tăng tốc vốn từ vựng Spaced Repetition để bổ trợ ngữ âm &amp; đọc hiểu.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
-            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
-              Ưu tiên 2 • Bổ trợ
-            </span>
-            <p className="font-bold text-slate-900 dark:text-white text-xs">
-              Luyện Nghe &amp; Shadowing
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Tạo đòn bẩy phản xạ nghe để củng cố kỹ năng Nói đang vượt trội.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
-            <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider block">
-              Ưu tiên 3 • Bứt phá
-            </span>
-            <p className="font-bold text-slate-900 dark:text-white text-xs">
-              Ngữ pháp &amp; Viết câu B1+
-            </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Củng cố cấu trúc câu hoàn chỉnh để nâng dài điểm tổng thể.
-            </p>
-          </div>
-        </div>
-
-        {firstCourse?.classId && (
-          <div className="pt-2 flex justify-end">
+          )}
+          {firstCourse?.classId && (
             <button
               type="button"
               onClick={() =>
                 navigate(`/student/courses/${firstCourse.classId}/daily-plan`)
               }
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-800 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-800 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer shrink-0 self-start sm:self-auto"
             >
-              <span>Đến Lộ Trình Luyện Tập Hàng Ngày</span>
+              <span>Lộ trình</span>
               <ArrowRight size={14} />
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

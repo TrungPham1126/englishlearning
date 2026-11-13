@@ -46,13 +46,17 @@ class AudioQualityGate:
 
         if clipping_ratio > 0.03:
             warnings.append(f"Audio clipping detected ({clipping_ratio * 100:.1f}% samples clipped).")
-            if strict and clipping_ratio > 0.10:
-                raise AudioQualityTooLowError("Âm thanh bị vỡ tiếng (clipping) quá nặng.")
+            if clipping_ratio > 0.10:
+                is_acceptable = False
+                if strict:
+                    raise AudioQualityTooLowError("Âm thanh bị vỡ tiếng (clipping) quá nặng.")
 
         if estimated_snr < 7.0 and duration > 1.2:
             warnings.append(f"High background noise (SNR: {estimated_snr:.1f} dB).")
-            if strict and estimated_snr < 4.0:
-                raise AudioQualityTooLowError("Tiếng ồn môi trường quá lớn.")
+            if estimated_snr < 4.0:
+                is_acceptable = False
+                if strict:
+                    raise AudioQualityTooLowError("Tiếng ồn môi trường quá lớn.")
 
         return AudioQualityMetrics(
             duration=round(duration, 3),

@@ -11,6 +11,7 @@ interface SubmissionFilterBarProps {
   onChangeAssignmentId: (id: string) => void;
   loadingClasses: boolean;
   loadingAssignments: boolean;
+  hideClassSelector?: boolean;
 }
 
 export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
@@ -22,50 +23,67 @@ export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
   onChangeAssignmentId,
   loadingClasses,
   loadingAssignments,
+  hideClassSelector = false,
 }) => {
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
       <div>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-          Trung Tâm Chấm Bài & Đánh Giá
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Xem bài nộp phần Viết đoạn văn (Writing) & Luyện nói (Speaking), tham khảo gợi ý AI và chấm điểm thủ công
-        </p>
+        {hideClassSelector ? (
+          <>
+            <h2 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              <Award className="h-5 w-5 text-blue-700 dark:text-blue-400" />
+              Chấm Bài &amp; Đánh Giá Theo Bài Tập
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Chọn bài tập Viết / Nói trong lớp để xem danh sách bài nộp, kết quả AI chấm và chấm điểm
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Trung Tâm Chấm Bài &amp; Đánh Giá
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Xem bài nộp phần Viết đoạn văn (Writing) &amp; Luyện nói (Speaking), tham khảo gợi ý AI và chấm điểm thủ công
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         {/* Lựa chọn Lớp học */}
-        <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl shadow-sm">
-          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Lớp:
-          </label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => onChangeClassId(e.target.value)}
-            className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white outline-none cursor-pointer"
-          >
-            {loadingClasses ? (
-              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                Đang tải lớp học...
-              </option>
-            ) : classes.length === 0 ? (
-              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                Chưa có lớp phụ trách
-              </option>
-            ) : (
-              classes.map((c) => (
-                <option
-                  key={c.id}
-                  value={c.id}
-                  className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                >
-                  {c.name} ({c.level || "Chưa set level"})
+        {!hideClassSelector && (
+          <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl shadow-sm">
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Lớp:
+            </label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => onChangeClassId(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-900 dark:text-white outline-none cursor-pointer"
+            >
+              {loadingClasses ? (
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                  Đang tải lớp học...
                 </option>
-              ))
-            )}
-          </select>
-        </div>
+              ) : classes.length === 0 ? (
+                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                  Chưa có lớp phụ trách
+                </option>
+              ) : (
+                classes.map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id}
+                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                  >
+                    {c.name} ({c.level || "Chưa set level"})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        )}
 
         {/* Lựa chọn Bài tập (Chỉ hiển thị bài Viết & Nói) */}
         <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-xl shadow-sm">

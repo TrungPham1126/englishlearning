@@ -66,9 +66,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyThemeToDOM(theme);
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-    localStorage.setItem("elp_theme", theme);
-  }, [theme]);
+    try {
+      const persistedValue = themeMode === "system" ? "system" : theme;
+      localStorage.setItem(THEME_STORAGE_KEY, persistedValue);
+      localStorage.setItem("elp_theme", persistedValue);
+    } catch {}
+  }, [theme, themeMode]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;

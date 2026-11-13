@@ -3,10 +3,13 @@ package com.englishlearning.assignment.service;
 import com.englishlearning.assignment.entity.Assignment;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import com.englishlearning.assignment.entity.QuestionType;
+import com.englishlearning.assignment.entity.SkillType;
 import com.englishlearning.assignment.repository.AssignmentQuestionRepository;
 import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.assignment.service.impl.ExcelImportServiceImpl;
 import com.englishlearning.common.exception.InvalidFileFormatException;
+import com.englishlearning.common.exception.ResourceNotFoundException;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -22,6 +25,8 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -228,5 +233,192 @@ class ExcelImportServiceImplTest {
             workbook.write(out);
             return out.toByteArray();
         }
+    }
+
+    @Test
+    @DisplayName("Null hoặc file 0 byte / thiếu sheet / ít hơn 2 hàng / assignment không tồn tại -> ném ngoại lệ chính xác")
+    void importQuestionsFromExcel_emptyNullSheetlessAndMissingAssignment_throwsExceptions() throws IOException {
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(null, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class);
+
+        MockMultipartFile zeroBytes = new MockMultipartFile(
+                "file", "empty.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                new byte[0]
+        );
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(zeroBytes, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("không được để trống");
+
+        UUID unknownAssId = UUID.randomUUID();
+        when(assignmentRepository.findById(unknownAssId)).thenReturn(Optional.empty());
+        MockMultipartFile validFile = new MockMultipartFile(
+                "file", "q.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                createValidExcelBytes("Q?", "MULTIPLE_CHOICE", "A1", "B1", "", "", "A", "")
+        );
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(validFile, unknownAssId))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        byte[] emptySheetBytes;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            wb.createSheet("Empty");
+            wb.write(out);
+            emptySheetBytes = out.toByteArray();
+        }
+        MockMultipartFile oneRowFile = new MockMultipartFile("file", "one.xlsx", "application/octet-stream", emptySheetBytes);
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(oneRowFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class);
+    }
+
+    @Test
+    @DisplayName("Bắt lỗi sai loại câu hỏi, thiếu đáp án FILL_IN_BLANK/MATCHING, hoặc toàn bộ dòng rỗng")
+    void importQuestionsFromExcel_invalidQuestionTypeMissingDataOrBlankRows_throwsInvalidFileFormatException() throws IOException {
+        // Invalid question type
+        byte[] badTypeBytes = createValidExcelBytes("Q1", "UNKNOWN_FORMAT", "A", "B", "", "", "A", "");
+        MockMultipartFile badTypeFile = new MockMultipartFile("file", "badtype.xlsx", "application/octet-stream", badTypeBytes);
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(badTypeFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("Loại câu hỏi không hợp lệ");
+
+        // Missing answer on FILL_IN_BLANK
+        byte[] missingAnsBytes = createValidExcelBytes("She ___ here.", "FILL_IN_BLANK", "", "", "", "", "", "Hint");
+        MockMultipartFile missingAnsFile = new MockMultipartFile("file", "missing_ans.xlsx", "application/octet-stream", missingAnsBytes);
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(missingAnsFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("Thiếu đáp án đúng");
+
+        // Missing options and answer on MULTIPLE_CHOICE
+        byte[] emptyMcqBytes = createValidExcelBytes("Pick one", "MULTIPLE_CHOICE", "", "", "", "", "", "");
+        MockMultipartFile emptyMcqFile = new MockMultipartFile("file", "empty_mcq.xlsx", "application/octet-stream", emptyMcqBytes);
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(emptyMcqFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("thiếu lựa chọn và đáp án");
+
+        // Header valid but all data rows have blank prompt
+        byte[] noDataBytes = createValidExcelBytes("", "MULTIPLE_CHOICE", "", "", "", "", "", "");
+        MockMultipartFile noDataFile = new MockMultipartFile("file", "nodata.xlsx", "application/octet-stream", noDataBytes);
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(noDataFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("Không tìm thấy câu hỏi hợp lệ");
+    }
+
+    @Test
+    @DisplayName("Import đầy đủ 6 loại câu hỏi (gồm TRUE_FALSE, ESSAY, AUDIO_RESPONSE, MATCHING, tiếng Việt alias) + file .xls legacy + Unicode")
+    void importQuestionsFromExcel_all6TypesXlsFormatSkillMappingAndAnswerAliases_succeeds() throws IOException {
+        byte[] xlsBytes;
+        try (Workbook wb = new HSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("BaiTap");
+            Row h = sheet.createRow(0);
+            h.createCell(0).setCellValue("STT");
+            h.createCell(1).setCellValue("Loại câu hỏi");
+            h.createCell(2).setCellValue("Kỹ năng");
+            h.createCell(3).setCellValue("Nội dung câu hỏi");
+            h.createCell(4).setCellValue("Điểm");
+            h.createCell(5).setCellValue("Lựa chọn A");
+            h.createCell(6).setCellValue("Lựa chọn B");
+            h.createCell(7).setCellValue("Lựa chọn C");
+            h.createCell(8).setCellValue("Lựa chọn D");
+            h.createCell(9).setCellValue("Đáp án đúng");
+            h.createCell(10).setCellValue("Giải thích");
+            h.createCell(11).setCellValue("Audio TTS");
+
+            Row r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue(1);
+            r1.createCell(1).setCellValue("TRẮC NGHIỆM");
+            r1.createCell(2).setCellValue("READING");
+            r1.createCell(3).setCellValue("Chọn từ đúng");
+            r1.createCell(4).setCellValue("2.5");
+            r1.createCell(5).setCellValue("One");
+            r1.createCell(6).setCellValue("Two");
+            r1.createCell(7).setCellValue("Three");
+            r1.createCell(8).setCellValue("Four");
+            r1.createCell(9).setCellValue("Đáp án C");
+
+            Row r2 = sheet.createRow(2);
+            r2.createCell(0).setCellValue(2);
+            r2.createCell(1).setCellValue("TRUE_FALSE");
+            r2.createCell(2).setCellValue("LISTENING");
+            r2.createCell(3).setCellValue("Water boils at 100C.");
+            r2.createCell(4).setCellValue(-2); // negative points -> fallback 1.0
+            r2.createCell(5).setCellValue("True");
+            r2.createCell(6).setCellValue("False");
+            r2.createCell(9).setCellValue("A");
+
+            Row r3 = sheet.createRow(3);
+            r3.createCell(0).setCellValue(3);
+            r3.createCell(1).setCellValue("TỰ LUẬN");
+            r3.createCell(2).setCellValue("WRITING");
+            r3.createCell(3).setCellValue("Viết đoạn văn về biến đổi khí hậu (150 từ)");
+            r3.createCell(10).setCellValue("Chấm theo IELTS Rubric");
+
+            Row r4 = sheet.createRow(4);
+            r4.createCell(0).setCellValue(4);
+            r4.createCell(1).setCellValue("AUDIO_RESPONSE");
+            r4.createCell(2).setCellValue("SPEAKING");
+            r4.createCell(3).setCellValue("Practice saying: Hello world!");
+            r4.createCell(11).setCellValue("Hello world!");
+
+            wb.write(out);
+            xlsBytes = out.toByteArray();
+        }
+
+        MockMultipartFile xlsFile = new MockMultipartFile("file", "legacy.xls", "application/vnd.ms-excel", xlsBytes);
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> imported = excelImportService.importQuestionsFromExcel(xlsFile, null);
+
+        assertThat(imported).hasSize(4);
+        assertThat(imported.get(0).getQuestionType()).isEqualTo(QuestionType.MULTIPLE_CHOICE);
+        assertThat(imported.get(0).getSkillType()).isEqualTo(SkillType.READING);
+        assertThat(imported.get(0).getPoints()).isEqualTo(2.5);
+        assertThat(imported.get(0).getOptions().get(2).getIsCorrect()).isTrue();
+
+        assertThat(imported.get(1).getQuestionType()).isEqualTo(QuestionType.TRUE_FALSE);
+        assertThat(imported.get(1).getSkillType()).isEqualTo(SkillType.LISTENING);
+        assertThat(imported.get(1).getPoints()).isEqualTo(1.0);
+        assertThat(imported.get(1).getOptions().get(0).getIsCorrect()).isTrue();
+
+        assertThat(imported.get(2).getQuestionType()).isEqualTo(QuestionType.ESSAY);
+        assertThat(imported.get(2).getPromptText()).contains("biến đổi khí hậu");
+
+        assertThat(imported.get(3).getQuestionType()).isEqualTo(QuestionType.AUDIO_RESPONSE);
+        assertThat(imported.get(3).getTranscript()).isEqualTo("Hello world!");
+
+        byte[] defaultTemplate = excelImportService.generateSampleTemplate(null);
+        assertThat(defaultTemplate).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel - Đọc file chuẩn Mau_Nhap_Bai_Tap_Chuan.xlsx: bỏ qua 0_Huong_Dan, map đúng promptText (không bị Script hijacking) và WRITING -> ESSAY")
+    void importRealStandardTemplate_readsMauTongHopAndMapsAllTypesIncludingWriting() throws IOException {
+        byte[] realTemplateBytes = Files.readAllBytes(Path.of("Mau_Nhap_Bai_Tap_Chuan.xlsx"));
+        MockMultipartFile realTemplate = new MockMultipartFile(
+                "file", "Mau_Nhap_Bai_Tap_Chuan.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", realTemplateBytes);
+
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> imported = excelImportService.importQuestionsFromExcel(realTemplate, null);
+
+        assertThat(imported).hasSize(11);
+        assertThat(imported.get(0).getPromptText())
+                .isEqualTo("What is the primary factor driving modern renewable energy adoption?");
+        assertThat(imported.get(0).getTranscript())
+                .isEqualTo("Renewable energy adoption has accelerated globally due to falling technological costs.");
+        assertThat(imported.get(0).getQuestionType()).isEqualTo(QuestionType.MULTIPLE_CHOICE);
+        assertThat(imported.get(0).getOptions().get(1).getIsCorrect()).isTrue();
+
+        // Row 11 (index 9): WRITING alias maps to ESSAY
+        assertThat(imported.get(9).getQuestionType()).isEqualTo(QuestionType.ESSAY);
+        assertThat(imported.get(9).getSkillType()).isEqualTo(SkillType.WRITING);
+        assertThat(imported.get(9).getPromptText()).contains("80-120 words");
+
+        // Row 12 (index 10): TRUE_FALSE with FALSE correct
+        assertThat(imported.get(10).getQuestionType()).isEqualTo(QuestionType.TRUE_FALSE);
+        assertThat(imported.get(10).getOptions())
+                .filteredOn(opt -> Boolean.TRUE.equals(opt.getIsCorrect()))
+                .extracting(opt -> opt.getOptionText())
+                .containsExactly("FALSE");
     }
 }

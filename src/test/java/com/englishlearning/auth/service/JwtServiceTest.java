@@ -6,12 +6,15 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.service.impl.JwtServiceImpl;
 import com.englishlearning.common.config.AppProperties;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -19,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit Test cho JwtService (Tương đương JwtTokenProvider trong kiến trúc Spring Security)
- * Kiểm tra tạo token, trích xuất claims, kiểm tra hạn dùng và chữ ký mật mã.
+ * Unit Test cho JwtService:
+ * Kiểm tra tạo token, trích xuất claims, kiểm tra hạn dùng từng mili-giây, token lỗi định dạng và chữ ký mật mã.
  */
 class JwtServiceTest {
 
@@ -80,9 +83,54 @@ class JwtServiceTest {
         // When
         String token = jwtService.generateAccessToken(userDetails);
         String extractedUserId = jwtService.extractClaim(token, claims -> claims.get("userId", String.class));
+        @SuppressWarnings("unchecked")
+        List<String> extractedRoles = jwtService.extractClaim(token, claims -> claims.get("roles", List.class));
 
         // Then
         assertThat(extractedUserId).isEqualTo(userId.toString());
+        assertThat(extractedRoles).containsExactly("ROLE_TEACHER");
+    }
+
+    @Test
+    @DisplayName("generateAccessToken: UserDetails chuẩn không phải CustomUserDetails vẫn sinh token hợp lệ không chứa userId")
+    void generateAccessToken_whenStandardUserDetails_omitsUserIdClaim() {
+        // Given
+        UserDetails standardUser = new org.springframework.security.core.userdetails.User(
+                "standard@elp.edu.vn",
+                "secret",
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+
+        // When
+        String token = jwtService.generateAccessToken(standardUser);
+        String userIdClaim = jwtService.extractClaim(token, claims -> claims.get("userId", String.class));
+
+        // Then
+        assertThat(jwtService.extractUsername(token)).isEqualTo("standard@elp.edu.vn");
+        assertThat(userIdClaim).isNull();
+        assertThat(jwtService.isTokenValid(token, standardUser)).isTrue();
+    }
+
+    @Test
+    @DisplayName("generateAccessToken: CustomUserDetails có id null không gây NullPointerException")
+    void generateAccessToken_whenCustomUserDetailsHasNullId_omitsUserIdSafely() {
+        // Given
+        User transientUser = User.builder()
+                .id(null)
+                .email("transient@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(Role.builder().name(RoleName.ROLE_STUDENT).build()))
+                .build();
+        CustomUserDetails details = new CustomUserDetails(transientUser);
+
+        // When
+        String token = jwtService.generateAccessToken(details);
+        String userIdClaim = jwtService.extractClaim(token, claims -> claims.get("userId", String.class));
+
+        // Then
+        assertThat(jwtService.extractUsername(token)).isEqualTo("transient@elp.edu.vn");
+        assertThat(userIdClaim).isNull();
     }
 
     @Test
@@ -135,6 +183,28 @@ class JwtServiceTest {
     }
 
     @Test
+    @DisplayName("isTokenValid: Token hết hạn đúng 1 mili-giây (-1ms) phải ném ExpiredJwtException")
+    void isTokenValid_whenExpiredByOneMillisecond_throwsExpiredJwtException() {
+        // Given
+        appProperties.getJwt().setAccessTokenExpirationMs(-1L);
+        JwtService edgeExpiredService = new JwtServiceImpl(appProperties);
+
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("millisecond@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build();
+        CustomUserDetails details = new CustomUserDetails(user);
+        String expiredByOneMsToken = edgeExpiredService.generateAccessToken(details);
+
+        // When / Then
+        assertThatThrownBy(() -> jwtService.isTokenValid(expiredByOneMsToken, details))
+                .isInstanceOf(ExpiredJwtException.class);
+    }
+
+    @Test
     @DisplayName("should_ThrowSignatureException_when_TokenSignatureIsTampered: Chặn token bị can thiệp sửa đổi trái phép")
     void should_ThrowSignatureException_when_TokenSignatureIsTampered() {
         // Given
@@ -146,11 +216,18 @@ class JwtServiceTest {
                 .roles(Set.of())
                 .build();
         String validToken = jwtService.generateAccessToken(new CustomUserDetails(user));
-        // Sửa đổi ký tự cuối cùng của chữ ký
         String tamperedToken = validToken.substring(0, validToken.length() - 4) + "XXXX";
 
         // When / Then
         assertThatThrownBy(() -> jwtService.extractUsername(tamperedToken))
                 .isInstanceOf(SignatureException.class);
+    }
+
+    @Test
+    @DisplayName("extractUsername: Token rác sai cấu trúc JWT phải ném MalformedJwtException")
+    void extractUsername_whenTokenIsMalformed_throwsMalformedJwtException() {
+        // When / Then
+        assertThatThrownBy(() -> jwtService.extractUsername("not-a-valid-jwt-string"))
+                .isInstanceOf(MalformedJwtException.class);
     }
 }

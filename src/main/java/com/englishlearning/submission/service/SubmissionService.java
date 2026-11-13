@@ -13,6 +13,8 @@ public interface SubmissionService {
 
     AttemptResponse submitAttempt(UUID studentId, UUID attemptId, SubmissionRequest request);
 
+    AttemptResponse recordAttemptViolation(UUID studentId, UUID attemptId, ExamViolationRequest request);
+
     AttemptResponse uploadAudioResponse(UUID studentId, UUID attemptId, UUID questionId, MultipartFile audio);
 
     AttemptResponse getAttemptDetail(UUID attemptId, UUID studentId, boolean isTeacher);
@@ -22,6 +24,8 @@ public interface SubmissionService {
     List<AttemptResponse> getStudentAttemptsHistory(UUID assignmentId, UUID studentId);
 
     List<SubmissionSummaryResponse> getTeacherSubmissions(UUID assignmentId);
+
+    List<TeacherStudentSubmissionDto> getStudentClassroomSubmissions(UUID classId, UUID studentId);
 
     AttemptResponse gradeSubmission(UUID attemptId, TeacherGradeRequest request);
 

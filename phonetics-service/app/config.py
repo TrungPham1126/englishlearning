@@ -79,23 +79,23 @@ class Settings(BaseSettings):
     # 4. Scoring Weights & Target Speed Configurations
     # --------------------------------------------------------------------------
     PRONUNCIATION_WEIGHT: float = Field(
-        default=0.50,
+        default=0.60,
         description="Weight of pronunciation score in overall score calculation."
     )
     FLUENCY_WEIGHT: float = Field(
-        default=0.30,
+        default=0.28,
         description="Weight of fluency score in overall score calculation."
     )
     SPEED_WEIGHT: float = Field(
-        default=0.20,
-        description="Weight of speed score in overall score calculation."
+        default=0.12,
+        description="Weight of speed/prosody score in overall score calculation."
     )
     SPEED_TARGET_MIN: float = Field(
         default=3.5,
         description="Optimal minimum speech rate in spoken syllables per second."
     )
     SPEED_TARGET_MAX: float = Field(
-        default=5.0,
+        default=5.5,
         description="Optimal maximum speech rate in spoken syllables per second."
     )
 
@@ -145,6 +145,10 @@ class Settings(BaseSettings):
     VOWEL_PROFILE_PATH: Path = Field(
         default=Path("reference_profiles/vowels.json"),
         description="Path to native speaker formant reference distributions."
+    )
+    CALIBRATION_PROFILE_PATH: Path = Field(
+        default=Path("reference_profiles/calibration.json"),
+        description="Path to SpeechOcean762/LibriSpeech empirically fitted calibration weights."
     )
     INFERENCE_TIMEOUT_SEC: float = Field(
         default=15.0,

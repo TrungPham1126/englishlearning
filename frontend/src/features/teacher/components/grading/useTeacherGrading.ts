@@ -1,20 +1,22 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
 import type { ClassroomItem } from "../../api/teacherApi";
 import type { GradingSubmission, GradingSubmissionDetail } from "./gradingTypes";
 
-export function useTeacherGrading() {
+export function useTeacherGrading(scopedClassId?: string) {
   const [classes, setClasses] = useState<ClassroomItem[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [selectedClassId, setSelectedClassId] = useState<string>(scopedClassId || "");
   const [assignments, setAssignments] = useState<any[]>([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
 
   const [submissions, setSubmissions] = useState<GradingSubmission[]>([]);
   const [selectedSub, setSelectedSub] = useState<GradingSubmission | null>(null);
   const [submissionDetail, setSubmissionDetail] = useState<GradingSubmissionDetail | null>(null);
+  const detailRequestIdRef = useRef<number>(0);
 
   const [inputScore, setInputScore] = useState<string>("");
   const [feedback, setFeedback] = useState<string>("");
+  const [answerScores, setAnswerScores] = useState<Record<string, number>>({});
   const [search, setSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
 
@@ -25,8 +27,13 @@ export function useTeacherGrading() {
   const [savingGrade, setSavingGrade] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
-  // 1. Tải danh sách lớp
+  // 1. Tải danh sách lớp (hoặc dùng scopedClassId khi ở trong 1 lớp cụ thể)
   useEffect(() => {
+    if (scopedClassId) {
+      setSelectedClassId(scopedClassId);
+      setLoadingClasses(false);
+      return;
+    }
     setLoadingClasses(true);
     teacherApi
       .getAssignedClasses()
@@ -39,7 +46,7 @@ export function useTeacherGrading() {
         console.error("Lỗi tải lớp học:", err);
       })
       .finally(() => setLoadingClasses(false));
-  }, []);
+  }, [scopedClassId]);
 
   // 2. Tải danh sách bài tập khi chọn Lớp (chỉ tải bài tập phần Viết đoạn văn & Speaking)
   useEffect(() => {
@@ -49,9 +56,9 @@ export function useTeacherGrading() {
         .getClassAssignments(selectedClassId, { gradingOnly: true })
         .then((res: any) => {
           const rawList = res.data?.data || [];
-          // Bộ lọc chặt chẽ: Chỉ giữ lại bài tập kỹ năng Viết (WRITING) hoặc Nói (SPEAKING),
-          // hoặc bài tập có câu hỏi dạng ESSAY hoặc AUDIO_RESPONSE
+          // Giữ lại bài thi (isExam) và bài tập cần chấm (WRITING / SPEAKING / ESSAY / AUDIO_RESPONSE)
           const gradableList = rawList.filter((a: any) => {
+            if (Boolean(a.isExam)) return true;
             const skill = String(a.skillType || "").toUpperCase();
             if (skill === "WRITING" || skill === "SPEAKING") return true;
             if (Array.isArray(a.questions) && a.questions.length > 0) {
@@ -111,39 +118,64 @@ export function useTeacherGrading() {
 
   // 4. Lấy chi tiết bài nộp khi Click vào danh sách bên trái
   const handleSelectSubmission = async (sub: GradingSubmission) => {
+    const reqId = ++detailRequestIdRef.current;
     setSelectedSub(sub);
     setLoadingDetail(true);
     setSaveSuccess(null);
     try {
       const res: any = await teacherApi.getSubmissionDetail(sub.attemptId);
+      if (reqId !== detailRequestIdRef.current) return;
       const detail = res.data?.data;
       if (detail) {
-        // Lọc chỉ hiển thị câu hỏi thuộc phần viết đoạn văn (ESSAY) và speaking (AUDIO_RESPONSE)
-        const subjectiveQuestions = (detail.questions || []).filter((q: any) => {
-          const type = String(q.questionType || "").toUpperCase();
-          if (type === "ESSAY" || type === "AUDIO_RESPONSE") return true;
-          if (q.audioUrl) return true;
-          const skill = String(detail.skillType || "").toUpperCase();
-          if (skill === "WRITING" && (q.studentAnswer || !q.options || q.options.length === 0)) return true;
-          if (skill === "SPEAKING") return true;
-          return false;
+        const isExam = Boolean(detail.isExam);
+        // Với Bài thi: giữ nguyên toàn bộ câu hỏi của mọi kỹ năng; bài thường chỉ lọc tự luận/speaking
+        const filteredQuestions = isExam
+          ? detail.questions || []
+          : (detail.questions || []).filter((q: any) => {
+              const type = String(q.questionType || "").toUpperCase();
+              if (type === "ESSAY" || type === "AUDIO_RESPONSE") return true;
+              if (q.audioUrl) return true;
+              const skill = String(detail.skillType || "").toUpperCase();
+              if (skill === "WRITING" && (q.studentAnswer || !q.options || q.options.length === 0)) return true;
+              if (skill === "SPEAKING") return true;
+              return false;
+            });
+
+        const initialScores: Record<string, number> = {};
+        filteredQuestions.forEach((q: any) => {
+          const key = q.questionId || q.id;
+          if (key && q.earnedPoints !== null && q.earnedPoints !== undefined) {
+            initialScores[key] = Number(q.earnedPoints);
+          }
         });
+        setAnswerScores(initialScores);
 
         setSubmissionDetail({
           ...detail,
-          questions: subjectiveQuestions,
+          questions: filteredQuestions,
         });
         setInputScore(detail?.score !== null && detail?.score !== undefined ? String(detail.score) : "");
         setFeedback(detail?.teacherFeedback || "");
       } else {
+        setAnswerScores({});
         setSubmissionDetail(null);
       }
     } catch (err) {
+      if (reqId !== detailRequestIdRef.current) return;
       console.error("Lỗi tải chi tiết bài làm:", err);
       alert("Không thể tải chi tiết bài làm của học sinh.");
     } finally {
-      setLoadingDetail(false);
+      if (reqId === detailRequestIdRef.current) {
+        setLoadingDetail(false);
+      }
     }
+  };
+
+  const handleUpdateQuestionScore = (questionKey: string, nextScore: number) => {
+    setAnswerScores((prev) => ({
+      ...prev,
+      [questionKey]: nextScore,
+    }));
   };
 
   // 5. Submit chấm điểm
@@ -159,9 +191,12 @@ export function useTeacherGrading() {
     try {
       setSavingGrade(true);
       setSaveSuccess(null);
+      const hasAnswerScores =
+        submissionDetail?.isExam && Object.keys(answerScores).length > 0;
       await teacherApi.gradeSubmission(selectedSub.attemptId, {
         score: parsedScore,
         feedback,
+        ...(hasAnswerScores ? { answerScores } : {}),
       });
 
       setSaveSuccess(`Đã lưu điểm ${parsedScore} và gửi nhận xét cho học viên.`);
@@ -239,6 +274,8 @@ export function useTeacherGrading() {
     loadingDetail,
     savingGrade,
     saveSuccess,
+    answerScores,
+    handleUpdateQuestionScore,
     handleSelectSubmission,
     handleSaveGrade,
     filteredSubmissions,

@@ -1,6 +1,8 @@
 package com.englishlearning.analytics.entity;
 
 import com.englishlearning.auth.entity.Student;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -17,6 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class StudentSkillProfile {
 
     @Id
@@ -24,6 +27,7 @@ public class StudentSkillProfile {
     @Column(name = "id", columnDefinition = "VARCHAR(36)")
     private UUID id;
 
+    @JsonIgnore
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
     @JoinColumn(name = "id", columnDefinition = "VARCHAR(36)")

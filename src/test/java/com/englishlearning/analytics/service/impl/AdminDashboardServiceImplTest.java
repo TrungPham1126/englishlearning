@@ -105,4 +105,48 @@ class AdminDashboardServiceImplTest {
         assertThat(stats.getCompletionDistribution().getMedium()).isEqualTo(0.0);
         assertThat(stats.getCompletionDistribution().getLow()).isEqualTo(0.0);
     }
+
+    @Test
+    @DisplayName("getSystemStats xử lý khi chưa có bài nộp, fallback từ StudentSkillProfile và phân loại medium/low")
+    @SuppressWarnings("unchecked")
+    void getSystemStats_handlesNullSkillAveragesAndDistributionBuckets() {
+        when(videoRepository.findByStatus(VideoStatus.PENDING_REVIEW)).thenReturn(Collections.emptyList());
+        when(classroomRepository.countByStatus(any(ClassStatus.class))).thenReturn(0L);
+        when(assignmentAttemptRepository.count()).thenReturn(0L);
+        when(assignmentAttemptRepository.countByStatus(AttemptStatus.SUBMITTED)).thenReturn(0L);
+
+        when(assignmentAttemptRepository.findAverageScoreBySkillType(any())).thenReturn(null);
+        when(aiEvaluationRepository.findAverageScoreByEvalType(any())).thenReturn(null);
+
+        TypedQuery<Double> profileAvgQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM StudentSkillProfile p"), eq(Double.class))).thenReturn(profileAvgQuery);
+        when(profileAvgQuery.getSingleResult()).thenReturn(62.4);
+
+        UUID s1 = UUID.randomUUID();
+        UUID s2 = UUID.randomUUID();
+        TypedQuery<UUID> activeStudentsQ = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("SELECT DISTINCT cs.student.id"), eq(UUID.class))).thenReturn(activeStudentsQ);
+        when(activeStudentsQ.getResultList()).thenReturn(Collections.emptyList());
+        when(studentRepository.findAll()).thenReturn(List.of(
+                Student.builder().id(s1).build(),
+                Student.builder().id(s2).build()
+        ));
+
+        TypedQuery<Long> assignedCountQ = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("SELECT COUNT(a) FROM Assignment a"), eq(Long.class))).thenReturn(assignedCountQ);
+        when(assignedCountQ.setParameter(anyString(), any())).thenReturn(assignedCountQ);
+        when(assignedCountQ.getSingleResult()).thenReturn(10L);
+
+        when(assignmentAttemptRepository.countCompletedDistinctAssignmentsByStudentId(s1)).thenReturn(6L); // 60% -> medium
+        when(assignmentAttemptRepository.countCompletedDistinctAssignmentsByStudentId(s2)).thenReturn(2L); // 20% -> low
+
+        AdminDashboardStats stats = adminDashboardService.getSystemStats();
+
+        assertThat(stats.getCompletionRate()).isEqualTo(100.0);
+        assertThat(stats.getWeeklySubmissionsTrend()).hasSize(7);
+        assertThat(stats.getAverageSkillScores()).containsEntry("Listening", 62.4);
+        assertThat(stats.getCompletionDistribution().getHigh()).isEqualTo(0.0);
+        assertThat(stats.getCompletionDistribution().getMedium()).isEqualTo(50.0);
+        assertThat(stats.getCompletionDistribution().getLow()).isEqualTo(50.0);
+    }
 }

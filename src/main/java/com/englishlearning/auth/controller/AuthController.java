@@ -8,6 +8,7 @@ import com.englishlearning.auth.service.AuthService;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.common.exception.ForbiddenException;
+import com.englishlearning.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -82,6 +83,9 @@ public class AuthController {
     @Operation(summary = "Lấy thông tin tài khoản hiện tại")
     public ResponseEntity<ApiResponse<UserSummaryDto>> getCurrentUser(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         UserSummaryDto user = authService.getCurrentUserProfile(userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(user));
     }
@@ -91,6 +95,9 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserSummaryDto>> updateProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody com.englishlearning.auth.dto.UpdateProfileRequest request) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         UserSummaryDto user = authService.updateProfile(userDetails.getId(), request);
         return ResponseEntity.ok(ApiResponse.success(user));
     }
@@ -100,6 +107,9 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserSummaryDto>> uploadAvatar(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         UserSummaryDto user = authService.updateAvatar(userDetails.getId(), file);
         return ResponseEntity.ok(ApiResponse.success(user));
     }

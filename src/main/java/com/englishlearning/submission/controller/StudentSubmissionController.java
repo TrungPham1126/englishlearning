@@ -2,6 +2,8 @@ package com.englishlearning.submission.controller;
 
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.BadRequestException;
+import com.englishlearning.common.exception.UnauthorizedException;
 import com.englishlearning.submission.dto.AttemptResponse;
 import com.englishlearning.submission.dto.StudentAssignmentSummaryResponse;
 import com.englishlearning.submission.dto.SubmissionRequest;
@@ -57,8 +59,8 @@ public class StudentSubmissionController {
             @PathVariable UUID attemptId,
             @Valid @RequestBody SubmissionRequest request,
             @AuthenticationPrincipal(expression = "id") UUID studentId) {
-        if (!request.getAssignmentId().equals(assignmentId)) {
-            throw new IllegalArgumentException("Assignment ID mismatch");
+        if (!assignmentId.equals(request.getAssignmentId())) {
+            throw new BadRequestException("Assignment ID mismatch");
         }
         AttemptResponse response = submissionService.submitAttempt(studentId, attemptId, request);
         return ResponseEntity.ok(ApiResponse.success("Assignment submitted successfully", response));
@@ -94,7 +96,20 @@ public class StudentSubmissionController {
             @PathVariable UUID attemptId, @PathVariable UUID questionId,
             @RequestParam("audio") org.springframework.web.multipart.MultipartFile audio,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
         return ResponseEntity.ok(ApiResponse.success("Upload thành công",
                 submissionService.uploadAudioResponse(userDetails.getId(), attemptId, questionId, audio)));
+    }
+
+    @PostMapping("/assignments/attempts/{attemptId}/violation")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<AttemptResponse>> recordAttemptViolation(
+            @PathVariable UUID attemptId,
+            @RequestBody(required = false) com.englishlearning.submission.dto.ExamViolationRequest request,
+            @AuthenticationPrincipal(expression = "id") UUID studentId) {
+        return ResponseEntity.ok(ApiResponse.success("Violation recorded",
+                submissionService.recordAttemptViolation(studentId, attemptId, request)));
     }
 }

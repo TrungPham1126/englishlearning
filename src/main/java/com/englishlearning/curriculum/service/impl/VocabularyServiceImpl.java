@@ -122,7 +122,7 @@ public class VocabularyServiceImpl implements VocabularyService {
     private VocabularyResponse mapToResponse(VocabularyItem item) {
         return VocabularyResponse.builder()
                 .id(item.getId())
-                .lessonId(item.getLesson().getId())
+                .lessonId(item.getLesson() != null ? item.getLesson().getId() : null)
                 .word(item.getWord())
                 .meaning(item.getMeaning())
                 .ipa(item.getIpa())

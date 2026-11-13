@@ -27,6 +27,8 @@ export function Modal({
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -38,7 +40,7 @@ export function Modal({
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
     const focusTimer = setTimeout(() => {
-      if (modalRef.current) {
+      if (modalRef.current && !modalRef.current.contains(document.activeElement)) {
         const focusables = modalRef.current.querySelectorAll<HTMLElement>(focusableSelector);
         if (focusables.length > 0) {
           focusables[0].focus();
@@ -50,7 +52,7 @@ export function Modal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -91,7 +93,7 @@ export function Modal({
         previousActiveElement.current.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

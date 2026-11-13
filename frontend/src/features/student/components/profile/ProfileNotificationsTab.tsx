@@ -22,10 +22,10 @@ export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = (
         <div className="flex items-center gap-2">
           <Bell size={18} className="text-blue-700 dark:text-blue-400" />
           <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
-            Thông Báo Đã Nhận
+            Thông báo
           </h3>
           {unreadNotificationsCount > 0 && (
-            <span className="ml-1 rounded-md bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+            <span className="ml-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
               {unreadNotificationsCount} chưa đọc
             </span>
           )}
@@ -37,7 +37,7 @@ export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = (
             className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition cursor-pointer"
           >
             <Check size={14} />
-            <span>Đánh dấu tất cả đã đọc</span>
+            <span>Đọc tất cả</span>
           </button>
         )}
       </div>
@@ -45,13 +45,13 @@ export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = (
       {notificationsLoading ? (
         <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-500 gap-2">
           <Loader2 size={24} className="animate-spin text-blue-700" />
-          <p className="text-xs">Đang tải thông báo...</p>
+          <p className="text-xs">Đang tải...</p>
         </div>
       ) : notifications.length === 0 ? (
         <div className="text-center py-12 text-slate-500 dark:text-slate-400">
           <Bell size={32} className="mx-auto mb-2 opacity-30" />
           <p className="text-xs font-medium">
-            Bạn chưa có thông báo nào.
+            Chưa có thông báo
           </p>
         </div>
       ) : (
@@ -79,7 +79,7 @@ export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = (
                           : "bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400"
                       }`}
                     >
-                      {item.classroomId ? "[Lớp học]" : "[Thông báo chung]"}
+                      {item.classroomId ? "Lớp" : "Chung"}
                     </span>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                       {item.title}
@@ -102,7 +102,7 @@ export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = (
                 </p>
                 {item.targetUrl && (
                   <div className="mt-2 flex items-center gap-1 text-[11px] font-bold text-blue-700 dark:text-blue-400">
-                    <span>Chi tiết liên kết</span>
+                    <span>Xem</span>
                     <ExternalLink size={12} />
                   </div>
                 )}

@@ -82,11 +82,24 @@ export const useAudioStore = create<AudioStoreState>()(
       set({
         recordingState,
         errorMessage: recordingState === "error" ? get().errorMessage : null,
+        ...(recordingState === "recording"
+          ? { isPlayingNative: false, isPlayingLearner: false }
+          : {}),
       }),
 
-    setIsPlayingNative: (isPlayingNative) => set({ isPlayingNative }),
+    setIsPlayingNative: (isPlayingNative) =>
+      set(
+        isPlayingNative
+          ? { isPlayingNative: true, isPlayingLearner: false }
+          : { isPlayingNative: false },
+      ),
 
-    setIsPlayingLearner: (isPlayingLearner) => set({ isPlayingLearner }),
+    setIsPlayingLearner: (isPlayingLearner) =>
+      set(
+        isPlayingLearner
+          ? { isPlayingLearner: true, isPlayingNative: false }
+          : { isPlayingLearner: false },
+      ),
 
     setIsSynthesizingNative: (isSynthesizingNative) =>
       set({ isSynthesizingNative }),

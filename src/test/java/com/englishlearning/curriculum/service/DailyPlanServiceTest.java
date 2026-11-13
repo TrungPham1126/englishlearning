@@ -163,4 +163,68 @@ class DailyPlanServiceTest {
 
         verify(dailyStudyPlanRepository, never()).findByClassroomIdOrderByDayNumberDesc(any());
     }
+
+    @Test
+    @DisplayName("Trả 100% và danh sách rỗng khi lớp học chưa có lộ trình nào")
+    void generateDailyRoadmapCheckpoints_whenNoPlans_returnsEmptyWith100Percent() {
+        UUID classroomId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classroomId, studentId)).thenReturn(true);
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId)).thenReturn(Collections.emptyList());
+
+        DailyHomeworkOverviewResponse res = dailyPlanService.getStudentDailyOverview(classroomId, studentId, null);
+
+        assertThat(res.getCompletionPercentage()).isEqualTo(100);
+        assertThat(res.getTotalDays()).isZero();
+        assertThat(res.getCompletedDays()).isZero();
+        assertThat(res.getDays()).isEmpty();
+        assertThat(res.getCurrentSelectedDay()).isNull();
+    }
+
+    @Test
+    @DisplayName("selectedDayId ưu tiên chọn đúng ngày được chỉ định và gán CORE cho sectionName null")
+    void generateDailyRoadmapCheckpoints_withSelectedDayAndNullSection_buildsCorrectDetail() {
+        UUID classroomId = UUID.randomUUID();
+        UUID day1Id = UUID.randomUUID();
+        UUID day2Id = UUID.randomUUID();
+
+        DailyStudyPlan day1 = DailyStudyPlan.builder()
+                .id(day1Id)
+                .dayNumber(1)
+                .title(null)
+                .scheduledDate(ACCESS_DATE.minusDays(1))
+                .estimatedMinutes(20)
+                .isUnlocked(true)
+                .build();
+        DailyStudyPlan day2 = DailyStudyPlan.builder()
+                .id(day2Id)
+                .dayNumber(2)
+                .title("DAY 2")
+                .scheduledDate(ACCESS_DATE)
+                .estimatedMinutes(30)
+                .isUnlocked(true)
+                .build();
+
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId)).thenReturn(List.of(day2, day1));
+        when(progressRepository.findByStudentIdAndDailyPlanId(null, day1Id)).thenReturn(Optional.empty());
+        when(progressRepository.findByStudentIdAndDailyPlanId(null, day2Id)).thenReturn(Optional.empty());
+
+        DailyPlanItem nullSectionItem = DailyPlanItem.builder()
+                .id(UUID.randomUUID())
+                .sectionName(null)
+                .title("Reading Warmup")
+                .itemType("READING")
+                .orderIndex(1)
+                .build();
+        when(dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(day1Id)).thenReturn(List.of(nullSectionItem));
+
+        DailyHomeworkOverviewResponse res = dailyPlanService.generateDailyRoadmapCheckpoints(classroomId, null, day1Id, null);
+
+        assertThat(res.getCurrentSelectedDay()).isNotNull();
+        assertThat(res.getCurrentSelectedDay().getId()).isEqualTo(day1Id);
+        assertThat(res.getCurrentSelectedDay().getTitle()).isEqualTo("DAY 1");
+        assertThat(res.getCurrentSelectedDay().getSections()).hasSize(1);
+        assertThat(res.getCurrentSelectedDay().getSections().get(0).getSectionName()).isEqualTo("CORE");
+        verify(classStudentRepository, never()).existsByClassroomIdAndStudentId(any(), any());
+    }
 }

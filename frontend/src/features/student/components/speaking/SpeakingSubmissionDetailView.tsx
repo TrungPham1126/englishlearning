@@ -204,42 +204,37 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
       <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400">
-              Chi tiết bài nộp học viên
-            </span>
             {isAssignmentPassed ? (
               <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
                 <CheckCircle2 size={11} />
-                PASS (≥ {passThreshold} pts)
+                Đạt
               </span>
             ) : isAttemptsExhausted ? (
-              <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800 flex items-center gap-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800 flex items-center gap-1 tabular-nums">
                 <XCircle size={11} />
-                NOT PASS (Hết {maxAttemptsCount} lượt)
+                Hết lượt ({maxAttemptsCount})
               </span>
             ) : (
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-800 flex items-center gap-1 tabular-nums">
                 <Clock size={11} />
-                Chưa đạt (Còn {remainingAttempts}/{maxAttemptsCount} lượt)
+                Còn {remainingAttempts}/{maxAttemptsCount} lượt
               </span>
             )}
           </div>
 
-          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate mt-0.5">
-            Bài nộp DAY {currentDay.dayNumber} – {isShadowingMode ? "SHADOWING" : "FREE RESPONSE"}
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate mt-1 tabular-nums">
+            Ngày {currentDay.dayNumber} • {isShadowingMode ? "Shadowing" : "Hỏi - đáp"}
           </h2>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium flex items-center gap-2">
-            <span>
-              {currentDay.scheduledDate ? `Lịch học: ${currentDay.scheduledDate}` : currentDay.title}
-            </span>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium flex items-center gap-2 tabular-nums">
+            <span>{currentDay.scheduledDate || currentDay.title}</span>
             <span>•</span>
-            <span>{attempts.length}/{maxAttemptsCount} lượt đã làm</span>
+            <span>{attempts.length}/{maxAttemptsCount} lượt</span>
             {highestScore > 0 && (
               <>
                 <span>•</span>
                 <span className="text-blue-700 dark:text-blue-400 font-bold">
-                  Điểm cao nhất: {highestScore.toFixed(1)} pts
+                  {highestScore.toFixed(1)}đ
                 </span>
               </>
             )}
@@ -253,31 +248,28 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
               <button
                 type="button"
                 disabled
-                title={`Bài tập đã đạt chuẩn (≥ ${passThreshold} điểm). Theo quy định, không thể làm lại.`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold opacity-90 cursor-not-allowed"
               >
                 <CheckCircle2 size={13} />
-                <span>Đã Đạt Chuẩn (≥ {passThreshold})</span>
+                <span>Đã đạt</span>
               </button>
             ) : isAttemptsExhausted ? (
               <button
                 type="button"
                 disabled
-                title={`Đã thực hiện đủ ${maxAttemptsCount} lần làm bài nhưng điểm số chưa đạt ${passThreshold} điểm. Kết quả: NOT PASS.`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold opacity-90 cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold opacity-90 cursor-not-allowed tabular-nums"
               >
                 <XCircle size={13} />
-                <span>Hết {maxAttemptsCount} Lượt (NOT PASS)</span>
+                <span>Hết lượt</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onRetake}
-                title={`Bạn còn ${remainingAttempts} lượt làm bài`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-xs transition cursor-pointer tabular-nums"
               >
                 <RotateCcw size={13} />
-                <span>Luyện Tập Lại (Còn {remainingAttempts}/{maxAttemptsCount} lượt)</span>
+                <span>Làm lại ({remainingAttempts})</span>
               </button>
             )
           ) : (
@@ -287,7 +279,7 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               <Eye size={13} />
-              <span>Xem Lịch Sử</span>
+              <span>Lịch sử</span>
             </button>
           )}
 
@@ -306,11 +298,11 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 const attScore = att.score ?? att.totalScore ?? null;
                 return (
                   <option key={att.attemptId} value={att.attemptId}>
-                    Lần làm #{att.attemptNumber}
+                    Lần #{att.attemptNumber}
                     {attScore !== null
-                      ? ` (${normalizeScoreTo100(attScore).toFixed(1)} pts)`
+                      ? ` (${normalizeScoreTo100(attScore).toFixed(1)}đ)`
                       : ""}
-                    {isBest ? " 🏆 [Điểm cao nhất]" : ""}
+                    {isBest ? " • Cao nhất" : ""}
                   </option>
                 );
               })}
@@ -319,12 +311,12 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
         </div>
       </div>
 
-      {/* 2. KHUNG KẾT QUẢ TỔNG QUAN (CHÍNH XÁC THEO IMAGE 2 VÀ QUY TẮC PASS / NOT PASS) */}
+      {/* 2. KHUNG KẾT QUẢ TỔNG QUAN */}
       {isSubmitted && currentAttempt && !isStudioOpen && (
-        <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 text-center shadow-xs space-y-2">
-          <div className="flex items-center justify-center gap-2">
+        <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] px-4 py-3.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span
-              className={`text-2xl sm:text-3xl font-black ${
+              className={`text-base font-black ${
                 isAssignmentPassed
                   ? "text-emerald-600 dark:text-emerald-400"
                   : isAttemptsExhausted
@@ -332,48 +324,42 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                   : "text-amber-600 dark:text-amber-400"
               }`}
             >
-              Kết quả:{" "}
               {isAssignmentPassed
-                ? "PASS"
+                ? "Đạt"
                 : isAttemptsExhausted
-                ? `NOT PASS (Hết ${maxAttemptsCount} lượt)`
-                : "CHƯA ĐẠT"}
+                ? "Chưa đạt (Hết lượt)"
+                : "Chưa đạt"}
+            </span>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 tabular-nums">
+              • Đúng {questions.filter((q) => isQuestionPassed(q.questionId, q, attempts)).length}/{totalQuestions}
+              {" • "}
+              <span className="text-blue-700 dark:text-blue-400 font-mono font-black">
+                {highestScore.toFixed(1)}đ
+              </span>
             </span>
           </div>
 
-          <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
-            (Đúng {questions.filter((q) => isQuestionPassed(q.questionId, q, attempts)).length}/{totalQuestions} câu
-            • Điểm cao nhất:{" "}
-            <span className="text-blue-700 dark:text-blue-400 font-mono font-black">
-              {highestScore.toFixed(1)} pts
-            </span>
-            {isAssignmentPassed ? ` ≥ ${passThreshold} pts` : ` < ${passThreshold} pts`})
-          </p>
-
-          {currentAttempt.attemptId === bestAttempt?.attemptId ? (
-            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-              <Award size={12} />
-              <span>Đang xem lần làm có điểm cao nhất (Lần #{currentAttempt.attemptNumber})</span>
-            </div>
-          ) : bestAttempt ? (
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-              Lần làm cao nhất:{" "}
+          <div className="flex items-center gap-2 text-[11px] tabular-nums">
+            {currentAttempt.attemptId === bestAttempt?.attemptId ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                <Award size={12} />
+                <span>Cao nhất (#{currentAttempt.attemptNumber})</span>
+              </span>
+            ) : bestAttempt ? (
               <button
                 type="button"
                 onClick={() => onSelectAttempt(bestAttempt)}
                 className="text-blue-700 dark:text-blue-400 font-bold hover:underline cursor-pointer"
               >
-                Lần #{bestAttempt.attemptNumber} (
-                {normalizeScoreTo100(bestAttempt.score ?? bestAttempt.totalScore ?? 0).toFixed(1)} pts)
+                Cao nhất (#{bestAttempt.attemptNumber})
               </button>
-            </div>
-          ) : null}
-
-          {submittedDateFormatted && (
-            <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
-              Bạn làm xong lúc {submittedDateFormatted}
-            </p>
-          )}
+            ) : null}
+            {submittedDateFormatted && (
+              <span className="text-slate-500 dark:text-slate-400 font-medium">
+                {submittedDateFormatted}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -382,10 +368,10 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
         /* CHẾ ĐỘ XEM BÀI NỘP VÀ BẢN THU ÂM (IMAGE 2) */
         <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 sm:p-6 shadow-xs space-y-5">
           {/* A. TRÌNH PHÁT BẢN GHI ÂM CỦA HỌC SINH */}
-          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-inner space-y-3">
+          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-inner space-y-2.5">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
               <Mic size={14} className="text-emerald-400" />
-              <span>Bản Thu Âm Giọng Nói Của Học Viên:</span>
+              <span>Bản thu</span>
             </span>
 
             {activeAudioUrl && !isMockOrBrokenAudioUrl(activeAudioUrl) ? (
@@ -395,8 +381,8 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 className="w-full max-w-lg rounded-lg shadow-sm"
               />
             ) : (
-              <div className="text-center py-4 text-xs text-slate-400">
-                (Chưa lưu trữ file âm thanh cho câu này hoặc đang xử lý)
+              <div className="text-center py-3 text-xs text-slate-400">
+                Chưa có bản thu
               </div>
             )}
           </div>
@@ -410,27 +396,22 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
             >
               <ChevronLeft size={16} />
-              <span>Câu trước</span>
+              <span>Trước</span>
             </button>
 
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1.5">
-                <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                  Câu {currentStep}/{totalQuestions}
-                </span>
-                {isCurrentQPassed ? (
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-800">
-                    ✓ Đạt (≥ 80)
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.2 rounded border border-amber-300 dark:border-amber-800">
-                    ~ Chưa đạt
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-                Thời lượng khuyến nghị: 120 giây
+            <div className="flex items-center justify-center gap-1.5 tabular-nums">
+              <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                Câu {currentStep}/{totalQuestions}
               </span>
+              {isCurrentQPassed ? (
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-800">
+                  Đạt
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-800">
+                  Chưa đạt
+                </span>
+              )}
             </div>
 
             <button
@@ -439,7 +420,7 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
               onClick={handleNextQuestion}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
             >
-              <span>Câu kế</span>
+              <span>Sau</span>
               <ChevronRight size={16} />
             </button>
           </div>
@@ -451,7 +432,7 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 (currentQ as any)?.content ||
                 (currentQ as any)?.sampleText ||
                 referenceSentence ||
-                "Nội dung câu hỏi Speaking"}
+                "Câu hỏi Speaking"}
             </h3>
 
             {/* Nút nghe lại câu mẫu bản xứ */}
@@ -462,39 +443,24 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
               >
                 <Volume2 size={13} />
-                <span>Nghe giọng mẫu bản ngữ</span>
+                <span>Nghe mẫu</span>
               </button>
             </div>
           </div>
 
           {/* D. ĐIỂM SỐ & TRẠNG THÁI CÂU HỎI */}
           <div
-            className={`p-4 rounded-xl text-center space-y-1 border ${
+            className={`px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-black border tabular-nums ${
               isCurrentQPassed
-                ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60"
-                : "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60"
+                ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300"
+                : "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300"
             }`}
           >
-            <p
-              className={`text-sm sm:text-base font-black ${
-                isCurrentQPassed
-                  ? "text-emerald-800 dark:text-emerald-300"
-                  : "text-amber-800 dark:text-amber-300"
-              }`}
-            >
-              Kết quả câu {currentStep}: {currentQuestionBestScore.toFixed(1)}/100 điểm
-            </p>
-            <p
-              className={`text-xs font-bold ${
-                isCurrentQPassed
-                  ? "text-emerald-700 dark:text-emerald-400"
-                  : "text-amber-700 dark:text-amber-400"
-              }`}
-            >
-              {isCurrentQPassed
-                ? `✓ Bạn đã đạt câu này (≥ ${passThreshold} điểm) - Đã khóa bảo toàn điểm!`
-                : `✗ Chưa đạt (dưới ${passThreshold} điểm) - Cần luyện tập thêm!`}
-            </p>
+            <span>
+              Câu {currentStep}: {currentQuestionBestScore.toFixed(1)}/100
+            </span>
+            <span>•</span>
+            <span>{isCurrentQPassed ? "Đạt" : "Chưa đạt"}</span>
           </div>
 
           {/* E. BÁO CÁO CHI TIẾT AI */}
@@ -503,7 +469,7 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
               <div className="flex items-center gap-2 mb-2">
                 <Zap size={16} className="text-amber-500" />
                 <h4 className="text-xs font-black uppercase text-slate-900 dark:text-white">
-                  Phân tích âm vị chi tiết:
+                  Phân tích âm vị
                 </h4>
               </div>
               <ShadowingEvaluationView data={shadowingReport} />
@@ -529,9 +495,9 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
         /* CHẾ ĐỘ THU ÂM & NỘP BÀI (STUDIO) */
         <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 sm:p-6 shadow-xs space-y-5 animate-in fade-in">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5 tabular-nums">
               <Mic size={14} className="text-blue-700 dark:text-blue-400" />
-              <span>Phòng Thu Âm Luyện Tập (Day {currentDay.dayNumber})</span>
+              <span>Thu âm • Ngày {currentDay.dayNumber}</span>
             </span>
             {isSubmitted && (
               <button
@@ -539,47 +505,38 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 onClick={() => setIsStudioOpen(false)}
                 className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
               >
-                Đóng phòng thu
+                Đóng
               </button>
             )}
           </div>
 
           {/* KIỂM TRA QUY TẮC CÂU ĐÃ PASS HOẶC HẾT LƯỢT */}
           {isCurrentQPassed ? (
-            /* TRƯỜNG HỢP CÂU ĐÃ PASS: KHÓA KHÔNG CHO LÀM LẠI & BẮT BUỘC LÀM CÂU TIẾP THEO */
-            <div className="rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/40 p-6 sm:p-8 text-center space-y-4">
-              <div className="inline-flex p-3 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-                <Lock size={28} />
+            <div className="rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/40 p-6 text-center space-y-3">
+              <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                <Lock size={22} />
               </div>
 
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-1 rounded-md border border-emerald-300 dark:border-emerald-700">
-                  ✓ Câu {currentStep} đã đạt chuẩn ({currentQuestionBestScore.toFixed(1)}/100 pts)
-                </span>
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white pt-1">
-                  Câu hỏi đã hoàn thành đạt chuẩn (≥ {passThreshold} điểm)
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tabular-nums">
+                  Câu {currentStep} đã đạt ({currentQuestionBestScore.toFixed(1)}/100)
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 max-w-lg mx-auto leading-relaxed">
-                  Theo quy định, bạn đã đạt yêu cầu cho câu hỏi này nên câu hỏi đã được khóa để bảo toàn điểm số.
-                  Bạn bắt buộc phải chuyển sang câu hỏi tiếp theo chưa đạt trong bài tập này.
-                </p>
               </div>
 
-              {/* Nút bắt buộc làm câu tiếp theo */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <div className="pt-1 flex flex-col sm:flex-row items-center justify-center gap-2.5">
                 {nextUnpassedIndex !== -1 ? (
                   <button
                     type="button"
                     onClick={() => onSelectQuestionIndex(nextUnpassedIndex)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-black text-xs shadow-md transition transform active:scale-95 cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-sm transition cursor-pointer tabular-nums"
                   >
-                    <span>Bắt buộc làm câu tiếp theo (Câu {nextUnpassedIndex + 1})</span>
-                    <ArrowRight size={15} />
+                    <span>Câu {nextUnpassedIndex + 1}</span>
+                    <ArrowRight size={14} />
                   </button>
                 ) : (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-black text-xs">
-                    <CheckCircle2 size={16} />
-                    <span>Tất cả các câu hỏi trong bài đều đã ĐẠT CHUẨN (≥ {passThreshold})!</span>
+                  <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs">
+                    <CheckCircle2 size={15} />
+                    <span>Đã đạt tất cả</span>
                   </div>
                 )}
 
@@ -590,23 +547,19 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                   >
                     <Eye size={14} />
-                    <span>Xem Lịch Sử Bài Nộp</span>
+                    <span>Lịch sử</span>
                   </button>
                 )}
               </div>
             </div>
           ) : isAttemptsExhausted ? (
-            /* TRƯỜNG HỢP ĐÃ HẾT SỐ LƯỢT LÀM MÀ VẪN DƯỚI CHUẨN -> NOT PASS */
-            <div className="rounded-xl border border-rose-300 dark:border-rose-700/60 bg-rose-50/80 dark:bg-rose-950/40 p-6 sm:p-8 text-center space-y-3">
-              <div className="inline-flex p-3 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300">
-                <XCircle size={28} />
+            <div className="rounded-xl border border-rose-300 dark:border-rose-700/60 bg-rose-50/80 dark:bg-rose-950/40 p-6 text-center space-y-2">
+              <div className="inline-flex p-2.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300">
+                <XCircle size={22} />
               </div>
-              <h3 className="text-base sm:text-lg font-black text-rose-900 dark:text-rose-200">
-                ĐÃ HẾT SỐ LẦN LÀM BÀI (KẾT QUẢ: NOT PASS)
+              <h3 className="text-sm sm:text-base font-black text-rose-900 dark:text-rose-200 tabular-nums">
+                Hết lượt ({maxAttemptsCount}/{maxAttemptsCount})
               </h3>
-              <p className="text-xs text-rose-800 dark:text-rose-300 max-w-md mx-auto">
-                Bạn đã làm đủ {maxAttemptsCount} lần nhưng điểm số chưa đạt {passThreshold} điểm. Theo quy định, kết quả được chốt là NOT PASS và bạn không thể thu âm lại nữa.
-              </p>
             </div>
           ) : isShadowingMode ? (
             <SpeakingShadowingStudio

@@ -63,56 +63,44 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
               <Mic className="h-3.5 w-3.5" aria-hidden="true" />
             </div>
 
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white">
-                  Luyện Phát Âm & Shadowing
-                </h3>
-                <span className="text-[9px] uppercase bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-1.5 py-0.2 rounded font-bold border border-blue-200 dark:border-blue-600/30">
-                  {practiceMode === "shadowing"
-                    ? "Đọc Đuổi (Shadowing)"
-                    : "Đọc Đơn (Normal)"}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                Phím tắt: <kbd className="font-mono font-bold">Space</kbd>{" "}
-                để Thu/Dừng • <kbd className="font-mono font-bold">R</kbd>{" "}
-                để Nghe lại mẫu
-              </p>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white">
+                Luyện nói
+              </h3>
+              <span className="text-[10px] font-semibold bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-600/30">
+                {practiceMode === "shadowing" ? "Đọc đuổi" : "Đọc đơn"}
+              </span>
             </div>
           </div>
 
           {/* Công cụ điều khiển: Chế độ, Tốc độ, Tạo lại mẫu & BẢNG QUY ƯỚC MÀU CHỈ 1 LẦN Ở TRÊN */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Hướng dẫn phân biệt màu sắc duy nhất 1 lần ở trên */}
+            {/* Chú giải màu phát âm */}
             <div
               role="list"
               aria-label="Chú giải màu trạng thái phát âm"
-              className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700"
+              className="flex flex-wrap items-center gap-2.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700"
             >
-              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mr-0.5">
-                Màu sắc:
-              </span>
               <span role="listitem" className="inline-flex items-center gap-1">
                 <span
                   aria-hidden="true"
                   className="w-2 h-2 rounded-full bg-emerald-500"
                 />
-                <span>Chuẩn (✓)</span>
+                <span>Chuẩn</span>
               </span>
               <span role="listitem" className="inline-flex items-center gap-1">
                 <span
                   aria-hidden="true"
                   className="w-2 h-2 rounded-full bg-amber-500"
                 />
-                <span>Cần cải thiện (~)</span>
+                <span>Gần đúng</span>
               </span>
               <span role="listitem" className="inline-flex items-center gap-1">
                 <span
                   aria-hidden="true"
                   className="w-2 h-2 rounded-full bg-rose-500"
                 />
-                <span>Phát âm sai (!)</span>
+                <span>Sai</span>
               </span>
               <span role="listitem" className="inline-flex items-center gap-1">
                 <span
@@ -197,7 +185,7 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
                 }`}
               />
               <span className="hidden sm:inline">
-                {isRepairingNative ? "Đang tạo..." : "Tạo lại mẫu"}
+                {isRepairingNative ? "Đang tạo..." : "Tạo lại"}
               </span>
             </button>
           </div>
@@ -218,8 +206,8 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
-            Tiến độ: {progressPercent}%
+          <span className="text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400 shrink-0">
+            {progressPercent}%
           </span>
         </div>
       </header>

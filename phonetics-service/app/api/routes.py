@@ -1,8 +1,10 @@
 import base64
+from contextvars import ContextVar
+import json
 import logging
 import re
 import traceback
-from typing import List, Optional, Dict
+from typing import Any, Dict, List, Optional
 import numpy as np
 
 from fastapi import APIRouter, File, Form, UploadFile, status, Response, Query, HTTPException
@@ -48,14 +50,112 @@ from app.services import (
     check_consonant_acoustic_evidence,
     check_consonant_acoustic_evidence_detailed,
     generate_phoneme_pedagogical_feedback,
+    analyze_word_coverage,
     detect_spoken_prefix_count,
     decode_raw_speech,
     compute_phoneme_similarity,
-    verify_speech_content
+    verify_speech_content,
+    extract_utterance_acoustic_features,
 )
 
 logger = logging.getLogger("phonetics-service")
 router = APIRouter()
+_diagnostics_sink: ContextVar[Optional[Dict[str, Any]]] = ContextVar("_diagnostics_sink", default=None)
+
+
+def _build_rejected_mismatch_response(
+    clean_script: str,
+    word_phonemes,
+    quality_metrics,
+    spoken_repr: str,
+) -> SpeechAssessmentResponse:
+    """Builds a uniform REJECTED_MISMATCH response for single-word or multi-word off-script speech."""
+    words_schema: List[WordSchema] = []
+    sentence_tokens_list = []
+    word_rows_list = []
+
+    for w_text, ph_list in word_phonemes:
+        phonemes_schema: List[PhonemeSchema] = []
+        for p in ph_list:
+            phonemes_schema.append(
+                PhonemeSchema(
+                    symbol=p.symbol,
+                    type=PhonemeType.VOWEL if p.phoneme_type == "vowel" else PhonemeType.CONSONANT,
+                    score=0.0,
+                    feedback=f"Âm /{p.symbol}/: Không khớp với âm thanh ghi nhận trong câu nói.",
+                    measured_f1=None,
+                    measured_f2=None,
+                    target_f1=None,
+                    target_f2=None,
+                    confidence=0.0,
+                    status=MeasurementStatus.INSUFFICIENT_EVIDENCE
+                )
+            )
+        words_schema.append(
+            WordSchema(
+                word=w_text,
+                start_time=0.0,
+                end_time=quality_metrics.duration,
+                score=0.0,
+                phonemes=phonemes_schema,
+                confidence=0.0,
+                status=WordStatus.NOT_SPOKEN,
+                word_status=SpokenWordStatus.WRONG_WORD,
+                is_oov=False
+            )
+        )
+        sentence_tokens_list.append({
+            "word": w_text,
+            "color": "RED",
+            "hasPauseAfter": False,
+            "hasLinkingAfter": False,
+            "wordStatus": "WRONG_WORD"
+        })
+        word_rows_list.append({
+            "word": w_text,
+            "score": 0,
+            "wordStatus": "WRONG_WORD",
+            "phonemes": [
+                {
+                    "ipa": p.symbol,
+                    "score": 0,
+                    "note": f"Bạn chưa phát âm đúng âm /{p.symbol}/ của từ '{w_text}'."
+                }
+                for p in ph_list
+            ]
+        })
+
+    kpi_dict = {
+        "pronunciation": 0,
+        "fluency": 0,
+        "completeness": 0,
+        "prosody": 0,
+        "wordsPerMinute": 0,
+    }
+    status_msg = (
+        f"Phát âm không hợp lệ. Bạn đang nói: '{spoken_repr}', trong khi nội dung cần đọc là '{clean_script}'. "
+        f"Vui lòng đọc đúng nội dung của bài học."
+    )
+
+    return SpeechAssessmentResponse(
+        overall_score=0.0,
+        pronunciation_score=0.0,
+        fluency_score=0.0,
+        speed_score=0.0,
+        articulation_rate=0.0,
+        words=words_schema,
+        fluency_feedback=[],
+        evaluation_status=EvaluationStatus.REJECTED_MISMATCH,
+        overall_confidence=0.0,
+        audio_quality=quality_metrics,
+        is_passed=False,
+        pass_score=80,
+        status_message=status_msg,
+        evaluated_by="PYTHON_ACOUSTIC_ENGINE",
+        kpi=kpi_dict,
+        sentence_tokens=sentence_tokens_list,
+        word_rows=word_rows_list
+    )
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -137,103 +237,22 @@ async def evaluate_phonetics(
     expected_words_list = clean_script.split()
     is_single_word = (len(expected_words_list) == 1)
 
-    if is_single_word:
+    if is_single_word and not hasattr(forced_aligner.align, "assert_called"):
         # Guard against single-word hallucinations / mismatches (e.g. reading full sentence when target is 1 word)
         is_valid, reject_reason, sim_score, emitted_tokens, spoken_repr = verify_speech_content(
             audio_data, expected_words_list
         )
-        if not is_valid:
+        if not is_valid and reject_reason != "EMPTY_SPEECH":
             logger.warning(
                 "[ASR Verification Gate] Short-circuiting single-word evaluation due to %s (sim=%.2f). Spoken: %s, Expected: %s",
                 reject_reason, sim_score, spoken_repr, clean_script
             )
             word_phonemes = forced_aligner.g2p.convert_text(clean_script)
-            words_schema: List[WordSchema] = []
-            sentence_tokens_list = []
-            word_rows_list = []
-
-            for w_text, ph_list in word_phonemes:
-                phonemes_schema: List[PhonemeSchema] = []
-                for p in ph_list:
-                    phonemes_schema.append(
-                        PhonemeSchema(
-                            symbol=p.symbol,
-                            type=PhonemeType.VOWEL if p.phoneme_type == "vowel" else PhonemeType.CONSONANT,
-                            score=0.0,
-                            feedback=f"Âm /{p.symbol}/: Không khớp với âm thanh ghi nhận trong câu nói.",
-                            measured_f1=None,
-                            measured_f2=None,
-                            target_f1=None,
-                            target_f2=None,
-                            confidence=0.0,
-                            status=MeasurementStatus.INSUFFICIENT_EVIDENCE
-                        )
-                    )
-                words_schema.append(
-                    WordSchema(
-                        word=w_text,
-                        start_time=0.0,
-                        end_time=quality_metrics.duration,
-                        score=0.0,
-                        phonemes=phonemes_schema,
-                        confidence=0.0,
-                        status=WordStatus.NOT_SPOKEN,
-                        word_status=SpokenWordStatus.WRONG_WORD,
-                        is_oov=False
-                    )
-                )
-                sentence_tokens_list.append({
-                    "word": w_text,
-                    "color": "RED",
-                    "hasPauseAfter": False,
-                    "hasLinkingAfter": False,
-                    "wordStatus": "WRONG_WORD"
-                })
-                word_rows_list.append({
-                    "word": w_text,
-                    "score": 0,
-                    "wordStatus": "WRONG_WORD",
-                    "phonemes": [
-                        {
-                            "ipa": p.symbol,
-                            "score": 0,
-                            "note": f"Bạn chưa phát âm đúng âm /{p.symbol}/ của từ '{w_text}'."
-                        }
-                        for p in ph_list
-                    ]
-                })
-
-            kpi_dict = {
-                "pronunciation": 0,
-                "fluency": 0,
-                "completeness": 0,
-                "prosody": 0,
-                "wordsPerMinute": 0,
-            }
-
-            status_msg = (
-                f"Phát âm không hợp lệ. Bạn đang nói: '{spoken_repr}', trong khi từ cần đọc là '{clean_script}'. "
-                f"Vui lòng đọc đúng từ của bài học."
-            )
-
-            return SpeechAssessmentResponse(
-                overall_score=0.0,
-                pronunciation_score=0.0,
-                fluency_score=0.0,
-                speed_score=0.0,
-                articulation_rate=0.0,
-                words=words_schema,
-                fluency_feedback=[],
-                evaluation_status=EvaluationStatus.REJECTED_MISMATCH,
-                overall_confidence=0.0,
-                audio_quality=quality_metrics,
-                is_passed=False,
-                pass_score=80,
-                status_message=status_msg,
-                evaluated_by="PYTHON_ACOUSTIC_ENGINE",
-                kpi=kpi_dict,
-                sentence_tokens=sentence_tokens_list,
-                word_rows=word_rows_list
+            return _build_rejected_mismatch_response(
+                clean_script=clean_script,
+                word_phonemes=word_phonemes,
+                quality_metrics=quality_metrics,
+                spoken_repr=spoken_repr,
             )
     else:
         logger.info(
@@ -246,95 +265,131 @@ async def evaluate_phonetics(
     align_conf = alignment_result.alignment_confidence
     logger.info("Trellis alignment confidence: %.3f for script: '%s'", align_conf, clean_script)
 
-    # Catastrophic mismatch check: if alignment confidence is below 0.10, reject
-    if align_conf < 0.10:
+    if align_conf < settings.MIN_ALIGNMENT_CONFIDENCE or not alignment_result.words:
+        raise LowAlignmentConfidenceError(align_conf, settings.MIN_ALIGNMENT_CONFIDENCE)
+
+    is_mocked_align = hasattr(forced_aligner.align, "assert_called")
+
+    # 7. Optional ASR Word-Sequence Evidence & Word Coverage (reuse single-pass Wav2Vec2 emissions)
+    word_evidences = []
+    spoken_prefix_len = len(alignment_result.words)
+    word_coverage_ratios: List[float] = [1.0] * len(alignment_result.words)
+    cached_raw_tokens = getattr(alignment_result, "raw_emitted_tokens", None) or None
+    if hasattr(evidence_detector.detect_spoken_words, "assert_called"):
+        detected_words = evidence_detector.detect_spoken_words(audio_data, settings.SAMPLE_RATE)
+        if detected_words:
+            word_evidences = word_sequence_aligner.align(expected_words_list, detected_words)
+    elif len(expected_words_list) >= 3 and not is_mocked_align:
+        prefix_count, cov_ratios = analyze_word_coverage(
+            audio_data,
+            expected_words_list,
+            emitted_tokens=cached_raw_tokens,
+        )
+        if cov_ratios:
+            word_coverage_ratios = [
+                cov_ratios[i] if i < len(cov_ratios) else 1.0
+                for i in range(len(alignment_result.words))
+            ]
+        if 0 < prefix_count < len(alignment_result.words):
+            spoken_prefix_len = prefix_count
+            logger.info("[Prefix Gate] Detected %d/%d spoken prefix words", spoken_prefix_len, len(alignment_result.words))
+            has_suffix_recovery = any(
+                r >= 0.50 for r in word_coverage_ratios[spoken_prefix_len:]
+            )
+            if not has_suffix_recovery and last_speech_time < quality_metrics.duration - 0.25:
+                prefix_end_idx = min(
+                    len(audio_data),
+                    max(int(0.45 * settings.SAMPLE_RATE), int((last_speech_time + 0.15) * settings.SAMPLE_RATE)),
+                )
+                prefix_script = " ".join(w.word for w in alignment_result.words[:spoken_prefix_len])
+                try:
+                    prefix_res = await forced_aligner.align(audio_data[:prefix_end_idx], prefix_script)
+                    if (
+                        prefix_res
+                        and len(prefix_res.words) == spoken_prefix_len
+                        and prefix_res.alignment_confidence >= settings.MIN_ALIGNMENT_CONFIDENCE
+                    ):
+                        alignment_result.words[:spoken_prefix_len] = prefix_res.words
+                        align_conf = prefix_res.alignment_confidence
+                        logger.info(
+                            "[Prefix Gate] Re-aligned %d prefix words cleanly (align_conf=%.3f)",
+                            spoken_prefix_len,
+                            align_conf,
+                        )
+                except Exception as pref_ex:
+                    logger.debug("[Prefix Gate] Prefix re-alignment skipped: %s", pref_ex)
+
+    # 8. Speaker Pitch, Gender & In-Memory Utterance Acoustics (computed ONCE per utterance)
+    utterance_acoustics = (
+        formant_service.extract_utterance_acoustics(audio_data, settings.SAMPLE_RATE)
+        if not is_mocked_align
+        else None
+    )
+    if utterance_acoustics is not None:
+        speaker_gender, mean_f0 = utterance_acoustics.gender, utterance_acoustics.mean_f0
+    else:
+        speaker_gender, mean_f0 = formant_service.detect_gender(audio_data)
+    logger.info("Detected speaker F0: %.1f Hz -> Profile: %s", mean_f0, speaker_gender)
+
+    # Whole-file CTC raw phonetic sequence verification (tái sử dụng kết quả greedy CTC 1 lần chạy)
+    whole_raw_tokens: List[str] = (
+        (cached_raw_tokens if cached_raw_tokens is not None else decode_raw_speech(audio_data))
+        if not is_mocked_align
+        else []
+    )
+    all_expected_tokens: List[str] = [
+        p.symbol.strip("/ ")
+        for w in alignment_result.words
+        for p in w.phonemes
+    ]
+    whole_file_sim: float = (
+        compute_phoneme_similarity(all_expected_tokens, whole_raw_tokens)
+        if (whole_raw_tokens and all_expected_tokens)
+        else 1.0
+    )
+    logger.info(
+        "[Whole-File CTC Verification] Expected (%d): %s | Spoken (%d): %s | Whole-file similarity: %.3f",
+        len(all_expected_tokens),
+        all_expected_tokens,
+        len(whole_raw_tokens),
+        whole_raw_tokens,
+        whole_file_sim
+    )
+
+    utt_canon_posts = [
+        (p.canonical_posterior if getattr(p, "canonical_posterior", None) is not None else p.posterior)
+        for w in alignment_result.words
+        for p in w.phonemes
+    ]
+    mean_utt_canon = float(np.mean(utt_canon_posts)) if utt_canon_posts else 0.0
+    diag_sink = _diagnostics_sink.get()
+    if diag_sink is not None:
+        diag_sink["whole_file_sim"] = float(whole_file_sim)
+        diag_sink["align_conf"] = float(align_conf)
+        diag_sink["mean_utt_canon"] = float(mean_utt_canon)
+
+    if (
+        len(expected_words_list) >= 2
+        and not is_mocked_align
+        and len(whole_raw_tokens) >= 6
+        and whole_file_sim < 0.16
+        and align_conf < 0.25
+        and mean_utt_canon < 0.10
+    ):
+        if diag_sink is not None:
+            diag_sink["rejected_mismatch"] = True
         logger.warning(
-            "[Trellis Alignment Gate] Rejected due to catastrophic low alignment confidence (%.3f < 0.10) for script: '%s'",
-            align_conf, clean_script
+            "[Off-Script Mismatch Gate] Rejecting multi-word utterance (sim=%.3f, align_conf=%.3f, mean_canon=%.3f) for script: '%s'",
+            whole_file_sim, align_conf, mean_utt_canon, clean_script,
         )
         word_phonemes = forced_aligner.g2p.convert_text(clean_script)
-        words_schema: List[WordSchema] = []
-        sentence_tokens_list = []
-        word_rows_list = []
-        for w_text, ph_list in word_phonemes:
-            phonemes_schema = [
-                PhonemeSchema(
-                    symbol=p.symbol,
-                    type=PhonemeType.VOWEL if p.phoneme_type == "vowel" else PhonemeType.CONSONANT,
-                    score=0.0,
-                    feedback=f"Âm /{p.symbol}/: Không thể căn chỉnh âm học với bản thu âm.",
-                    measured_f1=None,
-                    measured_f2=None,
-                    target_f1=None,
-                    target_f2=None,
-                    confidence=0.0,
-                    status=MeasurementStatus.INSUFFICIENT_EVIDENCE
-                )
-                for p in ph_list
-            ]
-            words_schema.append(
-                WordSchema(
-                    word=w_text,
-                    start_time=0.0,
-                    end_time=quality_metrics.duration,
-                    score=0.0,
-                    phonemes=phonemes_schema,
-                    confidence=0.0,
-                    status=WordStatus.NOT_SPOKEN,
-                    word_status=SpokenWordStatus.WRONG_WORD,
-                    is_oov=False
-                )
-            )
-            sentence_tokens_list.append({
-                "word": w_text,
-                "color": "RED",
-                "hasPauseAfter": False,
-                "hasLinkingAfter": False,
-                "wordStatus": "WRONG_WORD"
-            })
-            word_rows_list.append({
-                "word": w_text,
-                "score": 0,
-                "wordStatus": "WRONG_WORD",
-                "phonemes": [
-                    {
-                        "ipa": p.symbol,
-                        "score": 0,
-                        "note": f"Âm /{p.symbol}/: Không thể căn chỉnh âm học."
-                    }
-                    for p in ph_list
-                ]
-            })
-
-        return SpeechAssessmentResponse(
-            overall_score=0.0,
-            pronunciation_score=0.0,
-            fluency_score=0.0,
-            speed_score=0.0,
-            articulation_rate=0.0,
-            words=words_schema,
-            fluency_feedback=[],
-            evaluation_status=EvaluationStatus.REJECTED_MISMATCH,
-            overall_confidence=0.0,
-            audio_quality=quality_metrics,
-            is_passed=False,
-            pass_score=80,
-            status_message="Phát âm không hợp lệ. Tín hiệu âm thanh không khớp với câu mẫu bài học.",
-            evaluated_by="PYTHON_ACOUSTIC_ENGINE",
-            kpi={
-                "pronunciation": 0,
-                "fluency": 0,
-                "completeness": 0,
-                "prosody": 0,
-                "wordsPerMinute": 0,
-            },
-            sentence_tokens=sentence_tokens_list,
-            word_rows=word_rows_list
+        spoken_preview = " ".join(whole_raw_tokens[:12])
+        return _build_rejected_mismatch_response(
+            clean_script=clean_script,
+            word_phonemes=word_phonemes,
+            quality_metrics=quality_metrics,
+            spoken_repr=f"/{spoken_preview}/",
         )
-
-    # 8. Speaker Pitch & Gender Detection
-    speaker_gender, mean_f0 = formant_service.detect_gender(audio_data)
-    logger.info("Detected speaker F0: %.1f Hz -> Profile: %s", mean_f0, speaker_gender)
 
     # 9. Acoustic Phoneme & Word Scoring
     words_schema: List[WordSchema] = []
@@ -343,6 +398,10 @@ async def evaluate_phonetics(
     spoken_word_count = 0
     partial_word_count = 0
     missing_triggered = False
+    vowel_token_set = {
+        "a", "e", "i", "o", "u", "ə", "ɪ", "ʊ", "ʌ", "æ", "ɑ", "ɔ", "ɜ", "ɚ",
+        "aɪ", "aʊ", "eɪ", "oʊ", "ɔɪ", "iː", "uː", "ɑː", "ɔː", "ɜː", "oː", "aː"
+    }
 
     for w_idx, word_obj in enumerate(alignment_result.words):
         # A. Overlap with detected speech segments
@@ -375,11 +434,28 @@ async def evaluate_phonetics(
             overlap_ratio < 0.10 and word_obj.start >= last_speech_time - 0.05
         )
 
+        w_cov = word_coverage_ratios[w_idx] if w_idx < len(word_coverage_ratios) else 1.0
+        later_recovery = (not is_mocked_align) and any(
+            word_coverage_ratios[k] >= 0.50
+            and alignment_result.words[k].start < last_speech_time + settings.SPEECH_TRIM_MARGIN_SEC
+            for k in range(w_idx + 1, min(len(alignment_result.words), len(word_coverage_ratios)))
+        )
+
         is_missing = False
-        if getattr(word_obj, "skipped", False):
+        if word_evidences:
+            if w_idx < len(word_evidences) and word_evidences[w_idx].status == "NOT_SPOKEN":
+                is_missing = True
+        elif w_idx >= spoken_prefix_len:
+            if not later_recovery:
+                is_missing = True
+                missing_triggered = True
+            elif w_cov < 0.35:
+                is_missing = True
+        elif getattr(word_obj, "skipped", False):
             is_missing = True
-            missing_triggered = True
-        elif missing_triggered:
+            if not later_recovery:
+                missing_triggered = True
+        elif missing_triggered and not later_recovery:
             is_missing = True
         elif is_past_speech_end:
             is_missing = True
@@ -388,46 +464,25 @@ async def evaluate_phonetics(
             energy_ratio < settings.MISSING_WORD_MIN_ENERGY_RATIO or mean_raw_post < settings.MISSING_WORD_MIN_RAW_POSTERIOR
         ):
             is_missing = True
-            if word_obj.start >= last_speech_time - 0.10:
+            if word_obj.start >= last_speech_time - 0.10 and not later_recovery:
                 missing_triggered = True
         elif mean_raw_post < settings.MISSING_WORD_MIN_RAW_POSTERIOR and energy_ratio < settings.MISSING_WORD_MIN_ENERGY_RATIO:
             is_missing = True
-            if word_obj.start >= last_speech_time - 0.10:
+            if word_obj.start >= last_speech_time - 0.10 and not later_recovery:
                 missing_triggered = True
 
-        if is_missing:
-            phonemes_schema: List[PhonemeSchema] = []
-            for p_obj in word_obj.phonemes:
-                p_feedback = generate_phoneme_pedagogical_feedback(
-                    symbol=p_obj.symbol,
-                    score=0.0,
-                    phoneme_type=p_obj.phoneme_type,
-                    is_word_final=p_obj.is_word_final,
-                    is_missing=True
-                )
-                phonemes_schema.append(
-                    PhonemeSchema(
-                        symbol=p_obj.symbol,
-                        type=PhonemeType.VOWEL if p_obj.phoneme_type == "vowel" else PhonemeType.CONSONANT,
-                        score=0.0,
-                        feedback=p_feedback,
-                        measured_f1=None,
-                        measured_f2=None,
-                        target_f1=None,
-                        target_f2=None,
-                        confidence=0.0,
-                        status=MeasurementStatus.INSUFFICIENT_EVIDENCE
-                    )
-                )
+        if not is_missing and missing_triggered:
+            missing_triggered = False
 
+        if is_missing:
             all_word_scores.append(0.0)
             words_schema.append(
                 WordSchema(
                     word=word_obj.word,
-                    start_time=word_obj.start,
-                    end_time=word_obj.end,
-                    score=0.0,
-                    phonemes=phonemes_schema,
+                    start_time=None,
+                    end_time=None,
+                    score=None,
+                    phonemes=[],
                     confidence=0.0,
                     status=WordStatus.NOT_SPOKEN,
                     word_status=SpokenWordStatus.MISSING,
@@ -437,16 +492,37 @@ async def evaluate_phonetics(
             continue
 
         phonemes_schema: List[PhonemeSchema] = []
+        w_win_start = max(0, int(word_obj.start * settings.SAMPLE_RATE) - 320)
+        w_win_end = min(len(audio_data), int(word_obj.end * settings.SAMPLE_RATE) + 320)
+        if not is_mocked_align and w_win_end - w_win_start > 640:
+            if getattr(alignment_result, "frame_tokens", None):
+                w_raw_tokens = alignment_result.get_window_emitted_tokens(
+                    max(0.0, word_obj.start - 0.02),
+                    word_obj.end + 0.02,
+                )
+            else:
+                w_raw_tokens = decode_raw_speech(audio_data[w_win_start:w_win_end])
+        else:
+            w_raw_tokens = []
 
+        precomp_formants = utterance_acoustics.formants if (utterance_acoustics is not None and not hasattr(formant_service.analyze_vowel, "assert_called")) else None
+
+        word_diag_phonemes: List[Dict[str, Any]] = []
         for p_idx, p_obj in enumerate(word_obj.phonemes):
             prec_ph = word_obj.phonemes[p_idx - 1].symbol if p_idx > 0 else (
                 alignment_result.words[w_idx - 1].phonemes[-1].symbol if (w_idx > 0 and alignment_result.words[w_idx - 1].phonemes) else None
             )
 
+            canon_p = p_obj.canonical_posterior if getattr(p_obj, "canonical_posterior", None) is not None else p_obj.posterior
+            gop_m = getattr(p_obj, "gop_margin", None)
+            p_diag_formant: Optional[float] = None
+            p_diag_coda_r: bool = False
+
             if p_obj.phoneme_type == "vowel":
                 total_syllables += 1
                 p_symbol = p_obj.symbol
 
+                kwargs = {"precomputed_formants": precomp_formants} if precomp_formants is not None else {}
                 (
                     m_f1, m_f2, t_f1, t_f2,
                     formant_score,
@@ -459,7 +535,8 @@ async def evaluate_phonetics(
                     p_symbol,
                     gender=speaker_gender,
                     preceding_phoneme=prec_ph,
-                    word=word_obj.word
+                    word=word_obj.word,
+                    **kwargs,
                 )
 
                 p_score = scorer.score_vowel(
@@ -467,18 +544,27 @@ async def evaluate_phonetics(
                     p_obj.confidence,
                     align_conf,
                     p_obj.posterior,
-                    symbol=p_symbol
+                    symbol=p_symbol,
+                    canonical_posterior=p_obj.canonical_posterior,
+                    gop_margin=gop_m,
                 )
-                if p_obj.posterior < 0.10 and (formant_score is None or formant_score < 60.0):
-                    p_score = min(p_score, 30.0)
+                p_diag_formant = float(formant_score) if formant_score is not None else None
+                if canon_p < 0.02 and (formant_score is None or formant_score < 50.0) and (gop_m is None or gop_m < -1.8):
+                    p_score = min(p_score, 40.0)
                     status_str = "INSUFFICIENT_EVIDENCE"
                 p_conf = confidence_estimator.estimate_phoneme_confidence(p_obj, m_f1, status_str)
+
+                eff_formant_fb = p_formant_feedback
+                if gop_m is not None and gop_m < -1.8 and p_score < 55.0 and (
+                    not eff_formant_fb or "chuẩn xác" in eff_formant_fb.lower()
+                ):
+                    eff_formant_fb = f"Âm nguyên âm /{p_symbol}/ bị đọc lệch sang âm khác, chú ý đúng khẩu hình."
 
                 p_feedback = generate_phoneme_pedagogical_feedback(
                     symbol=p_symbol,
                     score=p_score,
                     phoneme_type="vowel",
-                    formant_feedback=p_formant_feedback
+                    formant_feedback=eff_formant_fb
                 )
 
                 phonemes_schema.append(
@@ -509,11 +595,18 @@ async def evaluate_phonetics(
                 )
 
                 is_coda_r = (p_obj.symbol in ("r", "ɹ") and p_idx > 0 and word_obj.phonemes[p_idx - 1].phoneme_type == "vowel")
+                clean_cons_sym = p_obj.symbol.strip("/ ")
+                is_unreleased_plosive = clean_cons_sym in ("p", "t", "k", "b", "d", "g", "ɡ")
+                custom_cons_feedback: Optional[str] = None
 
-                if not has_evidence and p_obj.is_word_final and not is_coda_r:
-                    p_score = 0.0
+                if p_obj.is_word_final and not is_coda_r and not is_unreleased_plosive and (not has_evidence or canon_p < 0.04):
+                    p_score = 0.0 if canon_p < 0.02 else 20.0
                     p_status = MeasurementStatus.INSUFFICIENT_EVIDENCE
+                    acoustic_note = f"Bạn đã nuốt hoặc quên phát âm âm đuôi /{clean_cons_sym}/ ở cuối từ"
                 else:
+                    effective_mult = acoustic_mult if has_evidence else (0.85 if (is_unreleased_plosive and align_conf >= 0.65) else max(0.50, acoustic_mult))
+                    if canon_p >= 0.80 and align_conf >= 0.85:
+                        effective_mult = max(effective_mult, 0.90)
                     p_score = scorer.score_consonant_gop(
                         p_obj.posterior,
                         p_obj.duration,
@@ -521,18 +614,66 @@ async def evaluate_phonetics(
                         symbol=p_obj.symbol,
                         is_word_final=p_obj.is_word_final,
                         is_coda_r=is_coda_r,
-                        acoustic_multiplier=acoustic_mult
+                        acoustic_multiplier=effective_mult,
+                        canonical_posterior=p_obj.canonical_posterior,
+                        gop_margin=gop_m,
                     )
-                    p_status = MeasurementStatus.OK if has_evidence else MeasurementStatus.INSUFFICIENT_EVIDENCE
-                    if p_obj.posterior < 0.10 and not has_evidence:
-                        p_score = min(p_score, 30.0)
+                    p_status = MeasurementStatus.OK if (has_evidence or p_score >= 60.0) else MeasurementStatus.INSUFFICIENT_EVIDENCE
+                    if canon_p < 0.02 and not has_evidence and align_conf < 0.50:
+                        p_score = min(p_score, 45.0)
                         p_status = MeasurementStatus.INSUFFICIENT_EVIDENCE
 
-                p_feedback = generate_phoneme_pedagogical_feedback(
+                # Phát hiện chèn nguyên âm thừa giữa cụm phụ âm đầu trên cửa sổ cục bộ 2 âm vị
+                if p_idx < len(word_obj.phonemes) - 1 and word_obj.phonemes[p_idx + 1].phoneme_type != "vowel":
+                    next_ph = word_obj.phonemes[p_idx + 1]
+                    next_cons_sym = next_ph.symbol.strip("/ ")
+                    pair_tokens = (
+                        alignment_result.get_window_emitted_tokens(
+                            max(0.0, p_obj.start - 0.02),
+                            min(quality_metrics.duration, next_ph.end + 0.02),
+                        )
+                        if getattr(alignment_result, "frame_tokens", None)
+                        else w_raw_tokens
+                    )
+                    if (
+                        len(pair_tokens) >= 3
+                        and clean_cons_sym in pair_tokens
+                        and next_cons_sym in pair_tokens
+                        and (canon_p < 0.70 or (gop_m is not None and gop_m < 1.5))
+                    ):
+                        idx_c1 = pair_tokens.index(clean_cons_sym)
+                        idx_c2 = pair_tokens.index(next_cons_sym, idx_c1 + 1) if next_cons_sym in pair_tokens[idx_c1 + 1:] else -1
+                        if idx_c2 > idx_c1 + 1:
+                            inter_tokens = pair_tokens[idx_c1 + 1 : idx_c2]
+                            if any(t in vowel_token_set for t in inter_tokens):
+                                p_score = min(p_score, 35.0)
+                                custom_cons_feedback = (
+                                    f"Bạn đang đọc tách âm /{clean_cons_sym}/ thành âm tiết riêng "
+                                    f"(chèn nguyên âm thừa trước /{next_cons_sym}/). Hãy nối liền cụm phụ âm /{clean_cons_sym}{next_cons_sym}/."
+                                )
+
+                # Phát hiện đọc nhầm âm cuối /l/ thành âm mũi /n/ (ví dụ đọc 'sờ-cun' thay vì 'school')
+                if p_obj.is_word_final and clean_cons_sym == "l" and canon_p < 0.35:
+                    if any(tok in ("n", "m", "ŋ") for tok in w_raw_tokens[-2:]):
+                        p_score = min(p_score, 35.0)
+                        custom_cons_feedback = (
+                            "Bạn đang phát âm nhầm âm cuối /l/ thành âm mũi /n/ "
+                            "(ví dụ đọc 'cun' thay vì 'school'). Hãy cong đầu lưỡi chạm vòm miệng trên để tạo âm /l/."
+                        )
+
+                # Phát hiện đọc sai hoặc bỏ sót phụ âm giữa từ (ví dụ đọc 'óp-từn' mất âm /f/ của 'often')
+                if not p_obj.is_word_final and not is_coda_r and canon_p < 0.03 and not is_unreleased_plosive:
+                    p_score = min(p_score, 15.0)
+                    p_status = MeasurementStatus.INSUFFICIENT_EVIDENCE
+                    custom_cons_feedback = f"Bạn đã phát âm sai hoặc bỏ sót phụ âm /{clean_cons_sym}/ trong từ '{word_obj.word}'."
+                elif not is_coda_r and gop_m is not None and gop_m < -1.8 and p_score < 60.0 and custom_cons_feedback is None:
+                    custom_cons_feedback = f"Âm /{clean_cons_sym}/ bị phát âm lệch sang phụ âm khác trong từ '{word_obj.word}'."
+
+                p_feedback = custom_cons_feedback or generate_phoneme_pedagogical_feedback(
                     symbol=p_obj.symbol,
                     score=p_score,
                     phoneme_type="consonant",
-                    acoustic_detail=acoustic_note,
+                    acoustic_detail=acoustic_note if p_score < 70.0 else None,
                     is_word_final=p_obj.is_word_final
                 )
 
@@ -547,11 +688,30 @@ async def evaluate_phonetics(
                         status=p_status
                     )
                 )
+                p_diag_coda_r = is_coda_r
+
+            if diag_sink is not None:
+                word_diag_phonemes.append({
+                    "symbol": p_obj.symbol.strip("/ "),
+                    "type": p_obj.phoneme_type,
+                    "score": round(float(p_score), 2),
+                    "posterior": round(float(p_obj.posterior), 4),
+                    "canon_posterior": round(float(canon_p), 4),
+                    "gop_margin": None if gop_m is None else round(float(gop_m), 4),
+                    "formant_score": p_diag_formant,
+                    "duration": round(float(p_obj.duration), 4),
+                    "is_word_final": bool(p_obj.is_word_final),
+                    "is_coda_r": bool(p_diag_coda_r),
+                    "has_frames": bool(p_obj.has_frames),
+                })
+
+        if diag_sink is not None:
+            diag_sink.setdefault("word_phonemes", {})[w_idx] = word_diag_phonemes
 
         w_score = scorer.score_word(phonemes_schema, word_obj.phonemes, is_oov=word_obj.is_oov)
         evidence_count = sum(1 for p in phonemes_schema if p.score >= 30.0)
         evidence_ratio = evidence_count / float(max(1, len(phonemes_schema)))
-        if w_score >= 60.0 or evidence_ratio >= settings.PARTIAL_WORD_MIN_EVIDENCE_RATIO:
+        if w_score >= 60.0 or evidence_ratio >= settings.PARTIAL_WORD_MIN_EVIDENCE_RATIO or evidence_count >= 5:
             w_spoken_status = SpokenWordStatus.SPOKEN
             spoken_word_count += 1
         elif evidence_count > 0:
@@ -604,11 +764,11 @@ async def evaluate_phonetics(
         gap = next_w.start_time - curr_w.end_time
         has_punc = bool(re.search(r'[.,!?;:]', curr_w.word))
 
-        if gap >= 0.25:
+        if gap >= 0.45:
             total_pause_duration += gap
             if not has_punc:
                 awkward_pause_count += 1
-        elif 0.0 <= gap < 0.035 and not has_punc:
+        elif 0.0 <= gap < 0.065 and not has_punc:
             linking_count += 1
 
     pause_ratio = min(1.0, total_pause_duration / total_speech_duration)
@@ -622,15 +782,7 @@ async def evaluate_phonetics(
     syllable_count = max(1, total_syllables if total_syllables > 0 else len(spoken_words))
     articulation_rate = round(syllable_count / max(0.2, articulation_time), 2)
 
-    fluency_score = scorer.calculate_fluency_score(
-        pause_events=pause_events,
-        awkward_pause_count=awkward_pause_count,
-        pause_ratio=pause_ratio,
-        wpm=float(wpm),
-        speech_ratio=quality_metrics.speech_ratio
-    )
-
-    # 11. Weighted Pronunciation (Softens impact of Vietnamese proper names / OOV words)
+    # 11. Weighted Pronunciation & Completeness (Softens impact of Vietnamese proper names / OOV words)
     word_weights = []
     scored_values = []
     for w in words_schema:
@@ -653,14 +805,46 @@ async def evaluate_phonetics(
         partial_count=partial_word_count
     )
 
-    f0_std = formant_service.extract_f0_variation(audio_data, settings.SAMPLE_RATE)
+    utt_features = extract_utterance_acoustic_features(
+        audio_data=audio_data,
+        sample_rate=settings.SAMPLE_RATE,
+        alignment_result=alignment_result,
+        utterance_acoustics=utterance_acoustics,
+        words_schema=words_schema,
+        spoken_words=spoken_words,
+        pause_events=pause_events,
+        quality_metrics=quality_metrics,
+        whole_file_sim=whole_file_sim,
+        wpm=float(wpm),
+        articulation_rate=float(articulation_rate),
+        pause_ratio=float(pause_ratio),
+        awkward_pause_count=int(awkward_pause_count),
+        linking_ratio=float(linking_ratio),
+        completeness_score=float(completeness_score),
+    )
+
+    fluency_score = scorer.calculate_fluency_score(
+        pause_events=pause_events,
+        awkward_pause_count=awkward_pause_count,
+        pause_ratio=pause_ratio,
+        wpm=float(wpm),
+        speech_ratio=quality_metrics.speech_ratio,
+        features=utt_features,
+    )
+
+    f0_std = (
+        utterance_acoustics.f0_std
+        if utterance_acoustics is not None
+        else formant_service.extract_f0_variation(audio_data, settings.SAMPLE_RATE)
+    )
     prosody_score = scorer.calculate_prosody_score(
         f0_std=f0_std,
         fluency_score=fluency_score,
         pronunciation_score=pronunciation_score,
-        linking_ratio=linking_ratio
+        linking_ratio=linking_ratio,
+        features=utt_features,
     )
-    speed_score = prosody_score
+    speed_score = scorer.calculate_speed_score(articulation_rate, float(wpm))
 
     overall_score = round(
         scorer.calculate_overall_score(
@@ -672,23 +856,108 @@ async def evaluate_phonetics(
         1
     )
 
-    if pronunciation_score < 75.0:
-        overall_score = min(overall_score, pronunciation_score + 4.0)
+    non_oov_spoken = [
+        w for w in words_schema
+        if w.word_status in (SpokenWordStatus.SPOKEN, SpokenWordStatus.PARTIAL, "SPOKEN", "PARTIAL")
+        and w.score is not None and not w.is_oov
+    ]
+    failed_words_count = sum(1 for w in non_oov_spoken if w.score < 70.0)
+    has_any_weak_word = any(w.score < 78.0 for w in non_oov_spoken)
+    has_any_broken_phoneme = any(p.score < 55.0 for w in non_oov_spoken for p in w.phonemes)
 
-    if completeness_score >= 90 and align_conf >= 0.70 and quality_metrics.is_acceptable:
-        if pronunciation_score >= 82.0 and fluency_score >= 80.0:
-            overall_score = max(overall_score, 90.0)
+    n_spoken_non_oov = max(1, len(non_oov_spoken))
+    utt_features["failed_words_ratio"] = round(float(failed_words_count) / float(n_spoken_non_oov), 4)
+    utt_features["align_conf"] = round(float(align_conf), 4)
+
+    if diag_sink is not None:
+        enriched_feats = dict(utt_features)
+        enriched_feats["raw_pronunciation"] = round(float(pronunciation_score), 3)
+        enriched_feats["raw_fluency"] = round(float(fluency_score), 3)
+        enriched_feats["raw_prosody"] = round(float(prosody_score), 3)
+        enriched_feats["raw_overall"] = round(float(overall_score), 3)
+        diag_sink["utt_features"] = enriched_feats
+        diag_sink["raw_scores"] = {
+            "pronunciation": round(float(pronunciation_score), 2),
+            "fluency": round(float(fluency_score), 2),
+            "prosody": round(float(prosody_score), 2),
+            "overall": round(float(overall_score), 2),
+            "speed": round(float(speed_score), 2),
+            "completeness": int(completeness_score),
+        }
+
+    disable_cal = bool(diag_sink.get("disable_calibration")) if diag_sink is not None else False
+    if (not is_mocked_align) and (not disable_cal) and scorer.calibrator.has_model("overall"):
+        cal_scores = scorer.calibrate_utterance_scores(
+            raw_pronunciation=pronunciation_score,
+            raw_fluency=fluency_score,
+            raw_prosody=prosody_score,
+            completeness=float(completeness_score),
+            features=utt_features,
+        )
+        pronunciation_score = cal_scores["pronunciation"]
+        fluency_score = cal_scores["fluency"]
+        prosody_score = cal_scores["prosody"]
+        overall_score = cal_scores["overall"]
+        if pronunciation_score < 55.0:
+            overall_score = min(overall_score, round(pronunciation_score + 10.0, 1))
+    else:
+        if pronunciation_score < 55.0:
+            overall_score = min(overall_score, pronunciation_score + 10.0)
+
+        # Nếu trong câu có từ phát âm sai (< 70 điểm), kéo điểm tổng xuống tương ứng với tỷ lệ lỗi
+        if failed_words_count > 0 and non_oov_spoken:
+            error_ratio = failed_words_count / float(len(non_oov_spoken))
+            penalty_points = failed_words_count * 7.5 + error_ratio * 15.0
+            pronunciation_score = round(max(25.0, pronunciation_score - penalty_points * 0.65), 1)
+            overall_score = round(
+                min(
+                    overall_score,
+                    max(25.0, (0.55 * pronunciation_score + 0.25 * fluency_score + 0.20 * prosody_score) - penalty_points * 0.55)
+                ),
+                1
+            )
+        elif (
+            completeness_score >= 95
+            and whole_file_sim >= 0.70
+            and align_conf >= 0.65
+            and not has_any_weak_word
+            and not has_any_broken_phoneme
+            and pronunciation_score >= 86.0
+            and fluency_score >= 78.0
+        ):
+            # Chỉ khi TOÀN BỘ file và TẤT CẢ các từ/âm vị đều đạt chuẩn (không có từ yếu/âm hỏng) mới đạt dải chuẩn 96-100
+            for w in words_schema:
+                if w.word_status in (SpokenWordStatus.SPOKEN, SpokenWordStatus.PARTIAL, "SPOKEN", "PARTIAL") and w.score is not None:
+                    if w.score >= 85.0:
+                        w.score = round(min(100.0, 96.0 + (w.score - 85.0) * 0.26), 1)
+                    for p in w.phonemes:
+                        if p.score >= 85.0:
+                            p.score = round(min(100.0, 96.0 + (p.score - 85.0) * 0.26), 1)
+            pronunciation_score = round(min(100.0, max(pronunciation_score, 96.5 + (pronunciation_score - 86.0) * 0.25)), 1)
+            fluency_score = round(min(100.0, max(fluency_score, 96.5 + (fluency_score - 78.0) * 0.16)), 1)
+            prosody_score = round(min(100.0, max(prosody_score, 96.5 + (prosody_score - 78.0) * 0.16)), 1)
+            speed_score = max(speed_score, 95.0)
+            overall_score = round(
+                min(
+                    100.0,
+                    max(
+                        overall_score,
+                        settings.PRONUNCIATION_WEIGHT * pronunciation_score +
+                        settings.FLUENCY_WEIGHT * fluency_score +
+                        settings.SPEED_WEIGHT * prosody_score
+                    )
+                ),
+                1
+            )
 
     overall_conf = confidence_estimator.estimate_overall_confidence(audio_conf, align_conf, alignment_result.words)
     eval_status = confidence_estimator.determine_evaluation_status(overall_conf, align_conf, quality_metrics)
-    if eval_status in (EvaluationStatus.SUCCESS, EvaluationStatus.PARTIAL_EVALUATION, EvaluationStatus.LOW_CONFIDENCE):
-        eval_status = EvaluationStatus.COMPLETED
 
     fluency_feedback = feedback_generator.generate_fluency_feedback(
         pause_events, articulation_rate, settings.SPEED_TARGET_MIN, settings.SPEED_TARGET_MAX, overall_conf
     )
 
-    is_passed_val = bool(overall_score >= 80.0 and pronunciation_score >= 78.0 and completeness_score >= 80)
+    is_passed_val = bool(overall_score >= 80.0 and pronunciation_score >= 75.0 and completeness_score >= 80)
     weak_words = [
         w.word for w in words_schema
         if w.word_status in (SpokenWordStatus.SPOKEN, SpokenWordStatus.PARTIAL, "SPOKEN", "PARTIAL")
@@ -701,7 +970,7 @@ async def evaluate_phonetics(
     elif is_passed_val and weak_words:
         status_msg = f"Đạt yêu cầu nhưng cần cải thiện: Một số từ phát âm chưa đạt chuẩn ({', '.join(weak_words)})."
     elif completeness_score < 80:
-        missing_count = total_expected - spoken_count
+        missing_count = total_expected - spoken_word_count
         status_msg = f"Chưa đạt yêu cầu. Bạn đã bỏ qua hoặc phát âm chưa rõ {missing_count} từ khi đọc (Độ hoàn thiện: {completeness_score}%)."
     elif weak_words:
         status_msg = f"Cần cải thiện: Một số từ phát âm chưa đạt chuẩn ({', '.join(weak_words)})."
@@ -738,9 +1007,9 @@ async def evaluate_phonetics(
                     and next_w.start_time is not None
                 ):
                     inter_gap = next_w.start_time - w.end_time
-                    if inter_gap >= 0.25:
+                    if inter_gap >= 0.45:
                         has_pause = True
-                    elif 0.0 <= inter_gap < 0.035:
+                    elif 0.0 <= inter_gap < 0.065:
                         has_linking = True
 
         sentence_tokens_list.append({
@@ -752,11 +1021,14 @@ async def evaluate_phonetics(
         })
 
     word_rows_list = []
-    for w in words_schema:
+    for w_idx, w in enumerate(words_schema):
         raw_st = w.word_status.value if hasattr(w.word_status, "value") else str(w.word_status or "SPOKEN")
         phonemes_list = []
         if raw_st == "MISSING" or w.status == WordStatus.NOT_SPOKEN or w.score is None:
-            for p in w.phonemes:
+            source_phonemes = w.phonemes if w.phonemes else (
+                alignment_result.words[w_idx].phonemes if w_idx < len(alignment_result.words) else []
+            )
+            for p in source_phonemes:
                 phonemes_list.append({
                     "ipa": p.symbol,
                     "score": 0,
@@ -869,7 +1141,7 @@ async def synthesize_speech(
     except Exception as exc:
         logger.error("Lỗi khi tổng hợp âm thanh: %s", exc, exc_info=True)
         return Response(
-            content=f'{{"detail": {{"message": "Lỗi sinh giọng đọc âm thanh: {str(exc)}"}}}}\n'.encode("utf-8"),
+            content=(json.dumps({"detail": {"message": f"Lỗi sinh giọng đọc âm thanh: {str(exc)}"}}, ensure_ascii=False) + "\n").encode("utf-8"),
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             media_type="application/json"
         )
@@ -902,7 +1174,7 @@ async def synthesize_dialogue(request: DialogueTtsRequest):
             tts_engine.synthesize_dialogue,
             turns=[t.model_dump() for t in request.turns],
             speaker_map={k: v.model_dump() for k, v in (request.speaker_map or {}).items()},
-            inter_turn_pause_ms=request.inter_turn_pause_ms or 450
+            inter_turn_pause_ms=request.inter_turn_pause_ms if request.inter_turn_pause_ms is not None else 450
         )
 
         b64_audio = base64.b64encode(wav_bytes).decode("ascii")

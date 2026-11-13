@@ -8,6 +8,10 @@ import com.englishlearning.assignment.entity.Assignment;
 
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 
+import com.englishlearning.assignment.entity.QuestionType;
+
+import com.englishlearning.assignment.entity.SkillType;
+
 import com.englishlearning.assignment.repository.AssignmentQuestionRepository;
 
 import com.englishlearning.assignment.repository.AssignmentRepository;
@@ -60,7 +64,13 @@ import java.time.Duration;
 
 import java.time.Instant;
 
+import java.util.ArrayList;
+
 import java.util.Collections;
+
+import java.util.HashSet;
+
+import java.util.LinkedHashMap;
 
 import java.util.List;
 
@@ -68,9 +78,15 @@ import java.util.Map;
 
 import java.util.Optional;
 
+import java.util.Set;
+
 import java.util.UUID;
 
 import java.util.stream.Collectors;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 
 
@@ -153,13 +169,27 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
+        List<AssignmentQuestion> assQuestions = assignment.getQuestions() != null
+
+                ? assignment.getQuestions()
+
+                : Collections.emptyList();
+
+
+
         if (existingInProgress.isPresent()) {
 
             AssignmentAttempt current = existingInProgress.get();
 
             boolean hasNewAnswers = false;
 
-            for (AssignmentQuestion q : assignment.getQuestions()) {
+            for (AssignmentQuestion q : assQuestions) {
+
+                if (!shouldPersistDetailedAnswer(assignment, q)) {
+
+                    continue;
+
+                }
 
                 boolean exists = current.getAnswers().stream()
 
@@ -238,6 +268,14 @@ public class SubmissionServiceImpl implements SubmissionService {
         long completedCount = completedAttempts.size();
 
 
+
+        boolean isExam = Boolean.TRUE.equals(assignment.getIsExam());
+
+        if (isExam && completedAttempts.stream().anyMatch(a -> Boolean.TRUE.equals(a.getIsCheatingFlagged()))) {
+
+            throw new BadRequestException("Bài thi của bạn đã bị khóa do vi phạm quy chế phòng thi (gian lận). Vui lòng liên hệ giáo viên.");
+
+        }
 
         // Kiểm tra bài tập có chứa câu hỏi tự luận không (ESSAY, IELTS Task 1/2, Paragraph dài)
 
@@ -330,7 +368,13 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        for (AssignmentQuestion q : assignment.getQuestions()) {
+        for (AssignmentQuestion q : assQuestions) {
+
+            if (!shouldPersistDetailedAnswer(assignment, q)) {
+
+                continue;
+
+            }
 
             StudentAnswer ans = new StudentAnswer();
 
@@ -352,13 +396,233 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        log.info("Khởi tạo lượt thi #{} cho học sinh {} với {} câu hỏi", attempt.getAttemptNumber(), studentId, assignment.getQuestions().size());
+        log.info("Khởi tạo lượt thi #{} cho học sinh {} với {} câu hỏi", attempt.getAttemptNumber(), studentId, assQuestions.size());
 
         return getAttemptDetail(attempt.getId(), studentId, false);
 
     }
 
 
+
+    private boolean shouldPersistDetailedAnswer(Assignment assignment, AssignmentQuestion question) {
+        if (assignment != null && Boolean.TRUE.equals(assignment.getIsExam())) {
+            return true;
+        }
+        if (question != null && question.getQuestionType() != null) {
+            QuestionType qType = question.getQuestionType();
+            return qType == QuestionType.ESSAY || qType == QuestionType.AUDIO_RESPONSE;
+        }
+        return false;
+    }
+
+    private boolean hasAnyPersistedQuestion(Assignment assignment) {
+        if (assignment == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(assignment.getIsExam())) {
+            return true;
+        }
+        if (assignment.getQuestions() == null) {
+            return false;
+        }
+        return assignment.getQuestions().stream().anyMatch(q -> shouldPersistDetailedAnswer(assignment, q));
+    }
+
+    private void applyAnswerResponseText(StudentAnswer answer, SubmissionRequest.AnswerDto ansReq,
+                                         AssignmentQuestion question, Map<UUID, AssignmentQuestion> questionMap) {
+        if (ansReq.getTextAnswer() != null && !ansReq.getTextAnswer().isBlank()) {
+            answer.setTextResponse(ansReq.getTextAnswer().trim());
+        } else if (ansReq.getSelectedOptionId() != null) {
+            if (question != null && question.getQuestionType() == QuestionType.MATCHING) {
+                AssignmentQuestion targetQ = questionMap.get(ansReq.getSelectedOptionId());
+                if (targetQ != null && targetQ.getCorrectAnswer() != null) {
+                    answer.setTextResponse(targetQ.getCorrectAnswer().trim());
+                } else {
+                    answer.setTextResponse(ansReq.getSelectedOptionId().toString());
+                }
+            } else {
+                answer.setTextResponse(ansReq.getSelectedOptionId().toString());
+            }
+        }
+    }
+
+    private double resolveAiOrExistingManualScore(AssignmentQuestion question, StudentAnswer workingAns) {
+        double point = question.getPoints() != null ? question.getPoints() : 10.0;
+        if (workingAns == null) {
+            return 0.0;
+        }
+        if (workingAns.getEarnedPoints() != null && workingAns.getEarnedPoints() > 0) {
+            return (workingAns.getEarnedPoints() / 10.0) * point;
+        }
+        if (workingAns.getId() != null) {
+            var evalOpt = aiEvaluationRepository.findByStudentAnswerId(workingAns.getId());
+            if (evalOpt.isPresent()) {
+                double aiScore = evalOpt.get().getOverallScore() != null ? evalOpt.get().getOverallScore() : 0.0;
+                workingAns.setEarnedPoints(aiScore);
+                workingAns.setIsCorrect(aiScore >= 5.0);
+                return (aiScore / 10.0) * point;
+            }
+        }
+        if (question.getQuestionType() == QuestionType.ESSAY) {
+            workingAns.setIsCorrect(false);
+            workingAns.setEarnedPoints(0.0);
+        }
+        return 0.0;
+    }
+
+    private double scoreAndPersistAnswers(AssignmentAttempt attempt, Assignment assignment,
+                                          List<AssignmentQuestion> questions,
+                                          List<SubmissionRequest.AnswerDto> incomingAnswers) {
+        List<AssignmentQuestion> safeQuestions = questions != null ? questions : Collections.emptyList();
+        List<SubmissionRequest.AnswerDto> safeAnswers = incomingAnswers != null ? incomingAnswers : Collections.emptyList();
+        Map<UUID, AssignmentQuestion> questionMap = safeQuestions.stream()
+                .filter(q -> q.getId() != null)
+                .collect(Collectors.toMap(AssignmentQuestion::getId, q -> q, (q1, q2) -> q1));
+        GradingResult gradingResult = gradingEngineService.evaluateSubmission(safeQuestions, safeAnswers);
+        double totalScore = 0.0;
+        Set<UUID> handledQuestionIds = new HashSet<>();
+
+        for (SubmissionRequest.AnswerDto ansReq : safeAnswers) {
+            AssignmentQuestion question = questionMap.get(ansReq.getQuestionId());
+            if (question == null) {
+                continue;
+            }
+            handledQuestionIds.add(question.getId());
+
+            boolean persist = shouldPersistDetailedAnswer(assignment, question);
+            StudentAnswer existingAns = attempt.getAnswers().stream()
+                    .filter(a -> a.getQuestion() != null && a.getQuestion().getId().equals(ansReq.getQuestionId()))
+                    .findFirst()
+                    .orElse(null);
+
+            StudentAnswer workingAns = existingAns;
+            if (workingAns == null && persist) {
+                workingAns = new StudentAnswer();
+                workingAns.setAttempt(attempt);
+                workingAns.setQuestion(question);
+                attempt.getAnswers().add(workingAns);
+            }
+
+            if (persist && workingAns != null) {
+                applyAnswerResponseText(workingAns, ansReq, question, questionMap);
+            }
+
+            if (question.getQuestionType() == QuestionType.AUDIO_RESPONSE || question.getQuestionType() == QuestionType.ESSAY) {
+                totalScore += resolveAiOrExistingManualScore(question, workingAns);
+            } else {
+                boolean isCorrect = Boolean.TRUE.equals(gradingResult.getCorrectnessPerQuestion().get(question.getId()));
+                Double earned = gradingResult.getEarnedPointsPerQuestion().get(question.getId());
+                double point = earned != null ? earned : 0.0;
+                if (persist && workingAns != null) {
+                    workingAns.setIsCorrect(isCorrect);
+                    workingAns.setEarnedPoints(point);
+                }
+                totalScore += point;
+            }
+
+            if (persist && workingAns != null) {
+                answerRepository.save(workingAns);
+            }
+        }
+
+        // Preserve & apply scores for AUDIO_RESPONSE/ESSAY answers uploaded or evaluated before submit when omitted from DTO answers
+        for (AssignmentQuestion question : safeQuestions) {
+            if (question.getId() == null || handledQuestionIds.contains(question.getId())) {
+                continue;
+            }
+            if (question.getQuestionType() != QuestionType.AUDIO_RESPONSE && question.getQuestionType() != QuestionType.ESSAY) {
+                continue;
+            }
+            StudentAnswer existingAns = attempt.getAnswers().stream()
+                    .filter(a -> a.getQuestion() != null && question.getId().equals(a.getQuestion().getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existingAns != null) {
+                totalScore += resolveAiOrExistingManualScore(question, existingAns);
+                if (shouldPersistDetailedAnswer(assignment, question)) {
+                    answerRepository.save(existingAns);
+                }
+            }
+        }
+
+        if (!Boolean.TRUE.equals(assignment != null ? assignment.getIsExam() : null)) {
+            attempt.getAnswers().removeIf(a -> {
+                if (a.getQuestion() == null) {
+                    return false;
+                }
+                AssignmentQuestion resolvedQ = a.getQuestion().getQuestionType() != null
+                        ? a.getQuestion()
+                        : questionMap.getOrDefault(a.getQuestion().getId(), a.getQuestion());
+                return !shouldPersistDetailedAnswer(assignment, resolvedQ);
+            });
+        }
+
+        double maxPossible = safeQuestions.stream().mapToDouble(q -> q.getPoints() != null ? q.getPoints() : 1.0).sum();
+        double finalScore = maxPossible > 0 ? (totalScore / maxPossible) * 10.0
+                : (safeQuestions.isEmpty() ? 0 : (totalScore / safeQuestions.size()) * 10.0);
+        return Math.round(finalScore * 10.0) / 10.0;
+    }
+
+    private String appendViolationLog(String existingJson, int index, String eventType, String reason) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            List<Map<String, Object>> logs = (existingJson != null && !existingJson.isBlank())
+                    ? mapper.readValue(existingJson, new TypeReference<List<Map<String, Object>>>() {})
+                    : new ArrayList<>();
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("count", index);
+            entry.put("eventType", eventType != null && !eventType.isBlank() ? eventType : "FOCUS_LOST");
+            entry.put("reason", reason != null && !reason.isBlank() ? reason : "Rời khỏi màn hình toàn phần");
+            entry.put("timestamp", Instant.now().toString());
+            logs.add(entry);
+            return mapper.writeValueAsString(logs);
+        } catch (Exception e) {
+            return existingJson != null ? existingJson : "[]";
+        }
+    }
+
+    private void notifyTeacherCheatingOrSubmission(AssignmentAttempt attempt, boolean isCheating) {
+        Assignment assignment = attempt.getAssignment();
+        if (assignment == null || assignment.getClassroom() == null || assignment.getClassroom().getTeacher() == null) {
+            return;
+        }
+        try {
+            UUID teacherUserId = assignment.getClassroom().getTeacher().getId();
+            UUID classId = assignment.getClassroom().getId();
+            boolean isExam = Boolean.TRUE.equals(assignment.getIsExam());
+            String studentName = attempt.getStudent() != null && attempt.getStudent().getUser() != null
+                    ? (attempt.getStudent().getUser().getFirstName() + " " + attempt.getStudent().getUser().getLastName()).trim()
+                    : "Học viên";
+
+            String title = isCheating
+                    ? "Cảnh báo gian lận bài thi"
+                    : (isExam ? "Bài thi mới cần chấm điểm" : "Bài nộp mới cần chấm điểm");
+            String message = isCheating
+                    ? String.format("%s đã bị đánh dấu GIAN LẬN (%d/%d lần vi phạm) trong bài thi \"%s\". Lý do: %s",
+                            studentName,
+                            attempt.getViolationCount() != null ? attempt.getViolationCount() : 3,
+                            assignment.getMaxViolations() != null ? assignment.getMaxViolations() : 3,
+                            assignment.getTitle(),
+                            attempt.getCheatingReason() != null ? attempt.getCheatingReason() : "Rời khỏi chế độ toàn màn hình")
+                    : String.format("%s đã nộp %s \"%s\" cần bạn đánh giá.",
+                            studentName, isExam ? "bài thi" : "bài tập", assignment.getTitle());
+            String targetUrl = isExam
+                    ? "/teacher/classrooms/" + classId + "/exams"
+                    : "/teacher/classrooms/" + classId + "/grading";
+
+            notificationService.sendSystemNotification(
+                    teacherUserId,
+                    title,
+                    message,
+                    NotificationType.SYSTEM_ALERT.name(),
+                    isCheating ? "CHEATING_ALERT" : "SUBMISSION_RECEIVED",
+                    targetUrl,
+                    attempt.getId()
+            );
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo cho giáo viên: {}", e.getMessage());
+        }
+    }
 
     @Override
 
@@ -374,109 +638,48 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         if (attempt.getSubmittedAt() != null) {
 
+            if (Boolean.TRUE.equals(attempt.getIsCheatingFlagged())) {
+
+                return getAttemptDetail(attemptId, studentId, false);
+
+            }
+
             throw new BadRequestException("This attempt has already been submitted.");
 
         }
 
 
 
+        Assignment assignment = attempt.getAssignment();
         List<AssignmentQuestion> questions = questionRepository.findByAssignmentId(request.getAssignmentId());
-        Map<UUID, AssignmentQuestion> questionMap = questions.stream()
-                .collect(Collectors.toMap(AssignmentQuestion::getId, q -> q));
+        double finalScore = scoreAndPersistAnswers(attempt, assignment, questions, request.getAnswers());
 
-        GradingResult gradingResult = gradingEngineService.evaluateSubmission(questions, request.getAnswers());
-        double totalScore = 0.0;
-
-        for (SubmissionRequest.AnswerDto ansReq : request.getAnswers()) {
-            StudentAnswer answer = attempt.getAnswers().stream()
-                    .filter(a -> a.getQuestion() != null && a.getQuestion().getId().equals(ansReq.getQuestionId()))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        StudentAnswer newAns = new StudentAnswer();
-                        newAns.setAttempt(attempt);
-                        AssignmentQuestion questionRef = new AssignmentQuestion();
-                        questionRef.setId(ansReq.getQuestionId());
-                        newAns.setQuestion(questionRef);
-                        attempt.getAnswers().add(newAns);
-                        return newAns;
-                    });
-
-            AssignmentQuestion question = questionMap.get(ansReq.getQuestionId());
-
-            if (ansReq.getTextAnswer() != null && !ansReq.getTextAnswer().isBlank()) {
-                answer.setTextResponse(ansReq.getTextAnswer().trim());
-            } else if (ansReq.getSelectedOptionId() != null) {
-                if (question != null && question.getQuestionType() == com.englishlearning.assignment.entity.QuestionType.MATCHING) {
-                    AssignmentQuestion targetQ = questionMap.get(ansReq.getSelectedOptionId());
-                    if (targetQ != null && targetQ.getCorrectAnswer() != null) {
-                        answer.setTextResponse(targetQ.getCorrectAnswer().trim());
-                    } else {
-                        answer.setTextResponse(ansReq.getSelectedOptionId().toString());
-                    }
-                } else {
-                    answer.setTextResponse(ansReq.getSelectedOptionId().toString());
-                }
+        if (Boolean.TRUE.equals(request.getCheatingFlagged())) {
+            attempt.setIsCheatingFlagged(true);
+            if (request.getViolationCount() != null) {
+                attempt.setViolationCount(request.getViolationCount());
             }
-
-            if (question != null) {
-                if (question.getQuestionType() == com.englishlearning.assignment.entity.QuestionType.AUDIO_RESPONSE) {
-                    double point = question.getPoints() != null ? question.getPoints() : 10.0;
-                    if (answer.getEarnedPoints() != null && answer.getEarnedPoints() > 0) {
-                        totalScore += (answer.getEarnedPoints() / 10.0) * point;
-                    } else if (answer.getId() != null) {
-                        var evalOpt = aiEvaluationRepository.findByStudentAnswerId(answer.getId());
-                        if (evalOpt.isPresent()) {
-                            double aiScore = evalOpt.get().getOverallScore() != null ? evalOpt.get().getOverallScore() : 0.0;
-                            answer.setEarnedPoints(aiScore);
-                            answer.setIsCorrect(aiScore >= 5.0);
-                            totalScore += (aiScore / 10.0) * point;
-                        }
-                    }
-                } else {
-                    boolean isCorrect = Boolean.TRUE.equals(gradingResult.getCorrectnessPerQuestion().get(question.getId()));
-                    Double earned = gradingResult.getEarnedPointsPerQuestion().get(question.getId());
-                    double point = earned != null ? earned : 0.0;
-                    answer.setIsCorrect(isCorrect);
-                    answer.setEarnedPoints(point);
-                    totalScore += point;
-                }
+            if (request.getCheatingReason() != null && !request.getCheatingReason().isBlank()) {
+                attempt.setCheatingReason(request.getCheatingReason());
             }
-            answerRepository.save(answer);
+            if (request.getViolationLogJson() != null && !request.getViolationLogJson().isBlank()) {
+                attempt.setViolationLogJson(request.getViolationLogJson());
+            }
         }
 
-
-
-        double maxPossible = questions.stream().mapToDouble(q -> q.getPoints() != null ? q.getPoints() : 1.0).sum();
-
-        double finalScore = maxPossible > 0 ? (totalScore / maxPossible) * 10.0 : (questions.isEmpty() ? 0 : (totalScore / questions.size()) * 10.0);
-
-        finalScore = Math.round(finalScore * 10.0) / 10.0;
-
-        boolean requiresTeacherGrading = questions.stream().anyMatch(q -> {
-
-            if (q.getQuestionType() == com.englishlearning.assignment.entity.QuestionType.ESSAY) {
-
+        boolean requiresTeacherGrading = Boolean.TRUE.equals(attempt.getIsCheatingFlagged())
+                || questions.stream().anyMatch(q -> {
+            if (q.getQuestionType() == QuestionType.ESSAY) {
                 return true;
-
             }
-
-            if (q.getQuestionType() == com.englishlearning.assignment.entity.QuestionType.AUDIO_RESPONSE) {
-
+            if (q.getQuestionType() == QuestionType.AUDIO_RESPONSE) {
                 StudentAnswer ans = attempt.getAnswers().stream()
-
                         .filter(a -> a.getQuestion() != null && a.getQuestion().getId().equals(q.getId()))
-
                         .findFirst().orElse(null);
-
                 return ans == null || ans.getEarnedPoints() == null || ans.getEarnedPoints() == 0.0;
-
             }
-
             return false;
-
         });
-
-
 
         Instant now = Instant.now();
 
@@ -518,43 +721,25 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        if (!requiresTeacherGrading) {
+        if (Boolean.TRUE.equals(attempt.getIsCheatingFlagged())) {
 
-            String skillType = attempt.getAssignment().getSkillType().name();
+            notifyTeacherCheatingOrSubmission(attempt, true);
 
-            double skillBoost = finalScore * 0.05;
+        } else if (!requiresTeacherGrading) {
 
-            analyticsService.updateSkillScore(studentId, skillType, skillBoost);
+            if (attempt.getAssignment() != null && attempt.getAssignment().getSkillType() != null) {
 
-        } else if (attempt.getAssignment().getClassroom() != null && attempt.getAssignment().getClassroom().getTeacher() != null) {
+                String skillType = attempt.getAssignment().getSkillType().name();
 
-            try {
+                double skillBoost = finalScore * 0.05;
 
-                UUID teacherUserId = attempt.getAssignment().getClassroom().getTeacher().getId();
-
-                notificationService.sendSystemNotification(
-
-                        teacherUserId,
-
-                        "Bài nộp mới cần chấm điểm",
-
-                        "Học sinh đã nộp bài tập \"" + attempt.getAssignment().getTitle() + "\" cần bạn đánh giá.",
-
-                        NotificationType.SYSTEM_ALERT.name(),
-
-                        "SUBMISSION_RECEIVED",
-
-                        "/teacher/grading",
-
-                        attempt.getId()
-
-                );
-
-            } catch (Exception e) {
-
-                log.warn("Không thể gửi thông báo cho giáo viên: {}", e.getMessage());
+                analyticsService.updateSkillScore(studentId, skillType, skillBoost);
 
             }
+
+        } else {
+
+            notifyTeacherCheatingOrSubmission(attempt, false);
 
         }
 
@@ -580,12 +765,73 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 .listeningScript(attempt.getAssignment().getListeningScript())
 
+                .isExam(Boolean.TRUE.equals(attempt.getAssignment().getIsExam()))
+
+                .violationCount(attempt.getViolationCount())
+
+                .isCheatingFlagged(Boolean.TRUE.equals(attempt.getIsCheatingFlagged()))
+
+                .cheatingReason(attempt.getCheatingReason())
+
+                .answersPersisted(hasAnyPersistedQuestion(attempt.getAssignment()))
+
                 .startedAt(attempt.getStartedAt())
 
                 .submittedAt(attempt.getSubmittedAt())
 
                 .build();
 
+    }
+
+    @Override
+    @Transactional
+    public AttemptResponse recordAttemptViolation(UUID studentId, UUID attemptId, ExamViolationRequest request) {
+        AssignmentAttempt attempt = attemptRepository.findByIdAndStudentId(attemptId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attempt not found"));
+
+        if (attempt.getSubmittedAt() != null) {
+            return getAttemptDetail(attemptId, studentId, false);
+        }
+
+        Assignment assignment = attempt.getAssignment();
+        int maxViolations = (assignment != null && assignment.getMaxViolations() != null && assignment.getMaxViolations() > 0)
+                ? assignment.getMaxViolations() : 3;
+        int nextCount = (attempt.getViolationCount() != null ? attempt.getViolationCount() : 0) + 1;
+        String eventType = request != null ? request.getEventType() : "FOCUS_LOST";
+        String reason = request != null && request.getReason() != null && !request.getReason().isBlank()
+                ? request.getReason()
+                : "Thoát chế độ toàn màn hình hoặc rời cửa sổ thi";
+
+        attempt.setViolationCount(nextCount);
+        attempt.setViolationLogJson(appendViolationLog(attempt.getViolationLogJson(), nextCount, eventType, reason));
+
+        if (nextCount >= maxViolations) {
+            attempt.setIsCheatingFlagged(true);
+            attempt.setCheatingReason("Vi phạm quy chế phòng thi (" + nextCount + "/" + maxViolations + " lần): " + reason);
+
+            List<AssignmentQuestion> questions = assignment != null
+                    ? questionRepository.findByAssignmentId(assignment.getId())
+                    : Collections.emptyList();
+            double finalScore = scoreAndPersistAnswers(attempt, assignment, questions,
+                    request != null ? request.getCurrentAnswers() : null);
+
+            Instant now = Instant.now();
+            attempt.setSubmittedAt(now);
+            attempt.setTotalScore(finalScore);
+            attempt.setStatus(AttemptStatus.SUBMITTED);
+            if (attempt.getStartedAt() != null) {
+                attempt.setDurationSeconds((int) Duration.between(attempt.getStartedAt(), now).getSeconds());
+            }
+            attemptRepository.save(attempt);
+            if (assignment != null) {
+                updateDailyProgressOnCompletion(studentId, assignment.getId(), attempt.getDurationSeconds());
+            }
+            notifyTeacherCheatingOrSubmission(attempt, true);
+        } else {
+            attemptRepository.save(attempt);
+        }
+
+        return getAttemptDetail(attemptId, studentId, false);
     }
 
 
@@ -611,6 +857,12 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (attempt.getSubmittedAt() != null) {
 
             throw new BadRequestException("Bài kiểm tra đã nộp");
+
+        }
+
+        if (audio == null || audio.isEmpty()) {
+
+            throw new BadRequestException("File ghi âm không được để trống");
 
         }
 
@@ -746,7 +998,13 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        List<AttemptResponse.QuestionResultDetail> questionDetails = assignmentWithQuestions.getQuestions().stream()
+        List<AssignmentQuestion> detailQuestions = assignmentWithQuestions.getQuestions() != null
+
+                ? assignmentWithQuestions.getQuestions()
+
+                : Collections.emptyList();
+
+        List<AttemptResponse.QuestionResultDetail> questionDetails = detailQuestions.stream()
 
                 .map(q -> {
 
@@ -760,9 +1018,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     UUID selectedOptId = null;
 
-                    if (ans != null && q
+                    if (ans != null && (q.getQuestionType() == QuestionType.MULTIPLE_CHOICE
 
-                            .getQuestionType() == com.englishlearning.assignment.entity.QuestionType.MULTIPLE_CHOICE) {
+                            || q.getQuestionType() == QuestionType.TRUE_FALSE)) {
 
                         try {
 
@@ -810,19 +1068,59 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     String feedback = null;
 
+                    AttemptResponse.AiEvaluationDetail aiEvalDetail = null;
+
                     if (ans != null) {
 
                         if (ans.getEvalFeedback() != null && !ans.getEvalFeedback().isBlank()) {
 
                             feedback = ans.getEvalFeedback();
 
-                        } else if (ans.getId() != null) {
+                        }
+
+                        if (ans.getId() != null) {
 
                             var evalOpt = aiEvaluationRepository.findByStudentAnswerId(ans.getId());
 
                             if (evalOpt.isPresent()) {
 
-                                feedback = evalOpt.get().getSuggestionsJson();
+                                var eval = evalOpt.get();
+
+                                if (feedback == null || feedback.isBlank()) {
+
+                                    feedback = eval.getSuggestionsJson();
+
+                                }
+
+                                aiEvalDetail = AttemptResponse.AiEvaluationDetail.builder()
+
+                                        .id(eval.getId())
+
+                                        .evalType(eval.getEvalType() != null ? eval.getEvalType().name() : null)
+
+                                        .overallScore(eval.getOverallScore())
+
+                                        .pronunciationScore(eval.getPronunciationScore())
+
+                                        .fluencyScore(eval.getFluencyScore())
+
+                                        .grammarScore(eval.getGrammarScore())
+
+                                        .vocabularyScore(eval.getVocabularyScore())
+
+                                        .coherenceScore(eval.getCoherenceScore())
+
+                                        .estimatedCefr(eval.getEstimatedCefr())
+
+                                        .sttTranscript(eval.getSttTranscript())
+
+                                        .correctedText(eval.getCorrectedText())
+
+                                        .mistakesJson(eval.getMistakesJson())
+
+                                        .suggestionsJson(eval.getSuggestionsJson())
+
+                                        .build();
 
                             }
 
@@ -842,7 +1140,17 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             .promptText(q.getPromptText())
 
-                            .questionType(q.getQuestionType().name())
+                            .questionType(q.getQuestionType() != null ? q.getQuestionType().name() : null)
+
+                            .skillType(q.getSkillType() != null
+
+                                    ? q.getSkillType().name()
+
+                                    : (assignmentWithQuestions.getSkillType() != null
+
+                                            ? assignmentWithQuestions.getSkillType().name()
+
+                                            : null))
 
                             .maxPoints(q.getPoints())
 
@@ -870,6 +1178,8 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             .evalFeedback(revealAnswers ? feedback : null)
 
+                            .aiEvaluation(revealAnswers ? aiEvalDetail : null)
+
                             .build();
 
                 }).collect(Collectors.toList());
@@ -878,7 +1188,10 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         AttemptResponse res = mapToAttemptSummary(attempt);
 
-        if (assignmentWithQuestions.getSkillType() == com.englishlearning.assignment.entity.SkillType.LISTENING) {
+        boolean exposeAudioAndScript = assignmentWithQuestions.getSkillType() == SkillType.LISTENING
+                || Boolean.TRUE.equals(assignmentWithQuestions.getIsExam());
+
+        if (exposeAudioAndScript) {
 
             if (res.getAudioUrl() == null || res.getAudioUrl().isBlank()) {
 
@@ -894,9 +1207,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         }
 
+        res.setAnswersPersisted(hasAnyPersistedQuestion(assignmentWithQuestions));
+
         if (res.getPassage() == null || res.getPassage().isBlank()) {
 
-            res.setPassage(assignmentWithQuestions.getSkillType() == com.englishlearning.assignment.entity.SkillType.LISTENING && assignmentWithQuestions.getListeningScript() != null
+            res.setPassage(assignmentWithQuestions.getSkillType() == SkillType.LISTENING && assignmentWithQuestions.getListeningScript() != null
 
                     ? assignmentWithQuestions.getListeningScript()
 
@@ -936,6 +1251,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
+            boolean isExam = Boolean.TRUE.equals(a.getIsExam());
+
+            boolean isCheatingFlagged = isExam && attemptRepository.findByStudentIdAndAssignmentId(studentId, a.getId())
+
+                    .stream().anyMatch(att -> Boolean.TRUE.equals(att.getIsCheatingFlagged()));
+
             return StudentAssignmentSummaryResponse.builder()
 
                     .id(a.getId())
@@ -944,7 +1265,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     .description(a.getDescription())
 
-                    .skillType(a.getSkillType().name())
+                    .skillType(a.getSkillType() != null ? a.getSkillType().name() : null)
 
                     .timeLimitMinutes(a.getTimeLimitMinutes())
 
@@ -959,6 +1280,16 @@ public class SubmissionServiceImpl implements SubmissionService {
                     .highestScore(highestScore != null ? highestScore : 0.0)
 
                     .status(status)
+
+                    .isExam(isExam)
+
+                    .examSkills(a.getExamSkills())
+
+                    .strictFullscreen(Boolean.TRUE.equals(a.getStrictFullscreen()))
+
+                    .maxViolations(a.getMaxViolations())
+
+                    .isCheatingFlagged(isCheatingFlagged)
 
                     .build();
 
@@ -986,30 +1317,182 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         return attemptRepository.findByAssignmentIdOrderBySubmittedAtDesc(assignmentId).stream()
 
-                .map(att -> SubmissionSummaryResponse.builder()
+                .map(att -> {
 
-                        .attemptId(att.getId())
+                    String studentName = "Học viên";
 
-                        .studentId(att.getStudent().getId())
+                    String studentEmail = null;
 
-                        .studentName(att.getStudent().getUser().getFirstName() + " "
+                    UUID stId = null;
 
-                                + att.getStudent().getUser().getLastName())
+                    if (att.getStudent() != null) {
 
-                        .studentEmail(att.getStudent().getUser().getEmail())
+                        stId = att.getStudent().getId();
 
-                        .attemptNumber(att.getAttemptNumber())
+                        if (att.getStudent().getUser() != null) {
 
-                        .score(att.getTotalScore())
+                            String fn = att.getStudent().getUser().getFirstName() != null ? att.getStudent().getUser().getFirstName() : "";
 
-                        .status(att.getStatus().name())
+                            String ln = att.getStudent().getUser().getLastName() != null ? att.getStudent().getUser().getLastName() : "";
 
-                        .submittedAt(att.getSubmittedAt())
+                            String combined = (fn + " " + ln).trim();
 
-                        .build())
+                            if (!combined.isBlank()) {
+
+                                studentName = combined;
+
+                            }
+
+                            studentEmail = att.getStudent().getUser().getEmail();
+
+                        }
+
+                    }
+
+                    return SubmissionSummaryResponse.builder()
+
+                            .attemptId(att.getId())
+
+                            .studentId(stId)
+
+                            .studentName(studentName)
+
+                            .studentEmail(studentEmail)
+
+                            .attemptNumber(att.getAttemptNumber())
+
+                            .score(att.getTotalScore())
+
+                            .status(att.getStatus() != null ? att.getStatus().name() : null)
+
+                            .submittedAt(att.getSubmittedAt())
+
+                            .violationCount(att.getViolationCount() != null ? att.getViolationCount() : 0)
+
+                            .isCheatingFlagged(Boolean.TRUE.equals(att.getIsCheatingFlagged()))
+
+                            .cheatingReason(att.getCheatingReason())
+
+                            .build();
+
+                })
 
                 .collect(Collectors.toList());
 
+    }
+
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TeacherStudentSubmissionDto> getStudentClassroomSubmissions(UUID classId, UUID studentId) {
+        List<AssignmentAttempt> attempts = attemptRepository.findSubmittedByClassroomIdAndStudentId(classId, studentId);
+        if (attempts.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<UUID> assignmentIds = attempts.stream()
+                .map(a -> a.getAssignment().getId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<UUID, List<String>> questionTypesByAssignment = new LinkedHashMap<>();
+        List<Object[]> qTypeRows = entityManager.createQuery(
+                "SELECT q.assignment.id, q.questionType FROM AssignmentQuestion q WHERE q.assignment.id IN :ids ORDER BY q.orderIndex ASC",
+                Object[].class)
+                .setParameter("ids", assignmentIds)
+                .getResultList();
+        for (Object[] row : qTypeRows) {
+            UUID aId = (UUID) row[0];
+            com.englishlearning.assignment.entity.QuestionType qType = (com.englishlearning.assignment.entity.QuestionType) row[1];
+            if (aId != null && qType != null) {
+                questionTypesByAssignment
+                        .computeIfAbsent(aId, k -> new ArrayList<>())
+                        .add(qType.name());
+            }
+        }
+
+        Map<UUID, com.englishlearning.curriculum.entity.DailyStudyPlan> planByAssignment = new LinkedHashMap<>();
+        List<DailyPlanItem> planItems = dailyPlanItemRepository.findByClassroomIdWithDailyPlanAndAssignment(classId);
+        for (DailyPlanItem item : planItems) {
+            if (item.getAssignment() != null && item.getDailyPlan() != null) {
+                planByAssignment.putIfAbsent(item.getAssignment().getId(), item.getDailyPlan());
+            }
+        }
+
+        Map<UUID, com.englishlearning.ai.entity.AiEvaluation> evalByAnswerId = new LinkedHashMap<>();
+        for (com.englishlearning.ai.entity.AiEvaluation eval : aiEvaluationRepository.findByStudentId(studentId)) {
+            if (eval.getStudentAnswer() != null && eval.getStudentAnswer().getId() != null) {
+                evalByAnswerId.put(eval.getStudentAnswer().getId(), eval);
+            }
+        }
+
+        return attempts.stream().map(a -> {
+            Assignment ass = a.getAssignment();
+            UUID assId = ass.getId();
+            String skillType = ass.getSkillType() != null ? ass.getSkillType().name() : null;
+            List<String> qTypes = questionTypesByAssignment.getOrDefault(assId, Collections.emptyList())
+                    .stream().distinct().collect(Collectors.toList());
+
+            com.englishlearning.curriculum.entity.DailyStudyPlan plan = planByAssignment.get(assId);
+
+            boolean hasAudio = "SPEAKING".equals(skillType) || qTypes.contains("AUDIO_RESPONSE");
+            boolean hasFeedback = false;
+            com.englishlearning.ai.entity.AiEvaluation matchedEval = null;
+            String previewText = null;
+
+            if (a.getAnswers() != null) {
+                for (StudentAnswer ans : a.getAnswers()) {
+                    if (ans.getAudioResponseUrl() != null && !ans.getAudioResponseUrl().isBlank()) {
+                        hasAudio = true;
+                    }
+                    if (ans.getEvalFeedback() != null && !ans.getEvalFeedback().isBlank()) {
+                        hasFeedback = true;
+                    }
+                    if (matchedEval == null && ans.getId() != null) {
+                        matchedEval = evalByAnswerId.get(ans.getId());
+                    }
+                    if (previewText == null && ans.getTextResponse() != null && !ans.getTextResponse().isBlank()) {
+                        previewText = ans.getTextResponse().trim();
+                    }
+                }
+            }
+
+            if ((previewText == null || previewText.isBlank()) && matchedEval != null
+                    && matchedEval.getSttTranscript() != null && !matchedEval.getSttTranscript().isBlank()) {
+                previewText = matchedEval.getSttTranscript().trim();
+            }
+            if (previewText != null && previewText.length() > 220) {
+                previewText = previewText.substring(0, 217) + "...";
+            }
+
+            return TeacherStudentSubmissionDto.builder()
+                    .attemptId(a.getId())
+                    .assignmentId(assId)
+                    .assignmentTitle(ass.getTitle())
+                    .skillType(skillType)
+                    .questionTypes(qTypes)
+                    .attemptNumber(a.getAttemptNumber())
+                    .status(a.getStatus().name())
+                    .score(a.getTotalScore())
+                    .teacherFeedback(a.getTeacherFeedback())
+                    .submittedAt(a.getSubmittedAt() != null ? a.getSubmittedAt() : a.getStartedAt())
+                    .dayNumber(plan != null ? plan.getDayNumber() : null)
+                    .dayTitle(plan != null ? plan.getTitle() : null)
+                    .scheduledDate(plan != null ? plan.getScheduledDate() : null)
+                    .hasAiEvaluation(matchedEval != null || hasFeedback)
+                    .aiScore(matchedEval != null ? matchedEval.getOverallScore() : null)
+                    .aiCefr(matchedEval != null ? matchedEval.getEstimatedCefr() : null)
+                    .aiEvalType(matchedEval != null && matchedEval.getEvalType() != null
+                            ? matchedEval.getEvalType().name() : null)
+                    .previewText(previewText)
+                    .hasAudio(hasAudio)
+                    .isExam(Boolean.TRUE.equals(ass.getIsExam()))
+                    .violationCount(a.getViolationCount() != null ? a.getViolationCount() : 0)
+                    .isCheatingFlagged(Boolean.TRUE.equals(a.getIsCheatingFlagged()))
+                    .cheatingReason(a.getCheatingReason())
+                    .build();
+        }).collect(Collectors.toList());
     }
 
 
@@ -1034,6 +1517,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 Double score = entry.getValue();
 
+                if (targetId == null || score == null) {
+
+                    continue;
+
+                }
+
                 attempt.getAnswers().stream()
 
                         .filter(a -> a.getId().equals(targetId) || (a.getQuestion() != null && a.getQuestion().getId().equals(targetId)))
@@ -1044,11 +1533,31 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             ans.setEarnedPoints(score);
 
-                            ans.setIsCorrect(score >= 5.0);
+                            double maxPt = (ans.getQuestion() != null && ans.getQuestion().getPoints() != null)
+                                    ? ans.getQuestion().getPoints() : 10.0;
+                            boolean isSubjective = ans.getQuestion() != null &&
+                                    (ans.getQuestion().getQuestionType() == QuestionType.ESSAY
+                                            || ans.getQuestion().getQuestionType() == QuestionType.AUDIO_RESPONSE);
+                            ans.setIsCorrect(isSubjective ? score >= 5.0 : score >= (maxPt * 0.5));
 
                             answerRepository.save(ans);
 
                         });
+
+            }
+
+        } else if (request.getFinalScore() != null && attempt.getAnswers() != null && attempt.getAnswers().size() == 1) {
+
+            StudentAnswer singleAns = attempt.getAnswers().get(0);
+
+            if (singleAns.getQuestion() != null && (singleAns.getQuestion().getQuestionType() == com.englishlearning.assignment.entity.QuestionType.ESSAY
+                    || singleAns.getQuestion().getQuestionType() == com.englishlearning.assignment.entity.QuestionType.AUDIO_RESPONSE)) {
+
+                singleAns.setEarnedPoints(request.getFinalScore());
+
+                singleAns.setIsCorrect(request.getFinalScore() >= 5.0);
+
+                answerRepository.save(singleAns);
 
             }
 
@@ -1066,13 +1575,23 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        String skillType = attempt.getAssignment().getSkillType().name();
+        if (attempt.getAssignment() != null && attempt.getAssignment().getSkillType() != null
 
-        double skillBoost = request.getFinalScore() * 0.05;
+                && attempt.getStudent() != null && request.getFinalScore() != null) {
 
-        analyticsService.updateSkillScore(attempt.getStudent().getId(), skillType, skillBoost);
+            String skillType = attempt.getAssignment().getSkillType().name();
 
-        updateDailyProgressOnCompletion(attempt.getStudent().getId(), attempt.getAssignment().getId(), attempt.getDurationSeconds());
+            double skillBoost = request.getFinalScore() * 0.05;
+
+            analyticsService.updateSkillScore(attempt.getStudent().getId(), skillType, skillBoost);
+
+        }
+
+        if (attempt.getStudent() != null && attempt.getAssignment() != null) {
+
+            updateDailyProgressOnCompletion(attempt.getStudent().getId(), attempt.getAssignment().getId(), attempt.getDurationSeconds());
+
+        }
 
 
 
@@ -1080,7 +1599,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
             UUID studentUserId = attempt.getStudent().getId();
 
-            String title = "Bài tập đã được chấm điểm";
+            boolean isExam = Boolean.TRUE.equals(attempt.getAssignment().getIsExam());
+
+            String title = isExam ? "Bài thi đã được chấm điểm" : "Bài tập đã được chấm điểm";
 
             String feedbackMsg = (request.getFeedback() != null && !request.getFeedback().isBlank())
 
@@ -1088,7 +1609,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     : "";
 
-            String message = String.format("Giáo viên đã chấm bài tập \"%s\": Điểm %.1f/10.%s",
+            String message = String.format("Giáo viên đã chấm %s \"%s\": Điểm %.1f/10.%s",
+
+                    isExam ? "bài thi" : "bài tập",
 
                     attempt.getAssignment().getTitle(),
 
@@ -1096,7 +1619,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     feedbackMsg);
 
-            String redirectUrl = "/student/assignments/" + attempt.getAssignment().getId() + "/take";
+            String redirectUrl = isExam
+
+                    ? "/student/exams/" + attempt.getAssignment().getId() + "/take"
+
+                    : "/student/assignments/" + attempt.getAssignment().getId() + "/take";
 
             notificationService.sendSystemNotification(
 
@@ -1252,7 +1779,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     private AttemptResponse mapToAttemptSummary(AssignmentAttempt att) {
 
-        boolean isListeningAssignment = att.getAssignment().getSkillType() == com.englishlearning.assignment.entity.SkillType.LISTENING;
+        boolean isExam = Boolean.TRUE.equals(att.getAssignment().getIsExam());
+
+        boolean isListeningAssignment = att.getAssignment().getSkillType() == SkillType.LISTENING || isExam;
 
         String audioUrl = isListeningAssignment ? att.getAssignment().getAudioUrl() : null;
 
@@ -1299,6 +1828,24 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .maxAllowedErrorPercent(att.getAssignment().getMaxAllowedErrorPercent())
 
                 .maxAttempts(att.getAssignment().getMaxAttempts())
+
+                .isExam(isExam)
+
+                .examSkills(att.getAssignment().getExamSkills())
+
+                .strictFullscreen(Boolean.TRUE.equals(att.getAssignment().getStrictFullscreen()))
+
+                .maxViolations(att.getAssignment().getMaxViolations())
+
+                .violationCount(att.getViolationCount() != null ? att.getViolationCount() : 0)
+
+                .isCheatingFlagged(Boolean.TRUE.equals(att.getIsCheatingFlagged()))
+
+                .cheatingReason(att.getCheatingReason())
+
+                .violationLogJson(att.getViolationLogJson())
+
+                .answersPersisted(hasAnyPersistedQuestion(att.getAssignment()))
 
                 .startedAt(att.getStartedAt())
 

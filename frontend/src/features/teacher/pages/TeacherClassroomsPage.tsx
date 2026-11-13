@@ -343,18 +343,24 @@ export default function TeacherClassroomsPage() {
                     >
                       DS Học viên
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => navigate(`/teacher/classrooms/${cls.id}/grading`)}
+                      leftIcon={<Award size={13} />}
+                    >
+                      Chấm bài
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => navigate(`/teacher/classrooms/${cls.id}`)}
+                      leftIcon={<BookOpen size={13} className="text-blue-700 dark:text-blue-400" />}
+                      rightIcon={<ChevronRight size={13} />}
+                    >
+                      Học liệu
+                    </Button>
                   </div>
-
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="w-full justify-between"
-                    onClick={() => navigate(`/teacher/classrooms/${cls.id}`)}
-                    leftIcon={<BookOpen size={13} className="text-blue-700 dark:text-blue-400" />}
-                    rightIcon={<ChevronRight size={13} />}
-                  >
-                    <span>Bài giảng &amp; Video HLS</span>
-                  </Button>
                 </div>
               </Card>
             );
@@ -449,6 +455,13 @@ export default function TeacherClassroomsPage() {
                             onClick={() => navigate(`/teacher/classrooms/${cls.id}/students`)}
                           >
                             Học viên
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => navigate(`/teacher/classrooms/${cls.id}/grading`)}
+                          >
+                            Chấm bài
                           </Button>
                           <Button
                             variant="ghost"

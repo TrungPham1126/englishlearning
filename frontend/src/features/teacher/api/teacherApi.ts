@@ -38,6 +38,87 @@ export interface LessonItem {
   documentsCount?: number;
 }
 
+export interface StudentSubmissionItem {
+  attemptId: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  skillType?: string | null;
+  questionTypes?: string[];
+  attemptNumber?: number;
+  status: string;
+  score?: number | null;
+  teacherFeedback?: string | null;
+  submittedAt?: string | null;
+  dayNumber?: number | null;
+  dayTitle?: string | null;
+  scheduledDate?: string | null;
+  hasAiEvaluation?: boolean;
+  aiScore?: number | null;
+  aiCefr?: string | null;
+  aiEvalType?: string | null;
+  previewText?: string | null;
+  hasAudio?: boolean;
+  isExam?: boolean;
+  violationCount?: number;
+  isCheatingFlagged?: boolean;
+  cheatingReason?: string | null;
+}
+
+export interface QuestionBankItem {
+  id: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  skillType?: string | null;
+  questionType: string;
+  promptText: string;
+  mediaUrl?: string | null;
+  transcript?: string | null;
+  correctAnswer?: string | null;
+  explanation?: string | null;
+  points?: number | null;
+  options?: Array<{
+    optionText: string;
+    matchText?: string | null;
+    isCorrect?: boolean | null;
+  }>;
+}
+
+export interface AiExamSectionConfig {
+  skillType: string;
+  questionFormat: string;
+  questionCount: number;
+  pointsPerQuestion?: number;
+}
+
+export interface AiExamGeneratePayload {
+  title?: string;
+  topic: string;
+  targetCefr: string;
+  customInstructions?: string;
+  sections: AiExamSectionConfig[];
+}
+
+export interface AiExamDraftResponse {
+  title: string;
+  description: string;
+  listeningScript?: string | null;
+  examSkills: string[];
+  questions: Array<{
+    skillType: string;
+    questionType: string;
+    promptText: string;
+    transcript?: string | null;
+    correctAnswer?: string | null;
+    explanation?: string | null;
+    points?: number;
+    options?: Array<{
+      optionText: string;
+      matchText?: string | null;
+      isCorrect?: boolean;
+    }>;
+  }>;
+}
+
 export const teacherApi = {
   // 1. Quản lý lớp học
   getAssignedClasses: () =>
@@ -163,6 +244,11 @@ export const teacherApi = {
     axiosClient.get<{ data: any[] }>("/api/v1/admin/resources?type=DOC"),
 
   // 5. Chấm bài
+  getStudentClassroomSubmissions: (classId: string, studentId: string) =>
+    axiosClient.get<{ data: StudentSubmissionItem[] }>(
+      `/api/v1/teacher/classrooms/${classId}/students/${studentId}/submissions`,
+    ),
+
   getSubmissionsForGrading: (assignmentId: string) =>
     axiosClient.get<{ data: any[] }>(
       `/api/v1/teacher/assignments/${assignmentId}/submissions`,
@@ -173,12 +259,35 @@ export const teacherApi = {
 
   gradeSubmission: (
     attemptId: string,
-    data: { score: number; feedback: string },
+    data: {
+      score: number;
+      feedback: string;
+      answerScores?: Record<string, number>;
+    },
   ) =>
     axiosClient.post(`/api/v1/teacher/submissions/${attemptId}/grade`, {
       finalScore: data.score,
       feedback: data.feedback,
+      ...(data.answerScores ? { answerScores: data.answerScores } : {}),
     }),
+
+  // 5b. Bài thi & Ngân hàng câu hỏi của lớp
+  getClassExams: (classId: string) =>
+    axiosClient.get<{ data: any[] }>(
+      `/api/v1/teacher/classrooms/${classId}/exams`,
+    ),
+
+  getQuestionBank: (classId: string) =>
+    axiosClient.get<{ data: QuestionBankItem[] }>(
+      `/api/v1/teacher/classrooms/${classId}/question-bank`,
+    ),
+
+  generateExamDraft: (payload: AiExamGeneratePayload) =>
+    axiosClient.post<{ data: AiExamDraftResponse }>(
+      `/api/v1/ai/exam/generate-draft`,
+      payload,
+      { timeout: 120000 },
+    ),
 
   // 6. AI Lab
   generateAiQuiz: (data: {

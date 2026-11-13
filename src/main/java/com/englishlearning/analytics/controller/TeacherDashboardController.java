@@ -73,10 +73,16 @@ public class TeacherDashboardController {
 
         List<TeacherDashboardResponse.PendingTask> tasks = new ArrayList<>();
         for (Object[] row : pendingAttempts) {
+            if (row == null) {
+                continue;
+            }
+            String taskId = (row.length > 0 && row[0] != null) ? row[0].toString() : "unknown";
+            String assignmentTitle = (row.length > 1 && row[1] != null) ? row[1].toString() : "Bài tập";
+            String classroomName = (row.length > 2 && row[2] != null) ? row[2].toString() : "Lớp học";
             tasks.add(TeacherDashboardResponse.PendingTask.builder()
-                    .id(row[0].toString())
-                    .title("Chấm bài: " + row[1].toString())
-                    .className(row[2].toString())
+                    .id(taskId)
+                    .title("Chấm bài: " + assignmentTitle)
+                    .className(classroomName)
                     .due("Chờ chấm")
                     .type("GRADING")
                     .build());

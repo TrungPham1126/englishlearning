@@ -4,10 +4,12 @@ import com.englishlearning.assignment.entity.SkillType;
 import com.englishlearning.submission.entity.AssignmentAttempt;
 import com.englishlearning.submission.entity.AttemptStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -41,6 +43,9 @@ public interface AssignmentAttemptRepository extends JpaRepository<AssignmentAtt
     @Query("SELECT AVG(a.totalScore) FROM AssignmentAttempt a WHERE a.assignment.skillType = :skillType AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED') AND a.totalScore IS NOT NULL")
     Double findAverageScoreBySkillType(@Param("skillType") SkillType skillType);
 
+    @Query("SELECT DISTINCT a FROM AssignmentAttempt a JOIN FETCH a.assignment ass LEFT JOIN FETCH a.answers WHERE ass.classroom.id = :classroomId AND a.student.id = :studentId AND a.status <> com.englishlearning.submission.entity.AttemptStatus.IN_PROGRESS ORDER BY a.submittedAt DESC, a.startedAt DESC")
+    List<AssignmentAttempt> findSubmittedByClassroomIdAndStudentId(@Param("classroomId") UUID classroomId, @Param("studentId") UUID studentId);
+
     @Query("SELECT COUNT(a) FROM AssignmentAttempt a WHERE a.assignment.classroom.id = :classroomId AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')")
     long countCompletedByClassroomId(@Param("classroomId") UUID classroomId);
 
@@ -49,4 +54,14 @@ public interface AssignmentAttemptRepository extends JpaRepository<AssignmentAtt
 
     @Query("SELECT DISTINCT a.assignment.id FROM AssignmentAttempt a WHERE a.student.id = :studentId AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')")
     Set<UUID> findCompletedAssignmentIdsByStudentId(@Param("studentId") UUID studentId);
+
+    @Query("SELECT a FROM AssignmentAttempt a JOIN FETCH a.assignment ass LEFT JOIN FETCH a.student s LEFT JOIN FETCH s.user WHERE ass.classroom.id = :classroomId ORDER BY a.submittedAt DESC, a.createdAt DESC")
+    List<AssignmentAttempt> findAllByClassroomIdWithDetails(@Param("classroomId") UUID classroomId);
+
+    @Query("SELECT a.id FROM AssignmentAttempt a WHERE a.assignment.id IN :assignmentIds")
+    List<UUID> findIdsByAssignmentIdIn(@Param("assignmentIds") Collection<UUID> assignmentIds);
+
+    @Modifying
+    @Query("DELETE FROM AssignmentAttempt a WHERE a.id IN :ids")
+    int deleteByIdIn(@Param("ids") Collection<UUID> ids);
 }

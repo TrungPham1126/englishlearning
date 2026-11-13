@@ -29,6 +29,10 @@ public class AssignmentRequest {
     private Double maxAllowedErrorPercent;
     private String audioUrl;
     private String listeningScript;
+    private Boolean isExam;
+    private List<String> examSkills;
+    private Boolean strictFullscreen;
+    private Integer maxViolations;
 
     private List<QuestionRequest> questions;
 
@@ -37,6 +41,7 @@ public class AssignmentRequest {
         @NotBlank
         private String promptText;
         private String questionType;
+        private String skillType;
         private String mediaUrl;
         private String transcript;
         private String correctAnswer;

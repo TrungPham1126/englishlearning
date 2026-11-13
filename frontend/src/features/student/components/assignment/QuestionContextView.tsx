@@ -214,38 +214,35 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
                 </button>
               )}
 
-              {/* Chỉ cho phép xem transcript sau khi học sinh hoàn thành và nộp bài */}
               {phase === 'REVIEW' && (
                 <button
                   type="button"
                   onClick={onToggleListeningScript}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer border ${
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
                     showListeningScript
                       ? 'bg-amber-400 text-slate-950 border-amber-300'
                       : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
                   }`}
-                  title="Xem kịch bản nội dung bài nghe (Khả dụng sau khi nộp bài)"
                 >
                   <FileText size={13} />
-                  <span>{showListeningScript ? 'Ẩn Transcript' : 'Xem Transcript'}</span>
+                  <span>{showListeningScript ? 'Ẩn lời thoại' : 'Lời thoại'}</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Panel kịch bản bài nghe liên tục chỉ mở khi đã nộp bài (phase === REVIEW) */}
           {phase === 'REVIEW' && showListeningScript && (
-            <div className="mt-3.5 p-4 rounded-xl bg-white dark:bg-slate-900/95 border border-blue-200 dark:border-blue-600/30 text-slate-800 dark:text-blue-100 text-xs leading-relaxed max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+            <div className="mt-3 p-3.5 rounded-xl bg-white dark:bg-slate-900/95 border border-blue-200 dark:border-blue-600/30 text-slate-800 dark:text-blue-100 text-xs leading-relaxed max-h-72 overflow-y-auto">
               <div className="flex items-center justify-between font-bold text-amber-600 dark:text-amber-300 mb-2 border-b border-slate-200 dark:border-white/10 pb-2">
-                <span className="flex items-center gap-2 uppercase tracking-wider text-xs">
-                  <Headphones size={14} /> Full Audio Transcript (Kịch bản bài nghe đồng bộ đa nhân vật)
+                <span className="flex items-center gap-1.5 text-xs">
+                  <Headphones size={14} /> Lời thoại
                 </span>
                 <button
                   type="button"
                   onClick={onToggleListeningScript}
-                  className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs cursor-pointer"
                 >
-                  ✕ Đóng
+                  Đóng
                 </button>
               </div>
 
@@ -284,14 +281,13 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
                   {listeningScript}
                 </div>
               ) : (
-                <p className="text-slate-400 italic">Không có kịch bản bài nghe cho bài này.</p>
+                <p className="text-slate-400">Chưa có lời thoại.</p>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* 2. THANH CHUYỂN TAB MOBILE CHO BÀI ĐỌC READING (< lg screens) */}
       {hasReadingPassage && (
         <div className="lg:hidden flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <button
@@ -304,7 +300,7 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
             }`}
           >
             <BookOpen size={13} />
-            <span>Đọc Bài Văn (Passage)</span>
+            <span>Bài đọc</span>
           </button>
           <button
             type="button"
@@ -316,7 +312,7 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
             }`}
           >
             <FileText size={13} />
-            <span>Danh Sách Câu Hỏi</span>
+            <span>Câu hỏi</span>
           </button>
         </div>
       )}

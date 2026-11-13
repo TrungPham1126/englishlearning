@@ -1,5 +1,14 @@
 import React from "react";
-import { ArrowLeft, School, BookOpen, Settings2, UserPlus, Video } from "lucide-react";
+import {
+  ArrowLeft,
+  School,
+  BookOpen,
+  Settings2,
+  UserPlus,
+  Video,
+  FileSpreadsheet,
+  Eye,
+} from "lucide-react";
 import type { ClassroomResponse } from "@/features/admin/types";
 
 interface ClassroomOverviewHeaderProps {
@@ -7,6 +16,9 @@ interface ClassroomOverviewHeaderProps {
   activeTab: "settings" | "students" | "videos" | "lessons";
   setActiveTab: (tab: "settings" | "students" | "videos" | "lessons") => void;
   pendingVideosCount: number;
+  exportingReport?: boolean;
+  onPreviewReport?: () => void;
+  onExportReport?: () => void;
   onBack: () => void;
 }
 
@@ -15,6 +27,9 @@ export const ClassroomOverviewHeader: React.FC<ClassroomOverviewHeaderProps> = (
   activeTab,
   setActiveTab,
   pendingVideosCount,
+  exportingReport = false,
+  onPreviewReport,
+  onExportReport,
   onBack,
 }) => {
   return (
@@ -44,6 +59,26 @@ export const ClassroomOverviewHeader: React.FC<ClassroomOverviewHeaderProps> = (
             <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 shadow-sm">
               GV: {classroom.teacherName || "Chưa phân công"}
             </span>
+            {onPreviewReport && (
+              <button
+                type="button"
+                onClick={onPreviewReport}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm cursor-pointer transition"
+              >
+                <Eye size={14} /> Báo Cáo Lớp
+              </button>
+            )}
+            {onExportReport && (
+              <button
+                type="button"
+                disabled={exportingReport}
+                onClick={onExportReport}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm cursor-pointer transition disabled:opacity-50"
+              >
+                <FileSpreadsheet size={14} />
+                {exportingReport ? "Đang xuất..." : "Xuất Excel (.xlsx)"}
+              </button>
+            )}
           </div>
         </div>
       </div>

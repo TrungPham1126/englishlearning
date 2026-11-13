@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { studentApi } from "@/features/student/api/studentApi";
@@ -114,20 +114,42 @@ export default function StudentProfilePage() {
     }
   };
 
+  const isMountedRef = useRef(true);
+  const saveTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setAvatarError(false);
   }, [user?.avatarUrl]);
 
   useEffect(() => {
+    let mounted = true;
     Promise.all([
       studentApi.getSkillProfile().catch(() => null),
       studentApi.getMyCourses().catch(() => []),
     ])
       .then(([skillData, courseData]) => {
+        if (!mounted || !isMountedRef.current) return;
         setProfile(skillData);
         setCourses(Array.isArray(courseData) ? courseData : []);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mounted && isMountedRef.current) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleChange = (
@@ -150,6 +172,7 @@ export default function StudentProfilePage() {
         avatarUrl: user?.avatarUrl,
       });
 
+      if (!isMountedRef.current) return;
       if (accessToken) {
         setAuth(accessToken, {
           ...updatedUser,
@@ -157,11 +180,22 @@ export default function StudentProfilePage() {
         });
       }
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      saveTimerRef.current = window.setTimeout(() => {
+        if (isMountedRef.current) {
+          setSaveSuccess(false);
+        }
+      }, 4000);
     } catch {
-      alert("Lỗi khi lưu thông tin hồ sơ.");
+      if (isMountedRef.current) {
+        alert("Lỗi khi lưu thông tin hồ sơ.");
+      }
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -215,7 +249,7 @@ export default function StudentProfilePage() {
       <div className="flex h-96 flex-col items-center justify-center space-y-3">
         <Loader2 className="animate-spin text-blue-700" size={36} />
         <p className="text-xs font-semibold text-slate-500">
-          Đang tải thông tin hồ sơ học viên...
+          Đang tải...
         </p>
       </div>
     );

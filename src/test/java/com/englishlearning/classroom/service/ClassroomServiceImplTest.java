@@ -1,13 +1,14 @@
 package com.englishlearning.classroom.service;
 
+import com.englishlearning.assignment.entity.Assignment;
 import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.auth.entity.Student;
 import com.englishlearning.auth.entity.Teacher;
+import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.repository.StudentRepository;
 import com.englishlearning.auth.repository.TeacherRepository;
 import com.englishlearning.auth.repository.UserRepository;
-import com.englishlearning.classroom.dto.ClassroomResponse;
-import com.englishlearning.classroom.dto.CreateClassroomRequest;
+import com.englishlearning.classroom.dto.*;
 import com.englishlearning.classroom.entity.ClassLevel;
 import com.englishlearning.classroom.entity.ClassStatus;
 import com.englishlearning.classroom.entity.ClassStudent;
@@ -15,18 +16,25 @@ import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.classroom.repository.ClassroomRepository;
 import com.englishlearning.classroom.service.impl.ClassroomServiceImpl;
+import com.englishlearning.common.dto.PageResponse;
 import com.englishlearning.common.exception.BadRequestException;
+import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.curriculum.entity.DailyPlanItem;
+import com.englishlearning.curriculum.entity.DailyStudyPlan;
+import com.englishlearning.curriculum.entity.Lesson;
+import com.englishlearning.curriculum.entity.StudentDailyProgress;
 import com.englishlearning.curriculum.repository.DailyPlanItemRepository;
 import com.englishlearning.curriculum.repository.DailyStudyPlanRepository;
 import com.englishlearning.curriculum.repository.LessonRepository;
 import com.englishlearning.curriculum.repository.StudentDailyProgressRepository;
-import com.englishlearning.curriculum.entity.DailyStudyPlan;
-import com.englishlearning.curriculum.entity.StudentDailyProgress;
 import com.englishlearning.submission.entity.AssignmentAttempt;
+import com.englishlearning.submission.entity.AttemptStatus;
 import com.englishlearning.submission.repository.AssignmentAttemptRepository;
+import com.englishlearning.video.entity.Video;
 import com.englishlearning.video.entity.VideoWatchHistory;
 import com.englishlearning.video.repository.VideoWatchHistoryRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,8 +42,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -350,5 +365,356 @@ class ClassroomServiceImplTest {
         assertThat(course.getCompletedLessons()).isEqualTo(1);
         // progressPercentage = (2 / 4) * 100 = 50.0%
         assertThat(course.getProgressPercentage()).isEqualTo(50.0);
+    }
+
+    @Test
+    @DisplayName("createClassroom - Tên lớp trùng, sĩ số <= 0, endDate < startDate hoặc teacher không tồn tại đều ném exception")
+    void createClassroom_invalidInputs_throwsAppropriateExceptions() {
+        CreateClassroomRequest dupReq = CreateClassroomRequest.builder()
+                .name("IELTS A")
+                .level(ClassLevel.B1)
+                .build();
+        when(classroomRepository.existsByNameIgnoreCase("IELTS A")).thenReturn(true);
+        assertThatThrownBy(() -> classroomService.createClassroom(dupReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Tên lớp học đã tồn tại");
+
+        CreateClassroomRequest badCapReq = CreateClassroomRequest.builder()
+                .name("IELTS B")
+                .level(ClassLevel.B1)
+                .maxStudents(0)
+                .build();
+        when(classroomRepository.existsByNameIgnoreCase("IELTS B")).thenReturn(false);
+        assertThatThrownBy(() -> classroomService.createClassroom(badCapReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Sĩ số tối đa");
+
+        CreateClassroomRequest badDateReq = CreateClassroomRequest.builder()
+                .name("IELTS C")
+                .level(ClassLevel.B1)
+                .startDate(LocalDate.of(2026, 5, 10))
+                .endDate(LocalDate.of(2026, 5, 1))
+                .build();
+        when(classroomRepository.existsByNameIgnoreCase("IELTS C")).thenReturn(false);
+        assertThatThrownBy(() -> classroomService.createClassroom(badDateReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Ngày kết thúc");
+
+        CreateClassroomRequest missingTeacherReq = CreateClassroomRequest.builder()
+                .name("IELTS D")
+                .level(ClassLevel.B1)
+                .teacherId(teacherId)
+                .build();
+        when(classroomRepository.existsByNameIgnoreCase("IELTS D")).thenReturn(false);
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.createClassroom(missingTeacherReq))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy thông tin giảng viên");
+    }
+
+    @Test
+    @DisplayName("createClassroom - Không truyền teacherId/maxStudents dùng mặc định 30 và fallback sinh Join Code khi trùng > 10 lần")
+    void createClassroom_defaultsAndJoinCodeFallback_succeeds() {
+        CreateClassroomRequest req = CreateClassroomRequest.builder()
+                .name("Foundation A1")
+                .level(ClassLevel.A1)
+                .build();
+        when(classroomRepository.existsByNameIgnoreCase("Foundation A1")).thenReturn(false);
+        when(classroomRepository.existsByJoinCode(anyString())).thenReturn(true);
+        when(classroomRepository.save(any(Classroom.class))).thenAnswer(inv -> {
+            Classroom c = inv.getArgument(0);
+            c.setId(classId);
+            return c;
+        });
+
+        ClassroomResponse resp = classroomService.createClassroom(req);
+
+        assertThat(resp.getMaxStudents()).isEqualTo(30);
+        assertThat(resp.getTeacherId()).isNull();
+        assertThat(resp.getTeacherName()).isEqualTo("Chưa phân công");
+        assertThat(resp.getJoinCode()).startsWith("ENG-");
+        verify(classroomRepository, times(10)).existsByJoinCode(anyString());
+    }
+
+    @Test
+    @DisplayName("enrollStudentByJoinCode - JoinCode rỗng, không tồn tại, PLANNING được phép, hoặc classroom.level == null")
+    void enrollStudentByJoinCode_edgeCases_handledCorrectly() {
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode("   ", studentId))
+                .isInstanceOf(BadRequestException.class);
+
+        when(classroomRepository.findByJoinCode("BADCODE")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(" badcode ", studentId))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        Classroom planningNoLevel = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.PLANNING)
+                .level(null)
+                .maxStudents(null)
+                .joinCode("ENG-PLAN")
+                .build();
+        Student student = Student.builder().id(studentId).currentLevel("B1").build();
+
+        when(classroomRepository.findByJoinCode("ENG-PLAN")).thenReturn(Optional.of(planningNoLevel));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(5L);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+
+        classroomService.enrollStudentByJoinCode(" eng-plan ", studentId);
+
+        verify(classStudentRepository).save(any(ClassStudent.class));
+        assertThat(student.getCurrentLevel()).isEqualTo("B1");
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateClassStatus & assignTeacher - Cập nhật thành công và báo 404 khi thiếu lớp/giảng viên")
+    void updateStatusAndAssignTeacher_allBranches() {
+        User teacherUser = User.builder().id(teacherId).firstName("Nguyen").lastName(null).build();
+        Teacher teacher = Teacher.builder().id(teacherId).user(teacherUser).build();
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .name("Speaking Pro")
+                .status(ClassStatus.PLANNING)
+                .level(ClassLevel.B2)
+                .build();
+
+        UpdateClassStatusRequest statusReq = new UpdateClassStatusRequest();
+        statusReq.setStatus(ClassStatus.IN_PROGRESS);
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classroomRepository.save(any(Classroom.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(12L);
+
+        ClassroomResponse statusResp = classroomService.updateClassStatus(classId, statusReq);
+        assertThat(statusResp.getStatus()).isEqualTo(ClassStatus.IN_PROGRESS);
+        assertThat(statusResp.getCurrentStudentsCount()).isEqualTo(12L);
+
+        AssignTeacherRequest assignReq = new AssignTeacherRequest();
+        assignReq.setTeacherId(teacherId);
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.of(teacher));
+
+        ClassroomResponse teacherResp = classroomService.assignTeacher(classId, assignReq);
+        assertThat(teacherResp.getTeacherId()).isEqualTo(teacherId);
+        assertThat(teacherResp.getTeacherName()).isEqualTo("Nguyen");
+
+        UUID missingId = UUID.randomUUID();
+        when(classroomRepository.findById(missingId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.updateClassStatus(missingId, statusReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> classroomService.assignTeacher(missingId, assignReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.assignTeacher(classId, assignReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Ghi danh qua SĐT (tạo mới Student profile nếu chưa có) và các nhánh lỗi")
+    void enrollStudent_byPhoneAndEdgeCases() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .name("TOEIC Intensive")
+                .status(ClassStatus.OPEN)
+                .level(ClassLevel.TOEIC_PREP)
+                .maxStudents(2)
+                .build();
+        User user = User.builder().id(studentId).phone("0901234567").email("st@test.com").build();
+
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier(" 0901234567 ");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(1L);
+        when(userRepository.findByEmail("0901234567")).thenReturn(Optional.empty());
+        when(userRepository.findByPhone("0901234567")).thenReturn(Optional.of(user));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
+        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> {
+            Student s = inv.getArgument(0);
+            if (s.getId() == null) s.setId(studentId);
+            return s;
+        });
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
+
+        classroomService.enrollStudent(classId, req);
+
+        verify(classStudentRepository).save(any(ClassStudent.class));
+        ArgumentCaptor<Student> studentCaptor = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository, times(2)).save(studentCaptor.capture());
+        assertThat(studentCaptor.getAllValues().get(1).getCurrentLevel()).isEqualTo("TOEIC_PREP");
+
+        // User không tồn tại
+        req.setStudentIdentifier("missing@test.com");
+        when(userRepository.findByEmail("missing@test.com")).thenReturn(Optional.empty());
+        when(userRepository.findByPhone("missing@test.com")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        // Lớp đã đóng (CANCELLED)
+        classroom.setStatus(ClassStatus.CANCELLED);
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("getTeacherClasses, getClassroomById, getAllClassrooms & leaveClass - Xử lý đầy đủ")
+    void queriesAndLeaveClass_allBranches() {
+        User tUser = User.builder().id(teacherId).firstName("Tran").lastName("Hung").build();
+        Teacher t = Teacher.builder().id(teacherId).user(tUser).build();
+        Classroom c1 = Classroom.builder().id(classId).name("Class 1").status(ClassStatus.OPEN).teacher(t).build();
+        Classroom c2 = Classroom.builder().id(UUID.randomUUID()).name("Class 2").status(ClassStatus.COMPLETED).build();
+
+        when(classroomRepository.findByTeacherId(teacherId)).thenReturn(List.of(c1));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(8L);
+        assertThat(classroomService.getTeacherClasses(teacherId)).hasSize(1);
+        assertThat(classroomService.getTeacherClasses(teacherId).get(0).getTeacherName()).isEqualTo("Tran Hung");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(c1));
+        assertThat(classroomService.getClassroomById(classId).getName()).isEqualTo("Class 1");
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Classroom> openPage = new PageImpl<>(List.of(c1), pageable, 1);
+        when(classroomRepository.findByStatus(ClassStatus.OPEN, pageable)).thenReturn(openPage);
+        PageResponse<ClassroomResponse> filtered = classroomService.getAllClassrooms(ClassStatus.OPEN, pageable);
+        assertThat(filtered.getTotalElements()).isEqualTo(1);
+
+        Page<Classroom> allPage = new PageImpl<>(List.of(c1, c2), pageable, 2);
+        when(classroomRepository.findAll(pageable)).thenReturn(allPage);
+        PageResponse<ClassroomResponse> unfiltered = classroomService.getAllClassrooms(null, pageable);
+        assertThat(unfiltered.getContent()).hasSize(2);
+
+        // leaveClass -> cập nhật level từ lớp còn lại hoặc null nếu hết lớp
+        ClassStudent cs = ClassStudent.builder()
+                .classroom(c1)
+                .student(Student.builder().id(studentId).build())
+                .isActive(true)
+                .build();
+        Student s = Student.builder().id(studentId).currentLevel("B2").build();
+        Classroom remainingClass = Classroom.builder().id(UUID.randomUUID()).level(ClassLevel.C1).build();
+        ClassStudent remainingCs = ClassStudent.builder().classroom(remainingClass).student(s).isActive(true).build();
+
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId)).thenReturn(Optional.of(cs));
+        when(classStudentRepository.findActiveEnrollmentsWithClassroom(studentId)).thenReturn(List.of(remainingCs));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(s));
+
+        classroomService.leaveClass(classId, studentId);
+
+        assertThat(cs.getIsActive()).isFalse();
+        assertThat(s.getCurrentLevel()).isEqualTo("C1");
+
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> classroomService.leaveClass(classId, studentId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getStudentCourses - Lesson fallback khi lớp chỉ có bài học, và list rỗng khi chưa ghi danh")
+    void getStudentCourses_emptyAndLessonOnlyFallback() {
+        when(classStudentRepository.findActiveEnrollmentsWithClassroom(studentId)).thenReturn(Collections.emptyList());
+        assertThat(classroomService.getStudentCourses(studentId)).isEmpty();
+
+        Classroom c = Classroom.builder()
+                .id(classId)
+                .name("Pronunciation Core")
+                .level(ClassLevel.A2)
+                .status(ClassStatus.OPEN)
+                .build();
+        ClassStudent enrollment = ClassStudent.builder()
+                .classroom(c)
+                .student(Student.builder().id(studentId).build())
+                .isActive(true)
+                .enrolledAt(Instant.now())
+                .build();
+
+        Lesson l1 = Lesson.builder().id(UUID.randomUUID()).build();
+        Lesson l2 = Lesson.builder().id(UUID.randomUUID()).build();
+        Video v1 = Video.builder().id(UUID.randomUUID()).lesson(l1).build();
+        VideoWatchHistory history = VideoWatchHistory.builder().video(v1).isCompleted(true).build();
+
+        when(classStudentRepository.findActiveEnrollmentsWithClassroom(studentId)).thenReturn(List.of(enrollment));
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(studentId)).thenReturn(Collections.emptyList());
+        when(studentDailyProgressRepository.findByStudentId(studentId)).thenReturn(Collections.emptyList());
+        when(videoWatchHistoryRepository.findByStudentIdAndIsCompletedTrue(studentId)).thenReturn(List.of(history));
+        when(assignmentRepository.findByClassroomId(classId)).thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.findByClassroomIdWithItems(classId)).thenReturn(Collections.emptyList());
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(List.of(l1, l2));
+
+        List<MyCourseResponse> courses = classroomService.getStudentCourses(studentId);
+        assertThat(courses).hasSize(1);
+        assertThat(courses.get(0).getTotalLessons()).isEqualTo(2);
+        assertThat(courses.get(0).getCompletedLessons()).isEqualTo(1);
+        assertThat(courses.get(0).getTotalTasks()).isEqualTo(2);
+        assertThat(courses.get(0).getCompletedTasks()).isEqualTo(1);
+        assertThat(courses.get(0).getProgressPercentage()).isEqualTo(50.0);
+    }
+
+    @Test
+    @DisplayName("getClassStudentsProgress - Tổng hợp điểm trung bình, số phút học và daily details")
+    @SuppressWarnings("unchecked")
+    void getClassStudentsProgress_aggregatesScoresAndDailyProgress() {
+        TypedQuery<Object[]> rosterQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM ClassStudent cs"), eq(Object[].class))).thenReturn(rosterQuery);
+        when(rosterQuery.setParameter("classId", classId)).thenReturn(rosterQuery);
+        Object[] studentRow = new Object[]{studentId, "", "", "st@test.com", "0909", Instant.parse("2026-10-01T00:00:00Z")};
+        when(rosterQuery.getResultList()).thenReturn(Collections.singletonList(studentRow));
+
+        UUID planAssignId = UUID.randomUUID();
+        UUID extraAssignId = UUID.randomUUID();
+        Assignment planAssign = Assignment.builder().id(planAssignId).build();
+        Assignment extraAssign = Assignment.builder().id(extraAssignId).build();
+
+        DailyPlanItem planItem = DailyPlanItem.builder().id(UUID.randomUUID()).assignment(planAssign).build();
+        DailyStudyPlan day1 = DailyStudyPlan.builder()
+                .id(UUID.randomUUID())
+                .dayNumber(1)
+                .estimatedMinutes(20)
+                .items(List.of(planItem))
+                .build();
+
+        when(dailyStudyPlanRepository.findByClassroomIdWithItems(classId)).thenReturn(List.of(day1));
+        when(assignmentRepository.findByClassroomId(classId)).thenReturn(List.of(planAssign, extraAssign));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(Collections.emptyList());
+
+        Student student = Student.builder().id(studentId).build();
+        StudentDailyProgress progress = StudentDailyProgress.builder()
+                .student(student)
+                .dailyPlan(day1)
+                .isCompleted(true)
+                .completedItemsCount(1)
+                .build();
+        when(studentDailyProgressRepository.findByStudentIdIn(List.of(studentId))).thenReturn(List.of(progress));
+
+        TypedQuery<AssignmentAttempt> attemptQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM AssignmentAttempt a"), eq(AssignmentAttempt.class))).thenReturn(attemptQuery);
+        when(attemptQuery.setParameter("studentIds", List.of(studentId))).thenReturn(attemptQuery);
+
+        AssignmentAttempt a1 = AssignmentAttempt.builder()
+                .student(student)
+                .assignment(planAssign)
+                .status(AttemptStatus.COMPLETED)
+                .totalScore(8.0)
+                .durationSeconds(300)
+                .build();
+        AssignmentAttempt a2 = AssignmentAttempt.builder()
+                .student(student)
+                .assignment(extraAssign)
+                .status(AttemptStatus.COMPLETED)
+                .totalScore(9.5)
+                .durationSeconds(600)
+                .build();
+        when(attemptQuery.getResultList()).thenReturn(List.of(a1, a2));
+
+        List<StudentProgressResponse> result = classroomService.getClassStudentsProgress(classId);
+
+        assertThat(result).hasSize(1);
+        StudentProgressResponse sp = result.get(0);
+        assertThat(sp.getFullName()).isEqualTo("Học viên ẩn danh");
+        assertThat(sp.getTotalTasks()).isEqualTo(3); // 2 assignments + 1 plan item
+        assertThat(sp.getCompletedTasks()).isEqualTo(3); // 2 submitted + 1 completed plan item
+        assertThat(sp.getCompletionRate()).isEqualTo(100);
+        assertThat(sp.getAverageScore()).isEqualTo(8.8); // round((8.0 + 9.5) / 2 * 10) / 10
+        assertThat(sp.getTotalStudyMinutes()).isEqualTo(20); // max(300s, 20*60s) / 60 = 20
+        assertThat(sp.getDailyProgressDetails()).hasSize(1);
+        assertThat(sp.getDailyProgressDetails().get(0).getDate()).isEqualTo("Day 1");
     }
 }

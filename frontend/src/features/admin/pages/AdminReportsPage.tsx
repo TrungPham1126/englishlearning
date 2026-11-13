@@ -1,6 +1,7 @@
 // src/features/admin/pages/AdminReportsPage.tsx
 import { useEffect, useState } from "react";
 import { adminApi } from "@/features/admin/api/adminApi";
+import { ReportsR2AndClassExportWidget } from "@/features/admin/components/database";
 import type { AdminDashboardStats, ClassroomResponse } from "@/features/admin/types";
 import type { UserSummaryDto } from "@/types/api";
 import {
@@ -192,6 +193,9 @@ export default function AdminReportsPage() {
           </span>
         </div>
       </div>
+
+      {/* 2B. BÁO CÁO CHI TIÊU CLOUD R2 & XUẤT EXCEL LỚP HỌC */}
+      <ReportsR2AndClassExportWidget classes={classes} />
 
       {/* 3. PHÂN BỐ TIẾN ĐỘ HOÀN THÀNH & ĐIỂM KỸ NĂNG THẬT TỪ DATABASE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

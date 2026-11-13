@@ -7,7 +7,6 @@ import {
   BookOpen,
   LogOut,
   GraduationCap,
-  Award,
   Radio,
   Camera,
   Menu,
@@ -140,11 +139,6 @@ export default function TeacherLayout() {
             <NavLink to="/teacher/classrooms" className={navLinkClass}>
               <BookOpen className="h-4 w-4 shrink-0" />
               <span>Lớp học phụ trách</span>
-            </NavLink>
-
-            <NavLink to="/teacher/grading" className={navLinkClass}>
-              <Award className="h-4 w-4 shrink-0" />
-              <span>Chấm bài &amp; Đánh giá</span>
             </NavLink>
 
             <NavLink to="/teacher/broadcast" className={navLinkClass}>

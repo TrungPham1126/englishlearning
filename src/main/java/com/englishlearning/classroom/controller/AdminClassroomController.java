@@ -1,6 +1,12 @@
 package com.englishlearning.classroom.controller;
 
+import com.englishlearning.analytics.dto.ClassroomPurgeResultDto;
+import com.englishlearning.analytics.service.AdminDatabaseService;
+import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.classroom.dto.*;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.englishlearning.classroom.entity.ClassStatus;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.ApiResponse;
@@ -13,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,11 +28,12 @@ import java.util.UUID;
 @RequestMapping("/api/admin/classrooms")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Classroom - Admin", description = "Quản lý lớp học, phân công giảng viên & duyệt học viên")
 public class AdminClassroomController {
 
     private final ClassroomService classroomService;
+    private final AdminDatabaseService adminDatabaseService;
 
     @PostMapping
     @Operation(summary = "Tạo lớp học mới")
@@ -90,5 +96,18 @@ public class AdminClassroomController {
             @Valid @RequestBody EnrollStudentRequest req) {
         classroomService.enrollStudent(id, req);
         return ResponseEntity.ok(ApiResponse.success("Ghi danh học viên vào lớp thành công", null));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Xóa vĩnh viễn lớp học cùng toàn bộ bài giảng, bài tập, bài làm và media R2 liên quan")
+    public ResponseEntity<ApiResponse<ClassroomPurgeResultDto>> deleteClassroom(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            HttpServletRequest request) {
+        UUID actorId = currentUser != null ? currentUser.getId() : null;
+        String ip = request != null ? request.getRemoteAddr() : "127.0.0.1";
+        ClassroomPurgeResultDto res = adminDatabaseService.deleteClassroom(id, actorId, ip);
+        return ResponseEntity.ok(ApiResponse.success(res.getMessage(), res));
     }
 }

@@ -256,4 +256,147 @@ class GradingEngineServiceTest {
         assertThat(result.getCorrectnessPerQuestion().values()).allMatch(Boolean::booleanValue);
     }
 
+    @Test
+    @DisplayName("FILL_IN_BLANK: Hỗ trợ đa đáp án phân cách '/' hoặc '|', khoảng trắng thừa & Unicode NFC/NFD")
+    void evaluateSubmission_fillInBlankMultiVariantWhitespaceAndUnicode() {
+        UUID qSlash = UUID.randomUUID();
+        UUID qPipe = UUID.randomUUID();
+        UUID qUnicode = UUID.randomUUID();
+        UUID qEmptyAns = UUID.randomUUID();
+
+        // NFD decomposed "Việt Nam" in question, NFC composed in student answer
+        String nfdVietnamese = java.text.Normalizer.normalize("Việt Nam", java.text.Normalizer.Form.NFD);
+
+        List<AssignmentQuestion> questions = List.of(
+                AssignmentQuestion.builder().id(qSlash).questionType(QuestionType.FILL_IN_BLANK)
+                        .correctAnswer("color / colour").points(2.0).build(),
+                AssignmentQuestion.builder().id(qPipe).questionType(QuestionType.FILL_IN_BLANK)
+                        .correctAnswer("haven't | have not").points(2.0).build(),
+                AssignmentQuestion.builder().id(qUnicode).questionType(QuestionType.FILL_IN_BLANK)
+                        .correctAnswer(nfdVietnamese).points(2.0).build(),
+                AssignmentQuestion.builder().id(qEmptyAns).questionType(QuestionType.FILL_IN_BLANK)
+                        .correctAnswer("test").points(2.0).build()
+        );
+
+        List<SubmissionRequest.AnswerDto> answers = List.of(
+                SubmissionRequest.AnswerDto.builder().questionId(qSlash).textAnswer("  COLOUR ").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qPipe).textAnswer("Have   not").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qUnicode).textAnswer("việt nam").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qEmptyAns).textAnswer("   ").build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(questions, answers);
+
+        assertThat(result.getCorrectnessPerQuestion().get(qSlash)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(qPipe)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(qUnicode)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(qEmptyAns)).isFalse();
+        assertThat(result.getTotalScore()).isEqualTo(6.0);
+        assertThat(result.getScaledScore()).isEqualTo(7.5);
+    }
+
+    @Test
+    @DisplayName("TRUE_FALSE & MULTIPLE_CHOICE: So khớp theo optionId hoặc text/label chuẩn hóa")
+    void evaluateSubmission_trueFalseAndTextOptionFallback() {
+        UUID tfById = UUID.randomUUID();
+        UUID tfByText = UUID.randomUUID();
+        UUID mcqByText = UUID.randomUUID();
+        UUID tfTrueOpt = UUID.randomUUID();
+
+        List<AssignmentQuestion> questions = List.of(
+                AssignmentQuestion.builder().id(tfById).questionType(QuestionType.TRUE_FALSE).points(1.0)
+                        .options(List.of(
+                                QuestionOption.builder().id(tfTrueOpt).optionLabel("A").optionText("True").isCorrect(true).build(),
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("False").isCorrect(false).build()
+                        )).build(),
+                AssignmentQuestion.builder().id(tfByText).questionType(QuestionType.TRUE_FALSE)
+                        .correctAnswer("False").points(1.0).options(List.of()).build(),
+                AssignmentQuestion.builder().id(mcqByText).questionType(QuestionType.MULTIPLE_CHOICE).points(2.0)
+                        .options(List.of(
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Wrong").isCorrect(false).build(),
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("Right choice").isCorrect(true).build()
+                        )).build()
+        );
+
+        List<SubmissionRequest.AnswerDto> answers = List.of(
+                SubmissionRequest.AnswerDto.builder().questionId(tfById).selectedOptionId(tfTrueOpt).build(),
+                SubmissionRequest.AnswerDto.builder().questionId(tfByText).textAnswer(" false ").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(mcqByText).textAnswer("Right choice").build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(questions, answers);
+
+        assertThat(result.getTotalScore()).isEqualTo(4.0);
+        assertThat(result.getScaledScore()).isEqualTo(10.0);
+    }
+
+    @Test
+    @DisplayName("MATCHING nâng cao: JSON map thành công/lỗi, peer QId & tính điểm từng phần (multi-pair partial scoring)")
+    void evaluateSubmission_matchingJsonPartialAndEdgeCases() {
+        UUID qMulti = UUID.randomUUID();
+        UUID qMalformedJson = UUID.randomUUID();
+        UUID qJsonPeer = UUID.randomUUID();
+        UUID qAudio = UUID.randomUUID();
+
+        // Multi-pair MATCHING (3 pairs total, worth 3.0 pts -> 2 correct pairs = 2.0 pts)
+        AssignmentQuestion multiPairQ = AssignmentQuestion.builder()
+                .id(qMulti)
+                .questionType(QuestionType.MATCHING)
+                .points(3.0)
+                .options(List.of(
+                        QuestionOption.builder().optionLabel("A").optionText("Apple").matchText("Táo").build(),
+                        QuestionOption.builder().optionLabel("B").optionText("Book").matchText("Sách").build(),
+                        QuestionOption.builder().optionLabel("C").optionText("Cat").matchText("Mèo").build()
+                ))
+                .build();
+
+        AssignmentQuestion malformedJsonQ = AssignmentQuestion.builder()
+                .id(qMalformedJson)
+                .questionType(QuestionType.MATCHING)
+                .correctAnswer("Táo")
+                .points(2.0)
+                .options(List.of())
+                .build();
+
+        AssignmentQuestion peerJsonQ = AssignmentQuestion.builder()
+                .id(qJsonPeer)
+                .questionType(QuestionType.MATCHING)
+                .promptText("Feline")
+                .correctAnswer("Mèo")
+                .points(2.0)
+                .options(List.of())
+                .build();
+
+        AssignmentQuestion audioQ = AssignmentQuestion.builder()
+                .id(qAudio)
+                .questionType(QuestionType.AUDIO_RESPONSE)
+                .points(null) // defaults to 1.0
+                .build();
+
+        List<SubmissionRequest.AnswerDto> answers = List.of(
+                SubmissionRequest.AnswerDto.builder().questionId(qMulti)
+                        .textAnswer("{\"Apple\":\"Táo\",\"Book\":\"Sách\",\"Cat\":\"Chó\"}").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qMalformedJson)
+                        .textAnswer("{broken json").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qJsonPeer)
+                        .textAnswer("{\"Feline\":\"Mèo\"}").build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                List.of(multiPairQ, malformedJsonQ, peerJsonQ, audioQ), answers);
+
+        assertThat(result.getEarnedPointsPerQuestion().get(qMulti)).isEqualTo(2.0);
+        assertThat(result.getCorrectnessPerQuestion().get(qMulti)).isFalse();
+        assertThat(result.getCorrectnessPerQuestion().get(qMalformedJson)).isFalse();
+        assertThat(result.getCorrectnessPerQuestion().get(qJsonPeer)).isTrue();
+        assertThat(result.isRequiresAiGrading()).isTrue();
+        assertThat(result.getAiGradedQuestionIds()).containsExactly(qAudio);
+
+        // Empty or null questions/answers boundary
+        GradingResult emptyRes = gradingEngineService.evaluateSubmission(null, null);
+        assertThat(emptyRes.getTotalScore()).isZero();
+        assertThat(emptyRes.getScaledScore()).isZero();
+        assertThat(emptyRes.isRequiresAiGrading()).isFalse();
+    }
+
 }

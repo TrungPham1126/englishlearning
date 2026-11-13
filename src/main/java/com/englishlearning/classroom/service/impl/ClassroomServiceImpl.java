@@ -66,6 +66,13 @@ public class ClassroomServiceImpl implements ClassroomService {
         if (classroomRepository.existsByNameIgnoreCase(req.getName())) {
             throw new BadRequestException("Tên lớp học đã tồn tại");
         }
+        if (req.getMaxStudents() != null && req.getMaxStudents() <= 0) {
+            throw new BadRequestException("Sĩ số tối đa phải lớn hơn 0");
+        }
+        if (req.getStartDate() != null && req.getEndDate() != null
+                && req.getEndDate().isBefore(req.getStartDate())) {
+            throw new BadRequestException("Ngày kết thúc phải sau hoặc bằng ngày bắt đầu");
+        }
         Teacher teacher = null;
         if (req.getTeacherId() != null) {
             teacher = teacherRepository.findById(req.getTeacherId())
@@ -181,10 +188,11 @@ public class ClassroomServiceImpl implements ClassroomService {
         if (classroom.getMaxStudents() != null && currentCount >= classroom.getMaxStudents()) {
             throw new BadRequestException("Lớp học đã đạt tối đa (" + classroom.getMaxStudents() + " học viên)");
         }
-        User user = userRepository.findByEmail(req.getStudentIdentifier())
-                .or(() -> userRepository.findByPhone(req.getStudentIdentifier()))
+        String identifier = req.getStudentIdentifier() != null ? req.getStudentIdentifier().trim() : "";
+        User user = userRepository.findByEmail(identifier)
+                .or(() -> userRepository.findByPhone(identifier))
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy tài khoản học viên với email/SĐT: " + req.getStudentIdentifier()));
+                        "Không tìm thấy tài khoản học viên với email/SĐT: " + identifier));
 
         Student student = studentRepository.findById(user.getId())
                 .orElseGet(() -> studentRepository.save(Student.builder().user(user).build()));
@@ -199,8 +207,10 @@ public class ClassroomServiceImpl implements ClassroomService {
                 .build();
         classStudentRepository.save(classStudent);
 
-        student.setCurrentLevel(classroom.getLevel() != null ? classroom.getLevel().name() : null);
-        studentRepository.save(student);
+        if (classroom.getLevel() != null) {
+            student.setCurrentLevel(classroom.getLevel().name());
+            studentRepository.save(student);
+        }
     }
 
     @Override
@@ -249,10 +259,7 @@ public class ClassroomServiceImpl implements ClassroomService {
 
         return enrollments.stream().map(enrollment -> {
             Classroom c = enrollment.getClassroom();
-            String teacherName = "Chưa phân công";
-            if (c.getTeacher() != null && c.getTeacher().getUser() != null) {
-                teacherName = c.getTeacher().getUser().getFirstName() + " " + c.getTeacher().getUser().getLastName();
-            }
+            String teacherName = formatTeacherName(c.getTeacher());
 
             // 1. Danh sách Assignment của lớp
             List<Assignment> classAssignments = assignmentRepository.findByClassroomId(c.getId());
@@ -345,15 +352,19 @@ public class ClassroomServiceImpl implements ClassroomService {
         return PageResponse.from(mappedPage);
     }
 
-    private ClassroomResponse mapToResponse(Classroom c, long currentCount) {
-        String teacherName = "Chưa phân công";
-        UUID teacherId = null;
-        if (c.getTeacher() != null) {
-            teacherId = c.getTeacher().getId();
-            if (c.getTeacher().getUser() != null) {
-                teacherName = c.getTeacher().getUser().getFirstName() + " " + c.getTeacher().getUser().getLastName();
-            }
+    private String formatTeacherName(Teacher teacher) {
+        if (teacher == null || teacher.getUser() == null) {
+            return "Chưa phân công";
         }
+        String fn = teacher.getUser().getFirstName();
+        String ln = teacher.getUser().getLastName();
+        String full = ((fn != null ? fn : "") + " " + (ln != null ? ln : "")).trim();
+        return full.isEmpty() ? "Chưa phân công" : full;
+    }
+
+    private ClassroomResponse mapToResponse(Classroom c, long currentCount) {
+        String teacherName = formatTeacherName(c.getTeacher());
+        UUID teacherId = c.getTeacher() != null ? c.getTeacher().getId() : null;
         return ClassroomResponse.builder()
                 .id(c.getId())
                 .name(c.getName())
@@ -433,7 +444,7 @@ public class ClassroomServiceImpl implements ClassroomService {
         final List<AssignmentAttempt> allAttempts = studentIds.isEmpty()
                 ? Collections.emptyList()
                 : entityManager.createQuery(
-                        "SELECT a FROM AssignmentAttempt a JOIN FETCH a.assignment WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')",
+                        "SELECT a FROM AssignmentAttempt a JOIN FETCH a.assignment WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED') ORDER BY COALESCE(a.submittedAt, a.startedAt) DESC, a.attemptNumber DESC",
                         AssignmentAttempt.class)
                         .setParameter("studentIds", studentIds)
                         .getResultList();
@@ -445,6 +456,14 @@ public class ClassroomServiceImpl implements ClassroomService {
             if (studentId == null)
                 continue;
             final UUID currentStudentId = studentId;
+
+            Map<UUID, AssignmentAttempt> latestAttemptByAssignment = new LinkedHashMap<>();
+            for (AssignmentAttempt att : allAttempts) {
+                if (att.getStudent() != null && att.getStudent().getId().equals(currentStudentId)
+                        && att.getAssignment() != null) {
+                    latestAttemptByAssignment.putIfAbsent(att.getAssignment().getId(), att);
+                }
+            }
 
             String fName = row[1] != null ? row[1].toString() : "";
             String lName = row[2] != null ? row[2].toString() : "";
@@ -460,6 +479,7 @@ public class ClassroomServiceImpl implements ClassroomService {
             int totalStudyMinutes = 0;
             double totalScoreSum = 0.0;
             int scoredAttemptsCount = 0;
+            Set<UUID> scoredAssignmentIds = new HashSet<>();
 
             for (DailyStudyPlan plan : plans) {
                 int planTotalItems = plan.getItems() != null ? plan.getItems().size() : 0;
@@ -469,39 +489,41 @@ public class ClassroomServiceImpl implements ClassroomService {
                 int planScoredCount = 0;
 
                 StudentDailyProgress progress = allProgress.stream()
-                        .filter(p -> p.getStudent().getId().equals(currentStudentId)
+                        .filter(p -> p.getStudent() != null && p.getDailyPlan() != null
+                                && p.getStudent().getId().equals(currentStudentId)
                                 && p.getDailyPlan().getId().equals(plan.getId()))
                         .findFirst().orElse(null);
 
-                if (progress != null && Boolean.TRUE.equals(progress.getIsCompleted())) {
-                    planCompletedTasks = planTotalItems;
-                    planDurationSeconds = plan.getEstimatedMinutes() != null ? plan.getEstimatedMinutes() * 60
-                            : 30 * 60;
-                } else if (plan.getItems() != null) {
+                if (plan.getItems() != null) {
                     for (var item : plan.getItems()) {
                         if (item.getAssignment() != null) {
                             UUID assignId = item.getAssignment().getId();
-                            AssignmentAttempt attempt = allAttempts.stream()
-                                    .filter(a -> a.getStudent().getId().equals(currentStudentId)
-                                            && a.getAssignment().getId().equals(assignId))
-                                    .findFirst().orElse(null);
+                            AssignmentAttempt attempt = latestAttemptByAssignment.get(assignId);
                             if (attempt != null) {
                                 planCompletedTasks++;
                                 if (attempt.getDurationSeconds() != null) {
                                     planDurationSeconds += attempt.getDurationSeconds();
                                 }
-                                if (attempt.getTotalScore() != null) {
+                                boolean hasOfficialScore = attempt.getStatus() == com.englishlearning.submission.entity.AttemptStatus.COMPLETED
+                                        || (attempt.getTotalScore() != null && attempt.getTotalScore() > 0);
+                                if (attempt.getTotalScore() != null && hasOfficialScore) {
                                     planScoreSum += attempt.getTotalScore();
                                     planScoredCount++;
+                                    scoredAssignmentIds.add(assignId);
                                 }
                             }
-                        } else {
-                            if (progress != null && progress.getCompletedItemsCount() != null
-                                    && progress.getCompletedItemsCount() > 0) {
-                                planCompletedTasks++;
-                            }
+                        } else if (progress != null && progress.getCompletedItemsCount() != null
+                                && progress.getCompletedItemsCount() > 0) {
+                            planCompletedTasks++;
                         }
                     }
+                }
+
+                if (progress != null && Boolean.TRUE.equals(progress.getIsCompleted())) {
+                    planCompletedTasks = planTotalItems;
+                    int estimatedSeconds = plan.getEstimatedMinutes() != null ? plan.getEstimatedMinutes() * 60
+                            : 30 * 60;
+                    planDurationSeconds = Math.max(planDurationSeconds, estimatedSeconds);
                 }
 
                 totalStudyMinutes += (planDurationSeconds / 60);
@@ -519,17 +541,33 @@ public class ClassroomServiceImpl implements ClassroomService {
                         .build());
             }
 
+            // Bổ sung điểm của các bài tập trực tiếp thuộc lớp nhưng không gắn trong DailyStudyPlan
+            for (Assignment clsAss : classAssignments) {
+                if (clsAss != null && clsAss.getId() != null && !scoredAssignmentIds.contains(clsAss.getId())) {
+                    AssignmentAttempt attempt = latestAttemptByAssignment.get(clsAss.getId());
+                    if (attempt != null && attempt.getTotalScore() != null) {
+                        boolean hasOfficialScore = attempt.getStatus() == com.englishlearning.submission.entity.AttemptStatus.COMPLETED
+                                || attempt.getTotalScore() > 0;
+                        if (hasOfficialScore) {
+                            totalScoreSum += attempt.getTotalScore();
+                            scoredAttemptsCount++;
+                            scoredAssignmentIds.add(clsAss.getId());
+                        }
+                    }
+                }
+            }
+
             // Tính tổng số bài tập đã nộp của học sinh
             long submittedAssignmentsCount = classAssignments.stream()
-                    .filter(a -> allAttempts.stream()
-                            .anyMatch(att -> att.getStudent().getId().equals(currentStudentId) && att.getAssignment().getId().equals(a.getId())))
+                    .filter(a -> latestAttemptByAssignment.containsKey(a.getId()))
                     .count();
 
             // Tính số nhiệm vụ lộ trình ngày đã hoàn thành
             int completedPlanItems = 0;
             for (DailyStudyPlan plan : plans) {
                 StudentDailyProgress progress = allProgress.stream()
-                        .filter(p -> p.getStudent().getId().equals(currentStudentId)
+                        .filter(p -> p.getStudent() != null && p.getDailyPlan() != null
+                                && p.getStudent().getId().equals(currentStudentId)
                                 && p.getDailyPlan().getId().equals(plan.getId()))
                         .findFirst().orElse(null);
                 if (progress != null) {

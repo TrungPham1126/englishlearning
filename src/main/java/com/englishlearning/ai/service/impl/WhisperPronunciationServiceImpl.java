@@ -68,34 +68,39 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
             int matchedWords = 0;
             int actualIdx = 0;
 
+            double weightedMatchSum = 0.0;
             for (String expected : expectedWords) {
                 boolean found = false;
-                int searchWindow = Math.min(actualIdx + 3, actualWords.size()); // Quét lân cận 3 từ
+                int searchWindow = Math.min(actualIdx + 4, actualWords.size()); // Quét lân cận 4 từ
 
                 for (int i = actualIdx; i < searchWindow; i++) {
                     String actual = actualWords.get(i);
                     double similarity = calculateSimilarity(expected, actual);
 
-                    if (similarity >= 0.8) { // Đọc chuẩn hoặc gần đúng
+                    if (similarity >= 0.72) { // Đọc chuẩn hoặc gần đúng (khoan dung biến âm nhẹ của STT)
+                        int wordSc = Math.min(100, (int) Math.round(Math.max(82.0, similarity * 100)));
                         wordScores.add(PhoneticEvaluationResponse.WordScore.builder()
                                 .word(expected)
-                                .score((int) Math.round(similarity * 100))
-                                .isAccurate(similarity >= 0.9)
-                                .note(similarity >= 0.9 ? "Phát âm chuẩn xác"
-                                        : "Phát âm chưa tròn vành: '" + actual + "'")
+                                .score(wordSc)
+                                .isAccurate(true)
+                                .note(similarity >= 0.85 ? "Phát âm chuẩn xác"
+                                        : "Phát âm khá rõ: '" + actual + "'")
                                 .build());
                         actualIdx = i + 1;
                         matchedWords++;
+                        weightedMatchSum += (wordSc / 100.0);
                         found = true;
                         break;
-                    } else if (similarity >= 0.5) { // Đọc lệch âm
+                    } else if (similarity >= 0.45) { // Đọc lệch âm nhưng vẫn có nỗ lực phát âm
+                        int wordSc = (int) Math.round(Math.max(60.0, similarity * 100));
                         wordScores.add(PhoneticEvaluationResponse.WordScore.builder()
                                 .word(expected)
-                                .score((int) Math.round(similarity * 100))
+                                .score(wordSc)
                                 .isAccurate(false)
-                                .note("Phát âm sai hoặc nghe thành: '" + actual + "'")
+                                .note("Cần phát âm tròn vành hơn (nghe gần giống: '" + actual + "')")
                                 .build());
                         actualIdx = i + 1;
+                        weightedMatchSum += 0.65;
                         found = true;
                         break;
                     }
@@ -111,7 +116,7 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
                 }
             }
 
-            int overallScore = totalWords > 0 ? (int) Math.round(((double) matchedWords / totalWords) * 100) : 0;
+            int overallScore = totalWords > 0 ? (int) Math.round((weightedMatchSum / totalWords) * 100) : 0;
             String feedback = String.format("Đã phát âm đúng %d/%d từ. Độ chính xác tổng thể: %d%%.",
                     matchedWords, totalWords, overallScore);
 

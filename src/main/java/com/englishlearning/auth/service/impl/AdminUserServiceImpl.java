@@ -9,6 +9,7 @@ import com.englishlearning.auth.repository.StudentRepository;
 import com.englishlearning.auth.repository.TeacherRepository;
 import com.englishlearning.auth.repository.UserRepository;
 import com.englishlearning.auth.service.AdminUserService;
+import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.classroom.repository.ClassroomRepository;
@@ -19,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +70,8 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public UserSummaryDto createUser(UserCreateByAdminRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+        if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email đã tồn tại: " + request.getEmail());
         }
 
@@ -150,6 +154,9 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public void toggleUserStatus(UUID userId, boolean isActive) {
+        if (!isActive && isCurrentAuthenticatedUser(userId)) {
+            throw new BadRequestException("Không thể tự khóa tài khoản của chính mình");
+        }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + userId));
         user.setIsActive(isActive);
@@ -159,6 +166,9 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public void deleteUser(UUID userId) {
+        if (isCurrentAuthenticatedUser(userId)) {
+            throw new BadRequestException("Không thể tự xóa tài khoản của chính mình");
+        }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + userId));
 
@@ -191,5 +201,13 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .isActive(user.getIsActive() != null ? user.getIsActive() : true)
                 .roles(user.getRoles().stream().map(r -> r.getName().name()).toList())
                 .build();
+    }
+
+    private boolean isCurrentAuthenticatedUser(UUID targetUserId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails currentUser) {
+            return targetUserId != null && targetUserId.equals(currentUser.getId());
+        }
+        return false;
     }
 }

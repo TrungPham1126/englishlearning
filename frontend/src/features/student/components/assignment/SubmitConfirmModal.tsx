@@ -31,100 +31,78 @@ export const SubmitConfirmModal: React.FC<SubmitConfirmModalProps> = ({
       }}
     >
       <div
-        className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-elevated p-6 space-y-5 animate-in zoom-in-95 duration-200"
+        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-elevated p-5 space-y-4 animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="submit-modal-title"
       >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
             <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                 isAllAnswered
                   ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
                   : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
               }`}
             >
-              {isAllAnswered ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+              {isAllAnswered ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             </div>
-            <div>
-              <h3 id="submit-modal-title" className="text-lg font-black text-slate-900 dark:text-slate-100">
-                Xác Nhận Nộp Bài Thi
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Kiểm tra tiến độ làm bài trước khi hoàn tất
-              </p>
-            </div>
+            <h3 id="submit-modal-title" className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+              Nộp bài?
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
+            aria-label="Đóng"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50 cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Thống kê tiến độ */}
         <div
-          className={`p-4 rounded-xl border text-sm leading-relaxed ${
+          className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
             isAllAnswered
               ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
               : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
           }`}
         >
-          {isAllAnswered ? (
-            <p className="font-semibold flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-              Tuyệt vời! Bạn đã hoàn thành tất cả {totalQuestions}/{totalQuestions} câu hỏi.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              <p className="font-bold flex items-center gap-2">
-                <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                Bạn vẫn còn {unanswered} câu chưa trả lời!
-              </p>
-              <p className="text-xs text-amber-800 dark:text-amber-300">
-                Các câu chưa làm sẽ được tính 0 điểm. Bạn có muốn quay lại kiểm tra trước khi nộp không?
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Thanh đếm câu */}
-        <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 px-1">
-          <span>Tiến độ hoàn thành</span>
-          <span className="font-black text-slate-900 dark:text-slate-100">
-            {answeredCount} / {totalQuestions} câu ({Math.round((answeredCount / (totalQuestions || 1)) * 100)}%)
+          <span>
+            {isAllAnswered
+              ? 'Đã hoàn thành tất cả câu hỏi.'
+              : `Còn ${unanswered} câu chưa trả lời.`}
+          </span>
+          <span className="font-bold tabular-nums">
+            {answeredCount}/{totalQuestions}
           </span>
         </div>
 
-        {/* Action Buttons (WCAG 44px touch-target) */}
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition cursor-pointer disabled:opacity-50 touch-manipulation"
+            className="flex-1 min-h-[42px] px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-50"
           >
-            Tiếp Tục Làm Bài
+            Làm tiếp
           </button>
           <button
             type="button"
             onClick={onConfirm}
             disabled={isSubmitting}
-            className="flex-1 min-h-[44px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-black text-sm shadow-md active:scale-[0.98] transition cursor-pointer disabled:opacity-50 touch-manipulation"
+            className="flex-1 min-h-[42px] flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
-                <Loader2 size={16} className="animate-spin" />
+                <Loader2 size={14} className="animate-spin" />
                 <span>Đang nộp...</span>
               </>
             ) : (
               <>
-                <Send size={16} />
-                <span>Nộp Bài Ngay</span>
+                <Send size={14} />
+                <span>Nộp bài</span>
               </>
             )}
           </button>

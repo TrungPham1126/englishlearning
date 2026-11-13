@@ -141,4 +141,27 @@ class AudioWebSocketHandlerTest {
         // Then: verify không phát sinh ngoại lệ
         assertThat(sessionId).isNotNull();
     }
+
+    @Test
+    @DisplayName("Bỏ qua JSON lỗi ở TextMessage, hỗ trợ setReferenceTextForSession & khôi phục default sau khi đóng session")
+    void should_HandleMalformedJsonSetReferenceAndTransportErrorSafely() throws Exception {
+        audioWebSocketHandler.afterConnectionEstablished(session);
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{not-valid-json"));
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{\"ping\":true}"));
+        audioWebSocketHandler.setReferenceTextForSession(sessionId, "Direct override sentence");
+
+        when(session.isOpen()).thenReturn(true);
+        when(shadowingPracticeService.processAudioChunk(eq(sessionId), any(byte[].class), any()))
+                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(85).build());
+
+        audioWebSocketHandler.handleBinaryMessage(session, new BinaryMessage(ByteBuffer.wrap(new byte[]{7, 8})));
+        verify(shadowingPracticeService).processAudioChunk(eq(sessionId), any(byte[].class), eq("Direct override sentence"));
+
+        // Đóng session -> map bị xóa -> chunk tiếp theo quay lại default "Hello world"
+        audioWebSocketHandler.afterConnectionClosed(session, CloseStatus.SERVER_ERROR);
+        audioWebSocketHandler.handleBinaryMessage(session, new BinaryMessage(ByteBuffer.wrap(new byte[]{9})));
+        verify(shadowingPracticeService).processAudioChunk(eq(sessionId), any(byte[].class), eq("Hello world"));
+
+        audioWebSocketHandler.handleTransportError(session, new RuntimeException("Transport reset"));
+    }
 }

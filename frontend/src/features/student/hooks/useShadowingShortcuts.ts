@@ -27,7 +27,8 @@ export function useShadowingShortcuts({
       if (event.altKey || event.ctrlKey || event.metaKey) return;
 
       const target = event.target as HTMLElement | null;
-      const tag = target?.tagName.toLowerCase();
+      const tag = target?.tagName?.toLowerCase();
+      const keyLower = (event.key || "").toLowerCase();
       const isInteractiveElement =
         tag === "input" ||
         tag === "textarea" ||
@@ -42,7 +43,7 @@ export function useShadowingShortcuts({
         return;
       }
 
-      if (event.key.toLowerCase() === "r" && !isInteractiveElement) {
+      if (keyLower === "r" && !isInteractiveElement) {
         event.preventDefault();
         onReplayNative();
         return;

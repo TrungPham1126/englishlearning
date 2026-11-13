@@ -2,7 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { adminApi } from "@/features/admin/api/adminApi";
 import { studentApi } from "@/features/student/api/studentApi";
-import type { ClassroomResponse, StudentEnrollmentItem } from "@/features/admin/types";
+import type {
+  ClassroomResponse,
+  StudentEnrollmentItem,
+  ClassroomDetailedReport,
+} from "@/features/admin/types";
 import type { UserSummaryDto } from "@/types/api";
 import { Loader2 } from "lucide-react";
 import {
@@ -12,6 +16,11 @@ import {
   ClassroomSettingsTab,
   ClassroomVideoReviewTab,
 } from "@/features/admin/components/classroom";
+import {
+  ClassroomReportPreviewModal,
+  ClassroomActionConfirmModal,
+  type ClassroomDestructiveActionMode,
+} from "@/features/admin/components/database";
 
 export default function ClassroomDetailPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -31,6 +40,12 @@ export default function ClassroomDetailPage() {
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Report & Database Purge/Delete States
+  const [exportingReport, setExportingReport] = useState(false);
+  const [previewReport, setPreviewReport] = useState<ClassroomDetailedReport | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmMode, setConfirmMode] = useState<ClassroomDestructiveActionMode | null>(null);
 
   const fetchData = async () => {
     if (!classId) return;
@@ -193,6 +208,54 @@ export default function ClassroomDetailPage() {
     }
   };
 
+  const handlePreviewReport = async () => {
+    if (!classId) return;
+    setPreviewLoading(true);
+    setPreviewReport(null);
+    try {
+      const res = await adminApi.getClassroomDetailedReport(classId);
+      setPreviewReport(res);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Không thể tải báo cáo lớp học");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleExportReport = async (id = classId, name = classroom?.name) => {
+    if (!id) return;
+    setExportingReport(true);
+    try {
+      await adminApi.downloadClassroomReportExcel(id, name);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Lỗi khi xuất báo cáo Excel");
+    } finally {
+      setExportingReport(false);
+    }
+  };
+
+  const handleConfirmDatabaseAction = async (forcePurge: boolean) => {
+    if (!classId || !confirmMode) return;
+    setIsProcessing(true);
+    try {
+      const res =
+        confirmMode === "DELETE_CLASSROOM"
+          ? await adminApi.deleteClassroom(classId)
+          : await adminApi.purgeClassroomSubmissions(classId, forcePurge);
+      alert(res.message);
+      setConfirmMode(null);
+      if (confirmMode === "DELETE_CLASSROOM") {
+        navigate("/admin/classrooms");
+      } else {
+        fetchData();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Không thể xử lý dữ liệu lớp học");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center p-20">
@@ -216,6 +279,9 @@ export default function ClassroomDetailPage() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingVideosCount={pendingVideos.length}
+        exportingReport={exportingReport}
+        onPreviewReport={handlePreviewReport}
+        onExportReport={() => handleExportReport()}
         onBack={() => navigate("/admin/classrooms")}
       />
 
@@ -230,6 +296,7 @@ export default function ClassroomDetailPage() {
 
       {activeTab === "settings" && (
         <ClassroomSettingsTab
+          classroomStatus={classroom.status}
           teachers={teachers}
           selectedTeacherId={selectedTeacherId}
           setSelectedTeacherId={setSelectedTeacherId}
@@ -238,6 +305,8 @@ export default function ClassroomDetailPage() {
           isProcessing={isProcessing}
           onAssignTeacher={handleAssignTeacher}
           onUpdateStatus={handleUpdateStatus}
+          onOpenPurgeSubmissions={() => setConfirmMode("PURGE_SUBMISSIONS")}
+          onOpenDeleteClassroom={() => setConfirmMode("DELETE_CLASSROOM")}
         />
       )}
 
@@ -259,6 +328,27 @@ export default function ClassroomDetailPage() {
           onRejectVideo={handleRejectVideo}
         />
       )}
+
+      <ClassroomReportPreviewModal
+        report={previewReport}
+        loading={previewLoading}
+        exporting={exportingReport}
+        onClose={() => {
+          setPreviewReport(null);
+          setPreviewLoading(false);
+        }}
+        onDownloadExcel={(id, name) => handleExportReport(id, name)}
+      />
+
+      <ClassroomActionConfirmModal
+        open={confirmMode !== null}
+        mode={confirmMode || "PURGE_SUBMISSIONS"}
+        classroomName={classroom.name}
+        classroomStatus={classroom.status}
+        processing={isProcessing}
+        onCancel={() => setConfirmMode(null)}
+        onConfirm={handleConfirmDatabaseAction}
+      />
     </div>
   );
 }

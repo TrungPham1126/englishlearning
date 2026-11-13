@@ -35,6 +35,10 @@ public class AssignmentQuestion {
     @Column(name = "question_type", nullable = false, length = 30)
     private QuestionType questionType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "skill_type", length = 30)
+    private SkillType skillType;
+
     @Column(name = "prompt_text", columnDefinition = "TEXT", nullable = false)
     private String promptText;
 

@@ -48,16 +48,17 @@ const QuestionPaletteComponent: React.FC<QuestionPaletteProps> = ({
     >
       <div className="border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center justify-between">
         <h2 className="text-[11px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-          Bảng Câu Hỏi
+          Câu hỏi
         </h2>
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-1.5 py-0.2 rounded">
-            {answeredCount}/{questions.length} câu
+          <span className="text-[11px] font-bold tabular-nums text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+            {answeredCount}/{questions.length}
           </span>
           {showMobilePalette && onCloseMobile && (
             <button
               type="button"
               onClick={onCloseMobile}
+              aria-label="Đóng"
               className="lg:hidden p-1 text-slate-400 hover:text-slate-600 rounded-md"
             >
               <X size={14} />
@@ -149,40 +150,38 @@ const QuestionPaletteComponent: React.FC<QuestionPaletteProps> = ({
         })}
       </div>
 
-      {/* Chú thích màu sắc */}
-      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block shrink-0 shadow-2xs" />
-          <span>Đã trả lời / Đúng</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm bg-amber-400 inline-block shrink-0 shadow-2xs" />
-          <span>Đánh dấu cần xem lại</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm bg-rose-500 inline-block shrink-0 shadow-2xs" />
-          <span>Cần sửa lại (Sai)</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 inline-block shrink-0" />
-          <span>Chưa hoàn thành</span>
-        </div>
+      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-xs bg-emerald-500" />
+          Đúng
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-xs bg-amber-400" />
+          Xem lại
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-xs bg-rose-500" />
+          Sai
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-xs bg-slate-200 dark:bg-slate-700" />
+          Trống
+        </span>
       </div>
 
-      {/* Nút Nộp Bài ở cột Palette */}
       {phase !== 'REVIEW' && (
         <button
           type="button"
           onClick={onSubmit}
           disabled={isSubmitting || isUploadingAudio}
-          className="w-full min-h-[34px] mt-2 flex items-center justify-center gap-1.5 bg-blue-700 hover:bg-blue-800 active:scale-[0.98] text-white text-[11px] font-bold py-2 rounded-lg shadow-2xs transition cursor-pointer disabled:opacity-50 touch-manipulation"
+          className="w-full min-h-[36px] mt-1 flex items-center justify-center gap-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold py-2 rounded-lg transition cursor-pointer disabled:opacity-50"
         >
           {isSubmitting ? (
             <Loader2 size={13} className="animate-spin" />
           ) : (
             <Send size={13} />
           )}
-          <span>Nộp Toàn Bộ Bài Tập</span>
+          <span>Nộp bài</span>
         </button>
       )}
     </div>

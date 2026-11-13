@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -116,4 +117,35 @@ async def test_case_half_then_noise():
         comp = res["kpi"]["completeness"]
         assert 18 <= comp <= 26
         assert res["overallScore"] <= 25.0
+
+
+@pytest.mark.asyncio
+async def test_tts_half_matches_two_word_prefix_script_and_reports_nonzero_missing_count():
+    fixture_half = Path(__file__).resolve().parent / "fixtures" / "tts_half.wav"
+    half_bytes = fixture_half.read_bytes()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. Exact matching 2-word transcript for tts_half.wav should pass cleanly
+        resp_match = await ac.post(
+            "/api/v1/audio/evaluate-phonetics",
+            files={"audio": ("tts_half.wav", half_bytes, "audio/wav")},
+            data={"script": "Consistent pronunciation"},
+        )
+        assert resp_match.status_code == 200, resp_match.text
+        match_body = resp_match.json()
+        assert match_body["kpi"]["completeness"] == 100
+        assert match_body["overallScore"] >= 65.0
+
+        # 2. Same truncated audio against full 9-word sentence must state exact missing count (7), never 0
+        resp_trunc = await ac.post(
+            "/api/v1/audio/evaluate-phonetics",
+            files={"audio": ("tts_half.wav", half_bytes, "audio/wav")},
+            data={"script": FULL_SENTENCE},
+        )
+        assert resp_trunc.status_code == 200, resp_trunc.text
+        trunc_body = resp_trunc.json()
+        assert trunc_body["kpi"]["completeness"] < 40
+        assert "7 từ" in trunc_body["statusMessage"]
+        assert "0 từ" not in trunc_body["statusMessage"]
 

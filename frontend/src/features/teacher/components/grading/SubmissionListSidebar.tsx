@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Loader2, Clock } from "lucide-react";
+import { Search, Loader2, Clock, ShieldAlert } from "lucide-react";
 import type { GradingSubmission } from "./gradingTypes";
 
 interface SubmissionListSidebarProps {
@@ -120,17 +120,25 @@ export const SubmissionListSidebar: React.FC<SubmissionListSidebarProps> = ({
                     </div>
                   </div>
 
-                  {isCompleted ? (
-                    <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                      {sub.score !== null && sub.score !== undefined
-                        ? `${sub.score} đ`
-                        : "Đã chấm"}
-                    </span>
-                  ) : (
-                    <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
-                      Chờ chấm
-                    </span>
-                  )}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {sub.isCheatingFlagged && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                        <ShieldAlert className="h-3 w-3" />
+                        GIAN LẬN ({sub.violationCount ?? 3})
+                      </span>
+                    )}
+                    {isCompleted ? (
+                      <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        {sub.score !== null && sub.score !== undefined
+                          ? `${sub.score} đ`
+                          : "Đã chấm"}
+                      </span>
+                    ) : (
+                      <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        Chờ chấm
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 dark:border-slate-800/80 pt-2">

@@ -45,6 +45,7 @@ const AdminReportsPage = lazy(() => import("@/features/admin/pages/AdminReportsP
 const SystemBroadcastPage = lazy(() => import("@/features/admin/pages/SystemBroadcastPage"));
 const AuditLogPage = lazy(() => import("@/features/admin/pages/AuditLogPage"));
 const AiMonitoringPage = lazy(() => import("@/features/admin/pages/AiMonitoringPage"));
+const AdminDatabaseStoragePage = lazy(() => import("@/features/admin/pages/AdminDatabaseStoragePage"));
 const ResourceLibraryPage = lazy(() => import("@/features/admin/pages/ResourceLibraryPage"));
 
 // Phân hệ Student (Lazy loaded)
@@ -53,6 +54,7 @@ const ClassLessonsPage = lazy(() => import("@/features/student/pages/ClassLesson
 const ClassAssignmentsPage = lazy(() => import("@/features/student/pages/ClassAssignmentsPage"));
 const LessonDetailPage = lazy(() => import("@/features/student/pages/LessonDetailPage"));
 const AssignmentTakePage = lazy(() => import("@/features/student/pages/AssignmentTakePage"));
+const ExamTakePage = lazy(() => import("@/features/student/pages/ExamTakePage"));
 const StudentProfilePage = lazy(() => import("@/features/student/pages/StudentProfilePage"));
 const SpeakingAiEvaluationPage = lazy(() => import("@/features/student/pages/SpeakingAiEvaluationPage"));
 const DailyHomeworkPage = lazy(() => import("@/features/student/pages/DailyHomeworkPage"));
@@ -64,6 +66,7 @@ const TeacherClassDetailPage = lazy(() => import("@/features/teacher/pages/Teach
 const TeacherClassStudentsPage = lazy(() => import("@/features/teacher/pages/TeacherClassStudentsPage"));
 const TeacherDailyPlanPage = lazy(() => import("@/features/teacher/pages/TeacherDailyPlanPage"));
 const TeacherGradingPage = lazy(() => import("@/features/teacher/pages/TeacherGradingPage"));
+const TeacherClassExamsPage = lazy(() => import("@/features/teacher/pages/TeacherClassExamsPage"));
 
 // Component chuyển hướng tự động sang Daily Plan nếu có ai truy cập URL bài tập lớp cũ
 const RedirectToDailyPlan = () => {
@@ -106,6 +109,10 @@ const routes: RouteObject[] = [
         path: "assignments/:assignmentId/take",
         element: withSuspense(AssignmentTakePage),
       },
+      {
+        path: "exams/:assignmentId/take",
+        element: withSuspense(ExamTakePage),
+      },
       { path: "submissions", element: withSuspense(SpeakingAiEvaluationPage) },
       { path: "speaking-ai", element: withSuspense(SpeakingAiEvaluationPage) },
       { path: "submissions/:attemptId", element: withSuspense(SpeakingAiEvaluationPage) },
@@ -142,6 +149,7 @@ const routes: RouteObject[] = [
       { path: "broadcast", element: withSuspense(SystemBroadcastPage) },
       { path: "audit-logs", element: withSuspense(AuditLogPage) },
       { path: "ai-monitoring", element: withSuspense(AiMonitoringPage) },
+      { path: "database", element: withSuspense(AdminDatabaseStoragePage) },
       { path: "*", element: <Navigate to="/admin/dashboard" replace /> },
     ],
   },
@@ -175,6 +183,14 @@ const routes: RouteObject[] = [
       {
         path: "classrooms/:classId/plans",
         element: withSuspense(TeacherDailyPlanPage),
+      },
+      {
+        path: "classrooms/:classId/grading",
+        element: withSuspense(TeacherGradingPage),
+      },
+      {
+        path: "classrooms/:classId/exams",
+        element: withSuspense(TeacherClassExamsPage),
       },
       {
         path: "grading",

@@ -27,6 +27,9 @@ export function AudioPlayer({
   onEnded,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -38,6 +41,15 @@ export function AudioPlayer({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (!src || !src.trim()) {
+      setIsLoading(false);
+      setHasError(false);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      return;
+    }
 
     setIsLoading(true);
     setHasError(false);
@@ -56,7 +68,7 @@ export function AudioPlayer({
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
-      onEnded?.();
+      onEndedRef.current?.();
     };
 
     const handleError = () => {
@@ -71,12 +83,13 @@ export function AudioPlayer({
     audio.addEventListener("error", handleError);
 
     return () => {
+      audio.pause();
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [src, onEnded]);
+  }, [src]);
 
   const togglePlay = () => {
     if (!audioRef.current || hasError) return;
@@ -124,7 +137,7 @@ export function AudioPlayer({
   };
 
   const formatTime = (secs: number) => {
-    if (isNaN(secs)) return "00:00";
+    if (!Number.isFinite(secs) || secs < 0) return "00:00";
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
@@ -139,7 +152,7 @@ export function AudioPlayer({
         className,
       )}
     >
-      <audio ref={audioRef} src={src} autoPlay={autoPlay} preload="metadata" />
+      <audio ref={audioRef} src={src || undefined} autoPlay={autoPlay} preload="metadata" />
 
       {title && (
         <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -187,6 +200,7 @@ export function AudioPlayer({
           <div className="relative flex items-center w-full">
             <input
               type="range"
+              aria-label="Thanh tiến trình âm thanh"
               min={0}
               max={duration || 100}
               value={currentTime}

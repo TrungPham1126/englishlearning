@@ -1,6 +1,7 @@
 // src/features/student/api/studentApi.ts
 import { axiosClient } from "@/lib/axiosClient";
-import type { ApiResponse, PageResponse } from "@/types/api";
+import { useAuthStore } from "@/store/useAuthStore";
+import type { ApiResponse } from "@/types/api";
 import type {
   MyCourseResponse,
   LessonSummary,
@@ -21,7 +22,35 @@ import type {
   KokoroVoice,
 } from "../types";
 
-let cachedMyCourses: { data: MyCourseResponse[]; timestamp: number } | null = null;
+let cachedMyCourses: {
+  userId: string;
+  data: MyCourseResponse[];
+  timestamp: number;
+} | null = null;
+
+function normalizeAttemptResponse(raw: AttemptResponse): AttemptResponse {
+  if (!raw) return raw;
+  return {
+    ...raw,
+    questions: Array.isArray(raw.questions) ? raw.questions : [],
+  };
+}
+
+function normalizeShadowingEvaluation(
+  raw: ShadowingEvaluationResponse,
+): ShadowingEvaluationResponse {
+  if (!raw) return raw;
+  return {
+    ...raw,
+    sentenceTokens: Array.isArray(raw.sentenceTokens) ? raw.sentenceTokens : [],
+    wordRows: Array.isArray(raw.wordRows)
+      ? raw.wordRows.map((row) => ({
+          ...row,
+          phonemes: Array.isArray(row?.phonemes) ? row.phonemes : [],
+        }))
+      : [],
+  };
+}
 
 export const studentApi = {
   updateProfile: async (data: {
@@ -56,14 +85,20 @@ export const studentApi = {
   // ================= 1. LỚP HỌC (CLASSROOMS) =================
   getMyCourses: async (forceRefresh = false): Promise<MyCourseResponse[]> => {
     const now = Date.now();
-    if (!forceRefresh && cachedMyCourses && now - cachedMyCourses.timestamp < 60000) {
+    const userId = useAuthStore.getState().user?.id || "anon";
+    if (
+      !forceRefresh &&
+      cachedMyCourses &&
+      cachedMyCourses.userId === userId &&
+      now - cachedMyCourses.timestamp < 60000
+    ) {
       return cachedMyCourses.data;
     }
     const res = await axiosClient.get<ApiResponse<MyCourseResponse[]>>(
       "/api/student/classrooms/my-courses",
     );
-    const data = res.data.data || [];
-    cachedMyCourses = { data, timestamp: now };
+    const data = Array.isArray(res.data?.data) ? res.data.data : [];
+    cachedMyCourses = { userId, data, timestamp: now };
     return data;
   },
 
@@ -88,7 +123,13 @@ export const studentApi = {
     const res = await axiosClient.get<ApiResponse<LessonDetailResponse>>(
       `/api/curriculum/lessons/${lessonId}`,
     );
-    return res.data.data;
+    const d = res.data.data;
+    return {
+      ...d,
+      documents: Array.isArray(d?.documents) ? d.documents : [],
+      vocabularies: Array.isArray(d?.vocabularies) ? d.vocabularies : [],
+      grammarTopics: Array.isArray(d?.grammarTopics) ? d.grammarTopics : [],
+    };
   },
 
   getVideoByLesson: async (lessonId: string): Promise<VideoResponse> => {
@@ -148,7 +189,7 @@ export const studentApi = {
     const res = await axiosClient.get<ApiResponse<AttemptResponse>>(
       `/api/v1/student/assignments/attempts/${attemptId}`,
     );
-    return res.data.data;
+    return normalizeAttemptResponse(res.data.data);
   },
 
   submitAssignment: async (
@@ -159,10 +200,35 @@ export const studentApi = {
       selectedOptionId?: string;
       textAnswer?: string;
     }>,
+    extra?: {
+      cheatingFlagged?: boolean;
+      violationCount?: number;
+      cheatingReason?: string;
+      violationLogJson?: string;
+    },
   ): Promise<AttemptResponse> => {
     const res = await axiosClient.post<ApiResponse<AttemptResponse>>(
       `/api/v1/student/assignments/${assignmentId}/attempts/${attemptId}/submit`,
-      { assignmentId, answers },
+      { assignmentId, answers, ...(extra || {}) },
+    );
+    return normalizeAttemptResponse(res.data.data);
+  },
+
+  recordExamViolation: async (
+    attemptId: string,
+    payload: {
+      eventType: string;
+      reason: string;
+      currentAnswers?: Array<{
+        questionId: string;
+        selectedOptionId?: string;
+        textAnswer?: string;
+      }>;
+    },
+  ): Promise<AttemptResponse> => {
+    const res = await axiosClient.post<ApiResponse<AttemptResponse>>(
+      `/api/v1/student/assignments/attempts/${attemptId}/violation`,
+      payload,
     );
     return res.data.data;
   },
@@ -199,7 +265,12 @@ export const studentApi = {
       "/api/v1/ai/speaking/evaluate",
       formData,
     );
-    return res.data.data;
+    const d = res.data.data;
+    return {
+      ...d,
+      mistakes: Array.isArray(d?.mistakes) ? d.mistakes : [],
+      suggestions: Array.isArray(d?.suggestions) ? d.suggestions : [],
+    };
   },
 
   // 4.2. Chấm đọc theo câu Shadowing (Groq Whisper-large-v3 + LLaMA 3.3 70B <2s)
@@ -221,7 +292,7 @@ export const studentApi = {
     const res = await axiosClient.post<
       ApiResponse<ShadowingEvaluationResponse>
     >("/api/v1/ai/speaking/shadowing-evaluate", formData);
-    return res.data.data;
+    return normalizeShadowingEvaluation(res.data.data);
   },
 
   // 4.3. Chấm bài viết tự luận Writing (Task Achievement, Grammar, Cohesion)
@@ -231,11 +302,16 @@ export const studentApi = {
     studentAnswerId: string,
   ): Promise<WritingAiEvaluationResult> => {
     const res = await axiosClient.post<ApiResponse<WritingAiEvaluationResult>>(
-      `/api/v1/ai/writing/evaluate?topic=${encodeURIComponent(topic)}&studentAnswerId=${studentAnswerId}`,
+      `/api/v1/ai/writing/evaluate?topic=${encodeURIComponent(topic)}&studentAnswerId=${encodeURIComponent(studentAnswerId)}`,
       essayText,
       { headers: { "Content-Type": "text/plain" } },
     );
-    return res.data.data;
+    const d = res.data.data;
+    return {
+      ...d,
+      mistakes: Array.isArray(d?.mistakes) ? d.mistakes : [],
+      suggestions: Array.isArray(d?.suggestions) ? d.suggestions : [],
+    };
   },
 
   // 4.4. Đánh giá phát âm từ vựng / câu qua Whisper AI (0 - 100 điểm)
@@ -275,11 +351,26 @@ export const studentApi = {
     selectedDayId?: string,
   ): Promise<DailyHomeworkOverviewResponse> => {
     const url = selectedDayId
-      ? `/api/v1/curriculum/daily-plans/classrooms/${classroomId}/student-overview?selectedDayId=${selectedDayId}`
+      ? `/api/v1/curriculum/daily-plans/classrooms/${classroomId}/student-overview?selectedDayId=${encodeURIComponent(selectedDayId)}`
       : `/api/v1/curriculum/daily-plans/classrooms/${classroomId}/student-overview`;
     const res =
       await axiosClient.get<ApiResponse<DailyHomeworkOverviewResponse>>(url);
-    return res.data.data;
+    const d = res.data.data;
+    return {
+      ...d,
+      days: Array.isArray(d?.days) ? d.days : [],
+      currentSelectedDay: d?.currentSelectedDay
+        ? {
+            ...d.currentSelectedDay,
+            sections: Array.isArray(d.currentSelectedDay.sections)
+              ? d.currentSelectedDay.sections.map((sec) => ({
+                  ...sec,
+                  items: Array.isArray(sec?.items) ? sec.items : [],
+                }))
+              : [],
+          }
+        : null,
+    };
   },
 
   getClassDailyPlans: async (classroomId: string): Promise<any[]> => {
@@ -335,7 +426,7 @@ export const studentApi = {
     const res = await axiosClient.get<ApiResponse<KokoroVoice[]>>(
       "/api/v1/ai/tts/voices"
     );
-    return res.data.data;
+    return Array.isArray(res.data?.data) ? res.data.data : [];
   },
 
   // 10. THÔNG BÁO HỆ THỐNG & LỚP HỌC (NOTIFICATIONS)

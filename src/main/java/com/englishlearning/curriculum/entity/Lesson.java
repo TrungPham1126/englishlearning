@@ -2,6 +2,8 @@ package com.englishlearning.curriculum.entity;
 
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.video.entity.Video;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -21,6 +23,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Lesson {
 
     @Id
@@ -31,6 +34,7 @@ public class Lesson {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "teacher", "classStudents"})
     private Classroom classroom;
 
     @Column(nullable = false, length = 200)
@@ -45,17 +49,21 @@ public class Lesson {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @JsonIgnore
     @OneToOne(mappedBy = "lesson", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Video video;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "lesson", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<LessonDocument> documents = new HashSet<>();
 
+    @JsonIgnore
     @OneToMany(mappedBy = "lesson", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<VocabularyItem> vocabularies = new HashSet<>();
 
+    @JsonIgnore
     @OneToMany(mappedBy = "lesson", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<GrammarTopic> grammarTopics = new HashSet<>();

@@ -196,4 +196,39 @@ class ExerciseGenerationServiceImplTest {
         verify(ttsAudioService, times(1)).synthesizeTtsAudio(eq("father"), eq("af_heart"));
         verify(ttsAudioService, times(1)).synthesizeTtsAudio(eq("mother"), eq("af_heart"));
     }
+
+    @Test
+    @DisplayName("Ném ResourceNotFoundException khi thiếu giảng viên; overload 5 tham số tự nhận diện 'nối từ' & chịu lỗi TTS")
+    void should_Throw404WhenTeacherMissing_detectVietnameseMatchingAndTolerateTtsErrors() {
+        UUID unknownTeacher = UUID.randomUUID();
+        when(teacherRepository.findById(unknownTeacher)).thenReturn(Optional.empty());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                exerciseGenerationService.generateQuestionsFromPrompt("Grammar", "B1", 3, unknownTeacher, false))
+                .isInstanceOf(com.englishlearning.common.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy thông tin giảng viên");
+
+        // Overload 5 tham số: tự nhận diện prompt có "nối từ" & generateAudio=false
+        Teacher teacher = Teacher.builder().id(teacherId).build();
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.of(teacher));
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("{\"pairs\":[{\"word\":\"book\",\"meaning\":\"A set of pages\"}]}");
+        when(aiGeneratedExerciseRepository.save(any(AiGeneratedExercise.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        AiGeneratedExercise vnMatching = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Tạo bài tập nối từ chủ đề trường học", "A1", 0, teacherId, false);
+        assertThat(vnMatching.getRawResponseJson()).contains("\"type\":\"MATCHING\"");
+        verifyNoInteractions(ttsAudioService);
+
+        // MULTIPLE_CHOICE với TTS bị lỗi vẫn hoàn tất lưu bài tập
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("{\"questions\":[{\"promptText\":\"Listen closely\",\"questionType\":\"LISTENING\"}]}");
+        when(ttsAudioService.synthesizeTtsAudio(anyString(), anyString()))
+                .thenThrow(new RuntimeException("TTS offline"));
+
+        AiGeneratedExercise mcRes = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Listening unit 2", "B1", 1, teacherId, true, QuestionType.MULTIPLE_CHOICE);
+        assertThat(mcRes.getStatus()).isEqualTo(GenerationStatus.READY_FOR_REVIEW);
+    }
 }

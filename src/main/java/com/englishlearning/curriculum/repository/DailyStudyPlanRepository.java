@@ -2,11 +2,13 @@ package com.englishlearning.curriculum.repository;
 
 import com.englishlearning.curriculum.entity.DailyStudyPlan;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,4 +28,8 @@ public interface DailyStudyPlanRepository extends JpaRepository<DailyStudyPlan, 
 
     @Query("SELECT DISTINCT p FROM DailyStudyPlan p LEFT JOIN FETCH p.items WHERE p.classroom.id IN :classroomIds")
     List<DailyStudyPlan> findByClassroomIdsWithItems(@Param("classroomIds") List<UUID> classroomIds);
+
+    @Modifying
+    @Query("DELETE FROM DailyStudyPlan p WHERE p.id IN :ids")
+    int deleteByIdIn(@Param("ids") Collection<UUID> ids);
 }

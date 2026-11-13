@@ -19,13 +19,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit Test cho RefreshTokenService:
- * Kiểm tra tạo token, thu hồi token cũ, xác thực hạn sống và xóa token rác.
+ * Kiểm tra tạo token, thu hồi token cũ, tái sử dụng token sau xóa, xác thực hạn sống và xóa token rác.
  */
 @ExtendWith(MockitoExtension.class)
 class RefreshTokenServiceTest {
@@ -40,7 +41,7 @@ class RefreshTokenServiceTest {
     @DisplayName("should_CreateRefreshTokenAndRevokeOldTokens_when_UserProvided: Xóa token cũ và tạo mới Refresh Token còn hạn")
     void should_CreateRefreshTokenAndRevokeOldTokens_when_UserProvided() {
         // Given
-        ReflectionTestUtils.setField(refreshTokenService, "refreshTokenDurationMs", 604800000L); // 7 ngày
+        ReflectionTestUtils.setField(refreshTokenService, "refreshTokenDurationMs", 604800000L);
         User user = User.builder()
                 .id(UUID.randomUUID())
                 .email("learner@elp.edu.vn")
@@ -54,13 +55,15 @@ class RefreshTokenServiceTest {
 
         // Then
         assertThat(created).isNotNull();
-        assertThat(created.getToken()).isNotBlank();
+        assertThat(created.getToken()).isNotBlank().contains("-");
         assertThat(created.getUser()).isEqualTo(user);
         assertThat(created.isRevoked()).isFalse();
         assertThat(created.getExpiryDate()).isAfter(Instant.now());
 
         verify(refreshTokenRepository).deleteByUser(user);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository).save(captor.capture());
+        assertThat(captor.getValue().getToken()).isEqualTo(created.getToken());
     }
 
     @Test
@@ -86,13 +89,13 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("should_ThrowUnauthorizedException_when_TokenNotFound: Báo lỗi khi token không có trong DB")
+    @DisplayName("should_ThrowUnauthorizedException_when_TokenNotFound: Báo lỗi khi token không có trong DB hoặc đã bị xóa sau rotate")
     void should_ThrowUnauthorizedException_when_TokenNotFound() {
-        // Given
-        when(refreshTokenRepository.findByToken("unknown-token")).thenReturn(Optional.empty());
+        // Given: Mô phỏng token cũ bị dùng lại sau khi createRefreshToken đã deleteByUser
+        when(refreshTokenRepository.findByToken("deleted-or-unknown-token")).thenReturn(Optional.empty());
 
         // When / Then
-        assertThatThrownBy(() -> refreshTokenService.verifyExpiration("unknown-token"))
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration("deleted-or-unknown-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Refresh token không tồn tại trong hệ thống");
     }
@@ -114,6 +117,8 @@ class RefreshTokenServiceTest {
         assertThatThrownBy(() -> refreshTokenService.verifyExpiration(tokenStr))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Refresh token đã bị thu hồi");
+
+        verify(refreshTokenRepository, never()).delete(any());
     }
 
     @Test
@@ -123,7 +128,28 @@ class RefreshTokenServiceTest {
         String tokenStr = "expired-token";
         RefreshToken token = RefreshToken.builder()
                 .token(tokenStr)
-                .expiryDate(Instant.now().minusSeconds(100)) // Đã quá hạn
+                .expiryDate(Instant.now().minusSeconds(100))
+                .revoked(false)
+                .build();
+
+        when(refreshTokenRepository.findByToken(tokenStr)).thenReturn(Optional.of(token));
+
+        // When / Then
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration(tokenStr))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token đã hết hạn. Vui lòng đăng nhập lại");
+
+        verify(refreshTokenRepository).delete(token);
+    }
+
+    @Test
+    @DisplayName("verifyExpiration: Token vừa hết hạn trước hiện tại 1 mili-giây vẫn bị xóa và từ chối")
+    void verifyExpiration_whenExpiredByOneMillisecond_deletesAndThrowsUnauthorized() {
+        // Given
+        String tokenStr = "just-expired-ms-token";
+        RefreshToken token = RefreshToken.builder()
+                .token(tokenStr)
+                .expiryDate(Instant.now().minusMillis(1))
                 .revoked(false)
                 .build();
 
@@ -156,5 +182,40 @@ class RefreshTokenServiceTest {
         ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
         verify(refreshTokenRepository).save(captor.capture());
         assertThat(captor.getValue().isRevoked()).isTrue();
+    }
+
+    @Test
+    @DisplayName("revokeToken: Không lỗi và không gọi save khi token không tồn tại")
+    void revokeToken_whenTokenDoesNotExist_doesNothing() {
+        // Given
+        when(refreshTokenRepository.findByToken("missing-token")).thenReturn(Optional.empty());
+
+        // When
+        refreshTokenService.revokeToken("missing-token");
+
+        // Then
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("cleanupExpiredTokens: Gọi deleteExpiredOrRevoked với thời điểm hiện tại")
+    void cleanupExpiredTokens_whenInvoked_deletesExpiredOrRevokedTokens() {
+        // When
+        refreshTokenService.cleanupExpiredTokens();
+
+        // Then
+        verify(refreshTokenRepository).deleteExpiredOrRevoked(any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("cleanupExpiredTokens: Bắt ngoại lệ DB để không làm sập scheduler")
+    void cleanupExpiredTokens_whenRepositoryThrowsException_doesNotPropagate() {
+        // Given
+        doThrow(new RuntimeException("DB lock timeout"))
+                .when(refreshTokenRepository).deleteExpiredOrRevoked(any(Instant.class));
+
+        // When & Then
+        assertThatCode(() -> refreshTokenService.cleanupExpiredTokens())
+                .doesNotThrowAnyException();
     }
 }

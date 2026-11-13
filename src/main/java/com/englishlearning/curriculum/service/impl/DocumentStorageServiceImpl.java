@@ -1,9 +1,11 @@
 package com.englishlearning.curriculum.service.impl;
 
 import com.englishlearning.curriculum.service.*;
+import com.englishlearning.video.service.R2UsageTracker;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +23,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
 
     private final S3Client s3Client;
 
+    @Autowired(required = false)
+    private R2UsageTracker r2UsageTracker;
+
     // Đã đổi sang đọc từ app.secrets.storage.*
     @Value("${app.secrets.storage.bucket-name}")
     private String bucketName;
@@ -28,8 +33,18 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
     @Value("${app.secrets.storage.public-url}")
     private String publicUrl;
 
+    @Value("${app.secrets.storage.endpoint:}")
+    private String endpoint;
+
+    private boolean isDummyStorageConfigured() {
+        return bucketName == null
+                || bucketName.isBlank()
+                || "dummy_bucket".equalsIgnoreCase(bucketName)
+                || (endpoint != null && endpoint.toLowerCase().contains("dummy"));
+    }
+
     public String uploadFile(MultipartFile file) {
-        if (file.isEmpty()) {
+        if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File tải lên không được để trống");
         }
 
@@ -37,6 +52,22 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
         String extension = "";
         if (originalFilename != null && originalFilename.contains(".")) {
             extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        if (isDummyStorageConfigured()) {
+            try {
+                java.nio.file.Path localDir = java.nio.file.Paths.get("uploads", "documents");
+                java.nio.file.Files.createDirectories(localDir);
+                String localFileName = UUID.randomUUID() + extension;
+                java.nio.file.Path targetPath = localDir.resolve(localFileName);
+                try (java.io.InputStream in = file.getInputStream()) {
+                    java.nio.file.Files.copy(in, targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+                log.info("Lưu tài liệu cục bộ (dummy storage mode): {}", targetPath.toAbsolutePath());
+                return "/uploads/documents/" + localFileName;
+            } catch (IOException ioEx) {
+                throw new RuntimeException("Lỗi IO khi lưu tài liệu cục bộ: " + ioEx.getMessage(), ioEx);
+            }
         }
 
         String uniqueFileName = "documents/" + UUID.randomUUID() + extension;
@@ -50,6 +81,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
 
             log.info("Đang upload tài liệu lên bucket: {} với key: {}", bucketName, uniqueFileName);
             s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordPut();
+            }
             log.info("Upload tài liệu thành công: {}", uniqueFileName);
 
             // Trả về full URL để frontend dùng luôn
@@ -90,6 +124,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
 
             log.info("Đang upload audio lên bucket: {} với key: {}", bucketName, uniqueFileName);
             s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordPut();
+            }
             log.info("Upload audio thành công: {}", uniqueFileName);
 
             return publicUrl + "/" + uniqueFileName;
@@ -133,6 +170,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                     .build();
 
             s3Client.putObject(putObjectRequest, RequestBody.fromFile(sourceFile));
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordPut();
+            }
             log.info("Upload audio thành công lên R2: {}", uniqueFileName);
             return publicUrl + "/" + uniqueFileName;
         } catch (Exception e) {
@@ -175,6 +215,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                     .build();
 
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(audioBytes));
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordPut();
+            }
             log.info("Upload audio bytes thành công lên R2: {} (kích thước: {} bytes)", uniqueFileName, audioBytes.length);
             return publicUrl + "/" + uniqueFileName;
         } catch (Exception e) {
@@ -201,7 +244,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
             return;
         }
         try {
-            if (fileUrl.startsWith(publicUrl + "/")) {
+            if (publicUrl != null && !publicUrl.isBlank() && fileUrl.startsWith(publicUrl + "/")) {
                 String key = fileUrl.substring((publicUrl + "/").length());
                 software.amazon.awssdk.services.s3.model.DeleteObjectRequest deleteRequest =
                         software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder()
@@ -209,6 +252,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                                 .key(key)
                                 .build();
                 s3Client.deleteObject(deleteRequest);
+                if (r2UsageTracker != null) {
+                    r2UsageTracker.recordDelete();
+                }
                 log.info("Đã xóa file cũ khỏi Cloud Storage: {}", key);
             } else if (fileUrl.startsWith("/uploads/")) {
                 java.nio.file.Path localPath = java.nio.file.Paths.get("." + fileUrl);

@@ -70,8 +70,8 @@ public class DailyPlanServiceImpl implements DailyPlanService {
             Optional<StudentDailyProgress> progressOpt = progressRepository.findByStudentIdAndDailyPlanId(studentId, plan.getId());
             boolean isCompleted = progressOpt.map(StudentDailyProgress::getIsCompleted).orElse(false);
 
-            boolean isCurrentDay = effectiveDate.isEqual(plan.getScheduledDate());
-            boolean isTodayOrPast = !plan.getScheduledDate().isAfter(effectiveDate);
+            boolean isCurrentDay = plan.getScheduledDate() != null && effectiveDate.isEqual(plan.getScheduledDate());
+            boolean isTodayOrPast = plan.getScheduledDate() != null && !plan.getScheduledDate().isAfter(effectiveDate);
             boolean isUnlocked = Boolean.TRUE.equals(plan.getIsUnlocked()) || isTodayOrPast;
 
             if (isUnlocked) {
@@ -91,7 +91,7 @@ public class DailyPlanServiceImpl implements DailyPlanService {
                     .id(plan.getId())
                     .dayNumber(plan.getDayNumber())
                     .title(plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber())
-                    .dateLabel(plan.getScheduledDate().format(DATE_SUMMARY_FORMATTER))
+                    .dateLabel(plan.getScheduledDate() != null ? plan.getScheduledDate().format(DATE_SUMMARY_FORMATTER) : "")
                     .scheduledDate(plan.getScheduledDate())
                     .estimatedMinutes(plan.getEstimatedMinutes())
                     .isCompleted(isCompleted)
@@ -102,7 +102,7 @@ public class DailyPlanServiceImpl implements DailyPlanService {
 
         if (targetPlan == null) {
             targetPlan = plans.stream()
-                    .filter(p -> !p.getScheduledDate().isAfter(effectiveDate))
+                    .filter(p -> p.getScheduledDate() != null && !p.getScheduledDate().isAfter(effectiveDate))
                     .findFirst()
                     .orElse(plans.get(0));
         }
@@ -148,7 +148,10 @@ public class DailyPlanServiceImpl implements DailyPlanService {
                 .collect(Collectors.toList());
 
         String dayTitle = plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber();
-        String fullHeaderLabel = String.format("%s %s", dayTitle, plan.getScheduledDate().format(DATE_FULL_FORMATTER).toUpperCase());
+        String formattedDate = plan.getScheduledDate() != null
+                ? plan.getScheduledDate().format(DATE_FULL_FORMATTER).toUpperCase()
+                : "";
+        String fullHeaderLabel = formattedDate.isEmpty() ? dayTitle : String.format("%s %s", dayTitle, formattedDate);
 
         return DayDetailDto.builder()
                 .id(plan.getId())

@@ -9,12 +9,14 @@ import {
   Award,
   Send,
   FileText,
+  ShieldAlert,
+  Info,
 } from "lucide-react";
 import type {
   GradingSubmission,
   GradingSubmissionDetail,
-  AiFeedbackParsed,
 } from "./gradingTypes";
+import { AiEvaluationCard } from "./AiEvaluationCard";
 
 interface GradingWorkspacePanelProps {
   selectedSub: GradingSubmission | null;
@@ -27,6 +29,8 @@ interface GradingWorkspacePanelProps {
   savingGrade: boolean;
   saveSuccess: string | null;
   onSaveGrade: (e: React.FormEvent) => void;
+  answerScores?: Record<string, number>;
+  onUpdateQuestionScore?: (questionKey: string, score: number) => void;
 }
 
 export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
@@ -40,24 +44,17 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
   savingGrade,
   saveSuccess,
   onSaveGrade,
+  answerScores,
+  onUpdateQuestionScore,
 }) => {
-  // Helper phân tích Feedback AI (JSON hoặc văn bản thường)
-  const parseAiFeedback = (
-    feedbackStr: string | null | undefined,
-  ): AiFeedbackParsed | null => {
-    if (!feedbackStr) return null;
-    try {
-      const parsed = JSON.parse(feedbackStr);
-      if (typeof parsed === "object") return parsed;
-    } catch {
-      // Plain string
-    }
-    return { generalFeedback: feedbackStr };
-  };
+  const isExam = Boolean(submissionDetail?.isExam);
 
-  // Chỉ lấy các câu hỏi tự luận cần giáo viên chấm: Viết đoạn văn (ESSAY) và Speaking (AUDIO_RESPONSE)
+  // Với Bài thi: giữ toàn bộ câu hỏi ở mọi kỹ năng để GV xem & chấm lại; bài thường giữ Viết/Speaking
   const gradableQuestions = useMemo(() => {
     if (!submissionDetail?.questions) return [];
+    if (submissionDetail.isExam) {
+      return submissionDetail.questions;
+    }
     return submissionDetail.questions.filter((q: any) => {
       const type = String(q.questionType || "").toUpperCase();
       if (type === "ESSAY" || type === "AUDIO_RESPONSE") return true;
@@ -68,6 +65,16 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
       return false;
     });
   }, [submissionDetail]);
+
+  const parsedViolations = useMemo(() => {
+    if (!submissionDetail?.violationLogJson) return [];
+    try {
+      const arr = JSON.parse(submissionDetail.violationLogJson);
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }, [submissionDetail?.violationLogJson]);
 
   if (!selectedSub) {
     return (
@@ -115,12 +122,20 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                 {submissionDetail.assignmentTitle}
               </h2>
               <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                {isWritingSkill
-                  ? "Viết đoạn văn (Writing)"
-                  : isSpeakingSkill
-                  ? "Luyện nói (Speaking)"
-                  : "Chấm Tự luận / Nói"}
+                {isExam
+                  ? "BÀI THI CHÍNH THỨC (LƯU TOÀN BỘ BÀI LÀM)"
+                  : isWritingSkill
+                    ? "Viết đoạn văn (Writing)"
+                    : isSpeakingSkill
+                      ? "Luyện nói (Speaking)"
+                      : "Chấm Tự luận / Nói"}
               </span>
+              {submissionDetail.isCheatingFlagged && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/40">
+                  <ShieldAlert className="h-3 w-3" />
+                  ĐÁNH DẤU GIAN LẬN ({submissionDetail.violationCount ?? 3} lần vi phạm)
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Học sinh:{" "}
@@ -146,6 +161,58 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
           </div>
         </div>
 
+        {/* Cảnh báo vi phạm phòng thi nếu có */}
+        {(submissionDetail.isCheatingFlagged || (submissionDetail.violationCount ?? 0) > 0) && (
+          <div
+            className={`rounded-xl border p-4 space-y-2 ${
+              submissionDetail.isCheatingFlagged
+                ? "border-rose-500/40 bg-rose-500/10"
+                : "border-amber-500/40 bg-amber-500/10"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={`flex items-center text-xs font-bold ${
+                  submissionDetail.isCheatingFlagged
+                    ? "text-rose-700 dark:text-rose-300"
+                    : "text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                <ShieldAlert className="mr-1.5 h-4 w-4 shrink-0" />
+                {submissionDetail.isCheatingFlagged
+                  ? `Cảnh báo gian lận: Vi phạm ${submissionDetail.violationCount ?? 3}/${submissionDetail.maxViolations ?? 3} lần`
+                  : `Nhắc nhở rời màn hình: ${submissionDetail.violationCount ?? 0}/${submissionDetail.maxViolations ?? 3} lần`}
+              </span>
+            </div>
+            {submissionDetail.cheatingReason && (
+              <p className="text-xs text-rose-700 dark:text-rose-200 font-medium">
+                {submissionDetail.cheatingReason}
+              </p>
+            )}
+            {parsedViolations.length > 0 && (
+              <ul className="space-y-1 pt-1 border-t border-rose-500/20 text-[11px] text-slate-700 dark:text-slate-300">
+                {parsedViolations.map((v: any, idx: number) => (
+                  <li key={idx}>
+                    • Lần {v.count ?? idx + 1} [{v.eventType || "FOCUS_LOST"}]:{" "}
+                    {v.reason || "Rời khỏi chế độ toàn màn hình"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Thông báo không lưu chi tiết với bài thường không phải Writing/Speaking */}
+        {!isExam && submissionDetail.answersPersisted === false && (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <span>
+              Bài luyện tập thường (Đọc/Nghe/Ngữ pháp/Từ vựng) chỉ lưu trạng thái{" "}
+              <strong>Đã hoàn thành</strong> và điểm tổng, không lưu từng đáp án chi tiết.
+            </span>
+          </div>
+        )}
+
         {/* Overall AI Feedback Banner (nếu có) */}
         {submissionDetail.aiFeedback && (
           <div className="rounded-xl border border-blue-500/30 bg-blue-600/10 p-4 space-y-1.5">
@@ -163,10 +230,18 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
         <div className="space-y-4 max-h-[460px] overflow-y-auto pr-2">
           {gradableQuestions.length > 0 ? (
             gradableQuestions.map((q: any, i: number) => {
-              const aiEval = parseAiFeedback(q.evalFeedback);
               const qType = String(q.questionType || "").toUpperCase();
-              const isEssay = qType === "ESSAY" || (!q.audioUrl && q.studentAnswer);
               const isAudio = qType === "AUDIO_RESPONSE" || !!q.audioUrl;
+              const isEssay =
+                qType === "ESSAY" ||
+                (!isAudio && (!q.options || q.options.length === 0) && Boolean(q.studentAnswer));
+              const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+              const qKey = q.questionId || q.id;
+              const maxPts = q.maxPoints ?? q.points ?? 10;
+              const currentQScore =
+                qKey && answerScores && answerScores[qKey] !== undefined
+                  ? answerScores[qKey]
+                  : (q.earnedPoints ?? 0);
               const wordCount = q.studentAnswer?.trim()
                 ? q.studentAnswer.trim().split(/\s+/).filter(Boolean).length
                 : 0;
@@ -180,25 +255,32 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
                       <span className="text-blue-700 dark:text-blue-400 font-bold mr-1">
-                        Phần {i + 1}:
+                        Câu {i + 1}:
                       </span>
                       {q.promptText}
                     </p>
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                      {isEssay ? (
-                        <>
-                          <FileText className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                          VIẾT ĐOẠN VĂN
-                        </>
-                      ) : isAudio ? (
-                        <>
-                          <Mic className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                          LUYỆN NÓI
-                        </>
-                      ) : (
-                        q.questionType || "TỰ LUẬN"
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {q.skillType && (
+                        <span className="inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          {q.skillType}
+                        </span>
                       )}
-                    </span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        {isEssay ? (
+                          <>
+                            <FileText className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            VIẾT ĐOẠN VĂN
+                          </>
+                        ) : isAudio ? (
+                          <>
+                            <Mic className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            LUYỆN NÓI
+                          </>
+                        ) : (
+                          q.questionType || "CÂU HỎI"
+                        )}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Media đề bài (nếu có audio mẫu/đề bài nghe tham khảo) */}
@@ -223,9 +305,48 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                       )}
                     </div>
 
-                    {q.studentAnswer ? (
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3.5 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed font-sans shadow-2xs">
-                        {q.studentAnswer}
+                    {hasOptions ? (
+                      <div className="space-y-1.5">
+                        {q.options.map((opt: any) => {
+                          const isChosen =
+                            q.selectedOptionId === opt.id ||
+                            q.studentAnswer === opt.id;
+                          return (
+                            <div
+                              key={opt.id}
+                              className={`rounded-lg border px-3 py-1.5 text-xs flex items-center justify-between gap-2 ${
+                                isChosen
+                                  ? opt.isCorrect
+                                    ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 font-semibold"
+                                    : "border-rose-400 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 font-semibold"
+                                  : opt.isCorrect
+                                    ? "border-emerald-300/70 bg-emerald-50/40 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400"
+                                    : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400"
+                              }`}
+                            >
+                              <span>
+                                {opt.optionLabel ? `${opt.optionLabel}. ` : ""}
+                                {opt.optionText}
+                                {opt.matchText ? ` → ${opt.matchText}` : ""}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0 text-[10px] font-bold">
+                                {opt.isCorrect && <span className="text-emerald-600">Đáp án đúng</span>}
+                                {isChosen && <span className="uppercase">• HV chọn</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : q.studentAnswer ? (
+                      <div className="space-y-1.5">
+                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3.5 text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed font-sans shadow-2xs">
+                          {q.studentAnswer}
+                        </div>
+                        {q.correctAnswer && !isEssay && (
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                            Đáp án tham khảo: <strong>{q.correctAnswer}</strong>
+                          </p>
+                        )}
                       </div>
                     ) : q.audioUrl ? (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 space-y-2 shadow-2xs">
@@ -250,47 +371,38 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                     )}
                   </div>
 
-                  {/* AI Feedback Box cho bài viết / bài nói */}
-                  {aiEval && (
-                    <div className="rounded-xl border border-blue-600/20 bg-blue-600/5 p-3 space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-blue-800 dark:text-blue-300 font-semibold text-[11px]">
-                        <span className="flex items-center">
-                          <Bot className="h-3.5 w-3.5 mr-1 text-blue-700 dark:text-blue-400" />
-                          AI Phân Tích & Gợi Ý Chấm Điểm
-                        </span>
-                        {aiEval.bandScore && (
-                          <span className="rounded bg-blue-600/20 px-2 py-0.5 font-bold text-blue-800 dark:text-blue-300">
-                            Band: {aiEval.bandScore}
-                          </span>
-                        )}
+                  {/* Điều chỉnh điểm từng câu (dành cho Bài thi) */}
+                  {isExam && qKey && onUpdateQuestionScore && (
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">
+                        Chấm lại điểm câu này (tối đa {maxPts}):
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.25"
+                          min="0"
+                          max={maxPts}
+                          value={currentQScore}
+                          onChange={(e) =>
+                            onUpdateQuestionScore(
+                              qKey,
+                              Math.max(0, Math.min(maxPts, Number(e.target.value) || 0)),
+                            )
+                          }
+                          className="w-20 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-900 dark:text-white text-right outline-none focus:border-blue-600"
+                        />
+                        <span className="text-[11px] text-slate-400">/ {maxPts}</span>
                       </div>
-
-                      {aiEval.generalFeedback && (
-                        <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                          {aiEval.generalFeedback}
-                        </p>
-                      )}
-
-                      {aiEval.grammarCorrections && (
-                        <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                          <strong className="block mb-0.5 text-amber-700 dark:text-amber-400">
-                            Góp ý ngữ pháp:
-                          </strong>
-                          {Array.isArray(aiEval.grammarCorrections)
-                            ? aiEval.grammarCorrections.join("; ")
-                            : String(aiEval.grammarCorrections)}
-                        </div>
-                      )}
-
-                      {aiEval.pronunciationNotes && (
-                        <div className="text-[11px] text-cyan-800 dark:text-cyan-300 bg-cyan-500/10 p-2 rounded-lg border border-cyan-500/20">
-                          <strong className="block mb-0.5 text-cyan-700 dark:text-cyan-400">
-                            Phát âm & Ngữ điệu:
-                          </strong>
-                          {aiEval.pronunciationNotes}
-                        </div>
-                      )}
                     </div>
+                  )}
+
+                  {/* AI Feedback Box cho bài viết / bài nói */}
+                  {(isEssay || isAudio || q.aiEvaluation || q.evalFeedback) && (
+                    <AiEvaluationCard
+                      question={q}
+                      onApplyAiScore={(scoreVal) => setInputScore(String(scoreVal))}
+                    />
                   )}
                 </div>
               );
@@ -402,7 +514,11 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               ) : (
                 <>
                   <Send className="h-3.5 w-3.5" />
-                  <span>Lưu Kết Quả & Gửi Nhận Xét</span>
+                  <span>
+                    {submissionDetail.status === "COMPLETED"
+                      ? "Cập Nhật Điểm & Nhận Xét (Chấm Lại)"
+                      : "Lưu Kết Quả & Gửi Nhận Xét"}
+                  </span>
                 </>
               )}
             </button>

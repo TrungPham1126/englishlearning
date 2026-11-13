@@ -8,6 +8,7 @@ import com.englishlearning.assignment.dto.KokoroVoiceDto;
 import com.englishlearning.assignment.service.ExerciseAudioService;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -37,7 +38,7 @@ public class AiTtsController {
     public ResponseEntity<ApiResponse<TtsResponse>> synthesizeSpeech(
             @RequestBody(required = false) TtsRequest request) {
         if (request == null || request.getText() == null || request.getText().trim().isEmpty()) {
-            throw new IllegalArgumentException("Nội dung câu mẫu cần tạo âm thanh (text) không được để trống.");
+            throw new BadRequestException("Nội dung câu mẫu cần tạo âm thanh (text) không được để trống.");
         }
         log.info("Generating TTS for text: {}", request.getText().trim());
         TtsResponse response = kokoroTtsClientService.synthesizeSpeech(request);

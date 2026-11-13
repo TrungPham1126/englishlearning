@@ -65,6 +65,17 @@ export function useShadowingAudioEngine({
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const startTimeMsRef = useRef<number>(0);
+  const ownedBlobUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const onAudioSubmittedRef = useRef(onAudioSubmitted);
+  onAudioSubmittedRef.current = onAudioSubmitted;
+
+  const revokeOwnedBlobUrl = useCallback(() => {
+    if (ownedBlobUrlRef.current) {
+      URL.revokeObjectURL(ownedBlobUrlRef.current);
+      ownedBlobUrlRef.current = null;
+    }
+  }, []);
 
   // Chỉ lấy các action tĩnh từ store -> Không bao giờ gây re-render component
   const setRecordingState = useAudioStore((s) => s.setRecordingState);
@@ -92,6 +103,18 @@ export function useShadowingAudioEngine({
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
+    analyserRef.current = null;
+    const activeRecorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+    if (activeRecorder) {
+      activeRecorder.ondataavailable = null;
+      activeRecorder.onstop = null;
+      if (activeRecorder.state !== "inactive") {
+        try {
+          activeRecorder.stop();
+        } catch {}
+      }
+    }
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
@@ -115,6 +138,9 @@ export function useShadowingAudioEngine({
       refAudioRef.current.pause();
     }
     if (learnerAudioRef.current) {
+      learnerAudioRef.current.onplay = null;
+      learnerAudioRef.current.onended = null;
+      learnerAudioRef.current.onerror = null;
       learnerAudioRef.current.pause();
     }
     stopAllSampleAudio();
@@ -136,6 +162,14 @@ export function useShadowingAudioEngine({
     setLearnerProgress,
     stopAllPlaybacks,
   ]);
+
+  // Dừng mọi luồng ghi âm / blob URL khi chuyển sang câu hỏi khác
+  useEffect(() => {
+    return () => {
+      cleanupAudioGraph();
+      revokeOwnedBlobUrl();
+    };
+  }, [questionId, cleanupAudioGraph, revokeOwnedBlobUrl]);
 
   // Cập nhật hoặc xóa URL câu mẫu khi đổi câu hỏi (tuyệt đối không giữ lại URL của câu trước)
   useEffect(() => {
@@ -352,11 +386,18 @@ export function useShadowingAudioEngine({
     audio.onended = () => {
       if (rafLearnerProgressRef.current !== null) {
         cancelAnimationFrame(rafLearnerProgressRef.current);
+        rafLearnerProgressRef.current = null;
       }
       setIsPlayingLearner(false);
       setLearnerProgress(1);
     };
-    audio.onerror = () => setIsPlayingLearner(false);
+    audio.onerror = () => {
+      if (rafLearnerProgressRef.current !== null) {
+        cancelAnimationFrame(rafLearnerProgressRef.current);
+        rafLearnerProgressRef.current = null;
+      }
+      setIsPlayingLearner(false);
+    };
 
     void audio.play().catch(() => setIsPlayingLearner(false));
   }, [setIsPlayingLearner, setLearnerProgress, stopAllPlaybacks]);
@@ -392,10 +433,12 @@ export function useShadowingAudioEngine({
       analyserRef.current = analyser;
 
       let mimeType = "audio/webm";
-      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-        mimeType = "audio/webm;codecs=opus";
-      } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-        mimeType = "audio/ogg;codecs=opus";
+      if (typeof MediaRecorder.isTypeSupported === "function") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+          mimeType = "audio/ogg;codecs=opus";
+        }
       }
 
       const recorder = new MediaRecorder(stream, { mimeType });
@@ -408,14 +451,25 @@ export function useShadowingAudioEngine({
       };
 
       recorder.onstop = () => {
+        if (mediaRecorderRef.current === recorder) {
+          mediaRecorderRef.current = null;
+        }
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+
+        cleanupAudioGraph();
+
+        if (!isMountedRef.current) return;
+
         const finalMime = recorder.mimeType || mimeType;
         const blob = new Blob(audioChunksRef.current, { type: finalMime });
         const url = URL.createObjectURL(blob);
+        revokeOwnedBlobUrl();
+        ownedBlobUrlRef.current = url;
         const durationSec = (Date.now() - startTimeMsRef.current) / 1000;
 
         setRecordedAudio(blob, url, durationSec);
-        cleanupAudioGraph();
-        onAudioSubmitted(blob);
+        onAudioSubmittedRef.current(blob);
       };
 
       startTimeMsRef.current = Date.now();
@@ -433,7 +487,7 @@ export function useShadowingAudioEngine({
 
       const freqBins = new Uint8Array(analyser.frequencyBinCount);
       const updateWaveformLoop = () => {
-        if (!analyserRef.current) return;
+        if (!analyserRef.current || !isMountedRef.current) return;
         analyserRef.current.getByteFrequencyData(freqBins);
 
         const nextPeaks = new Array<number>(WAVEFORM_BARS);
@@ -450,14 +504,18 @@ export function useShadowingAudioEngine({
 
       rafWaveformRef.current = requestAnimationFrame(updateWaveformLoop);
     } catch {
-      setErrorMessage(
-        "Không thể truy cập Microphone! Vui lòng cấp quyền ghi âm trên trình duyệt.",
-      );
+      cleanupAudioGraph();
+      if (isMountedRef.current) {
+        setRecordingState("idle");
+        setErrorMessage(
+          "Không thể truy cập Microphone! Vui lòng cấp quyền ghi âm trên trình duyệt.",
+        );
+      }
     }
   }, [
     cleanupAudioGraph,
-    onAudioSubmitted,
     pushLiveLearnerPeaks,
+    revokeOwnedBlobUrl,
     setErrorMessage,
     setEvaluationResult,
     setRecordedAudio,
@@ -490,9 +548,10 @@ export function useShadowingAudioEngine({
   const resetRecording = useCallback(() => {
     stopAllPlaybacks();
     cleanupAudioGraph();
+    revokeOwnedBlobUrl();
     useAudioStore.getState().resetAudioSession();
     usePracticeStore.getState().resetPracticeState();
-  }, [cleanupAudioGraph, stopAllPlaybacks]);
+  }, [cleanupAudioGraph, revokeOwnedBlobUrl, stopAllPlaybacks]);
 
   // Gửi bản thu âm lên Backend chấm điểm AI (Praat F1/F2 & Whisper-large-v3)
   const triggerAiEvaluation = useCallback(async () => {
@@ -545,18 +604,20 @@ export function useShadowingAudioEngine({
         targetId,
         targetSentence,
       );
+      if (!isMountedRef.current) return;
       setEvaluationResult(result, true);
       setRecordingState("evaluated");
-      onAudioSubmitted(blobToEvaluate, result);
+      onAudioSubmittedRef.current(blobToEvaluate, result);
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       const apiErr = err as { response?: { data?: { message?: string } } };
       const msg =
         apiErr?.response?.data?.message ||
         "Lỗi xử lý âm học từ máy chủ. Bạn có thể bấm Nộp & Chấm lại.";
+      setRecordingState("recorded");
       setErrorMessage(msg);
     }
   }, [
-    onAudioSubmitted,
     questionId,
     setErrorMessage,
     setEvaluationResult,
@@ -567,11 +628,16 @@ export function useShadowingAudioEngine({
   ]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    const cache = ttsCacheRef.current;
     return () => {
+      isMountedRef.current = false;
       stopAllPlaybacks();
       cleanupAudioGraph();
+      revokeOwnedBlobUrl();
+      cache.clear();
     };
-  }, [cleanupAudioGraph, stopAllPlaybacks]);
+  }, [cleanupAudioGraph, revokeOwnedBlobUrl, stopAllPlaybacks]);
 
   return {
     togglePlayNativeAudio,

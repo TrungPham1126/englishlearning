@@ -21,4 +21,9 @@ public class StudentAssignmentSummaryResponse {
     private Integer attemptsCount;
     private Double highestScore;
     private String status;
+    private Boolean isExam;
+    private String examSkills;
+    private Boolean strictFullscreen;
+    private Integer maxViolations;
+    private Boolean isCheatingFlagged;
 }

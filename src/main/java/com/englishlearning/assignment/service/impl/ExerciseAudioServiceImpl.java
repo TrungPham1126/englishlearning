@@ -149,7 +149,7 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy câu hỏi với id: " + questionId));
 
             Assignment assignment = question.getAssignment();
-            ExerciseAudioType exerciseType = (assignment.getSkillType() == SkillType.LISTENING)
+            ExerciseAudioType exerciseType = (assignment != null && assignment.getSkillType() == SkillType.LISTENING)
                     ? ExerciseAudioType.LISTENING
                     : ExerciseAudioType.SHADOWING;
 
@@ -177,7 +177,8 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
 
             // Kiểm tra bản ghi âm thanh đang hoạt động (Active Cache check)
             if (!forceRecreate) {
-                if (exerciseType == ExerciseAudioType.LISTENING && assignment.getAudioUrl() != null && !assignment.getAudioUrl().isBlank()) {
+                if (exerciseType == ExerciseAudioType.LISTENING && assignment != null
+                        && assignment.getAudioUrl() != null && !assignment.getAudioUrl().isBlank()) {
                     log.info("Sử dụng audio có sẵn trên Assignment cho questionId: {}, url: {}", questionId, assignment.getAudioUrl());
                     return ExerciseAudioResponseDto.builder()
                             .questionId(questionId)
@@ -236,7 +237,7 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
 
                 ExerciseAudio newAudio = ExerciseAudio.builder()
                         .exerciseType(exerciseType)
-                        .assignmentId(assignment.getId())
+                        .assignmentId(assignment != null ? assignment.getId() : null)
                         .questionId(questionId)
                         .contentHash(contentHash)
                         .voiceConfig(voiceConfigJson)
@@ -261,7 +262,7 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
                 }
                 assignmentQuestionRepository.save(question);
 
-                if (exerciseType == ExerciseAudioType.LISTENING) {
+                if (exerciseType == ExerciseAudioType.LISTENING && assignment != null) {
                     assignment.setAudioUrl(storedAudioUrl);
                     if (assignment.getListeningScript() == null || assignment.getListeningScript().isBlank()) {
                         assignment.setListeningScript(scriptText);
@@ -280,7 +281,7 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
                 // Ghi nhận bản ghi lỗi để hệ thống theo dõi
                 ExerciseAudio failedAudio = ExerciseAudio.builder()
                         .exerciseType(exerciseType)
-                        .assignmentId(assignment.getId())
+                        .assignmentId(assignment != null ? assignment.getId() : null)
                         .questionId(questionId)
                         .contentHash(contentHash)
                         .voiceConfig(voiceConfigJson)
@@ -376,10 +377,11 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
         AssignmentQuestion question = assignmentQuestionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy câu hỏi với id: " + questionId));
 
-        UUID classroomId = question.getAssignment().getClassroom().getId();
-
-        // 1. Kiểm tra quyền sở hữu bài tập
         if (isStudent) {
+            if (question.getAssignment() == null || question.getAssignment().getClassroom() == null) {
+                throw new ResourceNotFoundException("Không tìm thấy lớp học cho câu hỏi: " + questionId);
+            }
+            UUID classroomId = question.getAssignment().getClassroom().getId();
             boolean isEnrolled = classStudentRepository.existsByClassroomIdAndStudentId(classroomId, requestingUserId);
             if (!isEnrolled) {
                 log.warn("Học sinh {} cố gắng repair bài tập của lớp {} mà không thuộc lớp này", requestingUserId, classroomId);

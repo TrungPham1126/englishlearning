@@ -2,6 +2,10 @@ package com.englishlearning.ai.service.impl;
 
 
 
+import com.englishlearning.ai.dto.AiExamDraftResponse;
+
+import com.englishlearning.ai.dto.AiExamGenerateRequest;
+
 import com.englishlearning.ai.service.AiLabService;
 
 import com.englishlearning.ai.service.GeminiClientService;
@@ -118,21 +122,27 @@ public class AiLabServiceImpl implements AiLabService {
 
     private static final String SPEAKING_SYSTEM_INSTRUCTION = """
 
-            You are a Cambridge Certified IELTS Speaking Examiner and Senior Phonetician.
+            You are a Cambridge Certified IELTS Speaking Examiner and Pedagogical Coach (calibrated to official IELTS & Engnovate Speaking Band Descriptors).
 
-            Evaluate the provided student speech transcript strictly against the given Assignment Prompt and IELTS criteria.
+            Evaluate the provided student speech transcript fairly and constructively against the given Assignment Prompt and the 4 official IELTS Speaking criteria: Fluency & Coherence, Lexical Resource, Grammatical Range & Accuracy, and Pronunciation.
 
 
 
             RULES:
 
-            1. Verify Task Achievement: If the speech does NOT answer the Prompt or key criteria, set "isOffTopic": true and cap overallBand <= 4.0.
+            1. Verify Task Achievement: If the speech is completely unrelated to the Prompt, set "isOffTopic": true and cap overallBand <= 4.0. If the student answers the topic even briefly or simply, set "isOffTopic": false.
 
-            2. Evaluate Pronunciation, Fluency, Lexical Resource, and Grammar.
+            2. Fair IELTS Band Calibration (Engnovate Standard - Do NOT grade overly harshly):
+               - Band 7.5 - 9.0: Speaks coherently and at length with natural discourse markers, idiomatic/flexible vocabulary, and mostly accurate grammar (minor spoken slips or STT transcription artifacts are ignored).
+               - Band 6.0 - 7.0: Willing to speak at length, meaning is clear, uses a mix of simple and complex structures with good vocabulary attempt, even if some hesitation, self-correction, or grammatical errors occur.
+               - Band 5.0 - 5.5: Maintains flow on familiar topics using basic vocabulary and simple sentence forms; noticeable pauses or grammar errors do not prevent basic communication.
+               - Do NOT penalize spoken speech as if it were formal academic writing; natural spoken fillers, contractions, and minor STT recognition noise must be treated with leniency.
 
-            3. All explanations, corrections, and general feedback MUST be in Vietnamese.
+            3. Evaluate Pronunciation, Fluency, Lexical Resource, and Grammar with encouraging, actionable advice.
 
-            4. Return strictly valid JSON conforming to the requested schema.
+            4. All explanations, corrections, and general feedback MUST be in Vietnamese.
+
+            5. Return strictly valid JSON conforming to the requested schema.
 
             """;
 
@@ -471,17 +481,49 @@ public class AiLabServiceImpl implements AiLabService {
 
         try {
 
-            final StudentAnswer answer = (studentAnswerId != null)
+            StudentAnswer foundAnswer = (studentAnswerId != null)
 
                     ? entityManager.find(StudentAnswer.class, studentAnswerId)
 
                     : null;
 
-            if (studentAnswerId != null && answer == null) {
+            if (studentAnswerId != null && foundAnswer == null) {
 
-                throw new ResourceNotFoundException("Không tìm thấy câu trả lời của học sinh: " + studentAnswerId);
+                log.warn("Không tìm thấy StudentAnswer với ID: {}. Thử tìm theo Question ID trong các lượt làm bài đang mở...",
+
+                        studentAnswerId);
+
+                try {
+
+                    java.util.List<StudentAnswer> candidates = entityManager.createQuery(
+
+                            "SELECT a FROM StudentAnswer a WHERE a.question.id = :qId AND a.attempt.status = :status ORDER BY a.attempt.startedAt DESC",
+
+                            StudentAnswer.class)
+
+                            .setParameter("qId", studentAnswerId)
+
+                            .setParameter("status", com.englishlearning.submission.entity.AttemptStatus.IN_PROGRESS)
+
+                            .getResultList();
+
+                    if (!candidates.isEmpty()) {
+
+                        foundAnswer = candidates.get(0);
+
+                        log.info("Đã tìm thấy StudentAnswer {} tương ứng với Question ID {}", foundAnswer.getId(), studentAnswerId);
+
+                    }
+
+                } catch (Exception ex) {
+
+                    log.warn("Lỗi tra cứu StudentAnswer theo Question ID: {}", ex.getMessage());
+
+                }
 
             }
+
+            final StudentAnswer answer = foundAnswer;
 
 
 
@@ -593,9 +635,11 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-            if (studentAnswerId != null && answer != null) {
+            if (answer != null) {
 
-                AiEvaluation evaluation = aiEvaluationRepository.findByStudentAnswerId(studentAnswerId)
+                answer.setTextResponse(essayText);
+
+                AiEvaluation evaluation = aiEvaluationRepository.findByStudentAnswerId(answer.getId())
 
                         .orElseGet(() -> AiEvaluation.builder()
 
@@ -627,7 +671,13 @@ public class AiLabServiceImpl implements AiLabService {
 
                 aiEvaluationRepository.save(evaluation);
 
+                answer.setEvalFeedback(rawJson);
 
+                answer.setEarnedPoints(overallBand);
+
+                answer.setIsCorrect(overallBand >= 5.0);
+
+                entityManager.merge(answer);
 
                 if (answer.getAttempt() != null && answer.getAttempt().getStudent() != null) {
 
@@ -3399,7 +3449,11 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-            // Gán audioUrl và listeningScript ở cấp bài tập (Assignment root level) cho bài LISTENING
+            if (readingPassage == null || readingPassage.isBlank()) {
+
+                readingPassage = root.path("passage").asText("");
+
+            }
 
             String listeningPassage = root.path("listeningPassage").asText(root.path("audioScript").asText(""));
 
@@ -3417,227 +3471,11 @@ public class AiLabServiceImpl implements AiLabService {
 
             }
 
+            double perQuestionPoint = 10.0 / Math.max(1, exercise.getQuestionCount());
 
+            java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest> qReqs =
 
-            java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest> qReqs = new java.util.ArrayList<>();
-
-            if (questionsNode.isArray()) {
-
-                for (JsonNode qNode : questionsNode) {
-
-                    com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest qReq = new com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest();
-
-                    String prompt = qNode.has("prompt") ? qNode.get("prompt").asText() : qNode.path("question").asText();
-
-                    if (!readingPassage.isBlank() && !prompt.contains("[READING PASSAGE]")) {
-
-                        prompt = "[READING PASSAGE]\n" + readingPassage + "\n\n" + prompt;
-
-                    }
-
-                    qReq.setPromptText(prompt);
-
-
-
-                    String detectedQType = qNode.path("questionType").asText(qNode.path("type").asText(defaultQType)).toUpperCase();
-
-                    boolean isSentencePrompt = prompt.contains("___") || prompt.contains(" / ")
-
-                            || prompt.toLowerCase().contains("sắp xếp") || prompt.toLowerCase().contains("hoàn thành câu")
-
-                            || prompt.toLowerCase().contains("từ gợi ý");
-
-                    if (detectedQType.contains("MATCH")) {
-
-                        detectedQType = "MATCHING";
-
-                    } else if (isSentencePrompt || detectedQType.contains("FILL") || detectedQType.contains("BLANK") || detectedQType.contains("WORD_ARRANGEMENT") || detectedQType.contains("SHORT_ANSWER") || detectedQType.contains("WORD_FORM") || detectedQType.contains("DICTATION") || detectedQType.contains("SPELL") || detectedQType.contains("CONJUGAT") || detectedQType.contains("TRANSFORM") || detectedQType.contains("CORRECTION") || detectedQType.contains("KEYWORD") || detectedQType.contains("UNSCRAMBLE")) {
-
-                        detectedQType = "FILL_IN_BLANK";
-
-                    } else if (detectedQType.contains("TRUE") || detectedQType.contains("FALSE")) {
-
-                        detectedQType = "TRUE_FALSE";
-
-                    } else if (detectedQType.contains("ESSAY") || detectedQType.contains("WRITING")) {
-
-                        detectedQType = "ESSAY";
-
-                    } else if (detectedQType.contains("AUDIO") || detectedQType.contains("SPEAKING")) {
-
-                        detectedQType = "AUDIO_RESPONSE";
-
-                    } else {
-
-                        detectedQType = "MULTIPLE_CHOICE";
-
-                    }
-
-                    qReq.setQuestionType(detectedQType);
-
-
-
-                    // Thiết lập mediaUrl và transcript cho VOCABULARY và SPEAKING (Shadowing câu rời rạc).
-
-                    // Với LISTENING: Quản lý tập trung ở cấp bài tập, KHÔNG nhân bản vào từng câu hỏi con!
-
-                    if ("VOCABULARY".equals(skillType) || "SPEAKING".equals(skillType)) {
-
-                        String media = qNode.path("mediaUrl").asText(qNode.path("audioUrl").asText(null));
-
-                        if (media != null && !media.isBlank()) {
-
-                            qReq.setMediaUrl(media);
-
-                        }
-
-                        String transcript = qNode.path("transcript").asText(null);
-
-                        if (transcript != null && !transcript.isBlank()) {
-
-                            qReq.setTranscript(transcript);
-
-                        }
-
-                    }
-
-
-
-                    qReq.setExplanation(qNode.path("explanation").asText(""));
-
-                    qReq.setPoints(10.0 / Math.max(1, exercise.getQuestionCount()));
-
-
-
-                    if ("MATCHING".equals(detectedQType)) {
-                        String matchWord = qNode.path("word").asText(qNode.path("targetWord").asText(qNode.path("prompt").asText(prompt))).trim();
-                        String matchMeaning = qNode.path("meaning").asText(qNode.path("correctAnswer").asText(qNode.path("matchText").asText(""))).trim();
-                        qReq.setPromptText(matchWord);
-                        qReq.setCorrectAnswer(matchMeaning);
-                        String ipaStr = qNode.path("ipa").asText("");
-                        qReq.setExplanation(!ipaStr.isBlank() ? (ipaStr + " - " + matchMeaning) : matchMeaning);
-                        com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest opt = new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
-                        opt.setOptionText(matchWord);
-                        opt.setMatchText(matchMeaning);
-                        opt.setIsCorrect(true);
-                        java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest> opts = new java.util.ArrayList<>();
-                        opts.add(opt);
-                        qReq.setOptions(opts);
-                                        } else if ("AUDIO_RESPONSE".equals(detectedQType)) {
-
-                        qReq.setCorrectAnswer(qNode.path("correctAnswer").asText(prompt));
-
-                    } else if ("ESSAY".equals(detectedQType)) {
-
-                        qReq.setCorrectAnswer(qNode.path("correctAnswer").asText(""));
-
-                    } else if ("FILL_IN_BLANK".equals(detectedQType)) {
-
-                        String fillAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText(qNode.path("word").asText(""))).trim();
-
-                        qReq.setCorrectAnswer(fillAns);
-
-                    } else {
-
-                        String rawAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText(qNode.path("word").asText(""))).trim();
-
-                        qReq.setCorrectAnswer(rawAns);
-
-                        java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest> optReqs = new java.util.ArrayList<>();
-
-                        if (qNode.has("options") || qNode.has("choices")) {
-
-                            JsonNode optNode = qNode.has("options") ? qNode.get("options") : qNode.get("choices");
-
-                            if (optNode.isArray() && optNode.size() > 0) {
-
-                                for (JsonNode singleOpt : optNode) {
-
-                                    com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optReq = new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
-
-                                    String text = singleOpt.isTextual() ? singleOpt.asText() : singleOpt.path("text").asText(singleOpt.path("label").asText(""));
-
-                                    boolean isCorrect = singleOpt.path("isCorrect").asBoolean(singleOpt.path("correct").asBoolean(false));
-
-                                    if (!isCorrect && !rawAns.isBlank()) {
-
-                                        isCorrect = text.equalsIgnoreCase(rawAns);
-
-                                    }
-
-                                    optReq.setOptionText(text);
-
-                                    optReq.setCorrect(isCorrect);
-
-                                    optReqs.add(optReq);
-
-                                }
-
-                            } else if (optNode.isObject()) {
-
-                                optNode.fields().forEachRemaining(entry -> {
-
-                                    com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optReq = new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
-
-                                    String text = entry.getValue().asText();
-
-                                    boolean isCorrect = entry.getKey().equalsIgnoreCase(rawAns) || text.equalsIgnoreCase(rawAns);
-
-                                    optReq.setOptionText(text);
-
-                                    optReq.setCorrect(isCorrect);
-
-                                    optReqs.add(optReq);
-
-                                });
-
-                            }
-
-                        } else if ("TRUE_FALSE".equals(detectedQType)) {
-
-                            String correctAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText("TRUE")).toUpperCase();
-
-                            com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optT = new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
-
-                            optT.setOptionText("TRUE");
-
-                            optT.setCorrect("TRUE".equals(correctAns));
-
-                            optReqs.add(optT);
-
-                            com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optF = new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
-
-                            optF.setOptionText("FALSE");
-
-                            optF.setCorrect("FALSE".equals(correctAns));
-
-                            optReqs.add(optF);
-
-                        }
-
-
-
-                        if (optReqs.size() < 2 && !rawAns.isBlank()) {
-
-                            // Chuyển sang dạng điền đáp án nếu không có danh sách lựa chọn
-
-                            qReq.setQuestionType("FILL_IN_BLANK");
-
-                            qReq.setOptions(new java.util.ArrayList<>());
-
-                        } else {
-
-                            qReq.setOptions(optReqs);
-
-                        }
-
-                    }
-
-                    qReqs.add(qReq);
-
-                }
-
-            }
+                    convertRawJsonToQuestionRequests(root, defaultQType, skillType, readingPassage, perQuestionPoint);
 
             req.setQuestions(qReqs);
 
@@ -3757,6 +3595,299 @@ public class AiLabServiceImpl implements AiLabService {
 
         }
 
+    }
+
+    @Override
+    public AiExamDraftResponse generateExamDraft(AiExamGenerateRequest request, UUID teacherId) {
+        if (request == null || request.getSections() == null || request.getSections().isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn ít nhất một kỹ năng để AI sinh đề thi.");
+        }
+
+        String cefr = (request.getTargetCefr() != null && !request.getTargetCefr().isBlank())
+                ? request.getTargetCefr().trim().toUpperCase()
+                : "B2";
+        String topic = (request.getTopic() != null && !request.getTopic().isBlank())
+                ? request.getTopic().trim()
+                : "Comprehensive English Assessment";
+        String extra = (request.getCustomInstructions() != null && !request.getCustomInstructions().isBlank())
+                ? ("\nHướng dẫn bổ sung của giáo viên: " + request.getCustomInstructions().trim())
+                : "";
+        String content = topic + extra;
+
+        java.util.List<AiExamDraftResponse.GeneratedExamQuestionDto> allQuestions = new java.util.ArrayList<>();
+        java.util.Set<String> examSkills = new java.util.LinkedHashSet<>();
+        java.util.List<String> listeningScripts = new java.util.ArrayList<>();
+
+        for (AiExamGenerateRequest.SkillSectionSpec spec : request.getSections()) {
+            if (spec == null || spec.getSkillType() == null || spec.getSkillType().isBlank()) {
+                continue;
+            }
+            String skill = spec.getSkillType().trim().toUpperCase();
+            int count = (spec.getQuestionCount() != null && spec.getQuestionCount() > 0)
+                    ? Math.min(spec.getQuestionCount(), 20)
+                    : 3;
+            double points = (spec.getPointsPerQuestion() != null && spec.getPointsPerQuestion() > 0)
+                    ? spec.getPointsPerQuestion()
+                    : ("ESSAY".equalsIgnoreCase(spec.getQuestionFormat()) || "WRITING".equals(skill) || "SPEAKING".equals(skill) ? 10.0 : 1.0);
+
+            String formatCode = normalizeExamSectionFormat(skill, spec.getQuestionFormat());
+            examSkills.add(skill);
+
+            AiGeneratedExercise generated = generateQuizFromContent(
+                    content,
+                    cefr,
+                    count,
+                    teacherId,
+                    null,
+                    formatCode,
+                    skill
+            );
+
+            try {
+                JsonNode root = objectMapper.readTree(generated.getRawResponseJson());
+                String readingPassage = root.path("readingPassage").asText(root.path("passage").asText(""));
+                String listeningPassage = root.path("listeningPassage").asText(root.path("audioScript").asText(""));
+                if (!listeningPassage.isBlank()) {
+                    listeningScripts.add(listeningPassage);
+                }
+
+                String defaultQType = inferDefaultQuestionType(skill, formatCode);
+                java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest> converted =
+                        convertRawJsonToQuestionRequests(root, defaultQType, skill, readingPassage, points);
+
+                for (com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest qReq : converted) {
+                    java.util.List<AiExamDraftResponse.GeneratedExamOptionDto> optDtos = qReq.getOptions() == null
+                            ? java.util.Collections.emptyList()
+                            : qReq.getOptions().stream()
+                                    .map(opt -> AiExamDraftResponse.GeneratedExamOptionDto.builder()
+                                            .optionText(opt.getOptionText())
+                                            .matchText(opt.getMatchText())
+                                            .isCorrect(opt.isCorrect())
+                                            .build())
+                                    .collect(java.util.stream.Collectors.toList());
+
+                    String effectiveTranscript = (qReq.getTranscript() != null && !qReq.getTranscript().isBlank())
+                            ? qReq.getTranscript()
+                            : ("LISTENING".equals(skill) && !listeningPassage.isBlank() ? listeningPassage : null);
+
+                    allQuestions.add(AiExamDraftResponse.GeneratedExamQuestionDto.builder()
+                            .skillType(skill)
+                            .questionType(qReq.getQuestionType())
+                            .promptText(qReq.getPromptText())
+                            .transcript(effectiveTranscript)
+                            .correctAnswer(qReq.getCorrectAnswer())
+                            .explanation(qReq.getExplanation())
+                            .points(qReq.getPoints())
+                            .options(optDtos)
+                            .build());
+                }
+            } catch (Exception e) {
+                log.warn("Lỗi chuyển đổi phần {} trong AI Exam Draft: {}", skill, e.getMessage());
+                throw new BadRequestException("AI chưa tạo đúng định dạng cho phần " + skill + ": " + e.getMessage());
+            }
+        }
+
+        String title = (request.getTitle() != null && !request.getTitle().isBlank())
+                ? request.getTitle().trim()
+                : ("Đề thi " + cefr + " - " + topic);
+
+        return AiExamDraftResponse.builder()
+                .title(title)
+                .description("Đề thi tổng hợp kỹ năng (" + String.join(", ", examSkills) + ") - Trình độ " + cefr)
+                .listeningScript(listeningScripts.isEmpty() ? null : String.join("\n\n---\n\n", listeningScripts))
+                .examSkills(new java.util.ArrayList<>(examSkills))
+                .questions(allQuestions)
+                .build();
+    }
+
+    private String normalizeExamSectionFormat(String skill, String rawFormat) {
+        String fmt = (rawFormat != null && !rawFormat.isBlank()) ? rawFormat.trim().toUpperCase() : "MULTIPLE_CHOICE";
+        if (fmt.startsWith(skill + "_") || fmt.startsWith("VOCAB_") || fmt.startsWith("GRAMMAR_")
+                || fmt.startsWith("READING_") || fmt.startsWith("LISTENING_")
+                || fmt.startsWith("WRITING_") || fmt.startsWith("SPEAKING_")) {
+            return fmt;
+        }
+        return switch (skill) {
+            case "READING" -> {
+                if (fmt.contains("TRUE")) yield "READING_TRUE_FALSE";
+                if (fmt.contains("FILL") || fmt.contains("BLANK")) yield "READING_FILL_BLANK";
+                if (fmt.contains("MIX")) yield "READING_MIXED";
+                yield "READING_MULTIPLE_CHOICE";
+            }
+            case "LISTENING" -> {
+                if (fmt.contains("FILL") || fmt.contains("BLANK") || fmt.contains("DICTATION")) yield "LISTENING_FILL";
+                if (fmt.contains("DIALOGUE")) yield "LISTENING_DIALOGUE";
+                if (fmt.contains("MIX")) yield "LISTENING_MIXED";
+                yield "LISTENING_MC";
+            }
+            case "GRAMMAR" -> {
+                if (fmt.contains("CONJUGAT")) yield "GRAMMAR_VERB_CONJUGATION";
+                if (fmt.contains("ERROR")) yield "GRAMMAR_ERROR_CORRECTION";
+                if (fmt.contains("TRANSFORM")) yield "GRAMMAR_TRANSFORMATION";
+                if (fmt.contains("ARRANG") || fmt.contains("UNSCRAMBLE")) yield "GRAMMAR_WORD_ARRANGEMENT";
+                if (fmt.contains("FILL") || fmt.contains("BLANK")) yield "GRAMMAR_VERB_CONJUGATION";
+                if (fmt.contains("MIX")) yield "GRAMMAR_MIXED";
+                yield "GRAMMAR_MULTIPLE_CHOICE";
+            }
+            case "VOCABULARY" -> {
+                if (fmt.contains("MATCH")) yield "VOCAB_MATCHING";
+                if (fmt.contains("FILL") || fmt.contains("BLANK")) yield "VOCAB_MEANING_TO_WORD";
+                if (fmt.contains("COLLOCATION")) yield "VOCAB_COLLOCATION";
+                if (fmt.contains("MIX")) yield "VOCAB_MIXED";
+                yield "VOCAB_SYNONYM_ANTONYM";
+            }
+            case "WRITING" -> {
+                if (fmt.contains("TASK1")) yield "WRITING_IELTS_TASK1";
+                if (fmt.contains("TASK2")) yield "WRITING_IELTS_TASK2";
+                if (fmt.contains("SENTENCE") || fmt.contains("FILL")) yield "WRITING_SENTENCE";
+                yield "WRITING_PARAGRAPH";
+            }
+            case "SPEAKING" -> fmt.contains("SHADOW") ? "SPEAKING_SHADOWING" : "SPEAKING_QA";
+            default -> "MULTIPLE_CHOICE";
+        };
+    }
+
+    private String inferDefaultQuestionType(String skill, String formatCode) {
+        if ("SPEAKING".equals(skill) || formatCode.contains("SPEAKING")) return "AUDIO_RESPONSE";
+        if ("WRITING".equals(skill) && !formatCode.contains("SENTENCE") && !formatCode.contains("ARRANGEMENT")) return "ESSAY";
+        if (formatCode.contains("MATCH")) return "MATCHING";
+        if (formatCode.contains("TRUE_FALSE")) return "TRUE_FALSE";
+        if (formatCode.contains("FILL") || formatCode.contains("DICTATION") || formatCode.contains("CONJUGAT")
+                || formatCode.contains("ERROR") || formatCode.contains("TRANSFORM") || formatCode.contains("MEANING_TO_WORD")) {
+            return "FILL_IN_BLANK";
+        }
+        return "MULTIPLE_CHOICE";
+    }
+
+    private java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest> convertRawJsonToQuestionRequests(
+            JsonNode root, String defaultQType, String skillType, String readingPassage, double perQuestionPoint) {
+        JsonNode questionsNode = root.has("questions") ? root.get("questions") : objectMapper.createArrayNode();
+        java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest> qReqs = new java.util.ArrayList<>();
+        if (!questionsNode.isArray()) {
+            return qReqs;
+        }
+        for (JsonNode qNode : questionsNode) {
+            com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest qReq =
+                    new com.englishlearning.assignment.dto.AssignmentRequest.QuestionRequest();
+            String prompt = qNode.has("prompt") ? qNode.get("prompt").asText() : qNode.path("question").asText();
+            if (readingPassage != null && !readingPassage.isBlank() && !prompt.contains("[READING PASSAGE]")) {
+                prompt = "[READING PASSAGE]\n" + readingPassage + "\n\n" + prompt;
+            }
+            qReq.setPromptText(prompt);
+            qReq.setSkillType(skillType);
+
+            String detectedQType = qNode.path("questionType").asText(qNode.path("type").asText(defaultQType)).toUpperCase();
+            boolean isSentencePrompt = prompt.contains("___") || prompt.contains(" / ")
+                    || prompt.toLowerCase().contains("sắp xếp") || prompt.toLowerCase().contains("hoàn thành câu")
+                    || prompt.toLowerCase().contains("từ gợi ý");
+            if (detectedQType.contains("MATCH")) {
+                detectedQType = "MATCHING";
+            } else if (isSentencePrompt || detectedQType.contains("FILL") || detectedQType.contains("BLANK")
+                    || detectedQType.contains("WORD_ARRANGEMENT") || detectedQType.contains("SHORT_ANSWER")
+                    || detectedQType.contains("WORD_FORM") || detectedQType.contains("DICTATION")
+                    || detectedQType.contains("SPELL") || detectedQType.contains("CONJUGAT")
+                    || detectedQType.contains("TRANSFORM") || detectedQType.contains("CORRECTION")
+                    || detectedQType.contains("KEYWORD") || detectedQType.contains("UNSCRAMBLE")) {
+                detectedQType = "FILL_IN_BLANK";
+            } else if (detectedQType.contains("TRUE") || detectedQType.contains("FALSE")) {
+                detectedQType = "TRUE_FALSE";
+            } else if (detectedQType.contains("ESSAY") || detectedQType.contains("WRITING")) {
+                detectedQType = "ESSAY";
+            } else if (detectedQType.contains("AUDIO") || detectedQType.contains("SPEAKING")) {
+                detectedQType = "AUDIO_RESPONSE";
+            } else {
+                detectedQType = "MULTIPLE_CHOICE";
+            }
+            qReq.setQuestionType(detectedQType);
+
+            if ("VOCABULARY".equals(skillType) || "SPEAKING".equals(skillType)) {
+                String media = qNode.path("mediaUrl").asText(qNode.path("audioUrl").asText(null));
+                if (media != null && !media.isBlank()) {
+                    qReq.setMediaUrl(media);
+                }
+                String transcript = qNode.path("transcript").asText(null);
+                if (transcript != null && !transcript.isBlank()) {
+                    qReq.setTranscript(transcript);
+                }
+            }
+
+            qReq.setExplanation(qNode.path("explanation").asText(""));
+            qReq.setPoints(perQuestionPoint);
+
+            if ("MATCHING".equals(detectedQType)) {
+                String matchWord = qNode.path("word").asText(qNode.path("targetWord").asText(qNode.path("prompt").asText(prompt))).trim();
+                String matchMeaning = qNode.path("meaning").asText(qNode.path("correctAnswer").asText(qNode.path("matchText").asText(""))).trim();
+                qReq.setPromptText(matchWord);
+                qReq.setCorrectAnswer(matchMeaning);
+                String ipaStr = qNode.path("ipa").asText("");
+                qReq.setExplanation(!ipaStr.isBlank() ? (ipaStr + " - " + matchMeaning) : matchMeaning);
+                com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest opt =
+                        new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
+                opt.setOptionText(matchWord);
+                opt.setMatchText(matchMeaning);
+                opt.setIsCorrect(true);
+                qReq.setOptions(java.util.List.of(opt));
+            } else if ("AUDIO_RESPONSE".equals(detectedQType)) {
+                qReq.setCorrectAnswer(qNode.path("correctAnswer").asText(prompt));
+            } else if ("ESSAY".equals(detectedQType)) {
+                qReq.setCorrectAnswer(qNode.path("correctAnswer").asText(""));
+            } else if ("FILL_IN_BLANK".equals(detectedQType)) {
+                String fillAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText(qNode.path("word").asText(""))).trim();
+                qReq.setCorrectAnswer(fillAns);
+            } else {
+                String rawAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText(qNode.path("word").asText(""))).trim();
+                qReq.setCorrectAnswer(rawAns);
+                java.util.List<com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest> optReqs = new java.util.ArrayList<>();
+                if (qNode.has("options") || qNode.has("choices")) {
+                    JsonNode optNode = qNode.has("options") ? qNode.get("options") : qNode.get("choices");
+                    if (optNode.isArray() && optNode.size() > 0) {
+                        for (JsonNode singleOpt : optNode) {
+                            com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optReq =
+                                    new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
+                            String text = singleOpt.isTextual() ? singleOpt.asText() : singleOpt.path("text").asText(singleOpt.path("label").asText(""));
+                            boolean isCorrect = singleOpt.path("isCorrect").asBoolean(singleOpt.path("correct").asBoolean(false));
+                            if (!isCorrect && !rawAns.isBlank()) {
+                                isCorrect = text.equalsIgnoreCase(rawAns);
+                            }
+                            optReq.setOptionText(text);
+                            optReq.setCorrect(isCorrect);
+                            optReqs.add(optReq);
+                        }
+                    } else if (optNode.isObject()) {
+                        optNode.fields().forEachRemaining(entry -> {
+                            com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optReq =
+                                    new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
+                            String text = entry.getValue().asText();
+                            boolean isCorrect = entry.getKey().equalsIgnoreCase(rawAns) || text.equalsIgnoreCase(rawAns);
+                            optReq.setOptionText(text);
+                            optReq.setCorrect(isCorrect);
+                            optReqs.add(optReq);
+                        });
+                    }
+                } else if ("TRUE_FALSE".equals(detectedQType)) {
+                    String correctAns = qNode.path("correctAnswer").asText(qNode.path("answer").asText("TRUE")).toUpperCase();
+                    com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optT =
+                            new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
+                    optT.setOptionText("TRUE");
+                    optT.setCorrect("TRUE".equals(correctAns));
+                    optReqs.add(optT);
+                    com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest optF =
+                            new com.englishlearning.assignment.dto.AssignmentRequest.OptionRequest();
+                    optF.setOptionText("FALSE");
+                    optF.setCorrect("FALSE".equals(correctAns));
+                    optReqs.add(optF);
+                }
+
+                if (optReqs.size() < 2 && !rawAns.isBlank()) {
+                    qReq.setQuestionType("FILL_IN_BLANK");
+                    qReq.setOptions(new java.util.ArrayList<>());
+                } else {
+                    qReq.setOptions(optReqs);
+                }
+            }
+            qReqs.add(qReq);
+        }
+        return qReqs;
     }
 
 }

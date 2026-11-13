@@ -13,11 +13,18 @@ export function StreakBadge({ initialStreak = 5, className }: StreakBadgeProps) 
   const [streak, setStreak] = useState(initialStreak);
 
   useEffect(() => {
+    setStreak(initialStreak);
+  }, [initialStreak]);
+
+  useEffect(() => {
     // Tự động đọc dữ liệu streak nếu được lưu từ Daily Plan hoặc profile
     try {
       const storedStreak = localStorage.getItem("elp_student_streak");
-      if (storedStreak) {
-        setStreak(parseInt(storedStreak, 10));
+      if (storedStreak !== null) {
+        const parsed = parseInt(storedStreak, 10);
+        if (!Number.isNaN(parsed) && parsed >= 0) {
+          setStreak(parsed);
+        }
       }
     } catch {
       // ignore

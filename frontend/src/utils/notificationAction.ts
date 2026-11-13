@@ -21,12 +21,37 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   const fullText = `${rawTitle} ${rawMessage}`;
   const rawAction = (notification.actionType || "").trim().toUpperCase();
 
+  let effectiveAction: NotificationActionType;
+  if (rawAction === "GRADED" || rawAction === "NEW_GRADE") {
+    effectiveAction = "GRADED";
+  } else if (rawAction === "AI_EVALUATION") {
+    effectiveAction = "AI_EVALUATION";
+  } else if (rawAction === "NEW_ASSIGNMENT") {
+    effectiveAction = "NEW_ASSIGNMENT";
+  } else if (rawAction === "NEW_LESSON") {
+    effectiveAction = "NEW_LESSON";
+  } else if (rawAction === "SRS_REMINDER") {
+    effectiveAction = "SRS_REMINDER";
+  } else if (rawAction === "SUBMISSION_RECEIVED") {
+    effectiveAction = "SUBMISSION_RECEIVED";
+  } else if (/Bài nộp mới|cần chấm điểm/i.test(fullText)) {
+    effectiveAction = "SUBMISSION_RECEIVED";
+  } else if (/AI\s*(Speaking|Writing|Evaluation)|Shadowing|đánh\s*giá\s*AI|AI\s*đã\s*chấm/i.test(fullText)) {
+    effectiveAction = "AI_EVALUATION";
+  } else if (/chấm\s*điểm|đã\s*chấm|kết\s*quả\s*chấm/i.test(fullText)) {
+    effectiveAction = "GRADED";
+  } else if (/Bài tập mới|giao bài|lộ trình học mới|bài tập đã mở khóa/i.test(fullText)) {
+    effectiveAction = "NEW_ASSIGNMENT";
+  } else if (/Bài học mới|tài liệu mới|video bài học/i.test(fullText)) {
+    effectiveAction = "NEW_LESSON";
+  } else if (/từ vựng|flashcard|ôn tập SRS|(?:spaced|spced)\s*repetition/i.test(fullText)) {
+    effectiveAction = "SRS_REMINDER";
+  } else {
+    effectiveAction = "TEXT_ANNOUNCEMENT";
+  }
+
   // 1. GRADED (Giáo viên chấm bài)
-  if (
-    rawAction === "GRADED" ||
-    rawAction === "NEW_GRADE" ||
-    /chấm\s*điểm|đã\s*chấm|kết\s*quả\s*chấm/i.test(fullText)
-  ) {
+  if (effectiveAction === "GRADED") {
     // Trích xuất điểm số (ví dụ: "Điểm 8.5/10" hoặc "Điểm 8.5")
     const scoreMatch = fullText.match(/Điểm\s*([0-9]+(?:[\.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/i);
     const score = scoreMatch ? scoreMatch[1].trim() : null;
@@ -60,10 +85,7 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 2. AI_EVALUATION (AI Speaking / Writing / Shadowing)
-  if (
-    rawAction === "AI_EVALUATION" ||
-    /AI\s*(Speaking|Writing|Evaluation)|Shadowing|đánh\s*giá\s*AI|AI\s*đã\s*chấm/i.test(fullText)
-  ) {
+  if (effectiveAction === "AI_EVALUATION") {
     // Trích xuất Band hoặc Điểm
     const bandMatch = fullText.match(/Band\s*([0-9]+(?:[\.,][0-9]+)?)/i);
     const scoreMatch = fullText.match(/Điểm\s*([0-9]+(?:[\.,][0-9]+)?(?:\s*\/\s*[0-9]+)?)/i);
@@ -90,10 +112,7 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 3. NEW_ASSIGNMENT (Giáo viên giao bài tập mới hoặc Lộ trình mới)
-  if (
-    rawAction === "NEW_ASSIGNMENT" ||
-    /Bài tập mới|giao bài|lộ trình học mới|bài tập đã mở khóa/i.test(fullText)
-  ) {
+  if (effectiveAction === "NEW_ASSIGNMENT") {
     const targetUrl =
       notification.targetUrl ||
       (notification.referenceId
@@ -114,10 +133,7 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 4. NEW_LESSON (Bài học mới / Tài liệu mới)
-  if (
-    rawAction === "NEW_LESSON" ||
-    /Bài học mới|tài liệu mới|video bài học/i.test(fullText)
-  ) {
+  if (effectiveAction === "NEW_LESSON") {
     const targetUrl =
       notification.targetUrl ||
       (notification.referenceId
@@ -138,10 +154,7 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 5. SRS_REMINDER (Nhắc ôn từ vựng SRS)
-  if (
-    rawAction === "SRS_REMINDER" ||
-    /từ vựng|flashcard|ôn tập SRS|spced repetition/i.test(fullText)
-  ) {
+  if (effectiveAction === "SRS_REMINDER") {
     return {
       actionType: "SRS_REMINDER",
       targetUrl: notification.targetUrl || "/student/vocabulary",
@@ -156,13 +169,10 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 6. SUBMISSION_RECEIVED (Học sinh nộp bài, giáo viên cần chấm)
-  if (
-    rawAction === "SUBMISSION_RECEIVED" ||
-    /Bài nộp mới|cần chấm điểm/i.test(fullText)
-  ) {
+  if (effectiveAction === "SUBMISSION_RECEIVED") {
     return {
       actionType: "SUBMISSION_RECEIVED",
-      targetUrl: notification.targetUrl || "/teacher/grading",
+      targetUrl: notification.targetUrl || (notification.classroomId ? `/teacher/classrooms/${notification.classroomId}/grading` : "/teacher/classrooms"),
       referenceId: notification.referenceId,
       badgeText: "BÀI NỘP MỚI",
       badgeClass:

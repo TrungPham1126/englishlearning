@@ -39,11 +39,11 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
       {/* Box 1: Danh sách bài tập của Ngày đang chọn */}
       <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] shadow-xs overflow-hidden">
         <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+          <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5 tabular-nums">
             <Mic size={14} className="text-blue-700 dark:text-blue-400" />
-            Bài tập Ngày {currentDay.dayNumber}
+            Ngày {currentDay.dayNumber}
           </span>
-          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+          <span className="text-[11px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
             {currentDay.speakingTasks.length} bài
           </span>
         </div>
@@ -51,7 +51,7 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
         <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[350px] overflow-y-auto">
           {currentDay.speakingTasks.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              Ngày này chưa có bài tập Speaking nào
+              Chưa có bài Speaking
             </div>
           ) : (
             currentDay.speakingTasks.map((asg) => {
@@ -107,8 +107,8 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
                       </span>
                     )}
                     {asg.highestScore !== undefined && asg.highestScore !== null && (
-                      <p className="text-[11px] font-bold text-blue-800 dark:text-blue-400 mt-0.5">
-                        {asg.highestScore.toFixed(1)} pts
+                      <p className="text-[11px] font-bold tabular-nums text-blue-800 dark:text-blue-400 mt-0.5">
+                        {asg.highestScore.toFixed(1)}đ
                       </p>
                     )}
                   </div>
@@ -124,9 +124,9 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
         <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <span className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
             <Clock size={13} className="text-blue-700 dark:text-blue-400" />
-            Lịch Sử Các Lần Nộp
+            Lịch sử nộp
           </span>
-          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+          <span className="text-[11px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
             {attempts.length} lượt
           </span>
         </div>
@@ -134,7 +134,7 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
         <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto">
           {attempts.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              Chưa có lượt nộp bài nào
+              Chưa có lượt nộp
             </div>
           ) : (
             attempts.map((att) => {
@@ -155,11 +155,11 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                      Lần làm #{att.attemptNumber}
+                    <span className="text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                      Lần #{att.attemptNumber}
                     </span>
                     <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded ${
                         isDone
                           ? "text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-500/20"
                           : "text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-500/20"
@@ -167,12 +167,12 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
                     >
                       {isDone ? (
                         att.score !== undefined && att.score !== null ? (
-                          `${att.score.toFixed(1)} pts`
+                          `${att.score.toFixed(1)}đ`
                         ) : (
-                          "Đã hoàn thành"
+                          "Đã nộp"
                         )
                       ) : (
-                        "Đang làm dở"
+                        "Đang làm"
                       )}
                     </span>
                   </div>
@@ -207,7 +207,7 @@ export const SpeakingTasksSidebar: React.FC<SpeakingTasksSidebarProps> = ({
               className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs disabled:opacity-50"
             >
               <RotateCcw size={13} className="text-blue-700 dark:text-blue-400" />
-              <span>Luyện tập lại (Tạo bài nộp mới)</span>
+              <span>Làm lại</span>
             </button>
           </div>
         )}

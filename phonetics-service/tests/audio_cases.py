@@ -14,8 +14,38 @@ SR = 16000
 FULL_SENTENCE = "Consistent pronunciation practice and phonemic awareness enhance oral fluency."
 
 
+def _ensure_fixture_wav(name: str, text: str) -> Path:
+    FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+    wav_path = FIXTURE_DIR / name
+    if wav_path.exists():
+        return wav_path
+    import gtts
+    import soundfile as sf
+    import scipy.signal
+    mp3_path = FIXTURE_DIR / (name.replace(".wav", ".mp3"))
+    if not mp3_path.exists():
+        tts = gtts.gTTS(text, lang="en", tld="com")
+        tts.save(str(mp3_path))
+    data, orig_sr = sf.read(str(mp3_path), dtype="float32")
+    if data.ndim > 1:
+        data = np.mean(data, axis=1)
+    if orig_sr != SR:
+        import math
+        g = math.gcd(orig_sr, SR)
+        data = scipy.signal.resample_poly(data, SR // g, orig_sr // g).astype(np.float32)
+    pcm = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16)
+    with wave.open(str(wav_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(SR)
+        wf.writeframes(pcm.tobytes())
+    return wav_path
+
+
 def read_wav(name: str) -> np.ndarray:
-    with wave.open(str(FIXTURE_DIR / name), "rb") as wf:
+    text = FULL_SENTENCE if "full" in name else "Consistent pronunciation"
+    wav_path = _ensure_fixture_wav(name, text)
+    with wave.open(str(wav_path), "rb") as wf:
         assert wf.getframerate() == SR and wf.getnchannels() == 1
         raw = wf.readframes(wf.getnframes())
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0

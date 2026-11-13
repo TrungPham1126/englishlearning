@@ -152,4 +152,57 @@ public class ShadowingServiceTest {
                 verify(aiEvaluationRepository).save(captor.capture());
                 Assertions.assertEquals("GROQ_AI_FALLBACK", captor.getValue().getEvaluationEngine());
         }
+
+        @Test
+        void testEvaluateShadowing_BlankSentenceThrowsBadRequest() {
+                Assertions.assertThrows(com.englishlearning.common.exception.BadRequestException.class,
+                                () -> shadowingService.evaluateShadowing(null, null, "   "));
+        }
+
+        @Test
+        void testEvaluateShadowing_UpdatesExistingEvaluationAndAnalytics_andFallsBackWhenCleanedSentenceBlank() {
+                MockMultipartFile audio = new MockMultipartFile("audio", "test.wav", "audio/wav",
+                                new byte[] { 1, 2, 3 });
+                UUID studentId = UUID.randomUUID();
+                UUID answerId = UUID.randomUUID();
+                com.englishlearning.auth.entity.Student student = com.englishlearning.auth.entity.Student.builder()
+                                .id(studentId).build();
+                com.englishlearning.submission.entity.AssignmentAttempt attempt =
+                                com.englishlearning.submission.entity.AssignmentAttempt.builder().student(student).build();
+                StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
+                answer.setAttempt(attempt);
+
+                AiEvaluation existingEval = AiEvaluation.builder().studentAnswer(answer).build();
+                when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
+                when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.of(existingEval));
+                when(pythonIntegrationService.evaluatePhonetics(any(), any(), eq("Hello")))
+                                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(90).isPassed(true).build());
+
+                // Câu không rỗng nhưng chỉ gồm dấu ngoặc/khoảng trắng -> cleanShadowingSentence rỗng -> fallback "Hello"
+                ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(
+                                audio, answerId, "\"    \"");
+
+                Assertions.assertEquals(90, res.getOverallScore());
+                verify(aiEvaluationRepository).save(existingEval);
+                verify(entityManager).merge(answer);
+                verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 0.9);
+        }
+
+        @Test
+        void testEvaluateShadowing_AllThreeEnginesFail_ThrowsRuntimeException() {
+                MockMultipartFile audio = new MockMultipartFile("audio", "test.wav", "audio/wav",
+                                new byte[] { 1, 2, 3 });
+                when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                                .thenThrow(new RuntimeException("Python down"));
+                when(groqClientService.transcribeAudioVerbose(any(), any())).thenReturn("{\"text\":\"hi\"}");
+                when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                                .thenThrow(new RuntimeException("Gemini down"));
+                when(groqClientService.chatCompletionJson(anyString(), anyString()))
+                                .thenThrow(new RuntimeException("Groq down"));
+
+                RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
+                                () -> shadowingService.evaluateShadowing(audio, null, "Hi there"));
+                Assertions.assertTrue(thrown.getMessage().contains("Chấm bài Shadowing thất bại"));
+        }
 }

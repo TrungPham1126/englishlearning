@@ -136,7 +136,7 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                     .id(plan.getId())
                     .dayNumber(plan.getDayNumber())
                     .title(plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber())
-                    .dateLabel(plan.getScheduledDate().format(DATE_SUMMARY_FORMATTER))
+                    .dateLabel(plan.getScheduledDate() != null ? plan.getScheduledDate().format(DATE_SUMMARY_FORMATTER) : "")
                     .scheduledDate(plan.getScheduledDate())
                     .estimatedMinutes(plan.getEstimatedMinutes())
                     .isCompleted(isCompleted)
@@ -196,7 +196,7 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                     .isDone(itemDone)
                     .build();
 
-            grouped.computeIfAbsent(item.getSectionName(), k -> new ArrayList<>()).add(taskDto);
+            grouped.computeIfAbsent(item.getSectionName() != null ? item.getSectionName() : "CORE", k -> new ArrayList<>()).add(taskDto);
         }
 
         boolean isTrulyDayCompleted = !items.isEmpty() && completedCount >= items.size();
@@ -209,8 +209,10 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                 .collect(Collectors.toList());
 
         String dayTitle = plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber();
-        String fullHeaderLabel = String.format("%s %s", dayTitle,
-                plan.getScheduledDate().format(DATE_FULL_FORMATTER).toUpperCase());
+        String formattedDate = plan.getScheduledDate() != null
+                ? plan.getScheduledDate().format(DATE_FULL_FORMATTER).toUpperCase()
+                : "";
+        String fullHeaderLabel = formattedDate.isEmpty() ? dayTitle : String.format("%s %s", dayTitle, formattedDate);
 
         return DayDetailDto.builder()
                 .id(plan.getId())
@@ -282,8 +284,9 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
     public List<DailyStudyPlan> getPlansByClassroom(UUID classroomId) {
         List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdWithItems(classroomId);
         if (plans == null || plans.isEmpty()) {
-            plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
-            plans.sort(Comparator.comparing(DailyStudyPlan::getDayNumber));
+            List<DailyStudyPlan> rawPlans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
+            plans = rawPlans != null ? new ArrayList<>(rawPlans) : new ArrayList<>();
+            plans.sort(Comparator.comparing(DailyStudyPlan::getDayNumber, Comparator.nullsLast(Comparator.naturalOrder())));
         }
         for (DailyStudyPlan p : plans) {
             if (p.getItems() != null) {
@@ -365,6 +368,9 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
         Assignment assignment = null;
         if (request.getAssignmentId() != null) {
             assignment = entityManager.find(Assignment.class, request.getAssignmentId());
+            if (assignment == null) {
+                throw new ResourceNotFoundException("Không tìm thấy bài tập với ID: " + request.getAssignmentId());
+            }
         }
 
         DailyPlanItem item = DailyPlanItem.builder()
@@ -398,15 +404,17 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
         DailyStudyPlan plan = dailyStudyPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngày học: " + planId));
 
+        int itemsCount = plan.getItems() != null ? plan.getItems().size() : 0;
         StudentDailyProgress progress = progressRepository.findByStudentIdAndDailyPlanId(studentId, planId)
                 .orElseGet(() -> StudentDailyProgress.builder()
                         .student(entityManager.getReference(com.englishlearning.auth.entity.Student.class, studentId))
                         .dailyPlan(plan)
-                        .totalItemsCount(plan.getItems().size())
+                        .totalItemsCount(itemsCount)
                         .build());
 
         progress.setIsCompleted(true);
-        progress.setCompletedItemsCount(plan.getItems().size());
+        progress.setTotalItemsCount(itemsCount);
+        progress.setCompletedItemsCount(itemsCount);
         progress.setCompletedAt(Instant.now());
         progressRepository.save(progress);
     }
@@ -426,9 +434,10 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                 .getResultList();
 
         // 2. Lấy danh sách các lộ trình (Day 1, Day 2...) của lớp
-        java.util.List<DailyStudyPlan> plans = dailyStudyPlanRepository
+        java.util.List<DailyStudyPlan> rawPlans = dailyStudyPlanRepository
                 .findByClassroomIdOrderByDayNumberDesc(classroomId);
-        plans.sort(java.util.Comparator.comparing(DailyStudyPlan::getDayNumber));
+        java.util.List<DailyStudyPlan> plans = rawPlans != null ? new java.util.ArrayList<>(rawPlans) : new java.util.ArrayList<>();
+        plans.sort(java.util.Comparator.comparing(DailyStudyPlan::getDayNumber, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
 
         java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse> responseList = new java.util.ArrayList<>();
 

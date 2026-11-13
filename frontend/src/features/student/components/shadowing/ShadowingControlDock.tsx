@@ -106,7 +106,7 @@ export const ShadowingControlDock = memo<ShadowingControlDockProps>(
                 aria-hidden="true"
               />
             )}
-            <span>{isPlayingNative ? "Dừng mẫu" : "Nghe lại mẫu"}</span>
+            <span>{isPlayingNative ? "Dừng" : "Nghe mẫu"}</span>
             <kbd className="hidden sm:inline-block px-1 py-0.2 text-[9px] font-mono bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded border border-slate-300 dark:border-slate-600">
               R
             </kbd>
@@ -176,7 +176,7 @@ export const ShadowingControlDock = memo<ShadowingControlDockProps>(
                   className="h-3.5 w-3.5 text-white"
                   aria-hidden="true"
                 />
-                <span>Nộp & Chấm Điểm</span>
+                <span>Chấm điểm</span>
               </>
             )}
           </button>
@@ -193,17 +193,17 @@ export const ShadowingControlDock = memo<ShadowingControlDockProps>(
                 aria-hidden="true"
                 className="h-2 w-2 rounded-full bg-rose-500 animate-pulse"
               />
-              <span className="font-mono text-xs font-bold">
+              <span className="font-mono text-xs font-bold tabular-nums">
                 {formatTimer(recordingSeconds)}
               </span>
-              <span>— Đang thu âm (Nhấn Space để dừng)</span>
+              <span>Đang thu</span>
             </div>
           ) : recordedAudioUrl ? (
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>
-                  Đã thu âm xong
+                  Đã thu
                   {recordingDuration > 0
                     ? ` (${recordingDuration.toFixed(1)}s)`
                     : ""}
@@ -218,29 +218,29 @@ export const ShadowingControlDock = memo<ShadowingControlDockProps>(
                 className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 hover:underline font-bold cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" aria-hidden="true" />
-                <span>Thu âm lại</span>
+                <span>Thu lại</span>
               </button>
 
               {evaluationResult && (
                 <button
                   type="button"
                   onClick={() => setFeedbackDrawerOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-200 dark:hover:bg-blue-600/30 transition cursor-pointer text-[10px]"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 font-bold hover:bg-blue-200 dark:hover:bg-blue-600/30 transition cursor-pointer text-[10px] tabular-nums"
                 >
                   <Award className="w-3 h-3" aria-hidden="true" />
                   <span>
-                    Bảng Điểm & Khẩu Hình ({evaluationResult.overallScore}/100)
+                    Kết quả ({evaluationResult.overallScore}/100)
                   </span>
                 </button>
               )}
             </div>
           ) : (
             <span className="text-slate-600 dark:text-slate-400 font-medium text-[10px]">
-              Nhấn Micro hoặc phím{" "}
+              Nhấn Micro hoặc{" "}
               <kbd className="px-1 py-0.2 font-mono font-bold bg-white dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-700">
                 Space
               </kbd>{" "}
-              để bắt đầu thu âm
+              để thu
             </span>
           )}
         </div>

@@ -19,19 +19,19 @@ export const SpeakingDaySelector: React.FC<SpeakingDaySelectorProps> = ({
         <div className="flex items-center gap-2">
           <Calendar size={18} className="text-blue-700 dark:text-blue-400" />
           <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">
-            Lộ trình bài tập Speaking theo Ngày (Daily Plan):
+            Lộ trình Speaking
           </h2>
         </div>
-        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
-          {daysList.length} Ngày trong lộ trình
+        <span className="text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
+          {daysList.length} ngày
         </span>
       </div>
 
       {daysList.length === 0 ? (
         <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
-          <AlertTriangle className="mx-auto text-amber-500" size={32} />
+          <AlertTriangle className="mx-auto text-amber-500" size={28} />
           <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-            Chưa có ngày học nào được giao bài Speaking trong lớp này.
+            Chưa có bài Speaking
           </p>
         </div>
       ) : (

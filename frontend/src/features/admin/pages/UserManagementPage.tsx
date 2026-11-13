@@ -102,7 +102,7 @@ export default function UserManagementPage() {
         lastName: formData.lastName,
         phone: formData.phone,
         roles: formData.roles,
-        isActive: true,
+        isActive: selectedUser.isActive ?? true,
       });
       alert("Cập nhật thành công!");
       setIsEditModalOpen(false);

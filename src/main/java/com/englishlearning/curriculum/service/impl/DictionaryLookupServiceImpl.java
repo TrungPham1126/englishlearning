@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -25,11 +26,16 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, DictionaryEntryDto> cache = new ConcurrentHashMap<>();
 
+    @Autowired
     public DictionaryLookupServiceImpl() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(1500);
         factory.setReadTimeout(1500);
         this.restTemplate = new RestTemplate(factory);
+    }
+
+    DictionaryLookupServiceImpl(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
 
@@ -46,7 +52,7 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
 
         // Làm sạch từ vựng: bỏ dấu ngoặc, dấu chấm, phẩy, gạch chéo, markdown
         String cleanWord = rawWord.trim()
-                .replaceAll("^[\"'“‘\\[\\(]+|[\"'”’\\]\\),.?!:;]+$", "")
+                .replaceAll("^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$", "")
                 .trim()
                 .toLowerCase();
 

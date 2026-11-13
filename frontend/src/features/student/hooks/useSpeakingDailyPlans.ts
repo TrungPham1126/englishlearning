@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { studentApi } from "@/features/student/api/studentApi";
 import { isGradingRubricOrMetaText } from "@/utils/sampleAudioPlayer";
 import { detectItemCategory } from "@/features/student/components/SkillAccordion";
@@ -50,6 +50,16 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const isMountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Trích xuất báo cáo AI cho 1 câu hỏi cụ thể
   const extractAndSetAiReportForQuestion = useCallback(
     (q: any, attempt: AttemptResponse | null) => {
@@ -62,12 +72,15 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
       if (q.evalFeedback) {
         try {
           const parsed = JSON.parse(q.evalFeedback);
-          if (parsed.kpi || parsed.sentenceTokens || parsed.overallScore !== undefined) {
-            setShadowingReport(parsed);
-            return;
-          } else if (parsed.overallBand !== undefined || parsed.pronunciationScore !== undefined) {
-            setAiReport(parsed);
-            return;
+          if (parsed && typeof parsed === "object") {
+            if (parsed.kpi || parsed.sentenceTokens || parsed.overallScore !== undefined) {
+              setShadowingReport(parsed);
+              return;
+            }
+            if (parsed.overallBand !== undefined || parsed.pronunciationScore !== undefined) {
+              setAiReport(parsed);
+              return;
+            }
           }
         } catch {}
       }
@@ -76,10 +89,12 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
       if (attempt?.aiFeedback) {
         try {
           const parsed = JSON.parse(attempt.aiFeedback);
-          if (parsed.kpi || parsed.sentenceTokens) {
-            setShadowingReport(parsed);
-          } else {
-            setAiReport(parsed);
+          if (parsed && typeof parsed === "object") {
+            if (parsed.kpi || parsed.sentenceTokens) {
+              setShadowingReport(parsed);
+            } else {
+              setAiReport(parsed);
+            }
           }
         } catch {}
       }
@@ -108,8 +123,11 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
   // Tải chi tiết bài tập & khởi tạo attempt nếu chưa có
   const selectAndLoadAssignment = useCallback(
     async (asgId: string, targetAttemptId?: string) => {
+      const seq = ++loadSeqRef.current;
       try {
-        const rawList = await studentApi.getMyAttempts(asgId).catch(() => []);
+        const rawRes = await studentApi.getMyAttempts(asgId).catch(() => []);
+        if (!isMountedRef.current || seq !== loadSeqRef.current) return;
+        const rawList = Array.isArray(rawRes) ? rawRes : [];
         const byNewest = (a: AttemptResponse, b: AttemptResponse) =>
           (b.attemptNumber ?? 0) - (a.attemptNumber ?? 0);
         const sortedAttempts = [...rawList].sort(byNewest);
@@ -141,6 +159,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           const detail = await studentApi
             .getAttemptDetail(target.attemptId)
             .catch(() => target!);
+          if (!isMountedRef.current || seq !== loadSeqRef.current) return;
           applyAttemptDetail(detail);
 
           // Cập nhật trạng thái trực tiếp của task đang chọn vào daysList
@@ -154,7 +173,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           setDaysList((prev) =>
             prev.map((d) => ({
               ...d,
-              speakingTasks: d.speakingTasks.map((t) =>
+              speakingTasks: (d.speakingTasks || []).map((t) =>
                 t.id === asgId
                   ? {
                       ...t,
@@ -171,11 +190,13 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           const newAttempt = await studentApi
             .startAssignment(asgId)
             .catch(() => null);
+          if (!isMountedRef.current || seq !== loadSeqRef.current) return;
 
           if (newAttempt) {
             const detail = await studentApi
               .getAttemptDetail(newAttempt.attemptId)
               .catch(() => newAttempt);
+            if (!isMountedRef.current || seq !== loadSeqRef.current) return;
             setAttempts([detail]);
             applyAttemptDetail(detail);
           } else {
@@ -184,6 +205,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           }
         }
       } catch (err) {
+        if (!isMountedRef.current || seq !== loadSeqRef.current) return;
         console.error("Lỗi khi tải hoặc khởi tạo bài tập:", err);
         setCurrentAttempt(null);
       }
@@ -208,8 +230,9 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
         // Map lưu trữ các Ngày cùng danh sách bài tập Speaking của ngày đó
         const daysMap = new Map<string, DaySpeakingGroup>();
 
+        const safePlans = Array.isArray(rawDailyPlans) ? rawDailyPlans : [];
         // 2. Duyệt qua rawDailyPlans để lấy cấu trúc từng Ngày (Day 1, Day 2...)
-        rawDailyPlans.forEach((plan: any) => {
+        safePlans.forEach((plan: any) => {
           const dayNum = plan.dayNumber ?? 1;
           const planKey = plan.id || `day-${dayNum}`;
           const titleClean = plan.title || `DAY ${dayNum}`;
@@ -301,7 +324,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
             if (asgInfo) {
               const isComp = asgInfo.attemptsCount > 0 && asgInfo.status === "COMPLETED";
               const bestScore =
-                asgInfo.highestScore > 0
+                typeof asgInfo.highestScore === "number" && asgInfo.highestScore > 0
                   ? normalizeScoreTo100(asgInfo.highestScore)
                   : null;
               day.speakingTasks[i] = {
@@ -320,7 +343,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
         const validDays = daysArray.filter((d) => d.speakingTasks.length > 0);
         const displayDays = validDays.length > 0 ? validDays : daysArray;
 
-        if (!isMounted) return;
+        if (!isMounted || !isMountedRef.current) return;
         setDaysList(displayDays);
 
         let activeDay = displayDays.find((d) => d.isCurrentDay) || displayDays[0];
@@ -364,7 +387,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
       setLoading(true);
       try {
         const myCourses = await studentApi.getMyCourses().catch(() => []);
-        if (!isMounted) return;
+        if (!isMounted || !isMountedRef.current) return;
         setCourses(myCourses);
 
         if (myCourses.length === 0) {
@@ -404,7 +427,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
       try {
         await selectAndLoadAssignment(firstTask.id);
       } finally {
-        setSwitching(false);
+        if (isMountedRef.current) setSwitching(false);
       }
     } else {
       setSelectedAssignmentId(null);
@@ -423,7 +446,7 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
     try {
       await selectAndLoadAssignment(asgId);
     } finally {
-      setSwitching(false);
+      if (isMountedRef.current) setSwitching(false);
     }
   };
 
@@ -433,11 +456,13 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
     setSwitching(true);
     try {
       const detail = await studentApi.getAttemptDetail(attempt.attemptId);
+      if (!isMountedRef.current) return;
       applyAttemptDetail(detail);
     } catch {
+      if (!isMountedRef.current) return;
       applyAttemptDetail(attempt);
     } finally {
-      setSwitching(false);
+      if (isMountedRef.current) setSwitching(false);
     }
   };
 
@@ -482,18 +507,20 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
     try {
       const newAttempt = await studentApi.startAssignment(selectedAssignmentId);
       const detail = await studentApi.getAttemptDetail(newAttempt.attemptId);
+      if (!isMountedRef.current) return;
       setAttempts((prev) => [detail, ...prev]);
       applyAttemptDetail(detail);
       setActionMessage(
         `Bắt đầu lượt làm bài #${completedAttempts.length + 1}/${maxAttemptsCount}. Hãy hoàn thành các câu chưa đạt để đạt trên ${passThresholdScore} điểm!`,
       );
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       setErrorMessage(
         "Không thể bắt đầu lượt mới: " +
           (err.response?.data?.message || err.message),
       );
     } finally {
-      setSwitching(false);
+      if (isMountedRef.current) setSwitching(false);
     }
   };
 
@@ -605,16 +632,18 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           cleanFile,
           targetAnswerId || "",
         );
+        if (!isMountedRef.current) return;
 
         setAiReport(result as FullSpeakingAiResult);
         setReportQuestionId(currentQ.questionId);
         setActionMessage("AI đã hoàn thành đánh giá bài nói phỏng vấn của bạn!");
       } catch (err: any) {
+        if (!isMountedRef.current) return;
         setErrorMessage(
           `Đánh giá Speaking thất bại: ${err.response?.data?.message || err.message}`,
         );
       } finally {
-        setIsEvaluating(false);
+        if (isMountedRef.current) setIsEvaluating(false);
       }
     },
     [currentAttempt, currentQ, ensureStudentAnswerAudioUploaded],
@@ -652,12 +681,13 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
         const detail = await studentApi.getAttemptDetail(
           submittedAttempt.attemptId || currentAttempt.attemptId,
         );
+        if (!isMountedRef.current) return;
         applyAttemptDetail(detail);
 
         setDaysList((prevDays) =>
           prevDays.map((day) => ({
             ...day,
-            speakingTasks: day.speakingTasks.map((item) =>
+            speakingTasks: (day.speakingTasks || []).map((item) =>
               item.id === selectedAssignmentId
                 ? {
                     ...item,
@@ -677,9 +707,10 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
 
         setActionMessage("Chúc mừng bạn đã hoàn thành và nộp bài Speaking thành công!");
       } catch (err: any) {
+        if (!isMountedRef.current) return;
         alert("Nộp bài thất bại: " + (err.response?.data?.message || err.message));
       } finally {
-        setIsSubmitting(false);
+        if (isMountedRef.current) setIsSubmitting(false);
       }
     },
     [

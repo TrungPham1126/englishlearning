@@ -17,12 +17,21 @@ export function useSpeakingAudioRecorder() {
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
   const [activeAudioBlob, setActiveAudioBlob] = useState<Blob | null>(null);
 
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const recordingDurationRef = useRef<number>(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const ownedBlobUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  const revokeOwnedBlobUrl = useCallback(() => {
+    if (ownedBlobUrlRef.current) {
+      URL.revokeObjectURL(ownedBlobUrlRef.current);
+      ownedBlobUrlRef.current = null;
+    }
+  }, []);
 
   // Phát câu mẫu Text-to-speech (Kokoro Neural Audio / Web Speech English Fallback)
   const [isPlayingRefTts, setIsPlayingRefTts] = useState(false);
@@ -40,12 +49,17 @@ export function useSpeakingAudioRecorder() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {}
-    }
+    const activeRecorder = mediaRecorderRef.current;
     mediaRecorderRef.current = null;
+    if (activeRecorder) {
+      activeRecorder.ondataavailable = null;
+      activeRecorder.onstop = null;
+      if (activeRecorder.state !== "inactive") {
+        try {
+          activeRecorder.stop();
+        } catch {}
+      }
+    }
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -58,14 +72,20 @@ export function useSpeakingAudioRecorder() {
     try {
       cleanupMediaResources();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       mediaStreamRef.current = stream;
       audioChunksRef.current = [];
 
       let mimeType = "audio/webm";
-      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-        mimeType = "audio/webm;codecs=opus";
-      } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-        mimeType = "audio/ogg;codecs=opus";
+      if (typeof MediaRecorder.isTypeSupported === "function") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+          mimeType = "audio/ogg;codecs=opus";
+        }
       }
 
       const recorder = new MediaRecorder(stream, { mimeType });
@@ -76,12 +96,29 @@ export function useSpeakingAudioRecorder() {
       };
 
       recorder.onstop = () => {
-        const finalType = recorder.mimeType || "audio/webm";
-        const blob = new Blob(audioChunksRef.current, { type: finalType });
-        setActiveAudioBlob(blob);
-        setActiveAudioUrl(URL.createObjectURL(blob));
+        if (mediaRecorderRef.current === recorder) {
+          mediaRecorderRef.current = null;
+        }
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
         stream.getTracks().forEach((track) => track.stop());
-        mediaStreamRef.current = null;
+        if (mediaStreamRef.current === stream) {
+          mediaStreamRef.current = null;
+        }
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+
+        if (!isMountedRef.current) return;
+
+        const finalType = recorder.mimeType || mimeType;
+        const blob = new Blob(audioChunksRef.current, { type: finalType });
+        const nextUrl = URL.createObjectURL(blob);
+        revokeOwnedBlobUrl();
+        ownedBlobUrlRef.current = nextUrl;
+        setActiveAudioBlob(blob);
+        setActiveAudioUrl(nextUrl);
 
         const duration = (Date.now() - startTimeRef.current) / 1000;
         recordingDurationRef.current = duration;
@@ -97,43 +134,53 @@ export function useSpeakingAudioRecorder() {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch {
-      alert("Không thể truy cập Microphone. Vui lòng cấp quyền micro cho trình duyệt.");
+      cleanupMediaResources();
+      if (isMountedRef.current) {
+        setIsRecording(false);
+        alert("Không thể truy cập Microphone. Vui lòng cấp quyền micro cho trình duyệt.");
+      }
     }
-  }, [cleanupMediaResources]);
+  }, [cleanupMediaResources, revokeOwnedBlobUrl]);
 
   // Dừng thu âm
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
     }
-  }, [isRecording]);
+    setIsRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
   // Upload file âm thanh ghi sẵn
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
+        const nextUrl = URL.createObjectURL(file);
+        revokeOwnedBlobUrl();
+        ownedBlobUrlRef.current = nextUrl;
         setActiveAudioBlob(file);
-        setActiveAudioUrl(URL.createObjectURL(file));
+        setActiveAudioUrl(nextUrl);
         recordingDurationRef.current = 10;
       }
     },
-    [],
+    [revokeOwnedBlobUrl],
   );
 
   // Reset toàn bộ trạng thái audio (khi đổi câu hỏi hoặc rời trang)
   const resetAudioState = useCallback(() => {
     cleanupMediaResources();
     stopAllSampleAudio();
+    revokeOwnedBlobUrl();
     setIsPlayingRefTts(false);
     setIsSynthesizingTts(false);
 
     if (studentPlaybackAudioRef.current) {
+      studentPlaybackAudioRef.current.onended = null;
+      studentPlaybackAudioRef.current.onerror = null;
       studentPlaybackAudioRef.current.pause();
       studentPlaybackAudioRef.current.currentTime = 0;
     }
@@ -144,7 +191,7 @@ export function useSpeakingAudioRecorder() {
     setActiveAudioUrl(null);
     setActiveAudioBlob(null);
     recordingDurationRef.current = 0;
-  }, [cleanupMediaResources]);
+  }, [cleanupMediaResources, revokeOwnedBlobUrl]);
 
   // Điều khiển phát câu mẫu chuẩn (Sample Audio / Reference TTS)
   const handlePlayTtsPrompt = useCallback(
@@ -235,14 +282,19 @@ export function useSpeakingAudioRecorder() {
 
   // Cleanup khi unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       cleanupMediaResources();
+      revokeOwnedBlobUrl();
       if (studentPlaybackAudioRef.current) {
+        studentPlaybackAudioRef.current.onended = null;
+        studentPlaybackAudioRef.current.onerror = null;
         studentPlaybackAudioRef.current.pause();
       }
       stopAllSampleAudio();
     };
-  }, [cleanupMediaResources]);
+  }, [cleanupMediaResources, revokeOwnedBlobUrl]);
 
   return {
     isRecording,

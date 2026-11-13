@@ -71,6 +71,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-englishlearning_db}?createDatabaseIfNotExist=true&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
+      - PYTHON_AUDIO_SERVICE_BASE_URL=http://phonetics-service:8000
       - PYTHON_AUDIO_SERVICE_URL=http://phonetics-service:8000/api/v1/audio/evaluate-phonetics
       - KOKORO_TTS_URL=http://phonetics-service:8000/tts
       - STORAGE_PUBLIC_URL=http://localhost:8080/uploads

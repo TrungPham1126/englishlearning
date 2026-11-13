@@ -58,7 +58,7 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
   return (
     <div className="space-y-2.5">
       <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-        Câu hỏi phỏng vấn / Câu mẫu chuẩn (Reference Prompt):
+        Câu hỏi
       </span>
       <div className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 leading-relaxed bg-slate-50/70 dark:bg-slate-800/60 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700">
         "{promptText}"
@@ -76,17 +76,17 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
           {isSynthesizingTts ? (
             <>
               <Loader2 size={13} className="animate-spin text-blue-200" />
-              <span>Đang tải âm mẫu...</span>
+              <span>Đang tải...</span>
             </>
           ) : isPlayingRefTts ? (
             <>
               <Pause size={13} />
-              <span>Dừng câu mẫu</span>
+              <span>Dừng</span>
             </>
           ) : (
             <>
               <Volume2 size={13} />
-              <span>Nghe câu mẫu</span>
+              <span>Nghe mẫu</span>
             </>
           )}
         </button>
@@ -101,12 +101,12 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
             {isPlayingStudentRec ? (
               <>
                 <Pause size={13} />
-                <span>Dừng bản thu</span>
+                <span>Dừng</span>
               </>
             ) : (
               <>
                 <Play size={13} />
-                <span>Nghe bản thu</span>
+                <span>Bản thu</span>
               </>
             )}
           </button>
@@ -131,8 +131,7 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
         </div>
 
         {/* Tốc độ đọc */}
-        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
-          <span className="px-1 text-[11px] text-slate-400">Tốc độ:</span>
+        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 tabular-nums">
           {SPEEDS.map((s) => (
             <button
               key={s}
@@ -156,7 +155,7 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white ml-auto cursor-pointer"
           >
             <Lightbulb size={13} className="text-amber-500" />
-            <span>Gợi ý trả lời</span>
+            <span>Gợi ý</span>
             {showGuidelines ? (
               <ChevronUp size={13} />
             ) : (
@@ -169,14 +168,14 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
       {showGuidelines && (
         <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 space-y-1 animate-in fade-in">
           <b className="block text-amber-950 dark:text-amber-300 font-bold">
-            💡 Hướng dẫn & Tiêu chí câu trả lời:
+            Gợi ý:
           </b>
           {question.explanation && (
             <p className="leading-relaxed">{question.explanation}</p>
           )}
           {question.correctAnswer && (
             <p className="leading-relaxed font-medium text-amber-800 dark:text-amber-300">
-              Ý chính gợi ý: {question.correctAnswer}
+              {question.correctAnswer}
             </p>
           )}
         </div>

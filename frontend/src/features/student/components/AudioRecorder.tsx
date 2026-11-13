@@ -1,6 +1,6 @@
 // src/features/student/components/AudioRecorder.tsx
-import { useState, useRef } from "react";
-import { Mic, Square, Play, RotateCcw } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Mic, Square } from "lucide-react";
 
 interface AudioRecorderProps {
   onRecordingComplete: (blob: Blob) => void;
@@ -12,41 +12,105 @@ export default function AudioRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const ownedBlobUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const onRecordingCompleteRef = useRef(onRecordingComplete);
+  onRecordingCompleteRef.current = onRecordingComplete;
+
+  const revokeOwnedBlobUrl = useCallback(() => {
+    if (ownedBlobUrlRef.current) {
+      URL.revokeObjectURL(ownedBlobUrlRef.current);
+      ownedBlobUrlRef.current = null;
+    }
+  }, []);
+
+  const stopMediaResources = useCallback(() => {
+    const activeRecorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+    if (activeRecorder) {
+      activeRecorder.ondataavailable = null;
+      activeRecorder.onstop = null;
+      if (activeRecorder.state !== "inactive") {
+        try {
+          activeRecorder.stop();
+        } catch {}
+      }
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopMediaResources();
+      revokeOwnedBlobUrl();
+    };
+  }, [revokeOwnedBlobUrl, stopMediaResources]);
 
   const startRecording = async () => {
     try {
+      stopMediaResources();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      mediaStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
-      mediaRecorderRef.current.ondataavailable = (e) => {
+      recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm";
+      recorder.onstop = () => {
+        if (mediaRecorderRef.current === recorder) {
+          mediaRecorderRef.current = null;
+        }
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        stream.getTracks().forEach((track) => track.stop());
+        if (mediaStreamRef.current === stream) {
+          mediaStreamRef.current = null;
+        }
+        if (!isMountedRef.current) return;
+
+        const mimeType = recorder.mimeType || "audio/webm";
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(audioBlob);
+        revokeOwnedBlobUrl();
+        ownedBlobUrlRef.current = url;
         setAudioUrl(url);
-        onRecordingComplete(audioBlob);
+        onRecordingCompleteRef.current(audioBlob);
       };
 
-      mediaRecorderRef.current.start();
+      recorder.start();
       setIsRecording(true);
     } catch {
-      alert("Vui lòng cấp quyền truy cập Microphone để thực hiện bài nói.");
+      stopMediaResources();
+      if (isMountedRef.current) {
+        setIsRecording(false);
+        alert("Vui lòng cấp quyền truy cập Microphone để thực hiện bài nói.");
+      }
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-      setIsRecording(false);
     }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsRecording(false);
   };
 
   return (

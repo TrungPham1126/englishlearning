@@ -1,6 +1,7 @@
 package com.englishlearning.assignment.service;
 
 import com.englishlearning.assignment.dto.AssignmentRequest;
+import com.englishlearning.assignment.dto.QuestionBankItemDto;
 import com.englishlearning.assignment.entity.Assignment;
 
 import java.util.List;
@@ -17,6 +18,10 @@ public interface AssignmentService {
     void deleteAssignment(UUID id);
 
     List<Assignment> getAssignmentsByClassroom(UUID classroomId);
+
+    List<Assignment> getExamsByClassroom(UUID classroomId);
+
+    List<QuestionBankItemDto> getClassroomQuestionBank(UUID classroomId);
 
     void backfillAllAudios();
 }

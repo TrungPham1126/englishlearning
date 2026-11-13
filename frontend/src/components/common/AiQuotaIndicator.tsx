@@ -19,18 +19,36 @@ export function AiQuotaIndicator({
   const [quotaLimit, setQuotaLimit] = useState(total);
 
   useEffect(() => {
+    setQuotaUsed(used);
+  }, [used]);
+
+  useEffect(() => {
+    setQuotaLimit(total);
+  }, [total]);
+
+  useEffect(() => {
     try {
       const storedUsed = localStorage.getItem("elp_ai_quota_used");
       const storedLimit = localStorage.getItem("elp_ai_quota_limit");
-      if (storedUsed) setQuotaUsed(parseInt(storedUsed, 10));
-      if (storedLimit) setQuotaLimit(parseInt(storedLimit, 10));
+      if (storedUsed !== null) {
+        const parsedUsed = parseInt(storedUsed, 10);
+        if (!Number.isNaN(parsedUsed) && parsedUsed >= 0) {
+          setQuotaUsed(parsedUsed);
+        }
+      }
+      if (storedLimit !== null) {
+        const parsedLimit = parseInt(storedLimit, 10);
+        if (!Number.isNaN(parsedLimit) && parsedLimit > 0) {
+          setQuotaLimit(parsedLimit);
+        }
+      }
     } catch {
       // ignore
     }
   }, []);
 
   const remaining = Math.max(0, quotaLimit - quotaUsed);
-  const pct = Math.round((remaining / quotaLimit) * 100);
+  const pct = quotaLimit > 0 ? Math.round((remaining / quotaLimit) * 100) : 0;
 
   const isLow = pct <= 20;
   const isExhausted = remaining === 0;

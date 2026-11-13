@@ -192,4 +192,14 @@ public class AiLabController {
                                                 request.getStudentAnswer(),
                                                 request.getExpectedAnswer())));
         }
+
+        @PostMapping("/exam/generate-draft")
+        @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+        public ResponseEntity<ApiResponse<com.englishlearning.ai.dto.AiExamDraftResponse>> generateExamDraft(
+                        @RequestBody com.englishlearning.ai.dto.AiExamGenerateRequest request,
+                        @AuthenticationPrincipal CustomUserDetails userDetails) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                "AI đã sinh đề thi nháp thành công",
+                                aiLabService.generateExamDraft(request, userDetails.getId())));
+        }
 }

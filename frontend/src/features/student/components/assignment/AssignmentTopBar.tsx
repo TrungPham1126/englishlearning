@@ -102,31 +102,26 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
           </button>
 
           <div className="min-w-0">
-            <h1 className="font-bold text-xs sm:text-[13px] text-slate-900 dark:text-white leading-tight truncate">
-              {attempt?.assignmentTitle || 'Bài Tập Tiếng Anh'}
+            <h1 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight truncate">
+              {attempt?.assignmentTitle || 'Bài tập'}
             </h1>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
-              <span>IELTS / Cambridge CBT</span>
-              <span>•</span>
-              <span className="text-blue-700 dark:text-blue-400 font-semibold">
-                Đã làm {answeredCount}/{questionsCount} câu ({completionProgressPct}%)
-              </span>
+            <p className="text-[11px] text-blue-700 dark:text-blue-400 font-semibold tabular-nums mt-0.5">
+              {answeredCount}/{questionsCount} ({completionProgressPct}%)
             </p>
           </div>
         </div>
 
-        {/* Badges trung tâm: Countdown Timer, Streak, AI Quota */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {phase !== 'REVIEW' && (
             <div
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] tabular-nums font-medium transition ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] tabular-nums font-semibold transition ${
                 remainingSeconds <= 60
                   ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-300 dark:border-rose-500/40 text-rose-600 dark:text-rose-400 animate-pulse'
                   : remainingSeconds <= 300
                   ? 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300'
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
               }`}
-              title="Thời gian còn lại của phiên làm bài"
+              title="Thời gian còn lại"
             >
               <Clock
                 size={12}
@@ -136,47 +131,26 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
             </div>
           )}
 
-          {/* Streak Badge */}
-          <div
-            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-bold transition ${
-              streakCount > 0
-                ? 'bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300'
-                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-            }`}
-            title="Chuỗi trả lời đúng liên tiếp trong phiên luyện tập"
-          >
-            <Flame
-              size={12}
-              className={streakCount > 0 ? 'text-amber-500 fill-amber-500' : 'text-slate-400'}
-            />
-            <span>{streakCount} Streak</span>
-          </div>
-
-
+          {streakCount > 0 && (
+            <div
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-bold tabular-nums bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300"
+              title="Chuỗi đúng liên tiếp"
+            >
+              <Flame size={12} className="text-amber-500 fill-amber-500" />
+              <span>{streakCount}</span>
+            </div>
+          )}
         </div>
 
-        {/* Cột phải: Review Score hoặc Công cụ làm bài */}
         <div className="flex items-center gap-1.5 w-full lg:w-auto justify-between lg:justify-end flex-wrap">
           {phase === 'REVIEW' ? (
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <div className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 text-center">
-                  <span className="text-[10px] text-blue-800 dark:text-blue-300 font-semibold block uppercase tracking-wider">
-                    Số Câu Đúng
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold text-blue-700 dark:text-blue-400">
-                    {reviewStats.correctCount}/{reviewStats.totalQuestions}
-                  </span>
-                </div>
+            <div className="flex items-center gap-2">
+              <div className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 text-xs font-bold tabular-nums text-blue-700 dark:text-blue-300">
+                Đúng {reviewStats.correctCount}/{reviewStats.totalQuestions}
+              </div>
 
-                <div className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-center">
-                  <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-semibold block uppercase tracking-wider">
-                    Điểm Số
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                    {displayScore} / 10 pts
-                  </span>
-                </div>
+              <div className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-xs font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                {displayScore}/10
               </div>
 
               {!retakeEvaluation?.isEssay && (
@@ -184,7 +158,7 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
                   type="button"
                   disabled={isStarting}
                   onClick={onRetake}
-                  className={`min-h-[36px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer shadow-xs active:scale-[0.98] touch-manipulation disabled:opacity-50 ${
+                  className={`min-h-[34px] flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
                     retakeEvaluation?.canRetry
                       ? 'border-amber-300 bg-amber-500 hover:bg-amber-600 text-white'
                       : 'border-blue-200 bg-white hover:bg-blue-50 text-blue-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
@@ -195,7 +169,7 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
                   ) : (
                     <RotateCcw size={13} />
                   )}
-                  <span>{retakeEvaluation?.canRetry ? 'Làm Lại Bài Ngay' : 'Làm Lại Đề Này'}</span>
+                  <span>Làm lại</span>
                 </button>
               )}
             </div>
@@ -259,13 +233,13 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
                       ? 'bg-white dark:bg-slate-900 text-blue-800 dark:text-blue-400 shadow-xs font-semibold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
-                  title="Chế độ Luyện tập: Kiểm tra đáp án từng câu tức thì"
+                  title="Kiểm tra đáp án từng câu"
                 >
                   <Lightbulb
                     size={12}
                     className={studyMode === 'PRACTICE' ? 'text-amber-500' : ''}
                   />
-                  <span>Luyện Tập</span>
+                  <span>Luyện tập</span>
                 </button>
 
                 <button
@@ -276,14 +250,13 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
                       ? 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-xs font-semibold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
-                  title="Chế độ Thi thử: Chuẩn đề thi, tính điểm cuối cùng"
+                  title="Chấm điểm cuối giờ"
                 >
                   <Clock size={12} className={studyMode === 'TEST' ? 'text-rose-500' : ''} />
-                  <span>Thi Thử</span>
+                  <span>Thi thử</span>
                 </button>
               </div>
 
-              {/* Nút Nộp Bài Topbar */}
               <button
                 type="button"
                 onClick={onSubmit}
@@ -295,7 +268,7 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
                 ) : (
                   <Send size={12} />
                 )}
-                <span>Nộp Bài</span>
+                <span>Nộp bài</span>
               </button>
             </>
           )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
 import type { DailyPlanItem, GlobalResourceItem } from "./dailyPlanTypes";
 
@@ -8,6 +8,8 @@ export function useTeacherDailyPlan(classId: string | undefined) {
   const [globalResources, setGlobalResources] = useState<GlobalResourceItem[]>([]);
   const [progressStats, setProgressStats] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const savingPlanRef = useRef<boolean>(false);
+  const addingItemRef = useRef<boolean>(false);
 
   // Modal Xem chi tiết bài tập & Chỉnh sửa toàn diện
   const [showEditAssignmentModal, setShowEditAssignmentModal] = useState<boolean>(false);
@@ -103,8 +105,10 @@ export function useTeacherDailyPlan(classId: string | undefined) {
 
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingPlanRef.current) return;
     if (!title.trim() || !scheduledDate) return;
 
+    savingPlanRef.current = true;
     try {
       if (editingPlan) {
         await teacherApi.updateDailyPlan(editingPlan.id, {
@@ -127,6 +131,8 @@ export function useTeacherDailyPlan(classId: string | undefined) {
       loadData();
     } catch (err: any) {
       alert(err.response?.data?.message || "Lỗi lưu lộ trình");
+    } finally {
+      savingPlanRef.current = false;
     }
   };
 
@@ -151,6 +157,7 @@ export function useTeacherDailyPlan(classId: string | undefined) {
 
   const handleAddItemToPlan = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addingItemRef.current) return;
     if (!targetPlanId) return;
 
     let finalTitle = itemTitle.trim();
@@ -173,6 +180,7 @@ export function useTeacherDailyPlan(classId: string | undefined) {
       return;
     }
 
+    addingItemRef.current = true;
     try {
       const currentPlan = plans.find((p) => p.id === targetPlanId);
       const currentItemCount = currentPlan?.items?.length ?? 0;
@@ -189,6 +197,8 @@ export function useTeacherDailyPlan(classId: string | undefined) {
       loadData();
     } catch (err) {
       alert("Lỗi thêm bài tập vào Ngày học");
+    } finally {
+      addingItemRef.current = false;
     }
   };
 

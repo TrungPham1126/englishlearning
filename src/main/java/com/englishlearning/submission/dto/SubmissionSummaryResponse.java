@@ -18,4 +18,7 @@ public class SubmissionSummaryResponse {
     private Double score;
     private String status;
     private Instant submittedAt;
+    private Integer violationCount;
+    private Boolean isCheatingFlagged;
+    private String cheatingReason;
 }

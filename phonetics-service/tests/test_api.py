@@ -1,6 +1,11 @@
+import base64
 import io
-from unittest.mock import AsyncMock, patch
+import json
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
+import pytest
+import soundfile as sf
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -374,5 +379,289 @@ def test_how_about_you_g2p_and_context_formant_calibration():
         802.4, 1415.5, how_ref["mean"][0], how_ref["mean"][1], how_ref
     )
     assert how_score >= 90.0, f"Expected /aʊ/ score >= 90.0, got {how_score}"
+
+
+def test_validate_script_acronyms_and_single_letters():
+    """Validates validate_script accepts single letters / vowelless abbreviations (T shirt, Ph D, Mc Gregor)."""
+    from app.services.aligner import validate_script
+    from app.exceptions import InvalidTranscriptError
+
+    assert validate_script("T shirt") == ["T", "shirt"]
+    assert validate_script("Ph D student") == ["Ph", "D", "student"]
+    assert validate_script("Mc Gregor") == ["Mc", "Gregor"]
+    assert validate_script("I like AI") == ["I", "like", "AI"]
+
+    with pytest.raises(InvalidTranscriptError):
+        validate_script("xkcdzqqq bdfgh")
+
+
+def test_mid_sentence_skip_does_not_cascade_missing():
+    """Validates skipping one middle word does not cascade MISSING across all subsequent spoken words."""
+    from tests.audio_cases import case_full
+
+    wav_bytes = case_full()
+    script_with_skipped_word = (
+        "Consistent pronunciation practice omittedword phonemic awareness enhance oral fluency."
+    )
+    res = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("mid_skip.wav", wav_bytes, "audio/wav")},
+        data={"script": script_with_skipped_word},
+    )
+    assert res.status_code == 200, res.text
+    tokens = res.json()["sentenceTokens"]
+    assert len(tokens) == 9
+    # Words after the skipped middle slot must recover and still be scored (not cascaded MISSING)
+    later_statuses = [t["wordStatus"] for t in tokens[4:]]
+    spoken_later = sum(1 for st in later_statuses if st in ("SPOKEN", "PARTIAL"))
+    assert spoken_later >= 4, f"Unexpected cascading MISSING in later tokens: {tokens}"
+
+
+def test_google_tts_strut_vowel_bus():
+    """Validates standard Google TTS STRUT /ʌ/ in 'bus' is scored accurately without multilingual /a/ penalty."""
+    from pathlib import Path
+
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "tts_bus.mp3"
+    assert fixture_path.exists(), f"Missing fixture: {fixture_path}"
+
+    res = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("bus.mp3", fixture_path.read_bytes(), "audio/mpeg")},
+        data={"script": "bus"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    word_entry = body["words"][0]
+    assert word_entry["score"] >= 85.0, f"Expected word 'bus' score >= 85.0, got {word_entry}"
+    assert body["sentenceTokens"][0]["color"] == "GREEN"
+
+    strut_phoneme = [p for p in word_entry["phonemes"] if p["symbol"] == "ʌ"][0]
+    assert strut_phoneme["score"] >= 80.0, f"Expected /ʌ/ >= 80.0, got {strut_phoneme}"
+    assert "chuẩn xác" in strut_phoneme["feedback"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive Endpoint Integration & Error Handling Tests
+# ---------------------------------------------------------------------------
+
+def test_health_endpoint():
+    res = client.get("/health")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "healthy"
+    assert body["service"] == "phonetics-service"
+    assert body["version"] == "1.0.0"
+    assert body["sampleRate"] == 16000
+    assert body["device"] in ("cpu", "cuda")
+
+
+def test_evaluate_minimal_pair_ship_vs_sheep_real_audio():
+    cache_dir = Path(__file__).resolve().parents[1] / "test_audio_cache"
+    sheep_bytes = (cache_dir / "sheep.wav").read_bytes()
+
+    # sheep.wav against "sheep" -> /iː/ should pass GREEN
+    r_correct = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("sheep.wav", sheep_bytes, "audio/wav")},
+        data={"script": "sheep"},
+    )
+    assert r_correct.status_code == 200, r_correct.text
+    b_correct = r_correct.json()
+    ph_iy = [p for p in b_correct["words"][0]["phonemes"] if p["symbol"] == "iː"][0]
+    assert ph_iy["score"] >= 85.0
+    assert b_correct["sentenceTokens"][0]["color"] == "GREEN"
+
+    # sheep.wav against wrong word "ship" -> /ɪ/ must be penalized below 60 (RED/warning)
+    r_wrong = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("sheep.wav", sheep_bytes, "audio/wav")},
+        data={"script": "ship"},
+    )
+    assert r_wrong.status_code == 200, r_wrong.text
+    b_wrong = r_wrong.json()
+    ph_ih = [p for p in b_wrong["words"][0]["phonemes"] if p["symbol"] == "ɪ"][0]
+    assert ph_ih["score"] < 60.0
+    assert b_wrong["overallScore"] < b_correct["overallScore"]
+
+
+def test_evaluate_error_responses_empty_corrupt_noise_and_oversized():
+    # 0-byte empty file -> 422 EMPTY_SPEECH
+    r_empty = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("empty.wav", b"", "audio/wav")},
+        data={"script": "hello"},
+    )
+    assert r_empty.status_code == 422
+    assert r_empty.json()["detail"]["code"] == "EMPTY_SPEECH"
+
+    # Invalid text file disguised as .txt -> 415 UNSUPPORTED_AUDIO_FORMAT
+    r_txt = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("fake.txt", b"plain text not audio", "text/plain")},
+        data={"script": "hello"},
+    )
+    assert r_txt.status_code == 415
+    assert r_txt.json()["detail"]["code"] == "UNSUPPORTED_AUDIO_FORMAT"
+
+    # Pure broadband white noise > 1.2s -> 422 AUDIO_QUALITY_TOO_LOW
+    rng = np.random.default_rng(123)
+    noise = (0.3 * rng.standard_normal(int(1.6 * 16000))).astype(np.float32)
+    buf = io.BytesIO()
+    sf.write(buf, noise, 16000, format="WAV", subtype="PCM_16")
+    buf.seek(0)
+    r_noise = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("noise.wav", buf.read(), "audio/wav")},
+        data={"script": "hello"},
+    )
+    assert r_noise.status_code == 422
+    assert r_noise.json()["detail"]["code"] == "AUDIO_QUALITY_TOO_LOW"
+
+    # Oversized upload (> 15 MB) -> 413 AUDIO_TOO_LARGE
+    huge_payload = b"\x00" * (16 * 1024 * 1024)
+    r_huge = client.post(
+        "/api/v1/audio/evaluate-phonetics",
+        files={"audio": ("huge.wav", huge_payload, "audio/wav")},
+        data={"script": "hello"},
+    )
+    assert r_huge.status_code == 413
+    assert r_huge.json()["detail"]["code"] == "AUDIO_TOO_LARGE"
+
+
+def test_evaluate_sentence_token_color_mapping_green_yellow_red_gray():
+    wav_bytes = _create_mock_wav_bytes(2.4)
+    al_words = [
+        AlignedWord(word="good", start=0.1, end=0.45, confidence=0.95, phonemes=[
+            AlignedPhoneme("g", 0.1, 0.2, 0.9, 0.9, phoneme_type="consonant"),
+            AlignedPhoneme("ʊ", 0.2, 0.35, 0.9, 0.9, phoneme_type="vowel"),
+            AlignedPhoneme("d", 0.35, 0.45, 0.9, 0.9, phoneme_type="consonant"),
+        ]),
+        AlignedWord(word="mid", start=0.5, end=0.85, confidence=0.85, phonemes=[
+            AlignedPhoneme("m", 0.5, 0.6, 0.25, 0.7, phoneme_type="consonant", canonical_posterior=0.25, gop_margin=-0.6),
+            AlignedPhoneme("ɪ", 0.6, 0.75, 0.20, 0.7, phoneme_type="vowel", canonical_posterior=0.20, gop_margin=-0.8),
+            AlignedPhoneme("d", 0.75, 0.85, 0.25, 0.7, phoneme_type="consonant", canonical_posterior=0.25, gop_margin=-0.6),
+        ]),
+        AlignedWord(word="bad", start=0.9, end=1.25, confidence=0.8, phonemes=[
+            AlignedPhoneme("b", 0.9, 1.0, 0.05, 0.15, phoneme_type="consonant", canonical_posterior=0.05, gop_margin=-2.5),
+            AlignedPhoneme("æ", 1.0, 1.15, 0.05, 0.15, phoneme_type="vowel", canonical_posterior=0.05, gop_margin=-2.5),
+            AlignedPhoneme("d", 1.15, 1.25, 0.05, 0.15, phoneme_type="consonant", canonical_posterior=0.05, gop_margin=-2.5),
+        ]),
+        AlignedWord(word="skipped", start=1.5, end=1.8, confidence=0.05, phonemes=[
+            AlignedPhoneme("s", 1.5, 1.8, 0.01, 0.01, phoneme_type="consonant"),
+        ]),
+    ]
+    mock_result = AlignmentResult(words=al_words, alignment_confidence=0.85)
+
+    def _vowel_side_effect(audio, start_time, end_time, phoneme_symbol, **kwargs):
+        if phoneme_symbol == "ʊ":
+            return (440.0, 1150.0, 440.0, 1150.0, 95.0, "Khẩu hình và vị trí đặt lưỡi chuẩn xác!", "OK")
+        if phoneme_symbol == "ɪ":
+            return (460.0, 1750.0, 400.0, 1920.0, 68.0, "Điều chỉnh nhẹ", "OK")
+        return (700.0, 1000.0, 680.0, 1720.0, 35.0, "Hạ hàm", "OK")
+
+    with (
+        patch("app.api.routes.forced_aligner.align", new_callable=AsyncMock, return_value=mock_result),
+        patch("app.api.routes.verify_speech_content", return_value=(True, "VALID", 0.75, ["g", "ʊ", "d"], "/gʊd/")),
+        patch("app.api.routes.decode_raw_speech", return_value=["g", "ʊ", "d", "m", "ɪ", "d", "b", "æ", "d"]),
+        patch("app.api.routes.analyze_word_coverage", return_value=(3, [1.0, 1.0, 1.0, 0.0])),
+        patch("app.api.routes.evidence_detector.detect_spoken_words", return_value=[]),
+        patch("app.api.routes.formant_service.analyze_vowel", side_effect=_vowel_side_effect),
+        patch("app.api.routes.check_consonant_acoustic_evidence_detailed", return_value=(True, 0.9, "ok")),
+    ):
+        res = client.post(
+            "/api/v1/audio/evaluate-phonetics",
+            files={"audio": ("colors.wav", wav_bytes, "audio/wav")},
+            data={"script": "good mid bad skipped"},
+        )
+
+    assert res.status_code == 200, res.text
+    tokens = res.json()["sentenceTokens"]
+    assert [t["color"] for t in tokens] == ["GREEN", "YELLOW", "RED", "GRAY"]
+
+
+def test_tts_endpoints_json_query_special_chars_and_error_json_safety():
+    # JSON request with numbers & special characters
+    r_json = client.post(
+        "/api/v1/audio/tts",
+        json={"text": "Train leaves at 10:30 AM! Cost $25.50 (50% off).", "voice": "af_heart", "speed": 1.0},
+    )
+    assert r_json.status_code == 200, r_json.text
+    assert r_json.headers["content-type"].startswith("audio/wav")
+    assert float(r_json.headers["x-audio-duration"]) > 1.0
+    assert r_json.headers["x-audio-sample-rate"] == "24000"
+    audio_out, sr_out = sf.read(io.BytesIO(r_json.content), dtype="float32")
+    assert sr_out == 24000 and len(audio_out) > 24000
+
+    # Legacy query parameter mode
+    r_query = client.post("/tts?text=Hello+123&voice=bf_emma&speed=1.1")
+    assert r_query.status_code == 200
+    assert r_query.headers["x-audio-voice"] == "bf_emma"
+
+    # Empty text rejected
+    r_empty = client.post("/tts", json={"text": "   "})
+    assert r_empty.status_code == 400
+
+    # 500 error with quotes & newline in exception must still produce valid JSON
+    with patch("app.api.routes.tts_engine.synthesize_wav_bytes", side_effect=RuntimeError('bad "quote"\nnewline')):
+        r_err = client.post("/tts", json={"text": "Hello"})
+    assert r_err.status_code == 500
+    parsed = r_err.json()
+    assert 'bad "quote"' in parsed["detail"]["message"]
+
+
+def test_tts_dialogue_and_voices_endpoints():
+    r_voices = client.get("/tts/voices")
+    r_voices_v1 = client.get("/api/v1/audio/tts/voices")
+    assert r_voices.status_code == 200 and r_voices_v1.status_code == 200
+    voice_ids = {v["id"] for v in r_voices.json()}
+    assert {"af_heart", "am_michael", "bf_emma", "bm_george"}.issubset(voice_ids)
+
+    r_dlg = client.post(
+        "/api/v1/audio/tts/dialogue",
+        json={
+            "turns": [
+                {"speaker": "Alice", "text": "Meet at 10:30 AM!"},
+                {"speaker": "Bob", "text": "Deal for $50!"},
+            ],
+            "speakerMap": {"Alice": {"voice": "af_heart", "speed": 1.0}},
+            "interTurnPauseMs": 100,
+        },
+    )
+    assert r_dlg.status_code == 200, r_dlg.text
+    dlg_body = r_dlg.json()
+    assert len(dlg_body["segments"]) == 2
+    assert dlg_body["segments"][0]["endMs"] + 100 == dlg_body["segments"][1]["startMs"]
+    wav_decoded = base64.b64decode(dlg_body["audioBase64"])
+    arr, sr = sf.read(io.BytesIO(wav_decoded), dtype="float32")
+    assert sr == 24000 and len(arr) > 0
+
+    r_bad_pause = client.post(
+        "/tts/dialogue",
+        json={
+            "turns": [{"speaker": "Alice", "text": "Hi"}],
+            "interTurnPauseMs": 0,
+        },
+    )
+    assert r_bad_pause.status_code == 422
+
+    r_bad = client.post("/tts/dialogue", json={"turns": []})
+    assert r_bad.status_code == 422
+
+
+def test_main_unhandled_exception_handler_and_lifespan_resilience():
+    # Ensure TestClient with raise_server_exceptions=False catches unhandled 500 cleanly via main.py handler
+    local_client = TestClient(app, raise_server_exceptions=False)
+    with patch("app.api.routes.tts_engine.get_available_voices", side_effect=RuntimeError("unexpected crash")):
+        res = local_client.get("/tts/voices")
+    assert res.status_code == 500
+    body = res.json()
+    assert body["detail"]["code"] == "INTERNAL_ERROR"
+
+    # Lifespan must not crash if tts_engine.initialize() raises during startup
+    with patch("app.services.tts_service.tts_engine.initialize", side_effect=RuntimeError("no weights")):
+        with TestClient(app) as tc:
+            assert tc.get("/health").status_code == 200
+
+
 
 

@@ -7,6 +7,8 @@ import com.englishlearning.classroom.entity.ClassStudent;
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.classroom.repository.ClassroomRepository;
+import com.englishlearning.common.exception.ForbiddenException;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.notification.dto.NotificationClassroomDto;
 import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.dto.NotificationRecipientDto;
@@ -387,10 +389,10 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public void markAsRead(UUID notificationId, UUID userId) {
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông báo"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông báo"));
 
         if (notification.getRecipient() != null && !notification.getRecipient().getId().equals(userId)) {
-            throw new RuntimeException("Không có quyền truy cập");
+            throw new ForbiddenException("Không có quyền truy cập");
         }
         notification.setIsRead(true);
         notificationRepository.save(notification);

@@ -3,6 +3,7 @@ import {
   useRef,
   useMemo,
   useCallback,
+  useEffect,
   useLayoutEffect,
 } from "react";
 import type {
@@ -28,6 +29,30 @@ export function useMatchingLines({
   const [selectedRightId, setSelectedRightId] = useState<string | null>(null);
   const [playingWord, setPlayingWord] = useState<string | null>(null);
   const [rayCoordinates, setRayCoordinates] = useState<RayLine[]>([]);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  const stopWordAudio = useCallback(() => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.onended = null;
+      activeAudioRef.current.onerror = null;
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopWordAudio();
+    };
+  }, [stopWordAudio]);
 
   // 1. Normalize questions
   const normalizedQuestions = useMemo(() => {
@@ -249,15 +274,23 @@ export function useMatchingLines({
   // 5. Audio playback
   const playYoudaoFallback = (word: string) => {
     try {
+      stopWordAudio();
       const url = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(
         word,
       )}&type=2`;
       const audio = new Audio(url);
-      audio.onended = () => setPlayingWord(null);
-      audio.onerror = () => setPlayingWord(null);
-      audio.play().catch(() => setPlayingWord(null));
+      activeAudioRef.current = audio;
+      audio.onended = () => {
+        if (isMountedRef.current) setPlayingWord(null);
+      };
+      audio.onerror = () => {
+        if (isMountedRef.current) setPlayingWord(null);
+      };
+      audio.play().catch(() => {
+        if (isMountedRef.current) setPlayingWord(null);
+      });
     } catch {
-      setPlayingWord(null);
+      if (isMountedRef.current) setPlayingWord(null);
     }
   };
 
@@ -268,8 +301,12 @@ export function useMatchingLines({
         const utterance = new SpeechSynthesisUtterance(word);
         utterance.lang = "en-US";
         utterance.rate = 0.88;
-        utterance.onend = () => setPlayingWord(null);
-        utterance.onerror = () => playYoudaoFallback(word);
+        utterance.onend = () => {
+          if (isMountedRef.current) setPlayingWord(null);
+        };
+        utterance.onerror = () => {
+          if (isMountedRef.current) playYoudaoFallback(word);
+        };
         window.speechSynthesis.speak(utterance);
         return;
       } catch (err) {
@@ -290,6 +327,7 @@ export function useMatchingLines({
         .trim();
       if (!cleanWord) return;
 
+      stopWordAudio();
       setPlayingWord(cleanWord);
 
       const finalAudioUrl = resolveAudioUrl
@@ -302,15 +340,22 @@ export function useMatchingLines({
         !finalAudioUrl.includes("api.dictionaryapi.dev")
       ) {
         const audio = new Audio(finalAudioUrl);
-        audio.onended = () => setPlayingWord(null);
-        audio.onerror = () => playSpeechSynthesisWithFallback(cleanWord);
-        audio.play().catch(() => playSpeechSynthesisWithFallback(cleanWord));
+        activeAudioRef.current = audio;
+        audio.onended = () => {
+          if (isMountedRef.current) setPlayingWord(null);
+        };
+        audio.onerror = () => {
+          if (isMountedRef.current) playSpeechSynthesisWithFallback(cleanWord);
+        };
+        audio.play().catch(() => {
+          if (isMountedRef.current) playSpeechSynthesisWithFallback(cleanWord);
+        });
         return;
       }
 
       playSpeechSynthesisWithFallback(cleanWord);
     },
-    [resolveAudioUrl],
+    [resolveAudioUrl, stopWordAudio],
   );
 
   // 6. Click handlers

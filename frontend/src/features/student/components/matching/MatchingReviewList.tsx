@@ -122,8 +122,8 @@ export const MatchingReviewList: React.FC<MatchingReviewListProps> = ({
               </div>
 
               {item.explanation && (
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed italic">
-                  💡 {item.explanation}
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {item.explanation}
                 </p>
               )}
             </div>

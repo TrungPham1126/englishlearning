@@ -25,7 +25,7 @@ def decode_raw_speech(audio: np.ndarray) -> List[str]:
     Decodes raw acoustic audio directly into a sequence of phonemes using Wav2Vec2 CTC greedy decoding.
     Deduplicates consecutive identical frames and strips '<pad>' tokens.
     """
-    if len(audio) == 0:
+    if audio is None or len(audio) < 400:
         return []
 
     from app.services.aligner import forced_aligner
@@ -151,7 +151,7 @@ def verify_speech_content(
             )
             return False, "LENGTH_RATIO_EXCEEDED", sim, emitted, spoken_repr
 
-        if sim < 0.35:
+        if sim < 0.35 and M >= 5:
             logger.warning(
                 "[ASR Verification Gate] REJECTED: Single word '%s' mismatch (similarity: %.2f < 0.35)",
                 expected_words[0], sim
@@ -179,25 +179,30 @@ def verify_speech_content(
         return False, "LOW_SIMILARITY", sim, emitted, spoken_repr
 
 
-def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> int:
+def analyze_word_coverage(
+    audio: np.ndarray,
+    expected_words: List[str],
+    emitted_tokens: Optional[List[str]] = None,
+) -> Tuple[int, List[float]]:
     """
-    Computes Needleman-Wunsch alignment between target script phonemes and 
+    Computes Needleman-Wunsch alignment between target script phonemes and
     Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
-    Returns the number of sequential words from the beginning that were actually spoken.
+    Returns:
+        (spoken_prefix_len, per_word_match_ratios)
     """
     if not expected_words or len(audio) == 0:
-        return 0
+        return 0, [0.0 for _ in expected_words]
 
     from app.services.aligner import forced_aligner
 
-    emitted = decode_raw_speech(audio)
+    emitted = emitted_tokens if emitted_tokens is not None else decode_raw_speech(audio)
     if not emitted:
-        return 0
+        return 0, [0.0 for _ in expected_words]
 
     clean_script = " ".join(expected_words)
     word_phonemes = forced_aligner.g2p.convert_text(clean_script)
     if not word_phonemes:
-        return 0
+        return 0, [0.0 for _ in expected_words]
 
     expected_tokens = []
     token_to_word = []
@@ -243,7 +248,7 @@ def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> 
         alts = set([t1] + list(forced_aligner.UNIVERSAL_ALLOPHONES.get(t1, ())))
         t2 = emitted[j - 1]
         sim = 2.0 if t1 == t2 else (1.5 if (t2 in alts or t1.strip("ː") == t2.strip("ː")) else -1.0)
-        
+
         diag = dp[i - 1, j - 1] + sim
         up = dp[i - 1, j] - 1.0
 
@@ -260,20 +265,37 @@ def detect_spoken_prefix_count(audio: np.ndarray, expected_words: List[str]) -> 
         else:
             j -= 1
 
+    per_word_ratios: List[float] = [
+        matched_per_word.get(w_idx, 0) / float(max(1, total_per_word.get(w_idx, 1)))
+        for w_idx in range(len(word_phonemes))
+    ]
+
     spoken_prefix_len = 0
     for w_idx in range(len(word_phonemes)):
-        matched = matched_per_word.get(w_idx, 0)
-        total = total_per_word.get(w_idx, 1)
-        ratio = matched / float(total)
+        ratio = per_word_ratios[w_idx]
         if ratio >= 0.28:
             spoken_prefix_len = w_idx + 1
         else:
-            next_ratio = matched_per_word.get(w_idx + 1, 0) / float(total_per_word.get(w_idx + 1, 1)) if w_idx + 1 < len(word_phonemes) else 0.0
+            next_ratio = per_word_ratios[w_idx + 1] if w_idx + 1 < len(word_phonemes) else 0.0
             if next_ratio >= 0.40:
                 spoken_prefix_len = w_idx + 1
             else:
                 break
 
+    return spoken_prefix_len, per_word_ratios
+
+
+def detect_spoken_prefix_count(
+    audio: np.ndarray,
+    expected_words: List[str],
+    emitted_tokens: Optional[List[str]] = None,
+) -> int:
+    """
+    Computes Needleman-Wunsch alignment between target script phonemes and
+    Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
+    Returns the number of sequential words from the beginning that were actually spoken.
+    """
+    spoken_prefix_len, _ = analyze_word_coverage(audio, expected_words, emitted_tokens=emitted_tokens)
     return spoken_prefix_len
 
 

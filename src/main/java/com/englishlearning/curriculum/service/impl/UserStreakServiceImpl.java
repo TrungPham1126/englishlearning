@@ -26,16 +26,17 @@ public class UserStreakServiceImpl implements UserStreakService {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy học sinh với ID: " + studentId));
 
+        LocalDate effectiveDate = completionDate != null ? completionDate : LocalDate.now();
         int currentStreak = student.getCurrentStreak() != null ? student.getCurrentStreak() : 0;
         LocalDate lastActive = student.getLastActiveDate();
 
         if (lastActive == null) {
             // Lần đầu tiên hoàn thành bài học
             currentStreak = 1;
-        } else if (lastActive.equals(completionDate)) {
-            // Đã hoàn thành mục khác trong cùng ngày, giữ nguyên streak
+        } else if (lastActive.equals(effectiveDate) || effectiveDate.isBefore(lastActive)) {
+            // Đã hoàn thành mục khác trong cùng ngày hoặc hoàn thành bù bài cũ -> giữ nguyên streak
             return currentStreak;
-        } else if (lastActive.equals(completionDate.minusDays(1))) {
+        } else if (lastActive.equals(effectiveDate.minusDays(1))) {
             // Hoàn thành liên tiếp ngày kế tiếp -> Tăng streak lên 1
             currentStreak += 1;
         } else {
@@ -44,11 +45,11 @@ public class UserStreakServiceImpl implements UserStreakService {
         }
 
         student.setCurrentStreak(currentStreak);
-        student.setLastActiveDate(completionDate);
+        student.setLastActiveDate(effectiveDate);
         studentRepository.save(student);
 
         log.info("Cập nhật streak thành công cho học sinh {}: {} ngày (ngày hoàn thành: {})",
-                studentId, currentStreak, completionDate);
+                studentId, currentStreak, effectiveDate);
         return currentStreak;
     }
 

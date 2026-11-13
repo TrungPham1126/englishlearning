@@ -185,7 +185,16 @@ export default function AdminLessonDetailPage() {
                             if (window.confirm("Bạn có chắc muốn xóa tài liệu này?")) {
                               try {
                                 await adminApi.deleteDocument(doc.id);
-                                window.location.reload();
+                                setLesson((prev: any) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        documents: (prev.documents || []).filter(
+                                          (d: any) => d.id !== doc.id
+                                        ),
+                                      }
+                                    : prev
+                                );
                               } catch {
                                 alert("Xóa thất bại!");
                               }

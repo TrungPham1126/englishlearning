@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
@@ -57,5 +59,32 @@ class TtsAudioServiceImplTest {
                 .hasMessageContaining("không được để trống");
 
         verifyNoInteractions(exerciseAudioService);
+    }
+
+    @Test
+    @DisplayName("Chuẩn hóa giọng đọc rỗng về af_heart và ánh xạ legacy voice sang Kokoro")
+    void synthesizeTtsAudio_blankAndLegacyVoices_normalizedCorrectly() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Hello", "af_heart", 1.0)).thenReturn("/default.wav");
+        when(exerciseAudioService.synthesizeRawScriptToUrl("British", "bf_emma", 1.0)).thenReturn("/uk.wav");
+
+        assertThat(ttsAudioService.synthesizeTtsAudio("Hello", null)).isEqualTo("/default.wav");
+        assertThat(ttsAudioService.synthesizeTtsAudio("Hello", "   ")).isEqualTo("/default.wav");
+        assertThat(ttsAudioService.synthesizeTtsAudio("British", "en-GB-SoniaNeural")).isEqualTo("/uk.wav");
+    }
+
+    @Test
+    @DisplayName("synthesizeTtsAudioBytes - Trả UTF-8 bytes của URL hoặc mảng rỗng nếu URL null, và ném lỗi khi text rỗng")
+    void synthesizeTtsAudioBytes_allBranches() {
+        String url = "https://cdn.example.com/tts.wav";
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Read aloud", "af_heart", 1.0)).thenReturn(url);
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Silent", "af_heart", 1.0)).thenReturn(null);
+
+        byte[] result = ttsAudioService.synthesizeTtsAudioBytes("Read aloud", null);
+        assertThat(new String(result, StandardCharsets.UTF_8)).isEqualTo(url);
+
+        assertThat(ttsAudioService.synthesizeTtsAudioBytes("Silent", "af_heart")).isEmpty();
+
+        assertThatThrownBy(() -> ttsAudioService.synthesizeTtsAudioBytes(null, "af_heart"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

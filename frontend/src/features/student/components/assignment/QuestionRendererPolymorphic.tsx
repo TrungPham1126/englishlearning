@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Flag,
   Volume2,
@@ -15,6 +15,7 @@ import type {
   AttemptResponse,
   ShadowingEvaluationResponse,
   SpeakingAiEvaluationResult,
+  WritingAiEvaluationResult,
 } from '@/features/student/types';
 import WordUnscrambleInteractive from './WordUnscrambleInteractive';
 import WritingScaffoldingStudio from './WritingScaffoldingStudio';
@@ -54,6 +55,13 @@ export interface QuestionRendererPolymorphicProps {
     blob: Blob,
     result?: ShadowingEvaluationResponse | SpeakingAiEvaluationResult,
   ) => void;
+  onWritingEvaluated?: (
+    questionId: string,
+    result: WritingAiEvaluationResult,
+    text: string,
+    isPassed: boolean,
+  ) => void;
+  failCount?: number;
   isListening?: boolean;
   isVocab?: boolean;
 }
@@ -77,11 +85,37 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
   speakText,
   attempt,
   onUploadAudio,
+  onWritingEvaluated,
+  failCount = 0,
   isListening = false,
   isVocab = false,
 }) => {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<0.75 | 1.0>(1.0);
+  const wordAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (wordAudioRef.current) {
+        wordAudioRef.current.onended = null;
+        wordAudioRef.current.onerror = null;
+        wordAudioRef.current.pause();
+        wordAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const passBand = React.useMemo(() => {
+    if (!attempt?.passScore) return 6.0;
+    const ps = Number(attempt.passScore);
+    if (ps > 0 && ps <= 9.0) return ps;
+    if (ps > 9.0 && ps <= 10.0) return ps;
+    if (ps > 10.0) return Number((ps / 10).toFixed(1));
+    return 6.0;
+  }, [attempt?.passScore]);
 
   const rawType = String(question.questionType || '').toUpperCase();
   const prompt = question.promptText || '';
@@ -180,19 +214,33 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
     const media = question.mediaUrl || (question as any).audioUrl;
     if (media) {
       try {
+        if (wordAudioRef.current) {
+          wordAudioRef.current.onended = null;
+          wordAudioRef.current.onerror = null;
+          wordAudioRef.current.pause();
+        }
         const audio = new Audio(resolveAudioUrl(media));
+        wordAudioRef.current = audio;
         audio.playbackRate = playbackSpeed;
-        audio.onended = () => setIsPlayingAudio(false);
+        audio.onended = () => {
+          if (isMountedRef.current) setIsPlayingAudio(false);
+        };
         audio.onerror = () => {
+          if (!isMountedRef.current) return;
           if (targetWord) {
-            speakText(targetWord, () => setIsPlayingAudio(false));
+            speakText(targetWord, () => {
+              if (isMountedRef.current) setIsPlayingAudio(false);
+            });
           } else {
             setIsPlayingAudio(false);
           }
         };
         audio.play().catch(() => {
+          if (!isMountedRef.current) return;
           if (targetWord) {
-            speakText(targetWord, () => setIsPlayingAudio(false));
+            speakText(targetWord, () => {
+              if (isMountedRef.current) setIsPlayingAudio(false);
+            });
           } else {
             setIsPlayingAudio(false);
           }
@@ -204,7 +252,9 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
     }
 
     if (targetWord) {
-      speakText(targetWord, () => setIsPlayingAudio(false));
+      speakText(targetWord, () => {
+        if (isMountedRef.current) setIsPlayingAudio(false);
+      });
     } else {
       setIsPlayingAudio(false);
     }
@@ -232,45 +282,45 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
       {/* 1. HEADER CÂU HỎI */}
       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 flex-wrap gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-1.5 py-0.2 rounded border border-blue-200 dark:border-blue-800">
-            CÂU HỎI {index + 1}
+          <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 tabular-nums">
+            Câu {index + 1}
           </span>
 
           {phase === 'REVIEW' && (
             isCorrectInReview ? (
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 tabular-nums">
                 <CheckCircle2 size={11} />
-                CHÍNH XÁC (+{(question as any).earnedPoints ?? 1} pt)
+                Đúng (+{(question as any).earnedPoints ?? 1})
               </span>
             ) : (
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
                 <XCircle size={11} />
-                CHƯA ĐÚNG (0 pt)
+                Sai
               </span>
             )
           )}
 
-          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-            ({isSpeakingQA
-              ? 'SPEAKING Q&A'
+          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            {isSpeakingQA
+              ? 'Nói Q&A'
               : isSpeakingShadowing
-              ? 'SHADOWING'
+              ? 'Shadowing'
               : isWordUnscramble
-              ? 'SẮP XẾP TỪ'
+              ? 'Sắp xếp từ'
               : isFillInBlank
-              ? 'ĐIỀN TỪ'
+              ? 'Điền từ'
               : isParagraphWriting
-              ? 'VIẾT ĐOẠN VĂN'
+              ? 'Viết đoạn'
               : isIeltsEssay
-              ? 'BÀI LUẬN IELTS'
+              ? 'Viết luận'
               : isTrueFalse
-              ? 'ĐÚNG / SAI'
-              : 'TRẮC NGHIỆM'})
+              ? 'Đúng / Sai'
+              : 'Trắc nghiệm'}
           </span>
 
           {isFlagged && (
-            <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40">
-              ★ Đã đánh dấu xem lại
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40">
+              Đã đánh dấu
             </span>
           )}
         </div>
@@ -285,7 +335,7 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
           }`}
         >
           <Flag size={11} className={isFlagged ? 'fill-amber-500 text-amber-500' : ''} />
-          <span>{isFlagged ? 'Bỏ đánh dấu' : 'Đánh dấu'}</span>
+          <span>{isFlagged ? 'Bỏ dấu' : 'Đánh dấu'}</span>
         </button>
       </div>
 
@@ -297,7 +347,6 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
               {cleanPrompt}
             </h3>
 
-            {/* Nút phát âm âm thanh câu hỏi nhỏ (Dành cho Nghe & Chọn từ / Vocabulary) */}
             {isListeningWord && (
               <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                 <button
@@ -308,10 +357,9 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
                       ? 'bg-amber-600 ring-2 ring-amber-400'
                       : 'bg-amber-500 hover:bg-amber-600'
                   }`}
-                  title="Nghe phát âm từ vựng này"
                 >
                   <Volume2 size={15} className={isPlayingAudio ? 'animate-pulse' : ''} />
-                  <span>{isPlayingAudio ? 'Đang phát âm...' : 'Nghe phát âm'}</span>
+                  <span>{isPlayingAudio ? 'Đang phát...' : 'Nghe'}</span>
                 </button>
               </div>
             )}
@@ -332,20 +380,20 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
       {/* 3B. Điền từ vào chỗ trống / Hoàn thành câu */}
       {isFillInBlank && (
-        <div className="space-y-2.5 pt-1">
+        <div className="space-y-2 pt-1">
           <div className="relative">
             <input
               type="text"
               value={studentAns?.textAnswer || ''}
               onChange={(e) => onUpdateAnswer(question.questionId, { textAnswer: e.target.value })}
               disabled={isSubmitting || phase === 'REVIEW'}
-              placeholder="Nhập câu trả lời của bạn..."
+              placeholder="Nhập đáp án..."
               className="w-full min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition"
             />
           </div>
           {phase === 'REVIEW' && question.correctAnswer && (
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Gợi ý chữ cái đầu: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{getFirstLetterHint(question.correctAnswer)}...</span>
+              Gợi ý: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{getFirstLetterHint(question.correctAnswer)}...</span>
             </div>
           )}
         </div>
@@ -375,6 +423,13 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
                 onClick={() => {
                   if (phase === 'REVIEW' || isSubmitting) return;
                   onUpdateAnswer(question.questionId, { selectedOptionId: optId });
+                }}
+                onKeyDown={(e) => {
+                  if (phase === 'REVIEW' || isSubmitting) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onUpdateAnswer(question.questionId, { selectedOptionId: optId });
+                  }
                 }}
                 className={`min-h-[42px] flex items-center justify-between gap-2.5 p-2.5 sm:p-3 rounded-lg border transition-all cursor-pointer active:scale-[0.99] touch-manipulation select-none ${
                   isOptionRevealedCorrect
@@ -407,12 +462,12 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
                 {isOptionRevealedCorrect && (
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0 flex items-center gap-1">
-                    <CheckCircle2 size={15} /> Đáp án đúng
+                    <CheckCircle2 size={14} /> Đúng
                   </span>
                 )}
                 {isOptionRevealedWrong && (
                   <span className="text-xs font-semibold text-rose-600 dark:text-rose-400 shrink-0 flex items-center gap-1">
-                    <XCircle size={15} /> Bạn đã chọn
+                    <XCircle size={14} /> Đã chọn
                   </span>
                 )}
               </div>
@@ -455,22 +510,19 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
       {/* 3E. Speaking Studio */}
       {isSpeaking && isQuestionPassed(question.questionId, question, attempt ? [attempt] : []) && phase !== 'REVIEW' ? (
-        <div className="rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/40 p-4 sm:p-5 text-center space-y-2.5 my-2">
+        <div className="rounded-xl border border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/40 p-4 text-center space-y-2.5 my-2">
           <div className="inline-flex p-2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-            <Lock size={20} />
+            <Lock size={18} />
           </div>
 
-          <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-700">
-              ✓ ĐÃ ĐẠT CHUẨN ({getQuestionBestScoreAcrossAttempts(question.questionId, question, attempt ? [attempt] : []).toFixed(1)}/100 PTS ≥ 80)
+          <div>
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-md border border-emerald-300 dark:border-emerald-700 tabular-nums">
+              Đã đạt ({getQuestionBestScoreAcrossAttempts(question.questionId, question, attempt ? [attempt] : []).toFixed(1)}/100)
             </span>
-            <p className="text-xs text-slate-700 dark:text-slate-300 max-w-md mx-auto pt-1 font-medium">
-              Câu hỏi này đã đạt chuẩn nên được khóa để bảo toàn điểm số. Bạn bắt buộc phải chuyển sang câu hỏi tiếp theo chưa đạt.
-            </p>
           </div>
 
           {index + 1 < totalQuestions && (
-            <div className="pt-1">
+            <div>
               <button
                 type="button"
                 onClick={() => {
@@ -480,9 +532,9 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
                     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }
                 }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition cursor-pointer"
               >
-                <span>Bắt buộc làm câu tiếp theo (Câu {index + 2})</span>
+                <span>Câu {index + 2}</span>
                 <ArrowRight size={13} />
               </button>
             </div>
@@ -529,6 +581,12 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
           explanation={question.explanation || ''}
           currentParagraph={studentAns?.textAnswer || ''}
           onParagraphChange={(text) => onUpdateAnswer(question.questionId, { textAnswer: text })}
+          studentAnswerId={question.studentAnswerId || question.id || question.questionId}
+          passBand={passBand}
+          failCount={failCount}
+          onWritingEvaluated={(res, text, isPassed) =>
+            onWritingEvaluated?.(question.questionId, res, text, isPassed)
+          }
           disabled={isSubmitting || phase === 'REVIEW'}
         />
       )}
@@ -538,6 +596,12 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
           explanation={question.explanation || ''}
           currentEssay={studentAns?.textAnswer || ''}
           onEssayChange={(text) => onUpdateAnswer(question.questionId, { textAnswer: text })}
+          studentAnswerId={question.studentAnswerId || question.id || question.questionId}
+          passBand={passBand}
+          failCount={failCount}
+          onWritingEvaluated={(res, text, isPassed) =>
+            onWritingEvaluated?.(question.questionId, res, text, isPassed)
+          }
           disabled={isSubmitting || phase === 'REVIEW'}
         />
       )}
@@ -576,7 +640,9 @@ export const QuestionRendererPolymorphic = React.memo(
       prev.onToggleHint === next.onToggleHint &&
       prev.resolveAudioUrl === next.resolveAudioUrl &&
       prev.speakText === next.speakText &&
-      prev.onUploadAudio === next.onUploadAudio
+      prev.onUploadAudio === next.onUploadAudio &&
+      prev.onWritingEvaluated === next.onWritingEvaluated &&
+      prev.failCount === next.failCount
     );
   }
 );

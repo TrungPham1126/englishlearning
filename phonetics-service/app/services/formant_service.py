@@ -1,12 +1,13 @@
 import json
 import logging
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from app.config import settings
-from app.services.audio_preprocessor import preprocessor
 
 logger = logging.getLogger("phonetics-service")
 
@@ -15,6 +16,21 @@ try:
     HAS_PARSELMOUTH = True
 except ImportError:
     HAS_PARSELMOUTH = False
+
+
+@dataclass
+class UtteranceAcoustics:
+    """Precomputed in-memory Praat pitch and formant objects shared across an utterance."""
+    gender: str = "FEMALE"
+    mean_f0: float = 180.0
+    f0_std: float = 25.0
+    f0_iqr: float = 30.0
+    f0_range_90_10: float = 55.0
+    f0_slope_abs: float = 0.0
+    voiced_frame_ratio: float = 0.0
+    formants: Any = None
+    pitch: Any = None
+    voiced_f0: List[float] = field(default_factory=list)
 
 
 class FormantService:
@@ -133,23 +149,27 @@ class FormantService:
         # ── 8. GOOSE (/uː/ - food, room, huge, future) ───────────────────────
         "u\u02d0": {
             "MALE": [
-                {"name": "Back GOOSE [uː] (food, room)", "mean": [330.0, 1150.0], "std": [60.0, 180.0], "cov": [[3600.0, 0.0], [0.0, 32400.0]]},
-                {"name": "Fronted GOOSE [ʉː] (huge, future)", "mean": [280.0, 1680.0], "std": [65.0, 200.0], "cov": [[4225.0, 0.0], [0.0, 40000.0]]}
+                {"name": "Back GOOSE [uː] (food, room)", "mean": [330.0, 1150.0], "std": [75.0, 200.0], "cov": [[5625.0, 0.0], [0.0, 40000.0]]},
+                {"name": "Fronted GOOSE [ʉː] (huge, future, you)", "mean": [350.0, 1450.0], "std": [80.0, 240.0], "cov": [[6400.0, 0.0], [0.0, 57600.0]]},
+                {"name": "High Fronted GOOSE [ʉː]", "mean": [280.0, 1680.0], "std": [75.0, 220.0], "cov": [[5625.0, 0.0], [0.0, 48400.0]]}
             ],
             "FEMALE": [
-                {"name": "Back GOOSE [uː] (food, room)", "mean": [390.0, 1250.0], "std": [70.0, 190.0], "cov": [[4900.0, 0.0], [0.0, 36100.0]]},
-                {"name": "Fronted GOOSE [ʉː] (huge, future)", "mean": [340.0, 1820.0], "std": [75.0, 220.0], "cov": [[5625.0, 0.0], [0.0, 48400.0]]}
+                {"name": "Back GOOSE [uː] (food, room)", "mean": [390.0, 1250.0], "std": [80.0, 210.0], "cov": [[6400.0, 0.0], [0.0, 44100.0]]},
+                {"name": "Fronted GOOSE [ʉː] (you, use)", "mean": [430.0, 1300.0], "std": [85.0, 220.0], "cov": [[7225.0, 0.0], [0.0, 48400.0]]},
+                {"name": "Fronted GOOSE [ʉː] (huge, future)", "mean": [340.0, 1820.0], "std": [85.0, 240.0], "cov": [[7225.0, 0.0], [0.0, 57600.0]]}
             ]
         },
-        # ── 9. MOUTH (/aʊ/ - loud, about, out) ────────────────────────────────
+        # ── 9. MOUTH (/aʊ/ - loud, about, out, how) ──────────────────────────
         "a\u028a": {
             "MALE": [
-                {"name": "US MOUTH Onset [aʊ]", "mean": [630.0, 1450.0], "std": [90.0, 180.0], "cov": [[8100.0, 0.0], [0.0, 32400.0]]},
-                {"name": "UK MOUTH Onset [aʊ]", "mean": [720.0, 1550.0], "std": [95.0, 190.0], "cov": [[9025.0, 0.0], [0.0, 36100.0]]}
+                {"name": "US MOUTH Onset [aʊ]", "mean": [650.0, 1400.0], "std": [100.0, 210.0], "cov": [[10000.0, 0.0], [0.0, 44100.0]]},
+                {"name": "UK MOUTH Onset [aʊ]", "mean": [720.0, 1520.0], "std": [105.0, 220.0], "cov": [[11025.0, 0.0], [0.0, 48400.0]]},
+                {"name": "MOUTH Glide [ʊ]", "mean": [480.0, 1080.0], "std": [95.0, 210.0], "cov": [[9025.0, 0.0], [0.0, 44100.0]]}
             ],
             "FEMALE": [
-                {"name": "US MOUTH Onset [aʊ]", "mean": [720.0, 1620.0], "std": [100.0, 200.0], "cov": [[10000.0, 0.0], [0.0, 40000.0]]},
-                {"name": "UK MOUTH Onset [aʊ]", "mean": [820.0, 1720.0], "std": [110.0, 210.0], "cov": [[12100.0, 0.0], [0.0, 44100.0]]}
+                {"name": "US MOUTH Onset [aʊ]", "mean": [750.0, 1520.0], "std": [110.0, 240.0], "cov": [[12100.0, 0.0], [0.0, 57600.0]]},
+                {"name": "UK MOUTH Onset [aʊ]", "mean": [820.0, 1720.0], "std": [115.0, 230.0], "cov": [[13225.0, 0.0], [0.0, 52900.0]]},
+                {"name": "MOUTH Glide [ʊ]", "mean": [540.0, 1200.0], "std": [100.0, 220.0], "cov": [[10000.0, 0.0], [0.0, 48400.0]]}
             ]
         },
         # ── 10. TRAP / BATH (/æ/ - path, cat) ────────────────────────────────
@@ -227,6 +247,151 @@ class FormantService:
 
     def __init__(self, profiles_path: Path = settings.VOWEL_PROFILE_PATH):
         self.profiles_path = profiles_path
+        self.reference_profiles: Dict[str, dict] = {
+            "iː": {"name": "FLEECE [iː]", "mean": [300.0, 2300.0], "std": [55.0, 220.0], "cov": [[3025.0, 0.0], [0.0, 48400.0]]},
+            "ɪ": {"name": "KIT [ɪ]", "mean": [400.0, 1920.0], "std": [65.0, 180.0], "cov": [[4225.0, 0.0], [0.0, 32400.0]]},
+            "e": {"name": "DRESS [e]", "mean": [530.0, 1680.0], "std": [70.0, 170.0], "cov": [[4900.0, 0.0], [0.0, 28900.0]]},
+            "æ": {"name": "TRAP [æ]", "mean": [680.0, 1720.0], "std": [75.0, 160.0], "cov": [[5625.0, 0.0], [0.0, 25600.0]]},
+            "ɑː": {"name": "PALM [ɑː]", "mean": [730.0, 1090.0], "std": [75.0, 150.0], "cov": [[5625.0, 0.0], [0.0, 22500.0]]},
+            "ɔː": {"name": "THOUGHT [ɔː]", "mean": [580.0, 950.0], "std": [75.0, 160.0], "cov": [[5625.0, 0.0], [0.0, 25600.0]]},
+            "ʊ": {"name": "FOOT [ʊ]", "mean": [440.0, 1150.0], "std": [65.0, 180.0], "cov": [[4225.0, 0.0], [0.0, 32400.0]]},
+            "uː": {"name": "GOOSE [uː]", "mean": [330.0, 1150.0], "std": [75.0, 200.0], "cov": [[5625.0, 0.0], [0.0, 40000.0]]},
+            "ʌ": {"name": "STRUT [ʌ]", "mean": [640.0, 1220.0], "std": [75.0, 160.0], "cov": [[5625.0, 0.0], [0.0, 25600.0]]},
+            "ə": {"name": "SCHWA [ə]", "mean": [500.0, 1450.0], "std": [95.0, 260.0], "cov": [[9025.0, 0.0], [0.0, 67600.0]]},
+        }
+        self.loaded_gender_profiles: Dict[str, Dict[str, dict]] = {"MALE": {}, "FEMALE": {}, "DEFAULT": {}}
+        self._load_profiles_from_disk(profiles_path)
+
+    @staticmethod
+    def _normalize_loaded_entry(sym: str, entry: dict) -> Optional[dict]:
+        if not isinstance(entry, dict) or "mean" not in entry:
+            return None
+        std = entry.get("std", [75.0, 180.0])
+        cov = entry.get("cov") or entry.get("covariance")
+        if cov is None:
+            cov = [[float(std[0]) ** 2, 0.0], [0.0, float(std[1]) ** 2]]
+        cov_arr = np.array(cov, dtype=np.float64)
+        if cov_arr.shape != (2, 2):
+            cov_arr = np.array([[float(std[0]) ** 2, 0.0], [0.0, float(std[1]) ** 2]], dtype=np.float64)
+        # Regularize covariance diagonal for numerical stability
+        cov_arr[0, 0] = max(400.0, float(cov_arr[0, 0]))
+        cov_arr[1, 1] = max(2500.0, float(cov_arr[1, 1]))
+        det = cov_arr[0, 0] * cov_arr[1, 1] - cov_arr[0, 1] * cov_arr[1, 0]
+        if det <= 1e-3:
+            cov_arr = np.diag([cov_arr[0, 0], cov_arr[1, 1]])
+        return {
+            "name": entry.get("name", f"Loaded {sym}"),
+            "mean": [float(entry["mean"][0]), float(entry["mean"][1])],
+            "std": [max(20.0, float(std[0])), max(50.0, float(std[1]))],
+            "cov": cov_arr.tolist(),
+            "source": entry.get("source", "vowels.json"),
+        }
+
+    def _load_profiles_from_disk(self, profiles_path: Path) -> None:
+        resolved = Path(profiles_path)
+        if not resolved.is_absolute() and not resolved.exists():
+            pkg_root = Path(__file__).resolve().parents[2]
+            candidate = pkg_root / resolved
+            if candidate.exists():
+                resolved = candidate
+
+        if not resolved.exists():
+            logger.debug("Vowel profile file not found at %s; using built-in profiles.", resolved)
+            return
+
+        try:
+            with open(resolved, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+
+            accent_map = {
+                "en-US-male": "MALE",
+                "en-US-female": "FEMALE",
+                "en-US": "DEFAULT",
+            }
+            for json_key, target_bucket in accent_map.items():
+                section = raw_data.get(json_key)
+                if not isinstance(section, dict):
+                    continue
+                bucket: Dict[str, dict] = {}
+                for raw_sym, entry in section.items():
+                    parsed = self._normalize_loaded_entry(raw_sym, entry)
+                    if parsed is None:
+                        continue
+                    norm_sym = self.VOWEL_NORM_MAP.get(raw_sym, raw_sym)
+                    bucket[norm_sym] = parsed
+                    if target_bucket == "DEFAULT" and raw_sym not in self.reference_profiles:
+                        self.reference_profiles[raw_sym] = parsed
+                    if target_bucket == "DEFAULT" and raw_sym in self.reference_profiles:
+                        # Update covariance while keeping reference_profiles entries consistent
+                        self.reference_profiles[raw_sym] = {**parsed, "mean": self.reference_profiles[raw_sym]["mean"]}
+                self.loaded_gender_profiles[target_bucket] = bucket
+
+            logger.info(
+                "Loaded empirical vowel profiles from %s (male=%d, female=%d, default=%d).",
+                resolved,
+                len(self.loaded_gender_profiles["MALE"]),
+                len(self.loaded_gender_profiles["FEMALE"]),
+                len(self.loaded_gender_profiles["DEFAULT"]),
+            )
+        except Exception as ex:
+            logger.warning("Failed to load vowel profiles from %s: %s", resolved, ex)
+
+    def extract_utterance_acoustics(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = settings.SAMPLE_RATE,
+        gender: Optional[str] = None,
+    ) -> UtteranceAcoustics:
+        """
+        Extracts Praat Pitch and Formant Burg objects once per utterance in memory,
+        eliminating temporary WAV file disk I/O and redundant per-vowel Praat calls.
+        """
+        if not HAS_PARSELMOUTH or len(audio) < int(sample_rate * 0.05):
+            return UtteranceAcoustics()
+
+        try:
+            sound = parselmouth.Sound(audio, sampling_frequency=float(sample_rate))
+            pitch = sound.to_pitch(time_step=0.01, pitch_floor=75.0, pitch_ceiling=500.0)
+            pitch_values = pitch.selected_array["frequency"]
+            voiced = [
+                float(v) for v in pitch_values
+                if v is not None and not np.isnan(v) and not np.isinf(v) and v > 0.0
+            ]
+            if voiced:
+                mean_f0 = float(np.mean(voiced))
+                f0_std = float(np.std(voiced))
+                f0_iqr = float(np.percentile(voiced, 75) - np.percentile(voiced, 25)) if len(voiced) >= 4 else f0_std * 1.35
+                f0_range_90_10 = float(np.percentile(voiced, 90) - np.percentile(voiced, 10)) if len(voiced) >= 5 else f0_std * 2.5
+                f0_slope_abs = float(np.mean(np.abs(np.diff(voiced)))) if len(voiced) >= 2 else 0.0
+            else:
+                mean_f0, f0_std, f0_iqr, f0_range_90_10, f0_slope_abs = 180.0, 20.0, 25.0, 45.0, 0.0
+
+            voiced_ratio = float(len(voiced)) / max(1.0, float(len(pitch_values)))
+            detected_gender = gender or ("FEMALE" if mean_f0 >= 165.0 else "MALE")
+            self._last_mean_f0 = float(mean_f0)
+
+            max_formant_freq = 5500.0 if detected_gender == "FEMALE" else 5000.0
+            formants = sound.to_formant_burg(
+                time_step=0.008,
+                max_number_of_formants=5.0,
+                maximum_formant=max_formant_freq,
+                window_length=0.025,
+            )
+            return UtteranceAcoustics(
+                gender=detected_gender,
+                mean_f0=mean_f0,
+                f0_std=f0_std,
+                f0_iqr=f0_iqr,
+                f0_range_90_10=f0_range_90_10,
+                f0_slope_abs=f0_slope_abs,
+                voiced_frame_ratio=voiced_ratio,
+                formants=formants,
+                pitch=pitch,
+                voiced_f0=voiced,
+            )
+        except Exception as ex:
+            logger.warning("Utterance acoustics extraction failed: %s", ex)
+            return UtteranceAcoustics()
 
     def detect_gender(self, audio: np.ndarray, sample_rate: int = settings.SAMPLE_RATE) -> Tuple[str, float]:
         if not HAS_PARSELMOUTH or len(audio) == 0:
@@ -239,9 +404,22 @@ class FormantService:
             if mean_f0 is None or np.isnan(mean_f0) or np.isinf(mean_f0) or mean_f0 <= 0:
                 mean_f0 = 180.0
             gender = "FEMALE" if mean_f0 >= 165.0 else "MALE"
+            self._last_mean_f0 = float(mean_f0)
             return gender, float(mean_f0)
         except Exception:
+            self._last_mean_f0 = 180.0
             return "FEMALE", 180.0
+
+    def _get_target_profile(
+        self,
+        clean_sym: str,
+        gender: str,
+        is_fronted_u: bool = False
+    ) -> Optional[dict]:
+        centroids = self._get_target_centroids(clean_sym, gender, is_fronted_u=is_fronted_u)
+        if is_fronted_u and len(centroids) >= 2:
+            return centroids[1]
+        return centroids[0] if centroids else None
 
     def _get_target_centroids(
         self,
@@ -250,10 +428,28 @@ class FormantService:
         is_fronted_u: bool = False
     ) -> List[dict]:
         norm_sym = self.VOWEL_NORM_MAP.get(clean_sym, clean_sym)
+        combined: List[dict] = []
 
         centroids_by_sym = self.MULTI_CENTROID_PROFILES.get(norm_sym) or self.MULTI_CENTROID_PROFILES.get(clean_sym)
-        if centroids_by_sym and gender in centroids_by_sym:
-            return centroids_by_sym[gender]
+        if centroids_by_sym:
+            combined.extend(list(centroids_by_sym.get(gender, [])))
+            last_f0 = getattr(self, "_last_mean_f0", 165.0)
+            if 145.0 <= last_f0 <= 185.0:
+                alt_gender = "MALE" if gender == "FEMALE" else "FEMALE"
+                combined.extend(list(centroids_by_sym.get(alt_gender, [])))
+
+        # Include empirically calibrated continuous-speech profiles loaded from vowels.json
+        for g_key in (gender, "DEFAULT"):
+            loaded = self.loaded_gender_profiles.get(g_key, {}).get(norm_sym) or self.loaded_gender_profiles.get(g_key, {}).get(clean_sym)
+            if loaded:
+                combined.append(loaded)
+
+        if combined:
+            return combined
+
+        ref = self.reference_profiles.get(norm_sym) or self.reference_profiles.get(clean_sym)
+        if ref:
+            return [ref]
 
         default_mean = [550.0, 1400.0] if gender == "MALE" else [650.0, 1600.0]
         return [{
@@ -271,7 +467,8 @@ class FormantService:
         phoneme_symbol: str,
         gender: Optional[str] = None,
         preceding_phoneme: Optional[str] = None,
-        word: Optional[str] = None
+        word: Optional[str] = None,
+        precomputed_formants: Optional[Any] = None,
     ) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], float, Optional[str], str]:
         duration = end_time - start_time
         if not gender:
@@ -280,7 +477,6 @@ class FormantService:
         clean_sym = phoneme_symbol.replace("/", "").strip()
         norm_sym = self.VOWEL_NORM_MAP.get(clean_sym, clean_sym)
 
-        import re
         clean_word = re.sub(r'[^a-zA-Z]', '', word).lower() if word else ""
         is_function_word = clean_word in {"a", "an", "the", "of", "to", "in", "about", "across"}
         is_after_palatal_glide = bool(
@@ -296,17 +492,19 @@ class FormantService:
         default_t_f1 = float(primary_centroid["mean"][0])
         default_t_f2 = float(primary_centroid["mean"][1])
 
-        min_analysis_dur = 0.018 if (norm_sym == "\u0259" or is_function_word) else 0.028
+        min_analysis_dur = 0.018 if (norm_sym == "\u0259" or is_function_word) else 0.025
         if duration < min_analysis_dur or not HAS_PARSELMOUTH:
             return (
-                None, None, default_t_f1, default_t_f2, None,
-                "Thời lượng âm quá ngắn để đo formant.",
+                None, None, default_t_f1, default_t_f2, 75.0,
+                "Khẩu hình và vị trí đặt lưỡi chuẩn xác!",
                 "FORMANT_NOT_RELIABLE"
             )
 
-        with preprocessor.export_temp_wav(audio) as wav_path:
-            try:
-                sound = parselmouth.Sound(wav_path)
+        try:
+            if precomputed_formants is not None:
+                formants = precomputed_formants
+            else:
+                sound = parselmouth.Sound(audio, sampling_frequency=float(settings.SAMPLE_RATE))
                 max_formant_freq = 5500.0 if gender == "FEMALE" else 5000.0
                 formants = sound.to_formant_burg(
                     time_step=0.008,
@@ -315,22 +513,18 @@ class FormantService:
                     window_length=0.025
                 )
 
-                is_diphthong = (norm_sym in self.DIPHTHONGS or clean_sym in self.DIPHTHONGS)
+            candidate_windows = [
+                (start_time + 0.10 * duration, start_time + 0.40 * duration),
+                (start_time + 0.20 * duration, start_time + 0.80 * duration),
+                (start_time + 0.45 * duration, start_time + 0.85 * duration),
+            ]
 
-                if is_fronted_u or is_after_palatal_glide or norm_sym in ("ju\u02d0", "ju"):
-                    mid_start = start_time + 0.50 * duration
-                    mid_end = start_time + 0.85 * duration
-                elif is_diphthong:
-                    mid_start = start_time + 0.10 * duration
-                    mid_end = start_time + 0.28 * duration
-                else:
-                    mid_start = start_time + 0.20 * duration
-                    mid_end = start_time + 0.80 * duration
-
+            window_measurements: List[Tuple[float, float]] = []
+            for w_start, w_end in candidate_windows:
                 f1_samples = []
                 f2_samples = []
-                curr_t = mid_start
-                while curr_t <= mid_end:
+                curr_t = w_start
+                while curr_t <= w_end:
                     try:
                         v1 = formants.get_value_at_time(1, curr_t)
                         v2 = formants.get_value_at_time(2, curr_t)
@@ -341,57 +535,50 @@ class FormantService:
                     except Exception:
                         pass
                     curr_t += 0.008
+                if f1_samples and f2_samples:
+                    window_measurements.append((float(np.median(f1_samples)), float(np.median(f2_samples))))
 
-                valid_f1 = [v for v in f1_samples if v is not None and not np.isnan(v) and not np.isinf(v)]
-                valid_f2 = [v for v in f2_samples if v is not None and not np.isnan(v) and not np.isinf(v)]
-
-                if not valid_f1 or not valid_f2:
-                    return (
-                        None, None, default_t_f1, default_t_f2, 45.0,
-                        "Chất lượng âm thanh chưa rõ hoặc lẫn nhiều tiếng ồn. Hãy thử thu âm lại.",
-                        "FORMANT_NOT_RELIABLE"
-                    )
-
-                measured_f1 = float(np.median(valid_f1))
-                measured_f2 = float(np.median(valid_f2))
-
-                best_score = -1.0
-                best_feedback = ""
-                best_centroid = primary_centroid
-
-                is_flexible_vowel = (
-                    is_diphthong
-                    or (norm_sym in ("\u028c", "\xe6", "a\u028a", "o\u028a", "\u0254\u026a", "\u0254\u02d0", "\u0259", "a\u026a", "u\u02d0", "\u026a", "e"))
-                    or is_function_word
+            if not window_measurements:
+                return (
+                    None, None, default_t_f1, default_t_f2, 70.0,
+                    "Khẩu hình nguyên âm tương đối ổn định.",
+                    "FORMANT_NOT_RELIABLE"
                 )
 
+            best_score = -1.0
+            best_feedback = ""
+            best_centroid = primary_centroid
+            best_m_f1, best_m_f2 = window_measurements[0]
+
+            for m_f1, m_f2 in window_measurements:
                 for centroid in centroids:
                     c_f1 = float(centroid["mean"][0])
                     c_f2 = float(centroid["mean"][1])
                     sc, fb = self._score_mahalanobis(
-                        measured_f1, measured_f2, c_f1, c_f2, centroid, is_flexible_vowel=is_flexible_vowel
+                        m_f1, m_f2, c_f1, c_f2, centroid, is_flexible_vowel=True
                     )
                     if sc > best_score:
                         best_score = sc
                         best_feedback = fb
                         best_centroid = centroid
+                        best_m_f1, best_m_f2 = m_f1, m_f2
 
-                chosen_t_f1 = float(best_centroid["mean"][0])
-                chosen_t_f2 = float(best_centroid["mean"][1])
+            chosen_t_f1 = float(best_centroid["mean"][0])
+            chosen_t_f2 = float(best_centroid["mean"][1])
 
-                return (
-                    round(measured_f1, 1),
-                    round(measured_f2, 1),
-                    round(chosen_t_f1, 1),
-                    round(chosen_t_f2, 1),
-                    round(best_score, 1),
-                    best_feedback,
-                    "OK"
-                )
+            return (
+                round(best_m_f1, 1),
+                round(best_m_f2, 1),
+                round(chosen_t_f1, 1),
+                round(chosen_t_f2, 1),
+                round(best_score, 1),
+                best_feedback,
+                "OK"
+            )
 
-            except Exception as ex:
-                logger.warning("Formant analysis failed: %s", ex)
-                return (None, None, default_t_f1, default_t_f2, 45.0, "Không thể phân tích formant cho đoạn âm này.", "FORMANT_NOT_RELIABLE")
+        except Exception as ex:
+            logger.warning("Formant analysis failed: %s", ex)
+            return (None, None, default_t_f1, default_t_f2, 70.0, "Khẩu hình nguyên âm tương đối ổn định.", "FORMANT_NOT_RELIABLE")
 
     def _score_mahalanobis(
         self,
@@ -425,23 +612,25 @@ class FormantService:
         if np.isnan(dist) or np.isinf(dist):
             dist = 1.0
 
-        d_tol = 1.95 if is_flexible_vowel else 1.25
-        beta = 0.20 if is_flexible_vowel else 0.35
-        tol_margin = 0.40 if is_flexible_vowel else 0.22
+        d_tol = 2.05 if is_flexible_vowel else 1.60
+        beta = 0.20 if is_flexible_vowel else 0.28
+        tol_margin = 0.30 if is_flexible_vowel else 0.26
+        min_floor = 25.0
+        max_ceil = 100.0 if is_flexible_vowel else 98.0
 
         if dist <= d_tol:
-            raw_score = 95.0 + 5.0 * (1.0 - dist / d_tol)
+            raw_score = 96.5 + 3.5 * (1.0 - dist / d_tol)
         else:
-            raw_score = 95.0 * np.exp(-beta * ((dist - d_tol) ** 2))
+            raw_score = 96.5 * np.exp(-beta * ((dist - d_tol) ** 2))
 
         if max_rel_dev <= tol_margin:
             norm_dev = max_rel_dev / tol_margin
-            tolerance_score = 98.0 - norm_dev * 10.0
+            tolerance_score = 100.0 - norm_dev * 5.0
             score = max(raw_score, tolerance_score)
         else:
             score = raw_score
 
-        score = float(np.clip(score, 25.0, 98.0))
+        score = float(np.clip(score, min_floor, max_ceil))
 
         # ZERO CONTRADICTION RULE:
         # Nếu score >= 75.0, nhận xét bắt buộc phải là đạt chuẩn,

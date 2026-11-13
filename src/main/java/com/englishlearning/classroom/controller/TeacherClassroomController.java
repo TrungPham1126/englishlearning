@@ -5,6 +5,7 @@ import com.englishlearning.classroom.dto.ClassroomResponse;
 import com.englishlearning.classroom.dto.StudentProgressResponse;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +35,9 @@ public class TeacherClassroomController {
     @Operation(summary = "Lấy danh sách các lớp học Giảng viên đang phụ trách")
     public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getAssignedClasses(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
         return ResponseEntity.ok(ApiResponse.success(classroomService.getTeacherClasses(userDetails.getId())));
     }
 

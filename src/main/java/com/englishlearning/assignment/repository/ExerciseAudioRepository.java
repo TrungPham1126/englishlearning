@@ -2,8 +2,12 @@ package com.englishlearning.assignment.repository;
 
 import com.englishlearning.assignment.entity.ExerciseAudio;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,5 +22,11 @@ public interface ExerciseAudioRepository extends JpaRepository<ExerciseAudio, UU
     List<ExerciseAudio> findByAssignmentId(UUID assignmentId);
 
     List<ExerciseAudio> findByQuestionIdOrderByVersionDesc(UUID questionId);
+
+    List<ExerciseAudio> findByAssignmentIdIn(Collection<UUID> assignmentIds);
+
+    @Modifying
+    @Query("DELETE FROM ExerciseAudio ea WHERE ea.assignmentId IN :assignmentIds")
+    int deleteByAssignmentIdIn(@Param("assignmentIds") Collection<UUID> assignmentIds);
 }
 

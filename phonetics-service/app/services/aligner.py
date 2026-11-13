@@ -113,8 +113,8 @@ class G2PConverter:
             return cls._instance
 
     def is_in_cmu(self, word: str) -> bool:
-        w = word.strip().lower()
-        return bool(hasattr(self._g2p, "cmu") and w in self._g2p.cmu)
+        w = word.strip(".,!?;:\"'()[]{}").lower()
+        return bool(w and hasattr(self._g2p, "cmu") and w in self._g2p.cmu)
 
     def is_oov_word(self, word: str) -> bool:
         clean = re.sub(r'[^a-zA-Z]', '', word).lower()
@@ -211,6 +211,12 @@ class G2PConverter:
 g2p_converter = G2PConverter.get_instance()
 
 
+_ALLOWED_NO_VOWEL_TOKENS = {
+    "shh", "psst", "hmm", "nth", "by", "my",
+    "mc", "ph", "st", "mr", "mrs", "dr", "jr", "sr", "vs", "tv", "pc", "dj", "ok",
+}
+
+
 def validate_script(text: str) -> List[str]:
     if not text or not text.strip():
         raise InvalidTranscriptError("Script tham chiếu rỗng hoặc chỉ chứa khoảng trắng.")
@@ -228,21 +234,28 @@ def validate_script(text: str) -> List[str]:
         raise InvalidTranscriptError("Script không chứa từ tiếng Anh hợp lệ.")
 
     valid_cmu_count = 0
+    has_alpha_word = False
     for w in words:
         w_clean = re.sub(r'[^a-zA-Z]', '', w).lower()
         if not w_clean:
             continue
+        has_alpha_word = True
         if len(w_clean) > 30:
             raise InvalidTranscriptError(f"Từ '{w}' có độ dài {len(w_clean)} ký tự, vượt quá giới hạn cho phép.")
 
+        in_cmu_or_oov = g2p_converter.is_in_cmu(w_clean) or g2p_converter.is_oov_word(w)
         has_vowel = bool(re.search(r'[aeiouy]', w_clean))
-        if not has_vowel and w_clean not in {"shh", "psst", "hmm", "nth", "by", "my"}:
+        is_valid_abbrev = len(w_clean) == 1 or w_clean in _ALLOWED_NO_VOWEL_TOKENS or g2p_converter.is_in_cmu(w_clean)
+        if not has_vowel and not is_valid_abbrev:
             raise InvalidTranscriptError(f"Từ '{w}' không chứa nguyên âm hợp lệ trong cấu trúc âm tiết tiếng Anh.")
 
-        if g2p_converter.is_in_cmu(w_clean) or g2p_converter.is_oov_word(w):
+        if in_cmu_or_oov or len(w_clean) == 1:
             valid_cmu_count += 1
         elif re.search(r'[^aeiouy]{5,}', w_clean):
             raise InvalidTranscriptError(f"Từ '{w}' chứa cụm phụ âm bất thường không thuộc cấu trúc tiếng Anh.")
+
+    if not has_alpha_word:
+        raise InvalidTranscriptError("Script không chứa từ tiếng Anh hợp lệ.")
 
     if len(words) >= 1 and valid_cmu_count == 0:
         w0 = re.sub(r'[^a-zA-Z]', '', words[0]).lower()
@@ -274,6 +287,7 @@ class ModelManager:
             self.device = "cpu"
         self.model = None
         self.tokenizer = None
+        self.rev_vocab: Dict[int, str] = {}
         self._is_loaded = False
 
     @classmethod
@@ -320,6 +334,7 @@ class ModelManager:
                 with open(vocab_path, "r", encoding="utf-8") as f:
                     vocab_dict = json.load(f)
                 self.tokenizer = TokenizerWrapper(vocab_dict)
+                self.rev_vocab = {int(v): k for k, v in vocab_dict.items()}
 
                 self.model = Wav2Vec2ForCTC.from_pretrained(
                     settings.MODEL_NAME,
@@ -364,7 +379,7 @@ class ForcedAligner:
         "\u0259\u028a": ["o\u028a", "o\u02d0", "o", "\u0254\u02d0", "\u0259", "\u026a"],
         "i\u02d0": ["i", "\u026a", "j", "e\u026a"],
         "i": ["i\u02d0", "\u026a", "j"],
-        "e\u026a": ["e", "\u025b", "\xe6", "e\u026a", "i"],
+        "e\u026a": ["e", "\u025b", "\xe6", "i"],
         "\u028a": ["u\u02d0", "u", "o\u028a", "\u0259"],
 
         # ── 4. Fricatives & Affricates ─────────────────────────────────────────
@@ -384,8 +399,36 @@ class ForcedAligner:
         "\u0279": ["\u025a", "\u0259", "r", "\u0251\u02d0", "\u0254\u02d0", "w", "j"],
         "r": ["\u0279", "\u025a", "\u0259", "w", "j"],
         "j": ["i", "u\u02d0", "\u026a", "\xe7"],
-        "n": ["m", "\u014b", "n"],
+        "n": ["m", "\u014b"],
         "\u0259": ["\u025a", "a", "\u028c", "e", "\u026a"]
+    }
+
+    # Strict dialect/notation equivalences ONLY (never pool L2 substitution errors like /θ/->/f,s,t/ or /iː/->/ɪ/).
+    DIALECT_ALLOPHONES: Dict[str, List[str]] = {
+        "g": ["ɡ"],
+        "ɡ": ["g"],
+        "r": ["ɹ", "ɚ"],
+        "ɹ": ["r", "ɚ"],
+        "e": ["ɛ"],
+        "ɛ": ["e"],
+        "tʃ": ["ʧ"],
+        "dʒ": ["ʤ"],
+        "iː": ["i"],
+        "i": ["iː"],
+        "uː": ["u"],
+        "u": ["uː"],
+        "ɑː": ["ɑ", "aː"],
+        "ɑ": ["ɑː"],
+        "ɔː": ["ɔ", "ɑː", "ɑ"],
+        "ɔ": ["ɔː", "ɑː", "ɑ"],
+        "ɔɪ": ["oɪ"],
+        "oɪ": ["ɔɪ"],
+        "ɜː": ["ɜ", "ɚ"],
+        # Multilingual XLSR-53 realizes citation/US/UK/AU STRUT /ʌ/ [ɐ] across /ɐ, a, aː, ə/.
+        "\u028c": ["\u0250", "a", "a\u02d0", "\u0259"],
+        "\u0259": ["\u028c", "\u0250", "\u025a", "\u026a"],
+        "t": ["ɾ", "ʔ"],
+        "d": ["ɾ"],
     }
 
     PLOSIVES_SET = {"p", "t", "k", "b", "d", "g", "\u0261", "\u027e", "\u0294"}
@@ -455,12 +498,23 @@ class ForcedAligner:
         if not target_token_ids:
             raise AlignmentError("Không thể ánh xạ chuỗi phiên âm vào từ vựng của mô hình Wav2Vec2.")
 
+        if audio is None or len(audio) < 400:
+            raise AlignmentError("Đoạn âm thanh quá ngắn để phân tích căn chỉnh.")
+
         norm_audio = (audio - np.mean(audio)) / np.sqrt(np.var(audio) + 1e-7)
         audio_tensor = torch.from_numpy(norm_audio).float().unsqueeze(0).to(device)
 
         with torch.inference_mode():
             logits = model(audio_tensor).logits
             log_probs = torch.log_softmax(logits, dim=-1)
+            greedy_ids = torch.argmax(logits[0], dim=-1).cpu().numpy()
+
+        rev_vocab = self.model_mgr.rev_vocab or {int(v): k for k, v in vocab.items()}
+        frame_tokens = [rev_vocab.get(int(pid), "<pad>") for pid in greedy_ids]
+        raw_emitted_tokens: List[str] = []
+        for tok in frame_tokens:
+            if tok and tok != "<pad>" and (not raw_emitted_tokens or raw_emitted_tokens[-1] != tok):
+                raw_emitted_tokens.append(tok)
 
         num_frames = log_probs.size(1)
         num_targets = len(target_token_ids)
@@ -472,14 +526,37 @@ class ForcedAligner:
                 f"Đoạn âm thanh quá ngắn ({num_frames} frames) để căn chỉnh chuỗi đích ({num_targets} tokens)."
             )
 
+        # Strict dialect-only log-probs for unbiased pronunciation & GOP scoring.
+        log_probs_dialect = log_probs.clone()
+        valid_id_groups: Dict[int, List[int]] = {}
+        for target_sym, alt_syms in self.DIALECT_ALLOPHONES.items():
+            tgt_id = vocab.get(target_sym)
+            if tgt_id is None:
+                continue
+            group_ids = [tgt_id]
+            seen_d = {tgt_id}
+            for alt in alt_syms:
+                alt_id = vocab.get(alt)
+                if alt_id is not None and alt_id not in seen_d:
+                    seen_d.add(alt_id)
+                    group_ids.append(alt_id)
+                    log_probs_dialect[0, :, tgt_id] = torch.logaddexp(
+                        log_probs_dialect[0, :, tgt_id],
+                        log_probs[0, :, alt_id]
+                    )
+            valid_id_groups[tgt_id] = group_ids
+
+        # Error-tolerant allophonic pooling ONLY for finding CTC acoustic time boundaries.
         log_probs_pooled = log_probs.clone()
         for target_sym, alt_syms in self.UNIVERSAL_ALLOPHONES.items():
             tgt_id = vocab.get(target_sym)
             if tgt_id is None:
                 continue
+            seen_u = {tgt_id}
             for alt in alt_syms:
                 alt_id = vocab.get(alt)
-                if alt_id is not None:
+                if alt_id is not None and alt_id not in seen_u:
+                    seen_u.add(alt_id)
                     log_probs_pooled[0, :, tgt_id] = torch.logaddexp(
                         log_probs_pooled[0, :, tgt_id],
                         log_probs[0, :, alt_id]
@@ -577,6 +654,22 @@ class ForcedAligner:
                     mean_raw = float(np.mean(f_raw_probs))
                     mean_blank = float(np.mean(frame_blank_probs))
 
+                    # Strict canonical log-prob and Witt & Young GOP margin from un-pooled log_probs
+                    f_tensor = torch.tensor(frames, dtype=torch.long, device=device)
+                    aligned_tids = torch.tensor(aligned_path[frames], dtype=torch.long, device=device)
+                    canon_lps = log_probs_dialect[0, f_tensor, aligned_tids]
+                    canon_raw_probs = torch.exp(canon_lps).cpu().numpy()
+
+                    # Mask pad_id and valid dialect ids to find best competing phone log-prob
+                    comp_slice = log_probs[0, f_tensor, :].clone()
+                    comp_slice[:, pad_id] = -1e9
+                    for tid_val in aligned_path[frames]:
+                        tid_int = int(tid_val)
+                        excl_ids = valid_id_groups.get(tid_int, [tid_int])
+                        comp_slice[:, excl_ids] = -1e9
+                    best_comp_lps = comp_slice.max(dim=-1).values
+                    gop_frames = (canon_lps - best_comp_lps).cpu().numpy()
+
                     clean_sym = ph.symbol.strip("/ ")
                     is_plosive = clean_sym in self.PLOSIVES_SET or ph.token in self.PLOSIVES_SET
 
@@ -584,23 +677,35 @@ class ForcedAligner:
                     if mean_blank > 0.90 or mean_raw < 0.03:
                         p_post = float(np.max(f_raw_probs) if is_plosive else mean_raw)
                         p_raw_post = p_post
+                        p_canon_post = float(np.max(canon_raw_probs) if is_plosive else np.mean(canon_raw_probs))
+                        p_gop_margin = float(np.max(gop_frames) if is_plosive else np.mean(gop_frames))
                     else:
                         non_blank_mass = np.maximum(0.15, 1.0 - frame_blank_probs)
                         f_norm_probs = np.minimum(1.0, f_raw_probs / non_blank_mass)
+                        canon_norm_probs = np.minimum(1.0, canon_raw_probs / non_blank_mass)
                         if is_plosive:
                             p_post = float(max(np.max(f_norm_probs), np.max(f_raw_probs)))
                             p_raw_post = float(np.max(f_raw_probs))
+                            p_canon_post = float(max(np.max(canon_norm_probs), np.max(canon_raw_probs)))
+                            p_gop_margin = float(np.max(gop_frames))
                         else:
                             top_k = min(len(f_raw_probs), 3)
                             norm_top = float(np.mean(np.sort(f_norm_probs)[-top_k:]))
                             raw_top = float(np.mean(np.sort(f_raw_probs)[-top_k:]))
                             p_post = float(max(norm_top, raw_top))
                             p_raw_post = raw_top
+                            p_canon_post = float(max(
+                                float(np.mean(np.sort(canon_norm_probs)[-top_k:])),
+                                float(np.mean(np.sort(canon_raw_probs)[-top_k:]))
+                            ))
+                            p_gop_margin = float(np.mean(np.sort(gop_frames)[-min(len(gop_frames), 2):]))
                 else:
                     p_start = max(0.0, last_end_time)
                     p_end = min(total_audio_sec, p_start + 0.05)
                     p_post = 0.0
                     p_raw_post = 0.0
+                    p_canon_post = 0.0
+                    p_gop_margin = -6.0
 
                 last_end_time = p_end
                 p_conf = float(np.clip(p_post, 0.0, 1.0)) if p_post < 0.10 else float(np.clip(p_post + 0.10, 0.0, 1.0))
@@ -617,6 +722,8 @@ class ForcedAligner:
                         is_stress=ph.is_stress,
                         is_word_final=is_final,
                         raw_posterior=round(p_raw_post, 3),
+                        canonical_posterior=round(p_canon_post, 3),
+                        gop_margin=round(p_gop_margin, 3),
                         has_frames=bool(frames)
                     )
                 )
@@ -643,7 +750,10 @@ class ForcedAligner:
             words=words_out,
             alignment_confidence=round(align_confidence, 3),
             raw_tokens=raw_token_symbols,
-            blank_ratio=round(blank_ratio, 3)
+            blank_ratio=round(blank_ratio, 3),
+            raw_emitted_tokens=raw_emitted_tokens,
+            frame_tokens=frame_tokens,
+            frame_duration=round(frame_duration, 6)
         )
 
 

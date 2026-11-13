@@ -13,6 +13,10 @@ import type {
   VideoModerationItem,
   AiStatsResponse,
   StudentQuotaItem,
+  AdminDatabaseOverview,
+  ClassroomPurgeResult,
+  ClassroomDetailedReport,
+  R2CostReport,
 } from "../types";
 
 export const adminApi = {
@@ -302,5 +306,71 @@ export const adminApi = {
   },
   deleteGlobalResource: async (id: string): Promise<void> => {
     await axiosClient.delete(`/api/v1/admin/resources/${id}`);
+  },
+
+  // ==========================================
+  // --- DATABASE MANAGEMENT & CLOUD R2 COST ---
+  // ==========================================
+  getDatabaseOverview: async (): Promise<AdminDatabaseOverview> => {
+    const res = await axiosClient.get<ApiResponse<AdminDatabaseOverview>>(
+      "/api/v1/admin/database/overview",
+    );
+    return res.data.data;
+  },
+  purgeClassroomSubmissions: async (
+    classroomId: string,
+    force = false,
+  ): Promise<ClassroomPurgeResult> => {
+    const res = await axiosClient.post<ApiResponse<ClassroomPurgeResult>>(
+      `/api/v1/admin/database/classrooms/${classroomId}/purge-submissions?force=${force}`,
+    );
+    return res.data.data;
+  },
+  deleteClassroom: async (classroomId: string): Promise<ClassroomPurgeResult> => {
+    const res = await axiosClient.delete<ApiResponse<ClassroomPurgeResult>>(
+      `/api/v1/admin/database/classrooms/${classroomId}`,
+    );
+    return res.data.data;
+  },
+  getClassroomDetailedReport: async (
+    classroomId: string,
+  ): Promise<ClassroomDetailedReport> => {
+    const res = await axiosClient.get<ApiResponse<ClassroomDetailedReport>>(
+      `/api/v1/admin/database/classrooms/${classroomId}/report-summary`,
+    );
+    return res.data.data;
+  },
+  downloadClassroomReportExcel: async (
+    classroomId: string,
+    classroomName?: string,
+  ): Promise<void> => {
+    const res = await axiosClient.get(
+      `/api/v1/admin/database/classrooms/${classroomId}/report`,
+      { responseType: "blob" },
+    );
+    const blob = new Blob([res.data], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeName = (classroomName || classroomId)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    link.href = url;
+    link.download = `Bao_cao_lop_${safeName || "lop_hoc"}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  getR2CostReport: async (): Promise<R2CostReport> => {
+    const res = await axiosClient.get<ApiResponse<R2CostReport>>(
+      "/api/v1/admin/database/r2-report",
+    );
+    return res.data.data;
   },
 };

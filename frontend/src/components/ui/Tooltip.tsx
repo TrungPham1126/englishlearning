@@ -1,5 +1,5 @@
 // src/components/ui/Tooltip.tsx
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 export interface TooltipProps {
@@ -20,12 +20,26 @@ export function Tooltip({
   const [isVisible, setIsVisible] = useState(false);
   const timeoutRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   const show = () => {
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+    }
     timeoutRef.current = window.setTimeout(() => setIsVisible(true), delayMs);
   };
 
   const hide = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     setIsVisible(false);
   };
 
@@ -43,6 +57,11 @@ export function Tooltip({
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          hide();
+        }
+      }}
     >
       {children}
       {isVisible && content && (

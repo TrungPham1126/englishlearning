@@ -15,6 +15,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -182,5 +184,93 @@ class AiEvaluationServiceTest {
         // Fluency và Prosody tính theo công thức xác định
         assertThat(metrics.getFluency()).isGreaterThan(0);
         assertThat(metrics.getProsody()).isGreaterThan(0);
+    }
+
+    @Test
+    @DisplayName("Fallback Gemini sends real audio payload >= 44 bytes via multimodal API")
+    void should_UseMultimodalAudioWithGemini_when_RealWavPayloadProvided() {
+        byte[] wavHeaderPayload = new byte[64];
+        wavHeaderPayload[0] = 'R';
+        wavHeaderPayload[1] = 'I';
+        wavHeaderPayload[2] = 'F';
+        wavHeaderPayload[3] = 'F';
+
+        when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                .thenThrow(new RuntimeException("Python offline"));
+        when(geminiClientService.evaluateAudioWithInstruction(any(), eq(wavHeaderPayload), eq("audio/wav"), any()))
+                .thenReturn("{\"overallScore\":78,\"isPassed\":false,\"passScore\":80,\"statusMessage\":\"OK\"}");
+
+        ShadowingEvaluationResponse result = aiEvaluationService.evaluateSpeech(wavHeaderPayload, "speech.wav", sampleReference);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getOverallScore()).isEqualTo(78);
+        assertThat(result.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
+        verify(geminiClientService, times(1)).evaluateAudioWithInstruction(any(), eq(wavHeaderPayload), eq("audio/wav"), any());
+        verify(geminiClientService, never()).generateWithSystemInstruction(any(), any());
+        verifyNoInteractions(groqClientService);
+    }
+
+    @Test
+    @DisplayName("Fallback Groq transcribes real audio via Whisper before JSON scoring")
+    void should_TranscribeWithGroqWhisperBeforeScoring_when_GeminiFailsOnRealAudio() {
+        byte[] webmPayload = new byte[64];
+        webmPayload[0] = 0x1A;
+        webmPayload[1] = 0x45;
+        webmPayload[2] = (byte) 0xDF;
+        webmPayload[3] = (byte) 0xA3;
+
+        when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                .thenThrow(new RuntimeException("Python timeout"));
+        when(geminiClientService.evaluateAudioWithInstruction(any(), any(), any(), any()))
+                .thenThrow(new RuntimeException("Gemini unavailable"));
+        when(groqClientService.transcribeAudioVerbose(eq(webmPayload), eq("rec.webm")))
+                .thenReturn("{\"text\":\"Good morning\"}");
+        when(groqClientService.chatCompletionJson(any(), argThat(p -> p != null && p.contains("Good morning"))))
+                .thenReturn("{\"overallScore\":70,\"isPassed\":false,\"passScore\":80,\"statusMessage\":\"Missing word\"}");
+
+        ShadowingEvaluationResponse result = aiEvaluationService.evaluateSpeech(webmPayload, "rec.webm", sampleReference);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getOverallScore()).isEqualTo(70);
+        assertThat(result.getEvaluatedBy()).isEqualTo("GROQ_AI_FALLBACK");
+        verify(groqClientService, times(1)).transcribeAudioVerbose(eq(webmPayload), eq("rec.webm"));
+        verify(groqClientService, times(1)).chatCompletionJson(any(), any());
+    }
+
+    @Test
+    @DisplayName("Nhận diện đúng MIME type qua magic header (ID3, OggS, fLaC) và đuôi file (.m4a), chuẩn hóa câu mẫu rỗng")
+    void should_DetectAudioMimeTypesAndDefaultBlankReferenceSentence() {
+        when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                .thenThrow(new RuntimeException("Python down"));
+        when(geminiClientService.evaluateAudioWithInstruction(any(), any(), anyString(), any()))
+                .thenReturn("{\"overallScore\":85,\"isPassed\":true,\"passScore\":80}");
+
+        byte[] id3Mp3 = new byte[48];
+        id3Mp3[0] = 'I'; id3Mp3[1] = 'D'; id3Mp3[2] = '3';
+        aiEvaluationService.evaluateSpeech(id3Mp3, "track.unknown", "Hello");
+        verify(geminiClientService).evaluateAudioWithInstruction(any(), eq(id3Mp3), eq("audio/mp3"), any());
+
+        byte[] ogg = new byte[48];
+        ogg[0] = 'O'; ogg[1] = 'g'; ogg[2] = 'g'; ogg[3] = 'S';
+        aiEvaluationService.evaluateSpeech(ogg, "voice.bin", "Hello");
+        verify(geminiClientService).evaluateAudioWithInstruction(any(), eq(ogg), eq("audio/ogg"), any());
+
+        byte[] flac = new byte[48];
+        flac[0] = 'f'; flac[1] = 'L'; flac[2] = 'a'; flac[3] = 'C';
+        aiEvaluationService.evaluateSpeech(flac, "raw.bin", "Hello");
+        verify(geminiClientService).evaluateAudioWithInstruction(any(), eq(flac), eq("audio/flac"), any());
+
+        byte[] m4a = new byte[48];
+        aiEvaluationService.evaluateSpeech(m4a, "recording.M4A", "   ");
+        verify(geminiClientService).evaluateAudioWithInstruction(
+                any(), eq(m4a), eq("audio/mp4"), argThat(prompt -> prompt != null && prompt.contains("\"Hello world\"")));
+
+        // Null audio bỏ qua Tầng 1 và gọi text fallback
+        reset(pythonIntegrationService, geminiClientService);
+        when(geminiClientService.generateWithSystemInstruction(any(), any()))
+                .thenReturn("{\"overallScore\":80,\"isPassed\":true,\"passScore\":80}");
+        ShadowingEvaluationResponse noAudio = aiEvaluationService.evaluateSpeech(null, null, null);
+        assertThat(noAudio.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
+        verifyNoInteractions(pythonIntegrationService);
     }
 }

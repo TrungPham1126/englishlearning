@@ -29,6 +29,7 @@ export interface PracticeStoreState {
  * để hiển thị sóng âm Native Speaker trực quan ngay lập tức.
  */
 export function buildDeterministicNativePeaks(sentence: string, count = 60): readonly number[] {
+  if (count <= 0) return [];
   const clean = sentence.trim() || "Shadowing practice reference sentence";
   const peaks: number[] = [];
   let seed = 0;
@@ -38,7 +39,7 @@ export function buildDeterministicNativePeaks(sentence: string, count = 60): rea
   for (let i = 0; i < count; i++) {
     const wave = Math.sin((i / count) * Math.PI * 3.5 + (seed % 7));
     const harmonic = Math.cos((i * 1.7) + (seed % 13)) * 0.35;
-    const envelope = Math.sin((i / (count - 1)) * Math.PI); // Mượt ở 2 đầu câu
+    const envelope = count === 1 ? 1 : Math.sin((i / (count - 1)) * Math.PI); // Mượt ở 2 đầu câu
     const value = Math.abs(wave * 0.65 + harmonic) * (0.35 + 0.65 * envelope);
     peaks.push(Math.max(0.12, Math.min(0.95, Number(value.toFixed(3)))));
   }

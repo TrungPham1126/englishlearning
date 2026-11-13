@@ -150,4 +150,52 @@ class UserStreakServiceTest {
 
         verify(studentRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("Tăng streak qua mốc giao thừa (31/12 -> 01/01) và giữ nguyên khi hoàn thành bù ngày cũ")
+    void updateStreak_yearBoundaryAndPastCompletionDate_behavesCorrectly() {
+        UUID studentId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        Student student = Student.builder()
+                .id(studentId)
+                .currentStreak(9)
+                .lastActiveDate(LocalDate.of(2026, 12, 31))
+                .build();
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+
+        int nextYearStreak = userStreakService.updateStreakOnPlanCompletion(studentId, LocalDate.of(2027, 1, 1));
+        assertThat(nextYearStreak).isEqualTo(10);
+        assertThat(student.getLastActiveDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+
+        // Hoàn thành bù bài của 2 ngày trước -> không ghi đè streak hoặc lùi lastActiveDate
+        int preservedStreak = userStreakService.updateStreakOnPlanCompletion(studentId, LocalDate.of(2026, 12, 30));
+        assertThat(preservedStreak).isEqualTo(10);
+        assertThat(student.getLastActiveDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+        verify(studentRepository, times(1)).save(student);
+    }
+
+    @Test
+    @DisplayName("recordActivity & getCurrentStreak - Xử lý null currentStreak, null completionDate và student không tồn tại")
+    void recordActivityAndGetCurrentStreak_edgeCases() {
+        UUID studentId = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        Student student = Student.builder()
+                .id(studentId)
+                .currentStreak(null)
+                .lastActiveDate(null)
+                .build();
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+
+        assertThat(userStreakService.getCurrentStreak(studentId)).isZero();
+
+        int streak = userStreakService.recordActivity(studentId);
+        assertThat(streak).isEqualTo(1);
+        assertThat(student.getLastActiveDate()).isEqualTo(LocalDate.now());
+
+        // completionDate == null fallback sang LocalDate.now() -> cùng ngày nên giữ nguyên streak = 1
+        int sameDayStreak = userStreakService.updateStreakOnPlanCompletion(studentId, null);
+        assertThat(sameDayStreak).isEqualTo(1);
+
+        UUID missingId = UUID.fromString("77777777-7777-7777-7777-777777777777");
+        when(studentRepository.findById(missingId)).thenReturn(Optional.empty());
+        assertThat(userStreakService.getCurrentStreak(missingId)).isZero();
+    }
 }

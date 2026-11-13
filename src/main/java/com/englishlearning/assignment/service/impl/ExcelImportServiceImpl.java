@@ -4,6 +4,7 @@ import com.englishlearning.assignment.entity.Assignment;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import com.englishlearning.assignment.entity.QuestionOption;
 import com.englishlearning.assignment.entity.QuestionType;
+import com.englishlearning.assignment.entity.SkillType;
 import com.englishlearning.assignment.repository.AssignmentQuestionRepository;
 import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.assignment.service.ExcelImportService;
@@ -83,7 +84,10 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         try (InputStream inputStream = file.getInputStream();
              Workbook workbook = WorkbookFactory.create(inputStream)) {
 
-            Sheet sheet = workbook.getSheetAt(0);
+            if (workbook.getNumberOfSheets() == 0) {
+                throw new InvalidFileFormatException("File Excel không chứa sheet nào.");
+            }
+            Sheet sheet = selectQuestionSheet(workbook);
             if (sheet == null || sheet.getPhysicalNumberOfRows() < 2) {
                 throw new InvalidFileFormatException("File Excel không có dữ liệu câu hỏi hoặc thiếu dòng tiêu đề.");
             }
@@ -111,7 +115,11 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                 }
 
                 String typeStr = colMap.typeCol >= 0 ? getCellString(row.getCell(colMap.typeCol)) : "";
-                QuestionType questionType = parseQuestionType(typeStr);
+                QuestionType questionType = parseQuestionType(typeStr, r + 1);
+                SkillType skillType = parseSkillType(
+                        colMap.skillCol >= 0 ? getCellString(row.getCell(colMap.skillCol)) : "",
+                        assignment
+                );
 
                 String optA = colMap.optACol >= 0 ? getCellString(row.getCell(colMap.optACol)) : "";
                 String optB = colMap.optBCol >= 0 ? getCellString(row.getCell(colMap.optBCol)) : "";
@@ -120,6 +128,16 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                 String rawCorrectAnswer = colMap.answerCol >= 0 ? getCellString(row.getCell(colMap.answerCol)) : "";
                 String explanation = colMap.explanationCol >= 0 ? getCellString(row.getCell(colMap.explanationCol)) : "";
                 String audioScript = colMap.audioCol >= 0 ? getCellString(row.getCell(colMap.audioCol)) : "";
+
+                if ((questionType == QuestionType.FILL_IN_BLANK || questionType == QuestionType.MATCHING
+                        || questionType == QuestionType.TRUE_FALSE) && rawCorrectAnswer.isBlank()) {
+                    throw new InvalidFileFormatException("Dòng " + (r + 1) + ": Thiếu đáp án đúng cho câu hỏi " + questionType + ".");
+                }
+                if (questionType == QuestionType.MULTIPLE_CHOICE
+                        && optA.isBlank() && optB.isBlank() && optC.isBlank() && optD.isBlank()
+                        && rawCorrectAnswer.isBlank()) {
+                    throw new InvalidFileFormatException("Dòng " + (r + 1) + ": Câu hỏi trắc nghiệm thiếu lựa chọn và đáp án.");
+                }
 
                 Double points = 1.0;
                 if (colMap.pointsCol >= 0) {
@@ -150,6 +168,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                         .orderIndex(orderIndex++)
                         .promptText(promptText)
                         .questionType(questionType)
+                        .skillType(skillType)
                         .correctAnswer(finalCorrectAnswer)
                         .explanation(explanation)
                         .transcript(audioScript.isBlank() ? null : audioScript)
@@ -481,6 +500,26 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         return rows;
     }
 
+    private Sheet selectQuestionSheet(Workbook workbook) {
+        Sheet firstValidSheet = null;
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet candidate = workbook.getSheetAt(i);
+            if (candidate == null) continue;
+            String nameLower = candidate.getSheetName() != null ? candidate.getSheetName().toLowerCase() : "";
+            boolean isGuideSheet = nameLower.contains("huong_dan") || nameLower.contains("hướng dẫn") || nameLower.contains("guide");
+            if (isGuideSheet) continue;
+            if (findHeaderRowIndex(candidate) >= 0) {
+                if (nameLower.contains("mau_tong_hop") || nameLower.contains("bang_nhap")) {
+                    return candidate;
+                }
+                if (firstValidSheet == null) {
+                    firstValidSheet = candidate;
+                }
+            }
+        }
+        return firstValidSheet != null ? firstValidSheet : workbook.getSheetAt(0);
+    }
+
     private int findHeaderRowIndex(Sheet sheet) {
         int maxScan = Math.min(10, sheet.getLastRowNum());
         for (int r = 0; r <= maxScan; r++) {
@@ -533,10 +572,10 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                 if (map.answerCol < 0) map.answerCol = c;
             } else if (val.contains("giải thích") || val.contains("explanation") || val.contains("gợi ý") || val.contains("rubric")) {
                 if (map.explanationCol < 0) map.explanationCol = c;
-            } else if (val.contains("audio") || val.contains("tts") || val.contains("kịch bản") || val.contains("script")) {
-                if (map.audioCol < 0) map.audioCol = c;
             } else if (val.contains("câu hỏi") || val.contains("question") || val.contains("nội dung") || val.contains("đề bài") || val.contains("prompt")) {
                 if (map.promptCol < 0) map.promptCol = c;
+            } else if (val.contains("audio") || val.contains("tts") || val.contains("kịch bản") || val.contains("script")) {
+                if (map.audioCol < 0) map.audioCol = c;
             }
         }
 
@@ -596,7 +635,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         return formatter.formatCellValue(cell).trim();
     }
 
-    private QuestionType parseQuestionType(String typeStr) {
+    private QuestionType parseQuestionType(String typeStr, int rowNumber) {
         if (typeStr == null || typeStr.isBlank()) {
             return QuestionType.MULTIPLE_CHOICE;
         }
@@ -614,14 +653,27 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         if (clean.contains("AUDIO") || clean.contains("SPEAK") || clean.contains("SHADOW") || clean.contains("NÓI") || clean.contains("PHÁT ÂM")) {
             return QuestionType.AUDIO_RESPONSE;
         }
-        if (clean.contains("ESSAY") || clean.contains("VIẾT") || clean.contains("LUẬN")) {
+        if (clean.contains("ESSAY") || clean.contains("WRITING") || clean.contains("VIẾT") || clean.contains("LUẬN")) {
             return QuestionType.ESSAY;
+        }
+        if (clean.contains("TRẮC NGHIỆM") || clean.equals("MCQ") || clean.contains("MULTIPLE") || clean.contains("CHOICE")) {
+            return QuestionType.MULTIPLE_CHOICE;
         }
         try {
             return QuestionType.valueOf(clean);
         } catch (IllegalArgumentException e) {
-            return QuestionType.MULTIPLE_CHOICE;
+            throw new InvalidFileFormatException("Dòng " + rowNumber + ": Loại câu hỏi không hợp lệ: '" + typeStr.trim() + "'.");
         }
+    }
+
+    private SkillType parseSkillType(String skillStr, Assignment assignment) {
+        if (skillStr != null && !skillStr.isBlank()) {
+            try {
+                return SkillType.valueOf(skillStr.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return assignment != null ? assignment.getSkillType() : null;
     }
 
     private QuestionOption createOption(AssignmentQuestion question, String key, String text, boolean isCorrect) {

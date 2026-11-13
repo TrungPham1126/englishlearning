@@ -24,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit Test cho UserDetailsServiceImpl (CustomUserDetailsService)
+ * Unit Test cho UserDetailsServiceImpl:
  * Kiểm tra tải thông tin người dùng cho Spring Security Context.
  */
 @ExtendWith(MockitoExtension.class)
@@ -59,14 +59,41 @@ class UserDetailsServiceImplTest {
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
         // Then
-        assertThat(userDetails).isNotNull();
+        assertThat(userDetails).isInstanceOf(CustomUserDetails.class);
+        CustomUserDetails customDetails = (CustomUserDetails) userDetails;
+        assertThat(customDetails.getId()).isEqualTo(userId);
         assertThat(userDetails.getUsername()).isEqualTo(email);
         assertThat(userDetails.getPassword()).isEqualTo("$2a$10$hashedPassword");
         assertThat(userDetails.isEnabled()).isTrue();
+        assertThat(userDetails.isAccountNonLocked()).isTrue();
         assertThat(userDetails.getAuthorities())
                 .extracting(GrantedAuthority::getAuthority)
                 .containsExactly("ROLE_TEACHER");
 
+        verify(userRepository).findByEmail(email);
+    }
+
+    @Test
+    @DisplayName("loadUserByUsername: User bị khóa (isActive = false) trả về CustomUserDetails bị vô hiệu hóa")
+    void loadUserByUsername_whenUserIsInactive_returnsDisabledCustomUserDetails() {
+        // Given
+        String email = "locked@elp.edu.vn";
+        User lockedUser = User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .password("$2a$10$hashedPassword")
+                .isActive(false)
+                .roles(Set.of(Role.builder().name(RoleName.ROLE_STUDENT).build()))
+                .build();
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(lockedUser));
+
+        // When
+        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+
+        // Then
+        assertThat(userDetails.isEnabled()).isFalse();
+        assertThat(userDetails.isAccountNonLocked()).isFalse();
         verify(userRepository).findByEmail(email);
     }
 

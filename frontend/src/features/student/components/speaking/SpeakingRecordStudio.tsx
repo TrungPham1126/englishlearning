@@ -58,11 +58,11 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
           <Mic size={15} className="text-emerald-600 dark:text-emerald-400" />
-          Bản thu của bạn (Student Recorded Submission):
+          Bản thu
         </span>
         {isSubmitted && (
           <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-            <CheckCircle2 size={13} /> Đã nộp thành công
+            <CheckCircle2 size={13} /> Đã nộp
           </span>
         )}
       </div>
@@ -79,10 +79,8 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
           />
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-4 text-center text-xs text-slate-500 dark:text-slate-400">
-          {transcript
-            ? `Bản ghi âm đã được chấm điểm (Bản ghi: "${transcript}"). Bấm nút Thu âm lại bên dưới nếu bạn muốn ghi âm bản mới.`
-            : `Chưa có bản ghi âm. Hãy bấm nút thu âm micro bên dưới để trả lời bài tập Ngày ${dayNumber}.`}
+        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-3.5 text-center text-xs text-slate-500 dark:text-slate-400">
+          {transcript ? "Đã chấm điểm" : "Chưa có bản thu"}
         </div>
       )}
 
@@ -91,9 +89,9 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
           <button
             type="button"
             onClick={onStopRecord}
-            className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition animate-pulse cursor-pointer"
+            className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition animate-pulse cursor-pointer tabular-nums"
           >
-            <Square size={14} /> Dừng ghi âm ({formatTimer(recordingSeconds)})
+            <Square size={14} /> Dừng ({formatTimer(recordingSeconds)})
           </button>
         ) : (
           <button
@@ -102,13 +100,13 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
             className="flex items-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-600/40 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 px-4 py-2 text-xs font-semibold text-blue-800 dark:text-blue-300 transition cursor-pointer shadow-2xs"
           >
             <Mic size={14} className="text-rose-600" />
-            <span>{activeAudioUrl ? "Thu âm lại" : "Thu âm trực tiếp"}</span>
+            <span>{activeAudioUrl ? "Thu lại" : "Thu âm"}</span>
           </button>
         )}
 
         <label className="flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-2xs">
           <Upload size={14} className="text-blue-700 dark:text-blue-400" />
-          <span>Tải file ghi âm</span>
+          <span>Tải file</span>
           <input
             type="file"
             accept="audio/*"
@@ -128,7 +126,7 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
           ) : (
             <Award size={14} />
           )}
-          <span>Chấm Điểm Phỏng Vấn (IELTS)</span>
+          <span>Chấm điểm</span>
         </button>
       </div>
 
@@ -145,7 +143,7 @@ export const SpeakingRecordStudio: React.FC<SpeakingRecordStudioProps> = ({
             ) : (
               <CheckCircle2 size={16} />
             )}
-            <span>Nộp Bài Hoàn Thành Ngày {dayNumber}</span>
+            <span>Nộp bài (Ngày {dayNumber})</span>
           </button>
         </div>
       )}

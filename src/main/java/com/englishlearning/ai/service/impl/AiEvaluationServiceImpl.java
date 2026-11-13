@@ -23,8 +23,8 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     private final ObjectMapper objectMapper;
 
     private static final String SHADOWING_SYSTEM_INSTRUCTION = """
-            You are a strict Cambridge English Phonetician and Shadowing Pronunciation Examiner.
-            Your task is to rigorously evaluate a student's spoken audio/transcript against the exact Reference Sentence.
+            You are an encouraging Cambridge & IELTS Speaking Pronunciation Coach (calibrated to Engnovate IELTS Speaking standards).
+            Your task is to fairly evaluate a student's spoken audio/transcript against the Reference Sentence, rewarding intelligible speech and natural pacing while accurately noting any omitted words.
             Return strictly valid JSON matching the ShadowingEvaluationResponse schema.
             """;
 
@@ -51,10 +51,10 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             }
         }
 
-        // --- TẦNG 2: Secondary Cloud AI API (Gemini / Groq LLM Fallback) ---
+        // --- TẦNG 2: Secondary Cloud AI API (Gemini Multimodal / Groq Whisper + LLM Fallback) ---
         try {
             log.info("[Tầng 2] Kích hoạt Secondary Cloud AI (Gemini / Groq)...");
-            return evaluateWithCloudAiFallback(audioBytes, cleanRef);
+            return evaluateWithCloudAiFallback(audioBytes, effectiveFilename, cleanRef);
         } catch (Exception cloudEx) {
             log.error("[Tầng 2 Thất bại] Toàn bộ Cloud AI gặp sự cố: {}. Kích hoạt Tầng 3...", cloudEx.getMessage());
         }
@@ -64,16 +64,26 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
         return evaluateWithRuleBasedOffline(cleanRef);
     }
 
-    private ShadowingEvaluationResponse evaluateWithCloudAiFallback(byte[] audioBytes, String referenceSentence) {
+    private ShadowingEvaluationResponse evaluateWithCloudAiFallback(
+            byte[] audioBytes, String effectiveFilename, String referenceSentence) {
+        boolean hasRealAudio = audioBytes != null && audioBytes.length >= 44;
+        String mimeType = detectAudioMimeType(effectiveFilename, audioBytes);
         String userPrompt = String.format("""
                 Reference Sentence: "%s"
-                Audio data provided. Evaluate pronunciation rigorously and return JSON.
+                Audio data provided. Evaluate pronunciation, omitted/mispronounced words, fluency, and prosody rigorously and return strictly valid JSON (passScore=80).
                 """, referenceSentence);
 
         try {
-            log.info("Thử chấm điểm qua Gemini AI...");
-            String geminiJson = geminiClientService.generateWithSystemInstruction(
-                    SHADOWING_SYSTEM_INSTRUCTION, userPrompt);
+            log.info("Thử chấm điểm qua Gemini AI (multimodal={})...", hasRealAudio);
+            String geminiJson = null;
+            if (hasRealAudio) {
+                geminiJson = geminiClientService.evaluateAudioWithInstruction(
+                        SHADOWING_SYSTEM_INSTRUCTION, audioBytes, mimeType, userPrompt);
+            }
+            if (geminiJson == null || geminiJson.isBlank()) {
+                geminiJson = geminiClientService.generateWithSystemInstruction(
+                        SHADOWING_SYSTEM_INSTRUCTION, userPrompt);
+            }
             String cleanJson = GeminiClientService.stripMarkdown(geminiJson);
             ShadowingEvaluationResponse response = objectMapper.readValue(cleanJson, ShadowingEvaluationResponse.class);
             response.setEvaluatedBy("GEMINI_AI_FALLBACK");
@@ -81,7 +91,23 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
         } catch (Exception geminiEx) {
             log.warn("Gemini AI thất bại: {}. Fallback sang Groq Cloud AI...", geminiEx.getMessage());
             try {
-                String groqJson = groqClientService.chatCompletionJson(SHADOWING_SYSTEM_INSTRUCTION, userPrompt);
+                String groqPrompt = userPrompt;
+                if (hasRealAudio) {
+                    try {
+                        String whisperVerbose = groqClientService.transcribeAudioVerbose(audioBytes, effectiveFilename);
+                        if (whisperVerbose != null && !whisperVerbose.isBlank()) {
+                            groqPrompt = String.format("""
+                                    Reference Sentence: "%s"
+                                    Observed Whisper ASR Transcript & Word Timestamps:
+                                    %s
+                                    Compare the observed spoken transcript against the reference sentence, penalize omissions/substitutions objectively, and return strictly valid JSON.
+                                    """, referenceSentence, whisperVerbose);
+                        }
+                    } catch (Exception whisperEx) {
+                        log.warn("Groq Whisper transcription failed before scoring: {}", whisperEx.getMessage());
+                    }
+                }
+                String groqJson = groqClientService.chatCompletionJson(SHADOWING_SYSTEM_INSTRUCTION, groqPrompt);
                 String cleanJson = GroqClientService.stripMarkdown(groqJson);
                 ShadowingEvaluationResponse response = objectMapper.readValue(cleanJson, ShadowingEvaluationResponse.class);
                 response.setEvaluatedBy("GROQ_AI_FALLBACK");
@@ -91,6 +117,35 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                 throw new RuntimeException("Cả Gemini và Groq đều thất bại", groqEx);
             }
         }
+    }
+
+    private String detectAudioMimeType(String filename, byte[] audioBytes) {
+        if (audioBytes != null && audioBytes.length >= 12) {
+            if (audioBytes[0] == 'R' && audioBytes[1] == 'I' && audioBytes[2] == 'F' && audioBytes[3] == 'F') {
+                return "audio/wav";
+            }
+            if ((audioBytes[0] & 0xFF) == 0x1A && (audioBytes[1] & 0xFF) == 0x45
+                    && (audioBytes[2] & 0xFF) == 0xDF && (audioBytes[3] & 0xFF) == 0xA3) {
+                return "audio/webm";
+            }
+            if (audioBytes[0] == 'O' && audioBytes[1] == 'g' && audioBytes[2] == 'g' && audioBytes[3] == 'S') {
+                return "audio/ogg";
+            }
+            if (audioBytes[0] == 'f' && audioBytes[1] == 'L' && audioBytes[2] == 'a' && audioBytes[3] == 'C') {
+                return "audio/flac";
+            }
+            if ((audioBytes[0] & 0xFF) == 'I' && audioBytes[1] == 'D' && audioBytes[2] == '3'
+                    || ((audioBytes[0] & 0xFF) == 0xFF && (audioBytes[1] & 0xE0) == 0xE0)) {
+                return "audio/mp3";
+            }
+        }
+        String lower = filename != null ? filename.toLowerCase() : "";
+        if (lower.endsWith(".webm")) return "audio/webm";
+        if (lower.endsWith(".mp3")) return "audio/mp3";
+        if (lower.endsWith(".ogg")) return "audio/ogg";
+        if (lower.endsWith(".flac")) return "audio/flac";
+        if (lower.endsWith(".m4a")) return "audio/mp4";
+        return "audio/wav";
     }
 
     private ShadowingEvaluationResponse evaluateWithRuleBasedOffline(String referenceSentence) {

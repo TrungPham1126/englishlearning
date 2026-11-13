@@ -69,6 +69,21 @@ public class Assignment {
     @Column(name = "listening_script", columnDefinition = "TEXT")
     private String listeningScript;
 
+    @Column(name = "is_exam")
+    @Builder.Default
+    private Boolean isExam = false;
+
+    @Column(name = "exam_skills", length = 255)
+    private String examSkills;
+
+    @Column(name = "strict_fullscreen")
+    @Builder.Default
+    private Boolean strictFullscreen = false;
+
+    @Column(name = "max_violations")
+    @Builder.Default
+    private Integer maxViolations = 3;
+
     @OneToMany(mappedBy = "assignment", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orderIndex ASC")
     @Builder.Default

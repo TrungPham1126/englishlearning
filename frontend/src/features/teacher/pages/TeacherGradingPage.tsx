@@ -1,4 +1,6 @@
 import React from "react";
+import { useParams } from "react-router-dom";
+import ClassroomHeaderNav from "../components/ClassroomHeaderNav";
 import {
   SubmissionFilterBar,
   SubmissionListSidebar,
@@ -14,6 +16,7 @@ export type {
 } from "../components/grading";
 
 export default function TeacherGradingPage() {
+  const { classId } = useParams<{ classId: string }>();
   const {
     classes,
     selectedClassId,
@@ -38,15 +41,19 @@ export default function TeacherGradingPage() {
     loadingDetail,
     savingGrade,
     saveSuccess,
+    answerScores,
+    handleUpdateQuestionScore,
     handleSelectSubmission,
     handleSaveGrade,
     filteredSubmissions,
     pendingCount,
     completedCount,
-  } = useTeacherGrading();
+  } = useTeacherGrading(classId);
 
   return (
     <div className="space-y-6">
+      {classId && <ClassroomHeaderNav classId={classId} activeTab="grading" />}
+
       {/* Top Header & Dropdown Selectors */}
       <SubmissionFilterBar
         classes={classes}
@@ -57,6 +64,7 @@ export default function TeacherGradingPage() {
         onChangeAssignmentId={setSelectedAssignmentId}
         loadingClasses={loadingClasses}
         loadingAssignments={loadingAssignments}
+        hideClassSelector={Boolean(classId)}
       />
 
       {/* Main Grid: Left List + Right Grading Workspace */}
@@ -86,6 +94,8 @@ export default function TeacherGradingPage() {
           savingGrade={savingGrade}
           saveSuccess={saveSuccess}
           onSaveGrade={handleSaveGrade}
+          answerScores={answerScores}
+          onUpdateQuestionScore={handleUpdateQuestionScore}
         />
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
   Percent,
   RotateCcw,
   CheckCircle2,
+  Award,
 } from "lucide-react";
 
 interface AssignmentBasicInfoFormProps {
@@ -237,6 +238,51 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
                 {100 - maxAllowedErrorPercent}% ({((100 - maxAllowedErrorPercent) / 10).toFixed(1)}/10 điểm)
               </strong>.
               Nếu tỷ lệ sai vượt quá {maxAllowedErrorPercent}%, bài làm sẽ tính là chưa đạt và học sinh cần làm lại.
+            </p>
+          </div>
+
+          {/* Cấu hình chuẩn IELTS Band riêng cho dạng bài viết Writing */}
+          <div className="p-3 rounded-lg bg-indigo-50/70 dark:bg-slate-800/60 border border-indigo-200 dark:border-indigo-800/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                <Award className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>Chuẩn điểm Đạt IELTS Writing (IELTS Pass Band):</span>
+              </span>
+              <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 font-mono">
+                Band {((100 - maxAllowedErrorPercent) / 10).toFixed(1)} / 9.0
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { band: 5.0, label: "Band 5.0" },
+                { band: 5.5, label: "Band 5.5" },
+                { band: 6.0, label: "Band 6.0 (Chuẩn Đạt)" },
+                { band: 6.5, label: "Band 6.5" },
+                { band: 7.0, label: "Band 7.0" },
+                { band: 7.5, label: "Band 7.5" },
+                { band: 8.0, label: "Band 8.0" },
+              ].map((item) => {
+                const targetPct = Math.round(100 - item.band * 10);
+                const isSelected = maxAllowedErrorPercent === targetPct;
+                return (
+                  <button
+                    key={item.band}
+                    type="button"
+                    onClick={() => setMaxAllowedErrorPercent(targetPct)}
+                    className={`px-2 py-0.5 rounded text-xs font-bold transition cursor-pointer border ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-indigo-50/50"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              * Dành riêng cho phần viết bài Writing. AI sẽ chấm điểm theo thang IELTS và so sánh với mức Band này để xác định Đạt (PASS) hay Chưa Đạt.
             </p>
           </div>
         </div>

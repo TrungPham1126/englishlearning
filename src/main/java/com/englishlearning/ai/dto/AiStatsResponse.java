@@ -1,5 +1,6 @@
 package com.englishlearning.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -44,6 +45,7 @@ public class AiStatsResponse {
         private double costUsd;
         private long totalRequests;
         private String pricingModel;
+        @JsonProperty("isHealthy")
         private boolean isHealthy;
     }
 

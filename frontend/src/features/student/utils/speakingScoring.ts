@@ -7,7 +7,7 @@ import type { AttemptResponse, QuestionResultDetail } from "../types";
  * Nếu đã là thang 100 (vd: 86.0) -> giữ nguyên.
  */
 export function normalizeScoreTo100(rawScore: number | null | undefined): number {
-  if (rawScore === null || rawScore === undefined || isNaN(rawScore)) return 0;
+  if (rawScore === null || rawScore === undefined || !Number.isFinite(rawScore) || rawScore < 0) return 0;
   if (rawScore <= 10 && rawScore > 0) {
     return Math.round(rawScore * 100) / 10;
   }

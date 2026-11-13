@@ -25,6 +25,7 @@ import {
   Camera,
   Menu,
   X,
+  HardDrive,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -247,6 +248,11 @@ export default function AdminLayout() {
               <NavLink to="/admin/ai-monitoring" className={navLinkClass}>
                 <Cpu size={18} />
                 <span>Giám Sát Token &amp; AI</span>
+              </NavLink>
+
+              <NavLink to="/admin/database" className={navLinkClass}>
+                <HardDrive size={18} />
+                <span>Quản Lý CSDL &amp; Cloud R2</span>
               </NavLink>
             </div>
           </div>

@@ -1,6 +1,8 @@
 package com.englishlearning.classroom.entity;
 
 import com.englishlearning.auth.entity.Teacher;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -21,6 +23,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Classroom {
 
     @Id
@@ -35,6 +38,7 @@ public class Classroom {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "teacher_id", nullable = false)
     private Teacher teacher;
@@ -60,6 +64,7 @@ public class Classroom {
     @Column(name = "join_code", length = 20, unique = true)
     private String joinCode;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<ClassStudent> classStudents = new HashSet<>();

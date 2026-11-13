@@ -2,10 +2,12 @@ package com.englishlearning.curriculum.repository;
 
 import com.englishlearning.curriculum.entity.DailyPlanItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,4 +25,12 @@ public interface DailyPlanItemRepository extends JpaRepository<DailyPlanItem, UU
 
     @Query("SELECT dpi FROM DailyPlanItem dpi JOIN FETCH dpi.dailyPlan dp LEFT JOIN FETCH dpi.assignment a WHERE dp.classroom.id = :classroomId ORDER BY dpi.orderIndex ASC")
     List<DailyPlanItem> findByClassroomIdWithDailyPlanAndAssignment(@Param("classroomId") UUID classroomId);
+
+    @Modifying
+    @Query("DELETE FROM DailyPlanItem dpi WHERE dpi.dailyPlan.id IN :dailyPlanIds")
+    int deleteByDailyPlanIdIn(@Param("dailyPlanIds") Collection<UUID> dailyPlanIds);
+
+    @Modifying
+    @Query("DELETE FROM DailyPlanItem dpi WHERE dpi.assignment.id IN :assignmentIds")
+    int deleteByAssignmentIdIn(@Param("assignmentIds") Collection<UUID> assignmentIds);
 }

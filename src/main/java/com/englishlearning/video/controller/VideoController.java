@@ -136,11 +136,18 @@ public class VideoController {
     @GetMapping("/{id}/hls/{fileName:.+}")
     public ResponseEntity<Resource> serveHlsFile(
             @PathVariable UUID id,
-            @PathVariable String fileName,
-            @RequestParam(value = "uploadDir", defaultValue = "uploads/videos") String uploadBaseDir) {
-        Path filePath = Paths.get(uploadBaseDir, "hls", id.toString(), fileName);
+            @PathVariable String fileName) {
+        if (fileName == null || fileName.isBlank() || fileName.contains("..")
+                || fileName.contains("/") || fileName.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+        Path hlsDir = Paths.get(this.uploadBaseDir, "hls", id.toString()).toAbsolutePath().normalize();
+        Path filePath = hlsDir.resolve(fileName).normalize();
+        if (!filePath.startsWith(hlsDir)) {
+            return ResponseEntity.badRequest().build();
+        }
         File file = filePath.toFile();
-        if (!file.exists())
+        if (!file.exists() || !file.isFile())
             return ResponseEntity.notFound().build();
 
         String contentType = fileName.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/MP2T";

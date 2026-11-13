@@ -58,14 +58,16 @@ class SpeechDetector:
         min_speech_frames = int(80 / hop_ms)
 
         smoothed_mask = raw_speech_mask.copy()
-        # 1. Bridge small gaps
+        # 1. Bridge small gaps between speech regions (never bridge leading silence)
         gap_count = 0
+        seen_speech = False
         for i in range(len(smoothed_mask)):
             if not smoothed_mask[i]:
                 gap_count += 1
             else:
-                if 0 < gap_count < min_silence_frames:
+                if seen_speech and 0 < gap_count < min_silence_frames:
                     smoothed_mask[i - gap_count : i] = True
+                seen_speech = True
                 gap_count = 0
 
         # Convert mask to contiguous SpeechSegments

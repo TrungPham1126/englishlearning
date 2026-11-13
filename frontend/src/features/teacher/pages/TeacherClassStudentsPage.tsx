@@ -3,14 +3,12 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { teacherApi } from "../api/teacherApi";
 import ClassroomHeaderNav from "../components/ClassroomHeaderNav";
+import { StudentLearningProfileModal } from "../components/students/StudentLearningProfileModal";
 import {
   Search,
   AlertTriangle,
-  Bot,
-  X,
   Cpu,
   Ban,
-  Check,
   Users,
   Award,
   TrendingUp,
@@ -54,25 +52,36 @@ export default function TeacherClassStudentsPage() {
 
       if (resStudents.status === "fulfilled" && resStudents.value?.data) {
         const rawData = resStudents.value.data?.data || [];
-        // Map dữ liệu thật, mặc định 0 nếu BE chưa trả đủ progress
+        // Map cả DTO phẳng (StudentProgressResponse) lẫn nested entity nếu có
         const mapped = rawData.map((item: any) => {
+          const resolvedStudentId = item.studentId || item.student?.id || item.id;
           const quotaInfo = quotas.find(
-            (q: any) => q.studentId === item.student?.id,
+            (q: any) => q.studentId === resolvedStudentId,
           ) || { dailyUsed: 0, dailyLimit: 20, isBlocked: false };
+          const resolvedName =
+            item.fullName ||
+            (item.student?.user
+              ? `${item.student.user.firstName} ${item.student.user.lastName}`.trim()
+              : "Học viên");
+          const resolvedEnrolled =
+            item.enrolledAt && item.enrolledAt !== "N/A"
+              ? (() => {
+                  const d = new Date(item.enrolledAt);
+                  return Number.isNaN(d.getTime())
+                    ? item.enrolledAt
+                    : d.toLocaleDateString("vi-VN");
+                })()
+              : "N/A";
           return {
-            studentId: item.student?.id || item.id,
-            fullName: item.student?.user
-              ? `${item.student.user.firstName} ${item.student.user.lastName}`
-              : "Học viên",
-            email: item.student?.user?.email || "N/A",
-            phone: item.student?.user?.phone || "N/A",
-            enrolledAt: item.enrolledAt
-              ? new Date(item.enrolledAt).toLocaleDateString("vi-VN")
-              : "N/A",
+            studentId: resolvedStudentId,
+            fullName: resolvedName || "Học viên",
+            email: item.email || item.student?.user?.email || "N/A",
+            phone: item.phone || item.student?.user?.phone || "N/A",
+            enrolledAt: resolvedEnrolled,
             completedTasks: item.completedTasks || 0,
             totalTasks: item.totalTasks || 0,
             completionRate: item.completionRate || 0,
-            averageScore: item.averageScore || 0,
+            averageScore: item.averageScore ?? 0,
             weaknesses: item.weaknesses || [],
             aiQuota: quotaInfo,
             attendanceScore: item.attendanceScore || 0,
@@ -81,6 +90,11 @@ export default function TeacherClassStudentsPage() {
           };
         });
         setStudents(mapped);
+        setSelectedStudent((prev: any) =>
+          prev
+            ? mapped.find((m: any) => m.studentId === prev.studentId) || prev
+            : null,
+        );
       }
     } catch (err) {
       console.error("Lỗi khi tải danh sách học sinh:", err);
@@ -494,7 +508,7 @@ export default function TeacherClassStudentsPage() {
                   onClick={() => setSelectedStudent(student)}
                   className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-800 hover:text-white dark:hover:bg-blue-800 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
                 >
-                  Xem Chi Tiết Tiến Độ
+                  Hồ sơ học tập &amp; Bài nộp
                 </button>
               </div>
             );
@@ -502,177 +516,13 @@ export default function TeacherClassStudentsPage() {
         </div>
       )}
 
-      {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-elevated space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-              <div className="flex items-center space-x-3.5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-800/20 text-blue-700 dark:text-blue-400 font-extrabold text-lg border border-blue-200 dark:border-blue-600/30">
-                  {selectedStudent.fullName.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
-                    {selectedStudent.fullName}
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {selectedStudent.email} • {selectedStudent.phone}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 text-center">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  Điểm TB
-                </span>
-                <span className="text-xl font-black text-blue-700 dark:text-blue-400">
-                  {selectedStudent.averageScore} / 10
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 text-center">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  Đã Nộp
-                </span>
-                <span className="text-xl font-black text-slate-900 dark:text-white">
-                  {selectedStudent.completedTasks} / {selectedStudent.totalTasks}
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 text-center">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  AI Limit (Hôm nay)
-                </span>
-                {selectedStudent.aiQuota.isBlocked ? (
-                  <span className="text-base font-black text-rose-500 uppercase mt-1 block">
-                    Bị Chặn
-                  </span>
-                ) : (
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-                    {selectedStudent.aiQuota.dailyUsed}/{selectedStudent.aiQuota.dailyLimit}
-                  </span>
-                )}
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 text-center">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  Chuyên Cần
-                </span>
-                <span className="text-xl font-black text-amber-500 dark:text-amber-400">
-                  {selectedStudent.attendanceScore || 0}%
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5 text-center col-span-2 sm:col-span-1">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1">
-                  Tổng T.Gian
-                </span>
-                <span className="text-xl font-black text-sky-600 dark:text-cyan-400">
-                  {Math.floor((selectedStudent.totalStudyMinutes || 0) / 60)}h{" "}
-                  {(selectedStudent.totalStudyMinutes || 0) % 60}m
-                </span>
-              </div>
-            </div>
-
-            {selectedStudent.dailyProgressDetails &&
-              selectedStudent.dailyProgressDetails.length > 0 && (
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 p-5 space-y-4">
-                  <div className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                    <span>Chi Tiết Tiến Độ Từng Ngày</span>
-                    <span className="text-[11px] font-semibold normal-case text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2.5 py-1 rounded-lg">
-                      7 ngày gần nhất
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                    <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
-                      <thead className="bg-slate-50 dark:bg-slate-950 text-xs font-bold uppercase text-slate-500 border-b border-slate-200 dark:border-slate-800">
-                        <tr>
-                          <th className="px-4 py-3">Ngày</th>
-                          <th className="px-4 py-3 text-center">Bài tập hoàn thành</th>
-                          <th className="px-4 py-3 text-center">Thời gian học</th>
-                          <th className="px-4 py-3 text-center">Điểm số trung bình</th>
-                          <th className="px-4 py-3 text-right">Trạng thái</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                        {selectedStudent.dailyProgressDetails.map(
-                          (detail: any, index: number) => (
-                            <tr
-                              key={index}
-                              className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
-                            >
-                              <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
-                                {detail.date}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <span className="inline-flex items-center justify-center bg-blue-50 dark:bg-blue-600/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-600/20 rounded-md px-2 py-0.5 text-xs font-bold min-w-[2rem]">
-                                  {detail.completedTasks}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-center text-sky-600 dark:text-cyan-400 font-medium">
-                                {detail.studyMinutes} phút
-                              </td>
-                              <td className="px-4 py-3 text-center text-emerald-600 dark:text-emerald-400 font-bold">
-                                {detail.score}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {detail.completedTasks > 0 ? (
-                                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-                                    <Check size={14} /> Hoạt động
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-600 text-xs font-semibold">
-                                    Vắng mặt
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ),
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-            <div className="rounded-xl border border-blue-200 dark:border-blue-600/20 bg-blue-50/50 dark:bg-blue-600/5 p-4 space-y-3">
-              <div className="flex items-center text-xs font-bold text-blue-800 dark:text-blue-300">
-                <Bot className="h-4 w-4 mr-1.5 text-blue-700 dark:text-blue-400" /> Điểm
-                Yếu Cần Cải Thiện (AI Phân Tích)
-              </div>
-              {selectedStudent.weaknesses.length === 0 ? (
-                <div className="text-xs text-slate-500 dark:text-slate-400 italic">
-                  Học viên chưa có đủ dữ liệu để AI đánh giá.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedStudent.weaknesses.map((w: string, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center rounded-xl bg-white dark:bg-slate-900/80 px-3 py-2 text-xs border border-rose-200 dark:border-slate-800 text-rose-600 dark:text-rose-400 font-medium"
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5 mr-2 shrink-0" />
-                      {w}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedStudent(null)}
-                className="rounded-xl bg-slate-100 dark:bg-slate-800 px-5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-              >
-                Đóng cửa sổ
-              </button>
-            </div>
-          </div>
-        </div>
+      {selectedStudent && classId && (
+        <StudentLearningProfileModal
+          classId={classId}
+          student={selectedStudent}
+          onClose={() => setSelectedStudent(null)}
+          onGradeUpdated={loadData}
+        />
       )}
     </div>
   );

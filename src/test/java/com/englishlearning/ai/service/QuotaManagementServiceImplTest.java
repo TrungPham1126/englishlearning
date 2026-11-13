@@ -123,4 +123,38 @@ class QuotaManagementServiceImplTest {
         assertThat(result.getLastResetDate()).isEqualTo(LocalDate.now());
         verify(studentAiQuotaRepository, times(1)).save(quota);
     }
+
+    @Test
+    @DisplayName("Dùng lock pessimistic khi tồn tại, chặn học viên isBlocked, clamp count<=0 & updateDailyLimit âm, báo 404 khi thiếu Student")
+    void should_HandleLockedHitBlockedStudentMissingStudentAndClampValues() {
+        Student student = Student.builder().id(studentId).build();
+        StudentAiQuota blocked = StudentAiQuota.builder()
+                .student(student).dailyLimit(20).usedToday(1).lastResetDate(LocalDate.now()).isBlocked(true).build();
+        when(studentAiQuotaRepository.findByStudentIdWithLock(studentId)).thenReturn(Optional.of(blocked));
+
+        assertThatThrownBy(() -> quotaManagementService.deductAiQuota(studentId, 1))
+                .isInstanceOf(QuotaExceededException.class)
+                .hasMessageContaining("tạm khóa");
+
+        // Unblocked & count=0 -> Math.max(1, 0) = 1
+        blocked.setIsBlocked(false);
+        when(studentAiQuotaRepository.save(any(StudentAiQuota.class))).thenAnswer(inv -> inv.getArgument(0));
+        StudentAiQuota incremented = quotaManagementService.deductAiQuota(studentId, 0);
+        assertThat(incremented.getUsedToday()).isEqualTo(2);
+
+        // Missing student -> ResourceNotFoundException
+        UUID missingId = UUID.randomUUID();
+        when(studentAiQuotaRepository.findByStudentId(missingId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(missingId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> quotaManagementService.getOrCreateQuota(missingId))
+                .isInstanceOf(com.englishlearning.common.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy học sinh");
+
+        // updateDailyLimit âm -> clamp về 0 và tự khởi tạo nếu chưa có
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(studentAiQuotaRepository.findByStudentId(studentId)).thenReturn(Optional.empty());
+        StudentAiQuota updated = quotaManagementService.updateDailyLimit(studentId, -5);
+        assertThat(updated.getDailyLimit()).isZero();
+        assertThat(updated.getUsedToday()).isZero();
+    }
 }

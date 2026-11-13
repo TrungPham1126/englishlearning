@@ -69,9 +69,9 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
         <div className="flex items-center justify-between">
           <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
             <Video size={14} className="text-blue-700 dark:text-blue-400" />
-            Bài Speaking Đã Nộp
+            Speaking
           </span>
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+          <span className="text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
             {filteredDays.length} ngày
           </span>
         </div>
@@ -81,13 +81,13 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
           <button
             type="button"
             onClick={() => setFilterMode("all")}
-            className={`py-1 rounded-md transition cursor-pointer ${
+            className={`py-1 rounded-md transition cursor-pointer tabular-nums ${
               filterMode === "all"
                 ? "bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-400 shadow-2xs font-black"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
             }`}
           >
-            Tất cả bài ({aiDays.length})
+            Tất cả ({aiDays.length})
           </button>
           <button
             type="button"
@@ -98,7 +98,7 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
             }`}
           >
-            Đã có bài nộp
+            Đã nộp
           </button>
         </div>
       </div>
@@ -109,9 +109,7 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
           <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
             <Calendar className="mx-auto text-slate-400" size={24} />
             <p className="font-semibold">
-              {filterMode === "submitted"
-                ? "Chưa có ngày nào có bài nộp."
-                : "Không có bài Speaking nào trong lộ trình."}
+              {filterMode === "submitted" ? "Chưa có bài nộp" : "Chưa có bài Speaking"}
             </p>
           </div>
         ) : (
@@ -143,18 +141,18 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <span
-                      className={`text-xs font-black uppercase tracking-tight block truncate ${
+                      className={`text-xs font-black uppercase tracking-tight block truncate tabular-nums ${
                         isSelectedDay
                           ? "text-blue-900 dark:text-blue-300"
                           : "text-slate-800 dark:text-slate-200"
                       }`}
                     >
-                      DAY {day.dayNumber} – {dayTypeLabel(day.speakingTasks)}
+                      Ngày {day.dayNumber} • {dayTypeLabel(day.speakingTasks)}
                     </span>
 
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate flex items-center gap-1 font-medium">
                       <Clock size={11} className="shrink-0" />
-                      <span>{day.scheduledDate || day.title || "Lộ trình học"}</span>
+                      <span>{day.scheduledDate || day.title || "Lộ trình"}</span>
                     </p>
                   </div>
 
@@ -175,27 +173,27 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
                   {isPassed ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold">
                       <CheckCircle2 size={12} />
-                      <span>✓ Đã chấm đạt</span>
+                      <span>Đạt</span>
                     </span>
                   ) : isExhaustedNotPass ? (
                     <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-black">
                       <XCircle size={12} />
-                      <span>✗ NOT PASS (Hết lượt)</span>
+                      <span>Chưa đạt (Hết lượt)</span>
                     </span>
                   ) : isDone || inProgress ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
+                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold tabular-nums">
                       <Clock size={12} />
-                      <span>~ Lần {attemptsCount}/3 (Chưa đạt 80)</span>
+                      <span>Lần {attemptsCount}/3</span>
                     </span>
                   ) : (
                     <span className="text-rose-600 dark:text-rose-400 font-bold">
-                      — Chưa nộp (Tối đa 3 lần)
+                      Chưa nộp
                     </span>
                   )}
 
                   {highestScore !== null && highestScore !== undefined && (
-                    <span className="font-mono font-black text-slate-800 dark:text-slate-200">
-                      {highestScore.toFixed(1)} pts
+                    <span className="font-mono font-black tabular-nums text-slate-800 dark:text-slate-200">
+                      {highestScore.toFixed(1)}đ
                     </span>
                   )}
                 </div>
@@ -218,13 +216,13 @@ export const SpeakingSubmissionDaysList: React.FC<SpeakingSubmissionDaysListProp
                           e.stopPropagation();
                           navigate(`/student/assignments/${task.id}/take`);
                         }}
-                        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                        className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer shadow-2xs tabular-nums"
                       >
                         <PlayCircle size={13} />
                         <span>
-                          {used === 0 ? "Làm bài" : "Làm lại"}
-                          {` ${task.isShadowing ? "Shadowing" : "Q&A"}`} (
-                          {used}/{MAX_ATTEMPTS})
+                          {used === 0 ? "Làm" : "Làm lại"}{" "}
+                          {task.isShadowing ? "Shadowing" : "Q&A"} ({used}/
+                          {MAX_ATTEMPTS})
                         </span>
                       </button>
                     );

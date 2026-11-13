@@ -86,24 +86,22 @@ export const AssignmentResultBanner: React.FC<AssignmentResultBannerProps> = ({
           </div>
 
           <div className="space-y-0.5">
-            <h3 className="font-bold text-sm sm:text-base flex items-center gap-1.5">
+            <h3 className="font-bold text-sm sm:text-base">
               {isEssay
-                ? 'Bài Tự Luận Đang Chờ Đánh Giá'
+                ? 'Đã gửi bài viết'
                 : isNotPass
-                ? 'Kết Quả: NOT PASS (Hết Số Lượt Làm Bài)'
+                ? 'Chưa đạt (Hết lượt)'
                 : canRetry
-                ? `Kết quả bài làm chưa đạt chuẩn (Sai ${effectiveErrorRate}% > Cho phép ${maxAllowedError}%)`
-                : 'Chúc Mừng! Đã Đạt Chuẩn Kiến Thức'}
+                ? `Chưa đạt (${effectiveErrorRate}% lỗi > ${maxAllowedError}%)`
+                : 'Hoàn thành'}
             </h3>
-            <p className="text-xs sm:text-[13px] font-medium opacity-90 leading-normal">
+            <p className="text-xs font-medium opacity-90">
               {isEssay
-                ? 'Bài viết đã được gửi thành công, đang chờ chấm điểm.'
+                ? 'Đang chờ chấm điểm.'
                 : retakeEvaluation?.message ||
                   (canRetry
-                    ? `Kết quả bài làm chưa đạt chuẩn (Đúng ${correctCount}/${totalQ} câu). Bạn cần làm lại bài tập này để củng cố kiến thức!`
-                    : isAllCorrect
-                    ? `Xuất sắc! Bạn đã trả lời đúng trọn vẹn ${totalQ}/${totalQ} câu hỏi.`
-                    : 'Bạn đã hoàn thành bài tập với kết quả đạt chuẩn kiến thức. Hãy tiếp tục duy trì phong độ!')}
+                    ? `Đúng ${correctCount}/${totalQ} câu. Cần làm lại để đạt chuẩn.`
+                    : `Đúng ${correctCount}/${totalQ} câu.`)}
             </p>
           </div>
         </div>
@@ -116,7 +114,7 @@ export const AssignmentResultBanner: React.FC<AssignmentResultBannerProps> = ({
             className="min-h-[38px] flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 active:scale-[0.98] text-white font-semibold text-xs shadow-xs transition cursor-pointer shrink-0 touch-manipulation disabled:opacity-50"
           >
             {isStarting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-            <span>Làm Lại Bài Ngay</span>
+            <span>Làm lại</span>
           </button>
         )}
       </div>

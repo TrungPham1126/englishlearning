@@ -33,22 +33,23 @@ public class DailyAssignmentScheduler {
         // Tìm tất cả các DAY có lịch trùng ngày hôm nay mà chưa mở khóa
         List<DailyStudyPlan> todayPlans = dailyStudyPlanRepository.findByScheduledDateAndIsUnlockedFalse(today);
 
-        if (todayPlans.isEmpty()) {
+        if (todayPlans == null || todayPlans.isEmpty()) {
             log.info("[DAILY-SCHEDULER] Không có kế hoạch bài tập nào cần mở khóa hôm nay.");
             return;
         }
 
         for (DailyStudyPlan plan : todayPlans) {
             plan.setIsUnlocked(true);
+            String planTitle = plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber();
             try {
                 if (plan.getClassroom() != null && plan.getClassroom().getId() != null) {
                     NotificationDto notifDto = NotificationDto.builder()
                             .classroomId(plan.getClassroom().getId())
-                            .title("Lộ trình học mới: " + plan.getTitle())
-                            .message("Kế hoạch học tập hôm nay (" + plan.getTitle() + ") đã mở khóa. Hãy vào học ngay!")
+                            .title("Lộ trình học mới: " + planTitle)
+                            .message("Kế hoạch học tập hôm nay (" + planTitle + ") đã mở khóa. Hãy vào học ngay!")
                             .notificationType("NEW_ASSIGNMENT")
                             .actionType("NEW_ASSIGNMENT")
-                            .referenceId(plan.getId().toString())
+                            .referenceId(plan.getId() != null ? plan.getId().toString() : null)
                             .targetUrl("/student/courses/" + plan.getClassroom().getId() + "/daily-plan")
                             .build();
                     notificationService.dispatchNotification(notifDto);

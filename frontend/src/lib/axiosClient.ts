@@ -28,11 +28,16 @@ axiosClient.interceptors.request.use(
     // 2. FALLBACK: Nếu Zustand chưa kịp load xong (F5 trang), đọc thẳng từ localStorage
     if (!token) {
       try {
-        const authStorageStr = localStorage.getItem("auth-storage");
-        if (authStorageStr) {
-          const { state } = JSON.parse(authStorageStr);
-          if (state?.accessToken) {
-            token = state.accessToken;
+        const directToken = localStorage.getItem("accessToken");
+        if (directToken && directToken !== "null" && directToken !== "undefined") {
+          token = directToken;
+        } else {
+          const authStorageStr = localStorage.getItem("auth-storage");
+          if (authStorageStr) {
+            const parsed = JSON.parse(authStorageStr);
+            if (parsed?.state?.accessToken) {
+              token = parsed.state.accessToken;
+            }
           }
         }
       } catch (error) {
@@ -76,14 +81,19 @@ const processQueue = (error: unknown, token: string | null = null) => {
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined;
 
-    // Không lặp lại nếu bản thân request lỗi là gọi Login hoặc Refresh Token
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    // Không lặp lại nếu bản thân request lỗi là gọi Login, Refresh Token hoặc Logout
     const isAuthEndpoint =
       originalRequest.url?.includes("/api/v1/auth/login") ||
-      originalRequest.url?.includes("/api/v1/auth/refresh-token");
+      originalRequest.url?.includes("/api/v1/auth/refresh-token") ||
+      originalRequest.url?.includes("/api/v1/auth/logout");
 
     if (
       error.response?.status === 401 &&
@@ -119,7 +129,10 @@ axiosClient.interceptors.response.use(
           },
         );
 
-        const newAccessToken = res.data.data.accessToken;
+        const newAccessToken = res.data?.data?.accessToken;
+        if (!newAccessToken) {
+          throw new Error("Phản hồi refresh token không chứa accessToken hợp lệ");
+        }
         useAuthStore.getState().setAccessToken(newAccessToken);
 
         processQueue(null, newAccessToken);
@@ -131,7 +144,9 @@ axiosClient.interceptors.response.use(
       } catch (refreshErr) {
         processQueue(refreshErr, null);
         useAuthStore.getState().logout();
-        window.location.href = "/login";
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;

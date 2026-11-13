@@ -15,6 +15,7 @@ import type {
   QuestionResultDetail,
   ShadowingEvaluationResponse,
   SpeakingAiEvaluationResult,
+  WritingAiEvaluationResult,
 } from '@/features/student/types';
 import { isQuestionPassed } from '@/features/student/utils/speakingScoring';
 import useAssignmentTakeSession from '@/features/student/hooks/useAssignmentTakeSession';
@@ -101,10 +102,24 @@ export default function AssignmentTakePage() {
     navigate,
   } = session;
 
-  // Trạng thái cho chế độ Luyện Phát Âm / Shadowing tối giản (1 câu 1, tuần tự)
+  // Trạng thái cho chế độ làm bài tuần tự (Speaking / Writing)
   const [passedQuestionIds, setPassedQuestionIds] = useState<Record<string, boolean>>({});
   const [questionFailCounts, setQuestionFailCounts] = useState<Record<string, number>>({});
   const [skippedQuestionIds, setSkippedQuestionIds] = useState<Record<string, boolean>>({});
+  const [markedNotPassedQuestionIds, setMarkedNotPassedQuestionIds] = useState<Record<string, boolean>>({});
+
+  const isWritingQuestion = useCallback((q: QuestionResultDetail) => {
+    const t = String(q.questionType || '').toUpperCase();
+    const promptLower = (q.promptText || '').toLowerCase();
+    return (
+      t === 'ESSAY' ||
+      t === 'WRITING' ||
+      t === 'PARAGRAPH' ||
+      promptLower.includes('viết đoạn') ||
+      promptLower.includes('write a paragraph') ||
+      promptLower.includes('ielts')
+    );
+  }, []);
 
   const isSpeakingShadowingSession = useMemo(() => {
     return (
@@ -115,6 +130,23 @@ export default function AssignmentTakePage() {
       })
     );
   }, [isSpeakingTest, questions]);
+
+  const isWritingSession = useMemo(() => {
+    return questions.some((q) => isWritingQuestion(q));
+  }, [questions, isWritingQuestion]);
+
+  const isSequentialSession = useMemo(() => {
+    return isSpeakingShadowingSession || isWritingSession;
+  }, [isSpeakingShadowingSession, isWritingSession]);
+
+  const targetPassBand = useMemo(() => {
+    if (!attempt?.passScore) return 6.0;
+    const ps = Number(attempt.passScore);
+    if (ps > 0 && ps <= 9.0) return ps;
+    if (ps > 9.0 && ps <= 10.0) return ps;
+    if (ps > 10.0) return Number((ps / 10).toFixed(1));
+    return 6.0;
+  }, [attempt?.passScore]);
 
   const handleSpeakingAudioUpload = useCallback(
     (
@@ -142,12 +174,41 @@ export default function AssignmentTakePage() {
     [handleUploadSpeaking],
   );
 
+  const handleWritingEvaluated = useCallback(
+    (
+      questionId: string,
+      result: WritingAiEvaluationResult,
+      text: string,
+      isPassed: boolean,
+    ) => {
+      updateAnswer(questionId, { textAnswer: text });
+      if (isPassed) {
+        setPassedQuestionIds((prev) => ({ ...prev, [questionId]: true }));
+      } else {
+        setQuestionFailCounts((prev) => {
+          const nextCount = (prev[questionId] || 0) + 1;
+          if (nextCount >= 3) {
+            setMarkedNotPassedQuestionIds((p) => ({ ...p, [questionId]: true }));
+          }
+          return { ...prev, [questionId]: nextCount };
+        });
+      }
+    },
+    [updateAnswer],
+  );
+
   const isQuestionCompletedOrSkipped = useCallback(
     (qId: string, qDetail: QuestionResultDetail) => {
-      if (passedQuestionIds[qId] || skippedQuestionIds[qId]) return true;
+      if (
+        passedQuestionIds[qId] ||
+        skippedQuestionIds[qId] ||
+        markedNotPassedQuestionIds[qId]
+      ) {
+        return true;
+      }
       return isQuestionPassed(qId, qDetail, attempt ? [attempt] : []);
     },
-    [passedQuestionIds, skippedQuestionIds, attempt],
+    [passedQuestionIds, skippedQuestionIds, markedNotPassedQuestionIds, attempt],
   );
 
   // Memoized callbacks để ngăn re-render toàn bộ cây component phòng thi
@@ -186,63 +247,60 @@ export default function AssignmentTakePage() {
     );
   }, [setFontSizeLevel]);
 
-  // 1. GIAI ĐOẠN ĐANG TẢI DỮ LIỆU (CHECKING PHASE)
   if (phase === 'CHECKING') {
     return (
-      <div className="p-20 text-center text-xs font-semibold text-slate-500 flex flex-col items-center justify-center gap-3 min-h-[50vh]">
-        <Loader2 className="animate-spin text-blue-700" size={32} />
-        <span className="font-medium text-slate-600 dark:text-slate-400">
-          Đang nạp dữ liệu bài tập và phiên thi...
-        </span>
+      <div className="p-20 text-center text-xs font-medium text-slate-500 flex flex-col items-center justify-center gap-2.5 min-h-[50vh]">
+        <Loader2 className="animate-spin text-blue-700" size={24} />
+        <span>Đang tải...</span>
       </div>
     );
   }
 
-  // 2. GIAI ĐOẠN GIỚI THIỆU HOẶC HẾT LƯỢT (INTRO / EXHAUSTED PHASES)
   if (phase === 'EXHAUSTED' || phase === 'INTRO') {
     const completedList = previousAttempts.filter((a) => a.status !== 'IN_PROGRESS');
     const isExhausted = phase === 'EXHAUSTED';
 
     return (
-      <div className="max-w-3xl mx-auto my-12 space-y-6 animate-in fade-in duration-200 px-4">
+      <div className="max-w-lg mx-auto my-10 space-y-4 px-4">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer shadow-xs transition touch-manipulation active:scale-95"
+          aria-label="Quay lại"
+          className="min-h-[40px] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={18} />
         </button>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8 md:p-12 shadow-sm text-center space-y-6">
-          <div className="h-20 w-20 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 flex items-center justify-center mx-auto shadow-inner">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 text-center space-y-5">
+          <div className="h-14 w-14 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 flex items-center justify-center mx-auto">
             {isExhausted ? (
-              <ShieldAlert size={36} className="text-amber-500" />
+              <ShieldAlert size={28} className="text-amber-500" />
             ) : (
-              <BookOpen size={36} />
+              <BookOpen size={28} />
             )}
           </div>
 
-          <div className="space-y-2">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-950 dark:text-white">
+          <div className="space-y-1">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-950 dark:text-white">
               {isExhausted
-                ? 'Hết Lượt Làm Bài'
-                : previousAttempts[0]?.assignmentTitle || 'Bắt Đầu Bài Tập Tiếng Anh'}
+                ? 'Hết lượt làm bài'
+                : previousAttempts[0]?.assignmentTitle || 'Bài tập'}
             </h1>
-            <p className="text-slate-700 dark:text-slate-300 font-medium text-sm md:text-base leading-relaxed max-w-xl mx-auto">
-              {isExhausted
-                ? 'Bạn đã hoàn tất số lượt làm bài cho phép đối với đề thi này.'
-                : 'Làm bài theo định dạng CBT, có nghe phát âm từng từ, giải thích chi tiết và chấm điểm ngay sau khi nộp.'}
-            </p>
+            {isExhausted && (
+              <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm">
+                Bạn đã dùng hết số lượt cho phép.
+              </p>
+            )}
           </div>
 
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             {completedList.length > 0 && (
               <button
                 type="button"
                 onClick={() => navigate(`/student/assignments/${assignmentId}/submissions/latest`)}
-                className="w-full sm:w-auto min-h-[44px] px-8 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer touch-manipulation"
+                className="w-full sm:w-auto min-h-[42px] px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs text-slate-700 dark:text-slate-200 transition cursor-pointer"
               >
-                Xem Lịch Sử Bài Nộp
+                Lịch sử nộp bài
               </button>
             )}
 
@@ -251,40 +309,39 @@ export default function AssignmentTakePage() {
                 type="button"
                 disabled={isStarting}
                 onClick={handleStartNewAttempt}
-                className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-black shadow-md transition cursor-pointer disabled:opacity-50 touch-manipulation active:scale-[0.98]"
+                className="w-full sm:w-auto min-h-[42px] flex items-center justify-center gap-2 px-6 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm transition cursor-pointer disabled:opacity-50"
               >
                 {isStarting ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Đang khởi tạo...</span>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Đang mở...</span>
                   </>
                 ) : (
                   <>
                     <Award size={16} />
-                    <span>Bắt Đầu Làm Bài</span>
+                    <span>Bắt đầu</span>
                   </>
                 )}
               </button>
             )}
           </div>
 
-          {/* Lịch sử điểm số các lần trước */}
           {completedList.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 text-left">
-              <h4 className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 mb-3 tracking-wider">
-                Lịch sử làm bài trước đó ({completedList.length} lượt):
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-left space-y-2">
+              <h4 className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
+                Lịch sử ({completedList.length})
               </h4>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {completedList.map((att, idx) => (
                   <div
                     key={att.attemptId}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-bold tabular-nums"
                   >
                     <span className="text-slate-700 dark:text-slate-300">
                       Lượt #{att.attemptNumber || idx + 1}
                     </span>
-                    <span className="text-emerald-700 dark:text-emerald-400 font-black">
-                      {att.score != null ? `${Number(att.score).toFixed(1)} pts` : 'Đã nộp'}
+                    <span className="text-emerald-700 dark:text-emerald-400">
+                      {att.score != null ? `${Number(att.score).toFixed(1)}đ` : 'Đã nộp'}
                     </span>
                   </div>
                 ))}
@@ -364,7 +421,7 @@ export default function AssignmentTakePage() {
       {/* 3. THÂN TRANG: CỘT BÀI ĐỌC (NẾU CÓ) + NỘI DUNG CÂU HỎI */}
       <div
         className={
-          isSpeakingShadowingSession
+          isSequentialSession
             ? 'w-full max-w-4xl mx-auto space-y-4'
             : readingPassageText
             ? 'grid grid-cols-1 lg:grid-cols-12 gap-5 items-start'
@@ -372,7 +429,7 @@ export default function AssignmentTakePage() {
         }
       >
         {/* CỘT BÀI ĐỌC DÀI (READING PASSAGE) */}
-        {!isSpeakingShadowingSession && Boolean(readingPassageText) && (
+        {!isSequentialSession && Boolean(readingPassageText) && (
           <div
             className={`${
               readingMobileTab === 'PASSAGE' ? 'flex' : 'hidden lg:flex'
@@ -381,10 +438,7 @@ export default function AssignmentTakePage() {
             <div className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 px-4 py-2.5 flex items-center justify-between rounded-t-xl">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <BookOpen size={15} className="text-blue-700 dark:text-blue-400" />
-                Reading Passage
-              </span>
-              <span className="text-[11px] font-medium text-slate-400 italic">
-                Bôi đen để highlight
+                Bài đọc
               </span>
             </div>
 
@@ -406,7 +460,7 @@ export default function AssignmentTakePage() {
         {/* CỘT CHÍNH: HIỂN THỊ CÂU HỎI */}
         <div
           className={`${
-            isSpeakingShadowingSession
+            isSequentialSession
               ? 'w-full'
               : readingPassageText
               ? readingMobileTab === 'QUESTIONS'
@@ -436,9 +490,9 @@ export default function AssignmentTakePage() {
               isReview={phase === 'REVIEW'}
               resolveAudioUrl={resolveAudioUrl}
             />
-          ) : isSpeakingShadowingSession && phase !== 'REVIEW' ? (
+          ) : isSequentialSession && phase !== 'REVIEW' ? (
             /* =========================================================================
-               CHẾ ĐỘ SHADOWING / SPEAKING TỐI GIẢN: HIỂN THỊ 1 CÂU 1 & TUẦN TỰ
+               CHẾ ĐỘ TỐI GIẢN (SPEAKING / WRITING): HIỂN THỊ 1 CÂU 1 & TUẦN TỰ
                ========================================================================= */
             (() => {
               const currentQ = questions[activeQuestionIdx];
@@ -446,6 +500,8 @@ export default function AssignmentTakePage() {
               const isCurrentDone = isQuestionCompletedOrSkipped(currentQ.questionId, currentQ);
               const failCount = questionFailCounts[currentQ.questionId] || 0;
               const canSkip = failCount >= 3;
+              const isWritingCurrent = isWritingQuestion(currentQ);
+              const isMarkedNotPassed = markedNotPassedQuestionIds[currentQ.questionId];
 
               return (
                 <div className="space-y-4">
@@ -469,20 +525,25 @@ export default function AssignmentTakePage() {
                     speakText={speakText}
                     attempt={attempt}
                     onUploadAudio={handleSpeakingAudioUpload}
+                    onWritingEvaluated={handleWritingEvaluated}
+                    failCount={failCount}
                     isListening={isListeningTest}
                     isVocab={isVocabTest}
                   />
 
-                  {/* Thanh điều hướng câu tuần tự & Bỏ qua khi sai quá số lần cho phép */}
-                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-2xs space-y-2.5">
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
                     {isCurrentDone ? (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 p-3 rounded-lg text-emerald-900 dark:text-emerald-200">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 px-3 py-2.5 rounded-lg text-emerald-900 dark:text-emerald-200">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span className="text-xs sm:text-sm font-bold">
-                            {skippedQuestionIds[currentQ.questionId]
-                              ? 'Đã bỏ qua câu này. Bạn có thể làm tiếp câu tiếp theo.'
-                              : 'Xuất sắc! Bạn đã hoàn thành câu này. Hãy tiếp tục câu tiếp theo.'}
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span className="text-xs font-bold">
+                            {isMarkedNotPassed
+                              ? 'Đã ghi nhận.'
+                              : skippedQuestionIds[currentQ.questionId]
+                              ? 'Đã bỏ qua.'
+                              : isWritingCurrent
+                              ? `Đạt Band ${targetPassBand.toFixed(1)}.`
+                              : 'Hoàn thành.'}
                           </span>
                         </div>
 
@@ -495,42 +556,41 @@ export default function AssignmentTakePage() {
                               const nextQ = questions[nextIdx];
                               if (nextQ) scrollToQuestion(nextQ.questionId);
                             }}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shrink-0"
                           >
-                            <span>Sang câu tiếp theo (Câu {activeQuestionIdx + 2})</span>
+                            <span>Câu {activeQuestionIdx + 2}</span>
                             <ArrowRight size={14} />
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={handleOpenSubmitModal}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition cursor-pointer shrink-0"
                           >
-                            <span>Hoàn thành bài tập & Nộp bài</span>
+                            <span>Nộp bài</span>
                             <Send size={14} />
                           </button>
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-2.5">
+                      <div>
                         {canSkip ? (
-                          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-3 rounded-lg text-amber-900 dark:text-amber-200">
-                            <div className="flex items-center gap-2">
-                              <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                              <div className="text-xs">
-                                <p className="font-bold">
-                                  Bạn đã thử {failCount}/3 lần chưa đạt chuẩn.
-                                </p>
-                                <p className="text-amber-800 dark:text-amber-300">
-                                  Bạn có thể phát âm thử lại hoặc bấm "Bỏ qua câu này" để chuyển sang câu khác.
-                                </p>
-                              </div>
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 px-3 py-2.5 rounded-lg text-amber-900 dark:text-amber-200">
+                            <div className="flex items-center gap-2 text-xs font-bold">
+                              <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span>
+                                {failCount}/3 lần chưa đạt.
+                              </span>
                             </div>
 
                             <button
                               type="button"
                               onClick={() => {
                                 setSkippedQuestionIds((prev) => ({
+                                  ...prev,
+                                  [currentQ.questionId]: true,
+                                }));
+                                setMarkedNotPassedQuestionIds((prev) => ({
                                   ...prev,
                                   [currentQ.questionId]: true,
                                 }));
@@ -543,21 +603,25 @@ export default function AssignmentTakePage() {
                                   handleOpenSubmitModal();
                                 }
                               }}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition cursor-pointer shrink-0"
                             >
-                              <span>Bỏ qua câu này & Sang câu tiếp</span>
+                              <span>Bỏ qua câu này</span>
                               <ArrowRight size={14} />
                             </button>
                           </div>
                         ) : (
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-lg border border-slate-200/80 dark:border-slate-700/80">
+                          <div className="flex items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-lg border border-slate-200/80 dark:border-slate-700/80">
                             <span className="flex items-center gap-1.5 font-medium">
-                              <Lock size={13} className="text-slate-400" />
-                              <span>Hoàn thành phát âm câu này (đạt $\ge 80$ điểm) để mở khóa câu tiếp theo.</span>
+                              <Lock size={13} className="text-slate-400 shrink-0" />
+                              <span>
+                                {isWritingCurrent
+                                  ? `Cần đạt Band ${targetPassBand.toFixed(1)} để qua câu`
+                                  : 'Cần đạt ≥ 80 điểm để qua câu'}
+                              </span>
                             </span>
                             {failCount > 0 && (
-                              <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800">
-                                Số lần thử chưa đạt: {failCount}/3 lần
+                              <span className="text-[11px] font-bold tabular-nums text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800 shrink-0">
+                                {failCount}/3
                               </span>
                             )}
                           </div>
@@ -630,7 +694,7 @@ export default function AssignmentTakePage() {
         isSubmitting={isSubmitting}
         isUploadingAudio={isUploadingAudio}
         isNextDisabled={Boolean(
-          isSpeakingShadowingSession &&
+          isSequentialSession &&
             phase !== 'REVIEW' &&
             questions[activeQuestionIdx] &&
             !isQuestionCompletedOrSkipped(

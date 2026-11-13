@@ -1,5 +1,6 @@
 package com.englishlearning.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 import java.util.List;
@@ -16,6 +17,7 @@ public class PhoneticEvaluationResponse {
     public static class WordScore {
         private String word;
         private Integer score;
+        @JsonProperty("isAccurate")
         private boolean isAccurate;
         private String note;
     }

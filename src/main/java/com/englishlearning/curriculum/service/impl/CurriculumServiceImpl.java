@@ -5,6 +5,7 @@ import com.englishlearning.assignment.repository.AssignmentRepository;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassroomRepository;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.*;
 import com.englishlearning.curriculum.entity.*;
@@ -153,7 +154,15 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài học"));
 
         String fileUrl = storageService.uploadFile(file);
-        DocumentType fileType = DocumentType.valueOf(fileTypeStr.toUpperCase());
+        if (fileTypeStr == null || fileTypeStr.isBlank()) {
+            throw new BadRequestException("Loại tài liệu không được để trống");
+        }
+        DocumentType fileType;
+        try {
+            fileType = DocumentType.valueOf(fileTypeStr.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Loại tài liệu không hợp lệ: " + fileTypeStr);
+        }
 
         LessonDocument document = LessonDocument.builder()
                 .lesson(lesson)
@@ -227,22 +236,25 @@ public class CurriculumServiceImpl implements CurriculumService {
         final boolean completed;
         final int progressPercentage;
         final int watchedSeconds;
+        final boolean hasVideo;
 
-        LessonProgressData(boolean completed, int progressPercentage, int watchedSeconds) {
+        LessonProgressData(boolean completed, int progressPercentage, int watchedSeconds, boolean hasVideo) {
             this.completed = completed;
             this.progressPercentage = progressPercentage;
             this.watchedSeconds = watchedSeconds;
+            this.hasVideo = hasVideo;
         }
     }
 
     private LessonProgressData computeLessonProgress(UUID lessonId, UUID studentId) {
+        // 1. Kiểm tra Video của bài học (trả chính xác hasVideo ngay cả với teacher/guest)
+        Optional<Video> videoOpt = (lessonId != null) ? videoRepository.findByLessonId(lessonId) : Optional.empty();
+        boolean hasVideo = videoOpt.isPresent();
+
         if (studentId == null) {
-            return new LessonProgressData(false, 0, 0);
+            return new LessonProgressData(false, 0, 0, hasVideo);
         }
 
-        // 1. Kiểm tra Video của bài học
-        Optional<Video> videoOpt = videoRepository.findByLessonId(lessonId);
-        boolean hasVideo = videoOpt.isPresent();
         int watchedSeconds = 0;
         float videoPercent = 0.0f;
         boolean videoCompleted = false;
@@ -272,7 +284,8 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         for (Assignment assignment : assignments) {
             List<AssignmentAttempt> attempts = attemptRepository.findByStudentIdAndAssignmentId(studentId, assignment.getId());
-            boolean done = attempts.stream().anyMatch(a -> a.getStatus() != AttemptStatus.IN_PROGRESS);
+            boolean done = attempts != null && attempts.stream()
+                    .anyMatch(a -> a != null && a.getStatus() != null && a.getStatus() != AttemptStatus.IN_PROGRESS);
             if (done) {
                 completedAssignmentsCount++;
             }
@@ -283,12 +296,12 @@ public class CurriculumServiceImpl implements CurriculumService {
         boolean completed = false;
 
         if (hasVideo && hasAssignments) {
-            double vRate = videoCompleted ? 100.0 : Math.min(100.0, videoPercent);
+            double vRate = videoCompleted ? 100.0 : Math.max(0.0, Math.min(100.0, videoPercent));
             double aRate = (completedAssignmentsCount * 100.0) / assignments.size();
             progressPercentage = (int) Math.round((vRate + aRate) / 2.0);
             completed = videoCompleted && (completedAssignmentsCount == assignments.size());
         } else if (hasVideo) {
-            progressPercentage = (int) Math.min(100, Math.round(videoPercent));
+            progressPercentage = (int) Math.max(0, Math.min(100, Math.round(videoPercent)));
             completed = videoCompleted;
         } else if (hasAssignments) {
             progressPercentage = (int) Math.round((completedAssignmentsCount * 100.0) / assignments.size());
@@ -304,13 +317,21 @@ public class CurriculumServiceImpl implements CurriculumService {
             completed = true;
         }
 
-        return new LessonProgressData(completed, progressPercentage, watchedSeconds);
+        return new LessonProgressData(completed, progressPercentage, watchedSeconds, hasVideo);
     }
 
     // Các hàm mapping
     private LessonResponse mapToLessonResponse(Lesson lesson, LessonProgressData progress) {
+        UUID lessonId = lesson.getId();
+        boolean hasVideo = (progress != null)
+                ? progress.hasVideo
+                : (lessonId != null && videoRepository.findByLessonId(lessonId).isPresent());
+        int documentsCount = (lessonId != null)
+                ? documentRepository.findByLessonId(lessonId).size()
+                : 0;
+
         return LessonResponse.builder()
-                .id(lesson.getId())
+                .id(lessonId)
                 .classId(lesson.getClassroom().getId())
                 .title(lesson.getTitle())
                 .objectives(lesson.getObjectives())
@@ -322,6 +343,8 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .completed(progress != null && progress.completed)
                 .progressPercentage(progress != null ? progress.progressPercentage : 0)
                 .watchedSeconds(progress != null ? progress.watchedSeconds : 0)
+                .hasVideo(hasVideo)
+                .documentsCount(documentsCount)
                 .build();
     }
 

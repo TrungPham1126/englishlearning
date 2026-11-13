@@ -76,6 +76,11 @@ export function useAssignmentTakeSession() {
 
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsCacheMapRef = useRef<Map<string, string>>(new Map());
+  const createdBlobUrlsRef = useRef<string[]>([]);
+  const handleSubmitTestRef = useRef<() => Promise<void>>(async () => {});
+  const isSubmittingRef = useRef(false);
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
 
   // 1. Kiểm tra trạng thái lượt làm bài ban đầu
   useEffect(() => {
@@ -89,6 +94,11 @@ export function useAssignmentTakeSession() {
 
         setPreviousAttempts(history);
 
+        if (history.some((att) => Boolean(att.isExam))) {
+          navigate(`/student/exams/${assignmentId}/take`, { replace: true });
+          return;
+        }
+
         const inProgressAtt = history.find((att) => att.status === 'IN_PROGRESS');
         if (inProgressAtt) {
           const detail = await studentApi
@@ -97,6 +107,10 @@ export function useAssignmentTakeSession() {
           if (!isMounted) return;
 
           if (detail) {
+            if (detail.isExam) {
+              navigate(`/student/exams/${assignmentId}/take`, { replace: true });
+              return;
+            }
             setAttempt(detail);
             const restored: any = {};
             detail.questions?.forEach((q) => {
@@ -137,14 +151,16 @@ export function useAssignmentTakeSession() {
     };
   }, [assignmentId]);
 
-  // 2. Countdown Timer
+  // 2. Countdown Timer (luôn gọi phiên bản handleSubmitTest mới nhất qua ref, ngoài updater)
   useEffect(() => {
     if (phase !== 'TESTING') return;
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          handleSubmitTest();
+          setTimeout(() => {
+            void handleSubmitTestRef.current();
+          }, 0);
           return 0;
         }
         return prev - 1;
@@ -520,8 +536,8 @@ export function useAssignmentTakeSession() {
       if (Number.isFinite(el.duration) && !isNaN(el.duration) && el.duration > 0) {
         setAudioDuration(el.duration);
       }
-      el.playbackRate = playbackRate;
-      el.defaultPlaybackRate = playbackRate;
+      el.playbackRate = playbackRateRef.current;
+      el.defaultPlaybackRate = playbackRateRef.current;
     };
     const onPlay = () => setIsPlayingAudio(true);
     const onPause = () => setIsPlayingAudio(false);
@@ -547,7 +563,7 @@ export function useAssignmentTakeSession() {
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
     };
-  });
+  }, [mainAudioUrl, phase]);
 
   // Voice AI đoạn văn
   const toggleAiVoiceStream = useCallback(() => {
@@ -654,6 +670,10 @@ export function useAssignmentTakeSession() {
     try {
       const newAtt = await studentApi.startAssignment(assignmentId);
       const detail = await studentApi.getAttemptDetail(newAtt.attemptId);
+      if (detail.isExam) {
+        navigate(`/student/exams/${assignmentId}/take`, { replace: true });
+        return;
+      }
       setAttempt(detail);
       setAnswers({});
       setCheckedQuestions({});
@@ -671,7 +691,8 @@ export function useAssignmentTakeSession() {
 
   // Nộp bài thi
   const handleSubmitTest = useCallback(async () => {
-    if (!attempt || !assignmentId) return;
+    if (!attempt || !assignmentId || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -695,16 +716,18 @@ export function useAssignmentTakeSession() {
       const freshDetail = await studentApi.getAttemptDetail(res.attemptId || attempt.attemptId);
       setAttempt(freshDetail);
 
-      const restored: any = {};
-      freshDetail.questions?.forEach((q) => {
-        restored[q.questionId] = {
-          selectedOptionId:
-            q.selectedOptionId || (q.studentAnswer?.length === 36 ? q.studentAnswer : undefined),
-          textAnswer: q.studentAnswer,
-          audioUrl: q.audioUrl,
-        };
-      });
-      setAnswers((prev) => ({ ...prev, ...restored }));
+      if (freshDetail.answersPersisted !== false) {
+        const restored: any = {};
+        freshDetail.questions?.forEach((q) => {
+          restored[q.questionId] = {
+            selectedOptionId:
+              q.selectedOptionId || (q.studentAnswer?.length === 36 ? q.studentAnswer : undefined),
+            textAnswer: q.studentAnswer,
+            audioUrl: q.audioUrl,
+          };
+        });
+        setAnswers((prev) => ({ ...prev, ...restored }));
+      }
 
       setIsSubmitModalOpen(false);
       setPhase('REVIEW');
@@ -713,9 +736,12 @@ export function useAssignmentTakeSession() {
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Có lỗi xảy ra khi nộp bài. Vui lòng thử lại!');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   }, [attempt, assignmentId, questions, answers]);
+
+  handleSubmitTestRef.current = handleSubmitTest;
 
   // Highlight văn bản
   const applyHighlight = useCallback((color: 'yellow' | 'green') => {
@@ -752,6 +778,7 @@ export function useAssignmentTakeSession() {
       try {
         await studentApi.uploadSpeakingAudio(attempt.attemptId, questionId, blob);
         const audioUrl = URL.createObjectURL(blob);
+        createdBlobUrlsRef.current.push(audioUrl);
         updateAnswer(questionId, { audioUrl });
       } catch (err: any) {
         alert('Không thể tải lên file ghi âm: ' + (err.response?.data?.message || err.message));
@@ -761,6 +788,30 @@ export function useAssignmentTakeSession() {
     },
     [attempt, updateAnswer],
   );
+
+  // Dọn dẹp audio, speechSynthesis và blob URL khi unmount để tránh memory leak
+  useEffect(() => {
+    return () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current.onended = null;
+        ttsAudioRef.current.onerror = null;
+        ttsAudioRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      createdBlobUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      });
+      createdBlobUrlsRef.current = [];
+    };
+  }, []);
 
   return {
     assignmentId,

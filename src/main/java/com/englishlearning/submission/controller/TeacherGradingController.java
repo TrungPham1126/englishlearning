@@ -4,6 +4,7 @@ import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.submission.dto.AttemptResponse;
 import com.englishlearning.submission.dto.SubmissionSummaryResponse;
 import com.englishlearning.submission.dto.TeacherGradeRequest;
+import com.englishlearning.submission.dto.TeacherStudentSubmissionDto;
 import com.englishlearning.submission.service.SubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,5 +44,14 @@ public class TeacherGradingController {
             @Valid @RequestBody TeacherGradeRequest request) {
         return ResponseEntity
                 .ok(ApiResponse.success("Graded successfully", submissionService.gradeSubmission(attemptId, request)));
+    }
+
+    // Xem danh sách bài nộp (Speaking & Viết luận...) của một học viên trong lớp theo lộ trình ngày
+    @GetMapping("/classrooms/{classId}/students/{studentId}/submissions")
+    public ResponseEntity<ApiResponse<List<TeacherStudentSubmissionDto>>> getStudentClassroomSubmissions(
+            @PathVariable UUID classId,
+            @PathVariable UUID studentId) {
+        return ResponseEntity.ok(ApiResponse.success("Success",
+                submissionService.getStudentClassroomSubmissions(classId, studentId)));
     }
 }

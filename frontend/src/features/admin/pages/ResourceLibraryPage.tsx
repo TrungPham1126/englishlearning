@@ -49,6 +49,7 @@ export default function ResourceLibraryPage() {
       alert(err.response?.data?.message || "Lỗi tải lên tài liệu");
     } finally {
       setIsUploading(false);
+      e.target.value = "";
     }
   };
 

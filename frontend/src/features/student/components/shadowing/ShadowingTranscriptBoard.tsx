@@ -321,7 +321,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
 
                 {/* Mẹo phát âm */}
                 <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 text-[11px] text-amber-900 dark:text-amber-200">
-                  <span className="font-bold">💡 Mẹo chuẩn hóa: </span>
+                  <span className="font-bold">Mẹo: </span>
                   {activeWordData.phonetics.vietnameseTip}
                 </div>
               </div>

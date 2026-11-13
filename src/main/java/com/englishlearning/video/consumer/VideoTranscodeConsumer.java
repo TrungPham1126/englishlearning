@@ -184,34 +184,48 @@ public class VideoTranscodeConsumer {
 
             int exitCode = process.waitFor();
             if (exitCode == 0) {
-                log.info("FFmpeg nén xong! Đang đẩy toàn bộ lên mây...");
+                boolean isLocalOrDummyCloud = publicCloudUrl == null
+                        || publicCloudUrl.isBlank()
+                        || publicCloudUrl.contains("dummy")
+                        || publicCloudUrl.contains("localhost:8080");
 
-                String hlsPrefix = "hls/" + videoId;
-                String rawPrefix = "raw/" + videoId + "/" + localRawPath.getFileName().toString();
-
-                try {
-                    // 1. Upload HLS lên mây
-                    r2StorageService.uploadHlsFolder(hlsPrefix, outputDir);
-
-                    // 2. Upload file gốc mp4 lên mây để lưu trữ/backup
-                    String cloudRawUrl = r2StorageService.uploadFile(rawPrefix, localRawPath.toFile(), "video/mp4");
-
-                    // 3. Đổi URL trong Database trỏ thẳng ra public link của Cloudflare R2
-                    String playlistUrl = publicCloudUrl + "/" + hlsPrefix + "/master.m3u8";
+                if (isLocalOrDummyCloud) {
+                    String localPlaylistUrl = "/api/v1/videos/" + videoId + "/hls/master.m3u8";
                     video.setStatus(VideoStatus.PENDING_REVIEW);
-                    video.setHlsPlaylistUrl(playlistUrl);
-                    video.setRawStorageUrl(cloudRawUrl); // Đổi link raw từ C:\... thành link R2
+                    video.setHlsPlaylistUrl(localPlaylistUrl);
                     video.setRejectionReason(null);
                     videoRepository.save(video);
+                    log.info("[VIDEO_PIPELINE] FFmpeg HLS hoàn tất tại máy chủ cục bộ ({}), giữ file local thay vì đẩy R2 dummy.", localPlaylistUrl);
+                } else {
+                    log.info("FFmpeg nén xong! Đang đẩy toàn bộ lên mây...");
 
-                    // 4. QUAN TRỌNG: Xóa sạch file trên server cục bộ để giải phóng dung lượng
-                    FileSystemUtils.deleteRecursively(outputDir); // Xóa folder HLS local
-                    Files.deleteIfExists(localRawPath); // Xóa file mp4 local
-                    log.info(">>> Đã dọn dẹp ổ cứng (xóa file local) cho video: {}", videoId);
+                    String hlsPrefix = "hls/" + videoId;
+                    String rawPrefix = "raw/" + videoId + "/" + localRawPath.getFileName().toString();
 
-                } catch (Exception e) {
-                    log.error(">>> [R2-UPLOAD] LỖI UPLOAD / DỌN DẸP: ", e);
-                    handleFallbackToRaw(video);
+                    try {
+                        // 1. Upload HLS lên mây
+                        r2StorageService.uploadHlsFolder(hlsPrefix, outputDir);
+
+                        // 2. Upload file gốc mp4 lên mây để lưu trữ/backup
+                        String cloudRawUrl = r2StorageService.uploadFile(rawPrefix, localRawPath.toFile(), "video/mp4");
+
+                        // 3. Đổi URL trong Database trỏ thẳng ra public link của Cloudflare R2
+                        String playlistUrl = publicCloudUrl + "/" + hlsPrefix + "/master.m3u8";
+                        video.setStatus(VideoStatus.PENDING_REVIEW);
+                        video.setHlsPlaylistUrl(playlistUrl);
+                        video.setRawStorageUrl(cloudRawUrl); // Đổi link raw từ C:\... thành link R2
+                        video.setRejectionReason(null);
+                        videoRepository.save(video);
+
+                        // 4. QUAN TRỌNG: Xóa sạch file trên server cục bộ để giải phóng dung lượng
+                        FileSystemUtils.deleteRecursively(outputDir); // Xóa folder HLS local
+                        Files.deleteIfExists(localRawPath); // Xóa file mp4 local
+                        log.info(">>> Đã dọn dẹp ổ cứng (xóa file local) cho video: {}", videoId);
+
+                    } catch (Exception e) {
+                        log.error(">>> [R2-UPLOAD] LỖI UPLOAD / DỌN DẸP: ", e);
+                        handleFallbackToRaw(video);
+                    }
                 }
 
                 try {

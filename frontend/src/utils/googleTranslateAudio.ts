@@ -22,7 +22,7 @@ export function playGoogleTranslateAudio(
   word: string,
   options?: GoogleAudioPlayerOptions,
 ): void {
-  const cleanWord = word.trim().replace(/[.,?!]/g, "");
+  const cleanWord = String(word || "").trim().replace(/[.,?!]/g, "");
   if (!cleanWord) {
     options?.onEnd?.();
     return;
@@ -96,6 +96,9 @@ export function playGoogleTranslateAudio(
 export function stopGoogleTranslateAudio(): void {
   if (activeGoogleAudio) {
     try {
+      activeGoogleAudio.onplay = null;
+      activeGoogleAudio.onended = null;
+      activeGoogleAudio.onerror = null;
       activeGoogleAudio.pause();
       activeGoogleAudio.currentTime = 0;
     } catch {

@@ -3,6 +3,7 @@ package com.englishlearning.curriculum.controller;
 
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.UnauthorizedException;
 import com.englishlearning.curriculum.dto.GlobalResourceResponse;
 import com.englishlearning.curriculum.service.GlobalResourceService;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,9 @@ public class AdminResourceController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("type") String type,
             @AuthenticationPrincipal CustomUserDetails user) {
+        if (user == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
         resourceService.uploadResource(file, type, user.getId());
         return ResponseEntity.ok(ApiResponse.success("Upload thành công", null));
     }

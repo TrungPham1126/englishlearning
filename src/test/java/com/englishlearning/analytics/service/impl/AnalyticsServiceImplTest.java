@@ -121,4 +121,97 @@ class AnalyticsServiceImplTest {
         assertThat(result.getVocabularyScore()).isEqualTo(80.0);
         assertThat(result.getAiRecommendedPath()).isNotBlank();
     }
+
+    @Test
+    @DisplayName("getMyProfile tạo hồ sơ mới khi chưa có và làm mới lộ trình khởi động khi đã có điểm thực tế")
+    void getMyProfile_createsNewProfileAndRefreshesStarterPath() {
+        UUID newStudentId = UUID.randomUUID();
+        Student student = Student.builder().id(newStudentId).build();
+        when(profileRepository.findById(newStudentId)).thenReturn(Optional.empty());
+        when(entityManager.getReference(Student.class, newStudentId)).thenReturn(student);
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(newStudentId)).thenReturn(List.of());
+        when(aiEvaluationRepository.findByStudentId(newStudentId)).thenReturn(List.of());
+        when(studentVocabularyProgressRepository.countByStudentId(newStudentId)).thenReturn(0L);
+        when(studentVocabularyProgressRepository.countMasteredByStudentId(newStudentId)).thenReturn(0L);
+        when(profileRepository.save(any(StudentSkillProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentSkillProfile created = analyticsService.getMyProfile(newStudentId);
+        assertThat(created.getAiRecommendedPath()).contains("giai đoạn khởi động");
+
+        // Khi profile cũ mang thông điệp giai đoạn khởi động nhưng nay đã có điểm thực tế -> phải refresh lộ trình
+        StudentSkillProfile starterProfile = StudentSkillProfile.builder()
+                .id(studentId)
+                .aiRecommendedPath("Hồ sơ năng lực đang ở giai đoạn khởi động...")
+                .build();
+        when(profileRepository.findById(studentId)).thenReturn(Optional.of(starterProfile));
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(studentId)).thenReturn(List.of(
+                AssignmentAttempt.builder().assignment(Assignment.builder().skillType(SkillType.GRAMMAR).build()).totalScore(8.5).build()
+        ));
+        when(aiEvaluationRepository.findByStudentId(studentId)).thenReturn(List.of());
+        when(studentVocabularyProgressRepository.countByStudentId(studentId)).thenReturn(0L);
+        when(studentVocabularyProgressRepository.countMasteredByStudentId(studentId)).thenReturn(0L);
+
+        StudentSkillProfile refreshed = analyticsService.getMyProfile(studentId);
+        assertThat(refreshed.getGrammarScore()).isEqualTo(85.0);
+        assertThat(refreshed.getAiRecommendedPath()).doesNotContain("giai đoạn khởi động");
+        assertThat(analyticsService.getStudentAnalytics((Long) null)).isNull();
+        assertThat(analyticsService.getStudentAnalytics(studentId)).isEqualTo(refreshed);
+    }
+
+    @Test
+    @DisplayName("updateSkillScore cộng dồn an toàn cả khi điểm ban đầu null, chặn trần 100 và bỏ qua skillType lạ")
+    void updateSkillScore_handlesAllSixSkillsAndNullSafety() {
+        StudentSkillProfile nullableProfile = StudentSkillProfile.builder()
+                .id(studentId)
+                .aiRecommendedPath("existing")
+                .build(); // các field điểm đều null ban đầu
+        when(profileRepository.findById(studentId)).thenReturn(Optional.of(nullableProfile));
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(studentId)).thenReturn(List.of());
+        when(aiEvaluationRepository.findByStudentId(studentId)).thenReturn(List.of());
+        when(studentVocabularyProgressRepository.countByStudentId(studentId)).thenReturn(0L);
+        when(studentVocabularyProgressRepository.countMasteredByStudentId(studentId)).thenReturn(0L);
+        when(profileRepository.save(any(StudentSkillProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        analyticsService.updateSkillScore(studentId, "listening", 15.0);
+        analyticsService.updateSkillScore(studentId, "SPEAKING", 95.0);
+        analyticsService.updateSkillScore(studentId, "SPEAKING", 20.0); // cap at 100.0
+        analyticsService.updateSkillScore(studentId, "READING", 40.0);
+        analyticsService.updateSkillScore(studentId, "WRITING", 50.0);
+        analyticsService.updateSkillScore(studentId, "GRAMMAR", 60.0);
+        analyticsService.updateSkillScore(studentId, "VOCABULARY", 70.0);
+
+        assertThat(nullableProfile.getListeningScore()).isEqualTo(15.0);
+        assertThat(nullableProfile.getSpeakingScore()).isEqualTo(100.0);
+        assertThat(nullableProfile.getReadingScore()).isEqualTo(40.0);
+        assertThat(nullableProfile.getWritingScore()).isEqualTo(50.0);
+        assertThat(nullableProfile.getGrammarScore()).isEqualTo(60.0);
+        assertThat(nullableProfile.getVocabularyScore()).isEqualTo(70.0);
+
+        // Blank hoặc skillType không hợp lệ
+        clearInvocations(profileRepository);
+        analyticsService.updateSkillScore(studentId, "   ", 10.0);
+        verifyNoInteractions(profileRepository);
+        analyticsService.updateSkillScore(studentId, "UNKNOWN_SKILL", 10.0);
+    }
+
+    @Test
+    @DisplayName("generateRecommendedPath phân nhánh chính xác: khởi động, lệch năng lực (100 & 10) và cân bằng")
+    void generateRecommendedPath_coversStarterDisparityAndBalancedBranches() {
+        StudentSkillProfile starter = StudentSkillProfile.builder().build();
+        assertThat(analyticsService.generateRecommendedPath(starter)).contains("giai đoạn khởi động");
+
+        StudentSkillProfile unbalanced100 = StudentSkillProfile.builder()
+                .speakingScore(85.0).listeningScore(20.0).vocabularyScore(15.0)
+                .readingScore(50.0).writingScore(50.0).grammarScore(50.0)
+                .build();
+        assertThat(analyticsService.generateRecommendedPath(unbalanced100)).contains("mất cân đối lớn");
+
+        StudentSkillProfile balanced = StudentSkillProfile.builder()
+                .listeningScore(72.0).speakingScore(68.0).readingScore(70.0)
+                .writingScore(65.0).grammarScore(75.0).vocabularyScore(60.0)
+                .build();
+        assertThat(analyticsService.generateRecommendedPath(balanced))
+                .contains("phát triển tốt")
+                .contains("Từ vựng (Vocabulary)");
+    }
 }

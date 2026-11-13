@@ -202,7 +202,7 @@ public class PythonIntegrationServiceImpl implements PythonIntegrationService {
             }
 
             // 4. KPI Metrics
-            if (res.getKpi() == null) {
+            if (res.getKpi() == null || !rootNode.hasNonNull("kpi")) {
                 int pron = rootNode.path("pronunciationScore").asInt(
                         (int) Math.round(rootNode.path("pronunciation_score").asDouble((double) res.getOverallScore()))
                 );

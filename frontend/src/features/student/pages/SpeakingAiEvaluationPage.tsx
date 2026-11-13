@@ -78,6 +78,20 @@ export default function SpeakingAiEvaluationPage() {
 
   // 2. Quản lý thu âm học sinh & phát audio độc lập
   const [mobileTab, setMobileTab] = React.useState<"list" | "detail">("detail");
+  const shadowingBlobUrlRef = React.useRef<string | null>(null);
+  const revokeShadowingBlobUrl = React.useCallback(() => {
+    if (shadowingBlobUrlRef.current) {
+      URL.revokeObjectURL(shadowingBlobUrlRef.current);
+      shadowingBlobUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      revokeShadowingBlobUrl();
+    };
+  }, [revokeShadowingBlobUrl]);
+
   const {
     isRecording,
     recordingSeconds,
@@ -102,6 +116,7 @@ export default function SpeakingAiEvaluationPage() {
 
   // Đồng bộ âm thanh bài nộp và báo cáo AI khi chuyển câu hỏi / lượt nộp
   useEffect(() => {
+    revokeShadowingBlobUrl();
     resetAudioState();
 
     if (!currentQ) return;
@@ -126,6 +141,7 @@ export default function SpeakingAiEvaluationPage() {
     currentQ?.questionId,
     extractAndSetAiReportForQuestion,
     resetAudioState,
+    revokeShadowingBlobUrl,
     setActiveAudioUrl,
   ]);
 
@@ -133,9 +149,7 @@ export default function SpeakingAiEvaluationPage() {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500 font-medium gap-3">
         <Loader2 className="animate-spin text-blue-700" size={32} />
-        <span className="text-xs font-semibold">
-          Đang tải danh sách bài nộp Speaking &amp; Shadowing...
-        </span>
+        <span className="text-xs font-semibold">Đang tải...</span>
       </div>
     );
   }
@@ -155,11 +169,8 @@ export default function SpeakingAiEvaluationPage() {
           </button>
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-              Lịch Sử Bài Nộp &amp; Đánh Giá
+              Bài nộp Speaking
             </h1>
-            <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
-              Theo dõi kết quả luyện nói, nghe lại bản thu âm và phân tích âm vị theo từng ngày học
-            </p>
           </div>
         </div>
 
@@ -201,7 +212,7 @@ export default function SpeakingAiEvaluationPage() {
           }`}
         >
           <Calendar size={14} />
-          <span>Danh Sách Ngày ({daysList.length})</span>
+          <span className="tabular-nums">Ngày ({daysList.length})</span>
         </button>
         <button
           type="button"
@@ -213,7 +224,7 @@ export default function SpeakingAiEvaluationPage() {
           }`}
         >
           <Mic size={14} />
-          <span>Chi Tiết &amp; Luyện Âm AI</span>
+          <span>Chi tiết</span>
         </button>
       </div>
 
@@ -319,8 +330,11 @@ export default function SpeakingAiEvaluationPage() {
               onAudioPause={() => setIsPlayingStudentRec(false)}
               onAudioEnded={() => setIsPlayingStudentRec(false)}
               onAudioSubmittedShadowing={(blob, result) => {
+                revokeShadowingBlobUrl();
+                const nextBlobUrl = URL.createObjectURL(blob);
+                shadowingBlobUrlRef.current = nextBlobUrl;
                 setActiveAudioBlob(blob);
-                setActiveAudioUrl(URL.createObjectURL(blob));
+                setActiveAudioUrl(nextBlobUrl);
                 void ensureStudentAnswerAudioUploaded(blob);
                 if (result) {
                   setShadowingReport(result);
@@ -329,14 +343,11 @@ export default function SpeakingAiEvaluationPage() {
               }}
             />
           ) : (
-            <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[300px]">
-              <AlertTriangle className="mb-2 text-amber-500" size={32} />
+            <div className="elp-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[260px]">
+              <AlertTriangle className="mb-2 text-amber-500" size={28} />
               <h3 className="font-bold text-sm text-slate-800 dark:text-white">
-                Vui lòng chọn một ngày học
+                Chọn một ngày
               </h3>
-              <p className="text-xs mt-1 max-w-md text-slate-500 dark:text-slate-400">
-                Chọn một ngày ở cột bên trái để xem chi tiết lịch sử bài nộp.
-              </p>
             </div>
           )}
         </div>

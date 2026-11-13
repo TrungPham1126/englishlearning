@@ -59,7 +59,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
         // Cập nhật lại lộ trình học AI gợi ý
         if (profile.getAiRecommendedPath() == null || profile.getAiRecommendedPath().isBlank()
-                || profile.getAiRecommendedPath().contains("Đọc và Từ vựng")) {
+                || profile.getAiRecommendedPath().contains("Đọc và Từ vựng")
+                || profile.getAiRecommendedPath().contains("giai đoạn khởi động")) {
             profile.setAiRecommendedPath(generateRecommendedPath(profile));
         }
 
@@ -240,12 +241,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         StudentSkillProfile profile = getMyProfile(studentId);
 
         switch (skillType.toUpperCase()) {
-            case "LISTENING" -> profile.setListeningScore(Math.min(100.0, profile.getListeningScore() + scoreToAdd));
-            case "SPEAKING" -> profile.setSpeakingScore(Math.min(100.0, profile.getSpeakingScore() + scoreToAdd));
-            case "READING" -> profile.setReadingScore(Math.min(100.0, profile.getReadingScore() + scoreToAdd));
-            case "WRITING" -> profile.setWritingScore(Math.min(100.0, profile.getWritingScore() + scoreToAdd));
-            case "GRAMMAR" -> profile.setGrammarScore(Math.min(100.0, profile.getGrammarScore() + scoreToAdd));
-            case "VOCABULARY" -> profile.setVocabularyScore(Math.min(100.0, profile.getVocabularyScore() + scoreToAdd));
+            case "LISTENING" -> profile.setListeningScore(addCappedScore(profile.getListeningScore(), scoreToAdd));
+            case "SPEAKING" -> profile.setSpeakingScore(addCappedScore(profile.getSpeakingScore(), scoreToAdd));
+            case "READING" -> profile.setReadingScore(addCappedScore(profile.getReadingScore(), scoreToAdd));
+            case "WRITING" -> profile.setWritingScore(addCappedScore(profile.getWritingScore(), scoreToAdd));
+            case "GRAMMAR" -> profile.setGrammarScore(addCappedScore(profile.getGrammarScore(), scoreToAdd));
+            case "VOCABULARY" -> profile.setVocabularyScore(addCappedScore(profile.getVocabularyScore(), scoreToAdd));
             default -> log.warn("Không nhận diện được loại kỹ năng: {}. Bỏ qua cập nhật điểm.", skillType);
         }
 
@@ -253,6 +254,11 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         profileRepository.save(profile);
         log.info("Đã cộng dồn thành công +{} điểm vào kỹ năng {} của học sinh {}", scoreToAdd, skillType.toUpperCase(),
                 studentId);
+    }
+
+    private double addCappedScore(Double currentScore, double delta) {
+        double base = currentScore != null ? currentScore : 0.0;
+        return Math.min(100.0, Math.max(0.0, base + delta));
     }
 
     /**

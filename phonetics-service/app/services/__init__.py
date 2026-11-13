@@ -4,7 +4,13 @@ from app.services.audio_quality import AudioQualityGate, quality_gate, check_con
 from app.services.vad import SpeechDetector, speech_detector
 from app.services.aligner import ModelManager, IPASanitizer, ForcedAligner, forced_aligner
 from app.services.formant_service import FormantService, formant_service
-from app.services.scorer import Scorer, scorer, ScoringCalibrator, generate_phoneme_pedagogical_feedback
+from app.services.scorer import (
+    Scorer,
+    scorer,
+    ScoringCalibrator,
+    generate_phoneme_pedagogical_feedback,
+    extract_utterance_acoustic_features,
+)
 from app.services.confidence import ConfidenceEstimator, confidence_estimator
 from app.services.feedback import FeedbackGenerator, feedback_generator
 from app.services.word_aligner import (
@@ -14,6 +20,7 @@ from app.services.word_aligner import (
     word_sequence_aligner,
     WordAlignmentStatus,
     AlignedWordEvidence,
+    analyze_word_coverage,
     detect_spoken_prefix_count,
     decode_raw_speech,
     compute_phoneme_similarity,

@@ -32,6 +32,7 @@ public class AdminAiMonitoringController {
     }
 
     @PutMapping("/quotas/{studentId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Void>> updateQuota(@PathVariable UUID studentId,
             @RequestBody UpdateQuotaRequest request) {
         monitoringService.updateQuota(studentId, request);
@@ -39,6 +40,7 @@ public class AdminAiMonitoringController {
     }
 
     @PostMapping("/kill-switch/toggle")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> toggleKillSwitch() {
         boolean active = monitoringService.toggleGlobalKillSwitch();
         String msg = active ? "Đã kích hoạt ngắt AI khẩn cấp toàn hệ thống" : "Đã mở lại hoạt động AI toàn hệ thống";

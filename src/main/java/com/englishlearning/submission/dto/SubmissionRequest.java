@@ -18,6 +18,11 @@ public class SubmissionRequest {
     @NotNull
     private List<AnswerDto> answers;
 
+    private Boolean cheatingFlagged;
+    private Integer violationCount;
+    private String cheatingReason;
+    private String violationLogJson;
+
     @Data
     @Builder
     @NoArgsConstructor

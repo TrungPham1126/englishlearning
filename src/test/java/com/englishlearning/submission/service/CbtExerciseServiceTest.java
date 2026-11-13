@@ -256,4 +256,63 @@ class CbtExerciseServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Không tìm thấy lượt làm bài");
     }
+
+    @Test
+    @DisplayName("Biên đúng giới hạn thời gian (duration == timeLimit) được chấp nhận, lưu StudentAnswer và chịu lỗi RabbitMQ")
+    void submitCbtExercise_exactBoundaryAnswerPersistenceAndQueueFailureResilience() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        UUID optId = UUID.randomUUID();
+
+        Assignment assignment = Assignment.builder()
+                .id(assignmentId)
+                .timeLimitMinutes(30)
+                .build();
+
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .assignment(assignment)
+                .startedAt(FIXED_START_TIME)
+                .submittedAt(null)
+                .answers(new ArrayList<>())
+                .build();
+
+        Instant exact30MinSubmit = FIXED_START_TIME.plusSeconds(30 * 60L);
+
+        SubmissionRequest request = SubmissionRequest.builder()
+                .assignmentId(assignmentId)
+                .answers(List.of(
+                        SubmissionRequest.AnswerDto.builder().questionId(q1Id).selectedOptionId(optId).build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(q2Id).textAnswer("My essay response").build()
+                ))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assignmentId)).thenReturn(List.of());
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder()
+                        .totalScore(2.0)
+                        .maxPossibleScore(10.0)
+                        .scaledScore(2.0)
+                        .earnedPointsPerQuestion(Map.of(q1Id, 2.0, q2Id, 0.0))
+                        .correctnessPerQuestion(Map.of(q1Id, true, q2Id, false))
+                        .requiresAiGrading(true)
+                        .aiGradedQuestionIds(List.of(q2Id))
+                        .build()
+        );
+        doThrow(new RuntimeException("RabbitMQ broker unavailable"))
+                .when(rabbitTemplate).convertAndSend(eq(CbtExerciseServiceImpl.AI_GRADING_QUEUE), any(Map.class));
+
+        AttemptResponse response = cbtExerciseService.submitCbtExercise(studentId, attemptId, request, exact30MinSubmit);
+
+        assertThat(response.getStatus()).isEqualTo(AttemptStatus.SUBMITTED.name());
+        assertThat(attempt.getAnswers()).hasSize(2);
+        assertThat(attempt.getAnswers().get(0).getTextResponse()).isEqualTo(optId.toString());
+        assertThat(attempt.getAnswers().get(1).getTextResponse()).isEqualTo("My essay response");
+        verify(studentAnswerRepository, times(2)).save(any());
+        verify(attemptRepository).save(attempt);
+    }
 }

@@ -40,6 +40,20 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    if (!isOpen) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      setPlayingAudioUrl(null);
+    }
+    return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     setDetailData(assignment);
     if (!isOpen || !assignment?.id) return;
 

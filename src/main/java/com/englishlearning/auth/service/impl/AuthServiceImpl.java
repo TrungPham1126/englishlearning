@@ -16,6 +16,7 @@ import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.auth.service.RefreshTokenService;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.common.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -55,7 +56,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UserSummaryDto register(RegistrationRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+        if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email đã được sử dụng: " + request.getEmail());
         }
 
@@ -122,6 +124,10 @@ public class AuthServiceImpl implements AuthService {
             userDetails = new CustomUserDetails(user);
         }
 
+        if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+            throw new UnauthorizedException("Tài khoản đã bị khóa hoặc vô hiệu hóa");
+        }
+
         String accessToken = jwtService.generateAccessToken(userDetails);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
@@ -139,6 +145,9 @@ public class AuthServiceImpl implements AuthService {
     public AuthResult refreshToken(String oldTokenString) {
         RefreshToken validToken = refreshTokenService.verifyExpiration(oldTokenString);
         User user = validToken.getUser();
+        if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+            throw new UnauthorizedException("Tài khoản đã bị khóa hoặc vô hiệu hóa");
+        }
 
         CustomUserDetails userDetails = new CustomUserDetails(user);
         String newAccessToken = jwtService.generateAccessToken(userDetails);
@@ -204,7 +213,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
             throw new BadRequestException("Chỉ chấp nhận các định dạng file ảnh (JPEG, PNG, WEBP, GIF)");
         }
 

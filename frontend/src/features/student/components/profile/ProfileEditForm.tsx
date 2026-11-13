@@ -43,14 +43,9 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400">
               <Info size={16} />
             </div>
-            <div>
-              <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                Thông Tin Hồ Sơ Học Viên
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Cập nhật thông tin liên hệ và mục tiêu đầu ra CEFR của bạn
-              </p>
-            </div>
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
+              Hồ sơ
+            </h2>
           </div>
         </div>
 
@@ -58,7 +53,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Họ và đệm
+                Họ đệm
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
@@ -76,7 +71,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Tên gọi
+                Tên
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
@@ -97,7 +92,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Số điện thoại liên hệ
+                Số điện thoại
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
@@ -109,7 +104,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
                   value={formData.phone}
                   onChange={onChange}
                   disabled={isSaving}
-                  placeholder="Nhập số điện thoại..."
+                  placeholder="Số điện thoại..."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-[#0b1120] pl-10 pr-3.5 py-2.5 text-xs font-medium text-slate-900 dark:text-white focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition disabled:opacity-60"
                 />
               </div>
@@ -117,7 +112,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Địa chỉ Email (Định danh)
+                Email
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
@@ -137,7 +132,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Trình độ hiện tại (Theo lớp học)
+                Cấp độ
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-blue-600">
@@ -145,11 +140,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
                 </span>
                 <input
                   type="text"
-                  value={
-                    firstCourse?.level
-                      ? `Cấp độ ${firstCourse.level}`
-                      : "Chưa cấu hình theo lớp"
-                  }
+                  value={firstCourse?.level || "Chưa có"}
                   disabled
                   className="w-full rounded-xl border border-blue-200/70 dark:border-blue-600/30 bg-blue-50/50 dark:bg-slate-900/20 pl-10 pr-3.5 py-2.5 text-xs font-bold text-blue-800 dark:text-blue-300 cursor-not-allowed"
                 />
@@ -157,7 +148,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Mục tiêu đầu ra (Target CEFR)
+                Mục tiêu CEFR
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-500">
@@ -181,12 +172,10 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
       <div className="px-6 sm:px-8 py-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#0d1322]/60 flex items-center justify-between gap-4">
         {saveSuccess ? (
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 animate-in fade-in duration-200">
-            <CheckCircle2 size={15} /> Đã cập nhật thông tin thành công!
+            <CheckCircle2 size={15} /> Đã lưu
           </span>
         ) : (
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            Nhấn Lưu thay đổi sau khi chỉnh sửa hồ sơ
-          </span>
+          <span />
         )}
 
         <button
@@ -203,7 +192,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
           ) : (
             <>
               <Save size={15} />
-              <span>Lưu thay đổi</span>
+              <span>Lưu</span>
             </>
           )}
         </button>

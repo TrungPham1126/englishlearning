@@ -1,7 +1,18 @@
 import os
-import requests
+import sys
+import math
+import wave
+from pathlib import Path
+import numpy as np
 import gtts
-import pydub
+import soundfile as sf
+import scipy.signal
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
 
 TEST_WORDS = [
     # Monophthongs
@@ -42,16 +53,27 @@ def run_benchmark():
         for word, target_ph in TEST_WORDS:
             wav_path = os.path.join("test_audio_cache", f"{word}.wav")
             if not os.path.exists(wav_path):
-                tts = gtts.gTTS(word, lang='en', tld='com')
                 mp3_path = os.path.join("test_audio_cache", f"{word}.mp3")
-                tts.save(mp3_path)
-                sound = pydub.AudioSegment.from_mp3(mp3_path)
-                sound.export(wav_path, format="wav")
+                if not os.path.exists(mp3_path):
+                    tts = gtts.gTTS(word, lang='en', tld='com')
+                    tts.save(mp3_path)
+                data, orig_sr = sf.read(mp3_path, dtype="float32")
+                if data.ndim > 1:
+                    data = np.mean(data, axis=1)
+                if orig_sr != 16000:
+                    g = math.gcd(orig_sr, 16000)
+                    data = scipy.signal.resample_poly(data, 16000 // g, orig_sr // g).astype(np.float32)
+                pcm = (np.clip(data, -1.0, 1.0) * 32767).astype(np.int16)
+                with wave.open(wav_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
+                    wf.writeframes(pcm.tobytes())
                 
             with open(wav_path, "rb") as f:
                 files = {"audio": (f"{word}.wav", f, "audio/wav")}
                 data = {"script": word}
-                res = requests.post("http://127.0.0.1:8000/api/v1/audio/evaluate-phonetics", files=files, data=data)
+                res = client.post("/api/v1/audio/evaluate-phonetics", files=files, data=data)
                 
             if res.status_code == 200:
                 payload = res.json()

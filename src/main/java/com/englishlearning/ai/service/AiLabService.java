@@ -1,5 +1,7 @@
 package com.englishlearning.ai.service;
 
+import com.englishlearning.ai.dto.AiExamDraftResponse;
+import com.englishlearning.ai.dto.AiExamGenerateRequest;
 import com.englishlearning.ai.entity.AiGeneratedExercise;
 import com.englishlearning.assignment.entity.Assignment;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,6 +23,8 @@ public interface AiLabService {
 
     AiGeneratedExercise generateQuizFromContent(String lessonContent, String targetCefr, int questionCount,
             UUID teacherId, UUID lessonId, String exerciseType, String skillType);
+
+    AiExamDraftResponse generateExamDraft(AiExamGenerateRequest request, UUID teacherId);
 
     Assignment publishExerciseToAssignment(UUID exerciseId, UUID classroomId);
 

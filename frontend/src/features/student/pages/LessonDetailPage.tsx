@@ -25,26 +25,39 @@ export default function LessonDetailPage() {
 
   // Stable initial seek seconds to prevent re-seek loop
   const initialSeekSecondsRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const latestRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const fetchLessonData = () => {
     if (!lessonId) return;
+    const requestId = ++latestRequestIdRef.current;
     Promise.all([
       studentApi.getLessonDetail(lessonId),
       studentApi.getVideoByLesson(lessonId).catch(() => null),
     ])
       .then(async ([lessonData, videoData]) => {
+        if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
         setLesson(lessonData);
         setVideo(videoData);
         if (lessonData?.classId) {
           const classLessons = await studentApi
             .getClassLessons(lessonData.classId)
             .catch(() => []);
+          if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
           setPlaylist(classLessons);
         }
         if (videoData?.id) {
           const prog = await studentApi
             .getVideoProgress(videoData.id)
             .catch(() => null);
+          if (!isMountedRef.current || requestId !== latestRequestIdRef.current) return;
           setProgress(prog);
           if (initialSeekSecondsRef.current === null) {
             initialSeekSecondsRef.current = prog?.watchedSeconds ?? lessonData?.watchedSeconds ?? 0;
@@ -53,13 +66,23 @@ export default function LessonDetailPage() {
           initialSeekSecondsRef.current = lessonData.watchedSeconds;
         }
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        console.error("Lỗi tải chi tiết bài học:", err);
+      })
+      .finally(() => {
+        if (isMountedRef.current && requestId === latestRequestIdRef.current) {
+          setLoading(false);
+        }
+      });
   };
 
   useEffect(() => {
     initialSeekSecondsRef.current = null;
+    setLoading(true);
     fetchLessonData();
+  }, [lessonId]);
 
+  useEffect(() => {
     const handleProgressUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<{
         videoId: string;
@@ -78,12 +101,12 @@ export default function LessonDetailPage() {
     return () => {
       window.removeEventListener("student-progress-updated", handleProgressUpdate);
     };
-  }, [lessonId, video?.id]);
+  }, [video?.id]);
 
   if (loading || !lesson) {
     return (
-      <div className="p-8 text-sm font-medium text-zinc-500">
-        Đang tải nội dung bài giảng...
+      <div className="p-8 text-sm font-medium text-slate-500">
+        Đang tải...
       </div>
     );
   }
@@ -96,7 +119,7 @@ export default function LessonDetailPage() {
   const currentWatchedSeconds = progress?.watchedSeconds ?? lesson.watchedSeconds ?? 0;
 
   return (
-    <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* CỘT TRÁI: Video Player + Tab Content */}
       <div className="lg:col-span-8 space-y-4">
         {video?.hlsPlaylistUrl ? (
@@ -106,36 +129,31 @@ export default function LessonDetailPage() {
             initialSeconds={initialSeekSecondsRef.current ?? 0}
           />
         ) : (
-          <div className="relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
-            <div className="flex flex-col items-center justify-center">
-              <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-slate-300 mb-3 border border-white/10 shadow-inner">
-                <Play size={24} className="translate-x-0.5 fill-slate-300/20 text-slate-300" />
-              </div>
-              <span className="text-slate-300 font-medium text-sm">
-                Chưa có video cho bài học này
-              </span>
-              <p className="text-xs text-slate-500 mt-1">
-                Giảng viên chưa tải lên video bài giảng. Vui lòng xem tài liệu hoặc làm bài tập bên dưới.
-              </p>
+          <div className="relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-slate-300 mb-2 border border-white/10">
+              <Play size={22} className="translate-x-0.5 text-slate-300" />
             </div>
+            <span className="text-slate-300 font-medium text-sm">
+              Chưa có video
+            </span>
           </div>
         )}
 
-        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] rounded-xl shadow-sm overflow-hidden transition-colors">
-          <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 bg-slate-50/50 dark:bg-slate-900/40">
+        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] rounded-xl overflow-hidden transition-colors">
+          <div className="flex border-b border-slate-200 dark:border-slate-800 px-3 bg-slate-50/50 dark:bg-slate-900/40 overflow-x-auto">
             {[
-              { id: "overview", label: "Tổng Quan" },
-              { id: "docs", label: `Tài Liệu (${lesson.documents.length})` },
-              { id: "vocab", label: `Từ Vựng (${lesson.vocabularies.length})` },
+              { id: "overview", label: "Tổng quan" },
+              { id: "docs", label: `Tài liệu (${lesson.documents.length})` },
+              { id: "vocab", label: `Từ vựng (${lesson.vocabularies.length})` },
               {
                 id: "grammar",
-                label: `Ngữ Pháp (${lesson.grammarTopics.length})`,
+                label: `Ngữ pháp (${lesson.grammarTopics.length})`,
               },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+                className={`py-2.5 px-3.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === tab.id
                     ? "border-blue-700 text-blue-700 dark:border-blue-400 dark:text-blue-400 bg-white dark:bg-[#111827]"
                     : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -146,7 +164,7 @@ export default function LessonDetailPage() {
             ))}
           </div>
 
-          <div className="p-6">
+          <div className="p-5">
             {activeTab === "overview" && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
@@ -154,28 +172,31 @@ export default function LessonDetailPage() {
                     {lesson.title}
                   </h1>
                   {isCompleted ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 text-[10px] font-bold">
-                      <CheckCircle2 size={12} /> Đã hoàn thành
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 text-[11px] font-bold">
+                      <CheckCircle2 size={12} /> Xong
                     </span>
                   ) : currentWatchedSeconds > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 px-2 py-0.5 text-[10px] font-bold">
-                      <Clock size={12} /> Đang học (xem đến {Math.floor(currentWatchedSeconds / 60)}p{currentWatchedSeconds % 60}s)
+                    <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 px-2 py-0.5 text-[11px] font-bold tabular-nums">
+                      <Clock size={12} /> {Math.floor(currentWatchedSeconds / 60)}:{String(currentWatchedSeconds % 60).padStart(2, "0")}
                     </span>
                   ) : null}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Mục tiêu bài học:{" "}
-                  {lesson.objectives || "Nắm vững kiến thức trọng tâm"}
-                </p>
-                <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line border-t border-slate-100 dark:border-slate-800 pt-3">
-                  {lesson.content || "Nội dung chi tiết đang được cập nhật."}
-                </div>
+                {lesson.objectives && (
+                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    {lesson.objectives}
+                  </p>
+                )}
+                {lesson.content && (
+                  <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line border-t border-slate-100 dark:border-slate-800 pt-3">
+                    {lesson.content}
+                  </div>
+                )}
               </div>
             )}
             {activeTab === "docs" && (
               <div className="space-y-2">
                 {lesson.documents.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3">Chưa có tài liệu đính kèm cho bài học này.</p>
+                  <p className="text-xs text-slate-500 py-2">Chưa có tài liệu.</p>
                 ) : (
                   lesson.documents.map((doc) => (
                     <div
@@ -202,7 +223,7 @@ export default function LessonDetailPage() {
             {activeTab === "vocab" && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {lesson.vocabularies.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3 col-span-2">Chưa có danh sách từ vựng cho bài học này.</p>
+                  <p className="text-xs text-slate-500 py-2 col-span-2">Chưa có từ vựng.</p>
                 ) : (
                   lesson.vocabularies.map((v) => (
                     <div
@@ -228,12 +249,12 @@ export default function LessonDetailPage() {
             {activeTab === "grammar" && (
               <div className="space-y-3">
                 {lesson.grammarTopics.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3">Chưa có chủ điểm ngữ pháp cho bài học này.</p>
+                  <p className="text-xs text-slate-500 py-2">Chưa có ngữ pháp.</p>
                 ) : (
                   lesson.grammarTopics.map((g) => (
                     <div
                       key={g.id}
-                      className="border border-slate-200 dark:border-slate-800 p-4 rounded-xl space-y-2 bg-slate-50/50 dark:bg-slate-900/30"
+                      className="border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl space-y-2 bg-slate-50/50 dark:bg-slate-900/30"
                     >
                       <h3 className="text-xs font-bold text-slate-900 dark:text-white">
                         {g.title}
@@ -254,20 +275,17 @@ export default function LessonDetailPage() {
       </div>
 
       {/* CỘT PHẢI: Danh Sách Bài Học */}
-      <div className="lg:col-span-4 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm overflow-hidden flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
-              Danh Sách Bài Học
-            </h3>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Khóa học hiện tại</span>
-          </div>
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-            {playlist.length} bài
+      <div className="lg:col-span-4 bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl p-4 overflow-hidden flex flex-col gap-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+            Bài học
+          </h3>
+          <span className="text-xs font-bold tabular-nums text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+            {playlist.length}
           </span>
         </div>
 
-        <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
+        <div className="space-y-1.5 max-h-[550px] overflow-y-auto pr-1">
           {playlist.map((item, idx) => {
             const isCurrent = item.id === lessonId;
             const itemDone = item.completed || item.isCompleted || (item.progressPercentage ?? 0) >= 100;
@@ -276,18 +294,18 @@ export default function LessonDetailPage() {
               <div
                 key={item.id}
                 onClick={() => navigate(`/student/lessons/${item.id}`)}
-                className={`p-3 rounded-xl flex items-center justify-between text-xs cursor-pointer transition-all duration-150 ${
+                className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors ${
                   isCurrent
-                    ? "bg-blue-50 dark:bg-slate-900/40 border border-blue-700 dark:border-blue-500 shadow-sm"
-                    : "bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
+                    ? "bg-blue-50 dark:bg-slate-900/40 border border-blue-700 dark:border-blue-500"
+                    : "bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
                 }`}
               >
-                <div className="flex items-center gap-3 truncate pr-2">
+                <div className="flex items-center gap-2.5 truncate pr-2">
                   <span
                     className={
                       isCurrent
-                        ? "text-blue-700 dark:text-blue-400 font-extrabold text-sm"
-                        : "text-slate-400 dark:text-slate-500 font-semibold text-sm"
+                        ? "text-blue-700 dark:text-blue-400 font-extrabold text-sm tabular-nums"
+                        : "text-slate-400 dark:text-slate-500 font-semibold text-sm tabular-nums"
                     }
                   >
                     {String(idx + 1).padStart(2, "0")}
@@ -295,7 +313,7 @@ export default function LessonDetailPage() {
                   <span
                     className={
                       isCurrent
-                        ? "text-blue-950 dark:text-blue-100 font-bold text-sm tracking-tight truncate"
+                        ? "text-blue-950 dark:text-blue-100 font-bold text-sm truncate"
                         : "font-medium truncate"
                     }
                   >
@@ -305,7 +323,7 @@ export default function LessonDetailPage() {
                 {itemDone ? (
                   <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
                 ) : isCurrent ? (
-                  <span className="bg-blue-800 text-white text-[11px] font-semibold px-2 py-0.5 rounded-md shadow-xs shrink-0">
+                  <span className="bg-blue-700 text-white text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0">
                     Đang xem
                   </span>
                 ) : (
@@ -316,17 +334,16 @@ export default function LessonDetailPage() {
           })}
         </div>
 
-        {/* NÚT CHUYỂN NHANH SANG BÀI TẬP HÀNG NGÀY (DAILY PLAN) */}
         {lesson?.classId && (
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <button
               onClick={() =>
                 navigate(`/student/courses/${lesson.classId}/daily-plan`)
               }
-              className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs py-3 rounded-xl shadow-sm transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
             >
               <Calendar size={15} />
-              <span>Bài Tập Hàng Ngày (Daily Plan)</span>
+              <span>Lộ trình ngày</span>
             </button>
           </div>
         )}

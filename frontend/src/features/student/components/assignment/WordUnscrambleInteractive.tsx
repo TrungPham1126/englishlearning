@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { RotateCcw, HelpCircle } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 
 export function WordUnscrambleInteractive({
 
@@ -108,8 +108,8 @@ export function WordUnscrambleInteractive({
   return (
     <div className="space-y-2.5 p-3.5 sm:p-4 rounded-xl border border-blue-100 dark:border-blue-600/20 bg-blue-50/30 dark:bg-slate-900/20">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
-          <HelpCircle size={13} className="text-blue-700 dark:text-blue-400" /> Chạm vào các thẻ từ (Word Chips) để sắp xếp câu hoàn chỉnh:
+        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
+          Sắp xếp từ
         </span>
 
         {placedTokens.length > 0 && !disabled && (
@@ -118,7 +118,7 @@ export function WordUnscrambleInteractive({
             onClick={handleReset}
             className="flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
           >
-            <RotateCcw size={12} /> Đặt lại khay
+            <RotateCcw size={12} /> Đặt lại
           </button>
         )}
       </div>
@@ -126,8 +126,8 @@ export function WordUnscrambleInteractive({
       {/* Khay câu trả lời đang ghép */}
       <div className="min-h-[48px] p-2.5 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-600/40 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-1.5 shadow-inner">
         {placedTokens.length === 0 ? (
-          <span className="text-xs text-slate-400 dark:text-slate-500 font-medium italic select-none">
-            Chạm vào các từ bên dưới theo đúng trật tự ngữ pháp để thả vào khay này...
+          <span className="text-xs text-slate-400 dark:text-slate-500 font-medium select-none">
+            Chọn từ bên dưới...
           </span>
         ) : (
           placedTokens.map((word, idx) => (

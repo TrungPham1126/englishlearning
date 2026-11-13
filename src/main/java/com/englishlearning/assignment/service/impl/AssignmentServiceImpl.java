@@ -6,6 +6,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import com.englishlearning.assignment.dto.AssignmentRequest;
 
+import com.englishlearning.assignment.dto.QuestionBankItemDto;
+
 import com.englishlearning.assignment.entity.Assignment;
 
 import com.englishlearning.assignment.entity.AssignmentQuestion;
@@ -25,6 +27,8 @@ import com.englishlearning.assignment.service.AssignmentService;
 import com.englishlearning.assignment.service.ExerciseAudioService;
 
 import com.englishlearning.classroom.entity.Classroom;
+
+import com.englishlearning.common.exception.BadRequestException;
 
 import com.englishlearning.common.exception.ResourceNotFoundException;
 
@@ -90,7 +94,15 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         assignment.setDescription(request.getDescription());
 
-        assignment.setSkillType(SkillType.valueOf(request.getSkillType().toUpperCase()));
+        try {
+
+            assignment.setSkillType(SkillType.valueOf(request.getSkillType().trim().toUpperCase()));
+
+        } catch (IllegalArgumentException | NullPointerException ex) {
+
+            throw new BadRequestException("Invalid skillType: " + request.getSkillType());
+
+        }
 
         assignment.setTimeLimitMinutes(request.getTimeLimitMinutes());
 
@@ -104,23 +116,51 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         }
 
-        if (request.getPassScore() != null) {
+        if (request.getMaxAllowedErrorPercent() != null) {
+
+            assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
+
+            assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
+
+        } else if (request.getPassScore() != null) {
 
             assignment.setPassScore(request.getPassScore());
 
-            if (request.getMaxAllowedErrorPercent() != null) {
-                assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
-                assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
-            } else if (request.getPassScore() != null) {
-                double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
-                assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
-            }
+            double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
+
+            assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
 
         }
 
         assignment.setAudioUrl(request.getAudioUrl());
 
         assignment.setListeningScript(request.getListeningScript());
+
+        boolean isExam = Boolean.TRUE.equals(request.getIsExam());
+
+        assignment.setIsExam(isExam);
+
+        if (request.getExamSkills() != null && !request.getExamSkills().isEmpty()) {
+
+            String joinedSkills = request.getExamSkills().stream()
+
+                    .filter(s -> s != null && !s.isBlank())
+
+                    .map(s -> s.trim().toUpperCase())
+
+                    .distinct()
+
+                    .collect(java.util.stream.Collectors.joining(","));
+
+            assignment.setExamSkills(joinedSkills.isBlank() ? null : joinedSkills);
+
+        }
+
+        assignment.setStrictFullscreen(request.getStrictFullscreen() != null ? request.getStrictFullscreen() : isExam);
+
+        assignment.setMaxViolations(request.getMaxViolations() != null && request.getMaxViolations() > 0
+
+                ? request.getMaxViolations() : 3);
 
 
 
@@ -162,7 +202,39 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 question.setOrderIndex(orderIndex++);
 
-                question.setQuestionType(QuestionType.valueOf(qReq.getQuestionType().toUpperCase()));
+                try {
+
+                    String qTypeStr = (qReq.getQuestionType() != null && !qReq.getQuestionType().isBlank())
+
+                            ? qReq.getQuestionType().trim().toUpperCase()
+
+                            : "MULTIPLE_CHOICE";
+
+                    question.setQuestionType(QuestionType.valueOf(qTypeStr));
+
+                } catch (IllegalArgumentException ex) {
+
+                    throw new BadRequestException("Invalid questionType: " + qReq.getQuestionType());
+
+                }
+
+                if (qReq.getSkillType() != null && !qReq.getSkillType().isBlank()) {
+
+                    try {
+
+                        question.setSkillType(SkillType.valueOf(qReq.getSkillType().trim().toUpperCase()));
+
+                    } catch (IllegalArgumentException ex) {
+
+                        throw new BadRequestException("Invalid question skillType: " + qReq.getSkillType());
+
+                    }
+
+                } else {
+
+                    question.setSkillType(assignment.getSkillType());
+
+                }
 
                 question.setPromptText(qReq.getPromptText());
 
@@ -230,21 +302,27 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             if (request.getClassroomId() != null) {
 
+                boolean createdExam = Boolean.TRUE.equals(saved.getIsExam());
+
                 NotificationDto notifDto = NotificationDto.builder()
 
                         .classroomId(request.getClassroomId())
 
-                        .title("Bài tập mới: " + saved.getTitle())
+                        .title((createdExam ? "Bài thi mới: " : "Bài tập mới: ") + saved.getTitle())
 
-                        .message("Giáo viên đã giao bài tập mới \"" + saved.getTitle() + "\". Hãy hoàn thành trước hạn nộp!")
+                        .message(createdExam
+
+                                ? "Giáo viên đã giao bài thi mới \"" + saved.getTitle() + "\" (yêu cầu chế độ toàn màn hình). Hãy chuẩn bị kỹ trước khi làm bài!"
+
+                                : "Giáo viên đã giao bài tập mới \"" + saved.getTitle() + "\". Hãy hoàn thành trước hạn nộp!")
 
                         .notificationType("NEW_ASSIGNMENT")
 
-                        .actionType("NEW_ASSIGNMENT")
+                        .actionType(createdExam ? "NEW_EXAM" : "NEW_ASSIGNMENT")
 
                         .referenceId(saved.getId().toString())
 
-                        .targetUrl("/student/assignments/" + saved.getId() + "/take")
+                        .targetUrl((createdExam ? "/student/exams/" : "/student/assignments/") + saved.getId() + "/take")
 
                         .build();
 
@@ -258,7 +336,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         }
 
-        if (saved.getSkillType() == SkillType.SPEAKING || saved.getSkillType() == SkillType.LISTENING) {
+        if (requiresAsyncAudioGeneration(saved)) {
 
             exerciseAudioService.generateAudiosForAssignmentAsync(saved.getId(), AudioGeneratedBy.TEACHER);
 
@@ -320,7 +398,15 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         if (request.getSkillType() != null && !request.getSkillType().isBlank()) {
 
-            assignment.setSkillType(SkillType.valueOf(request.getSkillType().toUpperCase()));
+            try {
+
+                assignment.setSkillType(SkillType.valueOf(request.getSkillType().trim().toUpperCase()));
+
+            } catch (IllegalArgumentException ex) {
+
+                throw new BadRequestException("Invalid skillType: " + request.getSkillType());
+
+            }
 
         }
 
@@ -342,17 +428,19 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         }
 
-        if (request.getPassScore() != null) {
+        if (request.getMaxAllowedErrorPercent() != null) {
+
+            assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
+
+            assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
+
+        } else if (request.getPassScore() != null) {
 
             assignment.setPassScore(request.getPassScore());
 
-            if (request.getMaxAllowedErrorPercent() != null) {
-                assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
-                assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
-            } else if (request.getPassScore() != null) {
-                double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
-                assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
-            }
+            double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
+
+            assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
 
         }
 
@@ -368,9 +456,49 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         }
 
+        if (request.getIsExam() != null) {
+
+            assignment.setIsExam(request.getIsExam());
+
+        }
+
+        if (request.getExamSkills() != null) {
+
+            String joinedSkills = request.getExamSkills().stream()
+
+                    .filter(s -> s != null && !s.isBlank())
+
+                    .map(s -> s.trim().toUpperCase())
+
+                    .distinct()
+
+                    .collect(java.util.stream.Collectors.joining(","));
+
+            assignment.setExamSkills(joinedSkills.isBlank() ? null : joinedSkills);
+
+        }
+
+        if (request.getStrictFullscreen() != null) {
+
+            assignment.setStrictFullscreen(request.getStrictFullscreen());
+
+        }
+
+        if (request.getMaxViolations() != null && request.getMaxViolations() > 0) {
+
+            assignment.setMaxViolations(request.getMaxViolations());
+
+        }
+
 
 
         if (request.getQuestions() != null && !request.getQuestions().isEmpty()) {
+
+            if (assignment.getQuestions() == null) {
+
+                assignment.setQuestions(new ArrayList<>());
+
+            }
 
             List<AssignmentQuestion> existingQuestions = assignment.getQuestions();
 
@@ -426,6 +554,12 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 }
 
+                if (qReq.getSkillType() != null && !qReq.getSkillType().isBlank()) {
+
+                    question.setSkillType(SkillType.valueOf(qReq.getSkillType().trim().toUpperCase()));
+
+                }
+
                 question.setPromptText(qReq.getPromptText());
 
                 if (qReq.getMediaUrl() != null) {
@@ -478,13 +612,19 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             }
 
+            if (existingQuestions != null && existingQuestions.size() > incoming.size()) {
+
+                existingQuestions.subList(incoming.size(), existingQuestions.size()).clear();
+
+            }
+
         }
 
 
 
         Assignment saved = assignmentRepository.save(assignment);
 
-        if (saved.getSkillType() == SkillType.SPEAKING || saved.getSkillType() == SkillType.LISTENING) {
+        if (requiresAsyncAudioGeneration(saved)) {
 
             exerciseAudioService.generateAudiosForAssignmentAsync(saved.getId(), AudioGeneratedBy.TEACHER);
 
@@ -535,11 +675,161 @@ public class AssignmentServiceImpl implements AssignmentService {
 
 
 
+    private boolean requiresAsyncAudioGeneration(Assignment assignment) {
+
+        if (assignment == null) {
+
+            return false;
+
+        }
+
+        if (assignment.getSkillType() == SkillType.SPEAKING || assignment.getSkillType() == SkillType.LISTENING) {
+
+            return true;
+
+        }
+
+        return assignment.getQuestions() != null && assignment.getQuestions().stream().anyMatch(q ->
+
+                q.getQuestionType() == QuestionType.AUDIO_RESPONSE
+
+                        || q.getSkillType() == SkillType.SPEAKING
+
+                        || q.getSkillType() == SkillType.LISTENING);
+
+    }
+
     @Override
 
     public List<Assignment> getAssignmentsByClassroom(UUID classroomId) {
 
         return assignmentRepository.findByClassroomId(classroomId);
+
+    }
+
+    @Override
+
+    @Transactional(readOnly = true)
+
+    public List<Assignment> getExamsByClassroom(UUID classroomId) {
+
+        List<Assignment> exams = assignmentRepository.findByClassroomId(classroomId).stream()
+
+                .filter(a -> Boolean.TRUE.equals(a.getIsExam()))
+
+                .collect(java.util.stream.Collectors.toList());
+
+        for (Assignment exam : exams) {
+
+            if (exam.getQuestions() != null) {
+
+                exam.getQuestions().size();
+
+                exam.getQuestions().forEach(q -> {
+
+                    if (q.getOptions() != null) {
+
+                        q.getOptions().size();
+
+                    }
+
+                });
+
+            }
+
+        }
+
+        return exams;
+
+    }
+
+    @Override
+
+    @Transactional(readOnly = true)
+
+    public List<QuestionBankItemDto> getClassroomQuestionBank(UUID classroomId) {
+
+        List<Assignment> classroomAssignments = assignmentRepository.findByClassroomId(classroomId);
+
+        List<QuestionBankItemDto> items = new ArrayList<>();
+
+        java.util.Set<String> seenKeys = new java.util.HashSet<>();
+
+        for (Assignment a : classroomAssignments) {
+
+            List<AssignmentQuestion> qs = a.getQuestions();
+
+            if (qs == null) continue;
+
+            for (AssignmentQuestion q : qs) {
+
+                String key = (q.getQuestionType() != null ? q.getQuestionType().name() : "") + "::"
+
+                        + (q.getPromptText() != null ? q.getPromptText().trim().toLowerCase() : "");
+
+                if (!seenKeys.add(key)) {
+
+                    continue;
+
+                }
+
+                List<QuestionBankItemDto.OptionDto> optDtos = q.getOptions() == null
+
+                        ? java.util.Collections.emptyList()
+
+                        : q.getOptions().stream()
+
+                                .map(opt -> QuestionBankItemDto.OptionDto.builder()
+
+                                        .optionText(opt.getOptionText())
+
+                                        .matchText(opt.getMatchText())
+
+                                        .isCorrect(opt.getIsCorrect())
+
+                                        .build())
+
+                                .collect(java.util.stream.Collectors.toList());
+
+                String effectiveSkill = q.getSkillType() != null
+
+                        ? q.getSkillType().name()
+
+                        : (a.getSkillType() != null ? a.getSkillType().name() : "GRAMMAR");
+
+                items.add(QuestionBankItemDto.builder()
+
+                        .id(q.getId())
+
+                        .assignmentId(a.getId())
+
+                        .assignmentTitle(a.getTitle())
+
+                        .skillType(effectiveSkill)
+
+                        .questionType(q.getQuestionType() != null ? q.getQuestionType().name() : "MULTIPLE_CHOICE")
+
+                        .promptText(q.getPromptText())
+
+                        .mediaUrl(q.getMediaUrl())
+
+                        .transcript(q.getTranscript())
+
+                        .correctAnswer(q.getCorrectAnswer())
+
+                        .explanation(q.getExplanation())
+
+                        .points(q.getPoints())
+
+                        .options(optDtos)
+
+                        .build());
+
+            }
+
+        }
+
+        return items;
 
     }
 

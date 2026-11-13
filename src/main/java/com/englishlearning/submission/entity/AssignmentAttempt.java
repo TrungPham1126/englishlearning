@@ -66,6 +66,20 @@ public class AssignmentAttempt {
     @Column(name = "teacher_feedback", columnDefinition = "TEXT")
     private String teacherFeedback;
 
+    @Column(name = "violation_count")
+    @Builder.Default
+    private Integer violationCount = 0;
+
+    @Column(name = "is_cheating_flagged")
+    @Builder.Default
+    private Boolean isCheatingFlagged = false;
+
+    @Column(name = "cheating_reason", length = 500)
+    private String cheatingReason;
+
+    @Column(name = "violation_log_json", columnDefinition = "TEXT")
+    private String violationLogJson;
+
     @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<StudentAnswer> answers = new ArrayList<>();

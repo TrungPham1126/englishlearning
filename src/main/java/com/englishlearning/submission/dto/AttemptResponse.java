@@ -33,6 +33,15 @@ public class AttemptResponse {
     private Double passScore;
     private Double maxAllowedErrorPercent;
     private Integer maxAttempts;
+    private Boolean isExam;
+    private String examSkills;
+    private Boolean strictFullscreen;
+    private Integer maxViolations;
+    private Integer violationCount;
+    private Boolean isCheatingFlagged;
+    private String cheatingReason;
+    private String violationLogJson;
+    private Boolean answersPersisted;
     private List<QuestionResultDetail> questions;
 
     @Data
@@ -57,6 +66,7 @@ public class AttemptResponse {
         private UUID studentAnswerId;
         private String promptText;
         private String questionType;
+        private String skillType;
         private Double maxPoints;
         private Double earnedPoints;
         private String studentAnswer;
@@ -70,5 +80,26 @@ public class AttemptResponse {
         private String explanation;
         private Boolean isCorrect;
         private String evalFeedback;
+        private AiEvaluationDetail aiEvaluation;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AiEvaluationDetail {
+        private UUID id;
+        private String evalType;
+        private Double overallScore;
+        private Double pronunciationScore;
+        private Double fluencyScore;
+        private Double grammarScore;
+        private Double vocabularyScore;
+        private Double coherenceScore;
+        private String estimatedCefr;
+        private String sttTranscript;
+        private String correctedText;
+        private String mistakesJson;
+        private String suggestionsJson;
     }
 }

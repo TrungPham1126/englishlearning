@@ -90,7 +90,8 @@ public class TeacherAssignmentController {
         List<Assignment> assignments = assignmentService.getAssignmentsByClassroom(classroomId);
         if (gradingOnly && assignments != null) {
             assignments = assignments.stream()
-                    .filter(a -> a.getSkillType() == SkillType.WRITING
+                    .filter(a -> Boolean.TRUE.equals(a.getIsExam())
+                            || a.getSkillType() == SkillType.WRITING
                             || a.getSkillType() == SkillType.SPEAKING
                             || (a.getQuestions() != null && a.getQuestions().stream().anyMatch(q ->
                                     q.getQuestionType() == QuestionType.ESSAY
@@ -139,6 +140,20 @@ public class TeacherAssignmentController {
     }
 
     // 7. Backfill audio cho toàn bộ bài tập Speaking/Listening chưa có audio
+    @GetMapping("/classrooms/{classroomId}/exams")
+    public ResponseEntity<ApiResponse<List<Assignment>>> getExamsByClassroom(
+            @PathVariable UUID classroomId) {
+        return ResponseEntity.ok(ApiResponse.success("Classroom exams retrieved successfully",
+                assignmentService.getExamsByClassroom(classroomId)));
+    }
+
+    @GetMapping("/classrooms/{classroomId}/question-bank")
+    public ResponseEntity<ApiResponse<List<com.englishlearning.assignment.dto.QuestionBankItemDto>>> getClassroomQuestionBank(
+            @PathVariable UUID classroomId) {
+        return ResponseEntity.ok(ApiResponse.success("Classroom question bank retrieved successfully",
+                assignmentService.getClassroomQuestionBank(classroomId)));
+    }
+
     @PostMapping("/assignments/backfill-audios")
     public ResponseEntity<ApiResponse<String>> backfillAudios() {
         assignmentService.backfillAllAudios();

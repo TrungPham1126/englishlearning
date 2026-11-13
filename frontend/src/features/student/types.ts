@@ -145,6 +145,8 @@ export interface LessonSummary {
   progressPercentage?: number;
   watchedSeconds?: number;
   objectives?: string;
+  hasVideo?: boolean;
+  documentsCount?: number;
 }
 
 export type Lesson = LessonSummary;
@@ -187,8 +189,11 @@ export interface LessonDetailResponse {
   content?: string;
   orderIndex: number;
   completed?: boolean;
+  isCompleted?: boolean;
   progressPercentage?: number;
   watchedSeconds?: number;
+  hasVideo?: boolean;
+  documentsCount?: number;
   updatedAt?: string;
   documents: DocumentResponse[];
   vocabularies: VocabularyResponse[];
@@ -206,6 +211,8 @@ export interface VideoResponse {
 export interface VideoWatchHistory {
   watchedSeconds: number;
   completed: boolean;
+  isCompleted?: boolean;
+  completionPercentage?: number;
 }
 
 // ================= 4. BÀI TẬP & NỘP BÀI (ASSIGNMENTS & ATTEMPTS) =================
@@ -224,6 +231,7 @@ export interface QuestionResultDetail {
   studentAnswerId?: string;
   promptText: string;
   questionType: string;
+  skillType?: string | null;
   maxPoints: number;
   earnedPoints?: number;
   studentAnswer?: string;
@@ -262,6 +270,15 @@ export interface AttemptResponse {
   passScore?: number;
   maxAllowedErrorPercent?: number;
   maxAttempts?: number;
+  isExam?: boolean;
+  examSkills?: string | null;
+  strictFullscreen?: boolean;
+  maxViolations?: number;
+  violationCount?: number;
+  isCheatingFlagged?: boolean;
+  cheatingReason?: string | null;
+  violationLogJson?: string | null;
+  answersPersisted?: boolean;
   startedAt?: string;
   submittedAt?: string;
   questions?: QuestionResultDetail[];
@@ -279,6 +296,11 @@ export interface StudentAssignmentSummaryResponse {
   attemptsCount: number;
   highestScore: number;
   status: string;
+  isExam?: boolean;
+  examSkills?: string | null;
+  strictFullscreen?: boolean;
+  maxViolations?: number;
+  isCheatingFlagged?: boolean;
 }
 
 export interface StudentSkillProfile {

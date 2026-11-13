@@ -1,5 +1,5 @@
 // src/features/student/components/VocabularyMatchingStudio.tsx
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Volume2,
   CheckCircle2,
@@ -44,6 +44,7 @@ interface ParsedWordItem {
     id: string;
     label: string;
     text: string;
+    matchText?: string;
     isCorrect?: boolean;
   }[];
 }
@@ -118,6 +119,30 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
 }) => {
   const [activeWordId, setActiveWordId] = useState<string | null>(null);
   const [playingWord, setPlayingWord] = useState<string | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  const stopPronunciationAudio = useCallback(() => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.onended = null;
+      activeAudioRef.current.onerror = null;
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopPronunciationAudio();
+    };
+  }, [stopPronunciationAudio]);
 
   // 1. Phân tích và trích xuất danh sách Từ tiếng Anh + Phiên âm IPA + Lựa chọn
   const wordItems = useMemo<ParsedWordItem[]>(() => {
@@ -171,6 +196,7 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
             id: String(o.id || o.optionLabel || oIdx),
             label: o.optionLabel || String.fromCharCode(65 + oIdx),
             text: o.optionText || o.text || String(o),
+            matchText: o.matchText || o.meaning || o.definition,
             isCorrect: o.isCorrect,
           }))
         : [];
@@ -288,6 +314,7 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
       .trim();
     if (!cleanWord) return;
 
+    stopPronunciationAudio();
     setPlayingWord(cleanWord);
 
     // 1. Nếu có file Audio MP3 từ Backend/Từ điển CDN
@@ -301,9 +328,16 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
       !finalAudioUrl.includes("api.dictionaryapi.dev")
     ) {
       const audio = new Audio(finalAudioUrl);
-      audio.onended = () => setPlayingWord(null);
-      audio.onerror = () => playSpeechOrCdn(cleanWord);
-      audio.play().catch(() => playSpeechOrCdn(cleanWord));
+      activeAudioRef.current = audio;
+      audio.onended = () => {
+        if (isMountedRef.current) setPlayingWord(null);
+      };
+      audio.onerror = () => {
+        if (isMountedRef.current) playSpeechOrCdn(cleanWord);
+      };
+      audio.play().catch(() => {
+        if (isMountedRef.current) playSpeechOrCdn(cleanWord);
+      });
       return;
     }
 
@@ -317,8 +351,12 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
         const utterance = new SpeechSynthesisUtterance(cleanWord);
         utterance.lang = "en-US";
         utterance.rate = 0.88; // Tốc độ chuẩn cho học tập phát âm
-        utterance.onend = () => setPlayingWord(null);
-        utterance.onerror = () => playCdnFallback(cleanWord);
+        utterance.onend = () => {
+          if (isMountedRef.current) setPlayingWord(null);
+        };
+        utterance.onerror = () => {
+          if (isMountedRef.current) playCdnFallback(cleanWord);
+        };
         window.speechSynthesis.speak(utterance);
         return;
       } catch (err) {
@@ -330,15 +368,23 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
 
   const playCdnFallback = (cleanWord: string) => {
     try {
+      stopPronunciationAudio();
       const cdnUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(
         cleanWord
       )}&type=2`;
       const audio = new Audio(cdnUrl);
-      audio.onended = () => setPlayingWord(null);
-      audio.onerror = () => setPlayingWord(null);
-      audio.play().catch(() => setPlayingWord(null));
+      activeAudioRef.current = audio;
+      audio.onended = () => {
+        if (isMountedRef.current) setPlayingWord(null);
+      };
+      audio.onerror = () => {
+        if (isMountedRef.current) setPlayingWord(null);
+      };
+      audio.play().catch(() => {
+        if (isMountedRef.current) setPlayingWord(null);
+      });
     } catch {
-      setPlayingWord(null);
+      if (isMountedRef.current) setPlayingWord(null);
     }
   };
 
@@ -411,17 +457,14 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
       {/* 1. Header Bảng điều khiển Matching */}
       <div className="bg-white dark:bg-surface-card p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-blue-800 text-white flex items-center gap-1.5 shadow-xs">
-              <BookOpen size={12} /> BÀI TẬP NỐI TỪ VỰNG (VOCABULARY MATCHING)
+              <BookOpen size={12} /> Nối từ vựng
             </span>
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {wordItems.length} cặp từ vựng
+            <span className="text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+              {wordItems.length} cặp
             </span>
           </div>
-          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300 font-medium">
-            💡 Chạm vào từ tiếng Anh ở cột trái để nghe phát âm, sau đó chọn ý nghĩa tương ứng ở cột phải để hoàn thành cặp ghép.
-          </p>
         </div>
 
         {/* Thanh tiến độ ghép từ */}
@@ -602,8 +645,8 @@ export const VocabularyMatchingStudio: React.FC<VocabularyMatchingStudioProps> =
                         <span className="font-normal">{item.correctAnswer}</span>
                       </p>
                       {item.explanation && (
-                        <p className="text-slate-600 dark:text-slate-400 italic">
-                          💡 {item.explanation}
+                        <p className="text-slate-600 dark:text-slate-400">
+                          {item.explanation}
                         </p>
                       )}
                     </div>

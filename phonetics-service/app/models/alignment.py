@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -15,6 +16,10 @@ class AlignedPhoneme:
     is_word_final: bool = False
     # Raw CTC probability of the target token (NOT blank-normalized). None -> same as posterior.
     raw_posterior: Optional[float] = None
+    # Strict un-pooled / dialect-only target posterior (does not reward L2 substitution errors).
+    canonical_posterior: Optional[float] = None
+    # Witt & Young GOP log-likelihood margin: logP(target|x) - max_{q != target} logP(q|x).
+    gop_margin: Optional[float] = None
     # False when the Viterbi path assigned no audio frame to this phoneme.
     has_frames: bool = True
 
@@ -75,3 +80,19 @@ class AlignmentResult:
     raw_tokens: List[str] = field(default_factory=list)
     blank_ratio: float = 0.0
     duration_anomaly_penalty: float = 0.0
+    # Cached single-pass CTC greedy outputs to avoid redundant Wav2Vec2 forward passes.
+    raw_emitted_tokens: List[str] = field(default_factory=list)
+    frame_tokens: List[str] = field(default_factory=list)
+    frame_duration: float = 0.02
+
+    def get_window_emitted_tokens(self, start_sec: float, end_sec: float) -> List[str]:
+        """Slice cached greedy frame tokens in [start_sec, end_sec] and collapse CTC repeats."""
+        if not self.frame_tokens or self.frame_duration <= 0.0:
+            return []
+        f_start = max(0, int(start_sec / self.frame_duration))
+        f_end = min(len(self.frame_tokens), max(f_start + 1, int(math.ceil(end_sec / self.frame_duration))))
+        emitted: List[str] = []
+        for sym in self.frame_tokens[f_start:f_end]:
+            if sym and sym != "<pad>" and (not emitted or emitted[-1] != sym):
+                emitted.append(sym)
+        return emitted

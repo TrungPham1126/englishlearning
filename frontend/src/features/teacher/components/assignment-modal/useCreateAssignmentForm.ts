@@ -143,9 +143,19 @@ export function useCreateAssignmentForm({
       if (resPlans.status === "fulfilled" && resPlans.value?.data) {
         const loadedPlans = resPlans.value.data?.data || [];
         setDailyPlans(loadedPlans);
-        const match = loadedPlans.find((p: any) => p.scheduledDate === scheduledDate);
+        const byPlanId = initialPlanId
+          ? loadedPlans.find((p: any) => p.id === initialPlanId)
+          : null;
+        const targetDate = initialDate || scheduledDate;
+        const match = byPlanId || loadedPlans.find((p: any) => p.scheduledDate === targetDate);
         if (match) {
           setSelectedPlanId(match.id);
+          if (match.scheduledDate) {
+            setScheduledDate(match.scheduledDate);
+          }
+        } else if (initialDate) {
+          setSelectedPlanId("NEW_DAY");
+          setScheduledDate(initialDate);
         } else if (loadedPlans.length > 0) {
           setSelectedPlanId(loadedPlans[0].id);
           setScheduledDate(loadedPlans[0].scheduledDate);
@@ -162,7 +172,32 @@ export function useCreateAssignmentForm({
     if (isOpen && classId) {
       loadInitialData();
     }
-  }, [isOpen, classId]);
+  }, [isOpen, classId, initialDate, initialPlanId]);
+
+  useEffect(() => {
+    const cleanupAudio = () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      const mainElem = document.getElementById(
+        "main-assignment-audio"
+      ) as HTMLAudioElement | null;
+      if (mainElem) {
+        mainElem.pause();
+        mainElem.remove();
+      }
+      setIsPlayingMainAudio(false);
+      setPlayingPreviewId(null);
+    };
+
+    if (!isOpen) {
+      cleanupAudio();
+    }
+    return () => {
+      cleanupAudio();
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -204,12 +239,14 @@ export function useCreateAssignmentForm({
           if (opts.length === 0 && q.questionType === "MULTIPLE_CHOICE") {
             opts = ["", "", "", ""];
           }
+          const fallbackMatchAns =
+            q.questionType === "MATCHING" ? q.options?.[0]?.matchText || "" : "";
           return {
             id: q.id || crypto.randomUUID(),
             prompt: q.promptText || "",
             questionType: q.questionType || "MULTIPLE_CHOICE",
             options: opts,
-            correctAnswer: q.correctAnswer || "",
+            correctAnswer: q.correctAnswer || fallbackMatchAns || "",
             explanation: q.explanation || "",
             referenceAudioUrl: q.mediaUrl || "",
             transcript: q.transcript || "",
@@ -221,9 +258,18 @@ export function useCreateAssignmentForm({
 
       setStep(2);
     } else {
+      if (initialDate) {
+        setScheduledDate(initialDate);
+      }
+      if (initialSkillType) {
+        setAssignmentType(initialSkillType.toUpperCase() as any);
+      }
+      if (initialPlanId) {
+        setSelectedPlanId(initialPlanId);
+      }
       setStep(1);
     }
-  }, [isOpen, mode, initialData]);
+  }, [isOpen, mode, initialData, initialDate, initialSkillType, initialPlanId]);
 
   useEffect(() => {
     if (mode === "EDIT") return;
@@ -1266,12 +1312,38 @@ export function useCreateAssignmentForm({
               points: q.points || 1,
               options:
                 q.questionType === "MULTIPLE_CHOICE"
-                  ? q.options.map((optText, optIdx) => ({
-                      optionText: optText.trim(),
-                      isCorrect:
-                        optText.trim().toLowerCase() === resolvedCorrectAnswer.toLowerCase() ||
-                        String.fromCharCode(65 + optIdx) === resolvedCorrectAnswer.toUpperCase(),
-                    }))
+                  ? q.options
+                      .filter((opt) => opt.trim().length > 0)
+                      .map((optText, optIdx) => ({
+                        optionText: optText.trim(),
+                        isCorrect:
+                          optText.trim().toLowerCase() === resolvedCorrectAnswer.toLowerCase() ||
+                          String.fromCharCode(65 + optIdx) === resolvedCorrectAnswer.toUpperCase() ||
+                          Boolean(matchingOption && optText.trim() === matchingOption.trim()),
+                      }))
+                  : q.questionType === "TRUE_FALSE"
+                  ? [
+                      {
+                        optionText: "TRUE",
+                        isCorrect: resolvedCorrectAnswer === "TRUE",
+                      },
+                      {
+                        optionText: "FALSE",
+                        isCorrect: resolvedCorrectAnswer === "FALSE",
+                      },
+                      {
+                        optionText: "NOT GIVEN",
+                        isCorrect: resolvedCorrectAnswer === "NOT GIVEN",
+                      },
+                    ]
+                  : q.questionType === "MATCHING"
+                  ? [
+                      {
+                        optionText: (q.prompt || "").trim(),
+                        matchText: (q.correctAnswer || "").trim(),
+                        isCorrect: true,
+                      },
+                    ]
                   : [],
             };
           }),

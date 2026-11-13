@@ -2,6 +2,7 @@ package com.englishlearning.notification.controller;
 
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.UnauthorizedException;
 import com.englishlearning.notification.dto.NotificationClassroomDto;
 import com.englishlearning.notification.dto.NotificationDto;
 import com.englishlearning.notification.dto.NotificationRecipientDto;
@@ -36,6 +37,9 @@ public class NotificationController {
         if (classId != null) {
             return ResponseEntity.ok(ApiResponse.success(
                     notificationService.getClassroomAnnouncements(classId, page, size)));
+        }
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để xem thông báo");
         }
         return ResponseEntity.ok(ApiResponse.success(
                 notificationService.getMyNotifications(userDetails.getId(), page, size)));
@@ -97,12 +101,18 @@ public class NotificationController {
     @RequestMapping(value = "/{id}/read", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable UUID id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         notificationService.markAsRead(id, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã đọc", null));
     }
 
     @RequestMapping(value = "/read-all", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
         notificationService.markAllAsRead(userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Đã đọc tất cả", null));
     }

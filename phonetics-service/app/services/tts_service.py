@@ -5,7 +5,7 @@ import os
 import re
 import threading
 from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import soundfile as sf
 import torch
@@ -182,7 +182,7 @@ class KokoroTtsService:
                 continue
             s = re.sub(r'^(?:[-*•]+|\d+[.)])\s*', '', s)
             s = re.sub(
-                r'^(?:\*{1,2}|_)?(?:\[\s*([A-Za-z0-9_.\-\s]{1,30})\s*\]|([A-Za-z0-9_.\-\s]{1,30})(?:\s*\([^)]{1,25}\))?)(?:\*{1,2}|_)?\s*:\s*(?:\*{1,2}|_)?\s*',
+                r'^(?:\*{1,2}|_)?(?:\[\s*[A-Za-z0-9_.\-\s]{1,30}\s*\]|[A-Za-z][A-Za-z0-9_.\-]*(?:\s+[A-Za-z0-9_.\-]+){0,2}(?:\s*\([^)]{1,25}\))?)(?:\*{1,2}|_)?\s*:(?:\*{1,2}|_)?(?:\s+|$)\s*',
                 '',
                 s
             )
@@ -394,16 +394,18 @@ class KokoroTtsService:
             raise ValueError("Danh sách lượt thoại không được để trống.")
 
         # 1. Establish Speaker-to-Voice mapping
-        resolved_speaker_map: Dict[str, Dict[str, any]] = {}
+        resolved_speaker_map: Dict[str, Dict[str, Any]] = {}
         assigned_voices: List[str] = []
         if speaker_map:
             for spk_key, cfg in speaker_map.items():
                 if isinstance(cfg, dict):
                     v = cfg.get("voice", DEFAULT_VOICE)
-                    s = float(cfg.get("speed", 1.0))
+                    raw_speed = cfg.get("speed", 1.0)
+                    s = float(raw_speed if raw_speed is not None else 1.0)
                 else:
                     v = getattr(cfg, "voice", DEFAULT_VOICE)
-                    s = float(getattr(cfg, "speed", 1.0))
+                    raw_speed = getattr(cfg, "speed", 1.0)
+                    s = float(raw_speed if raw_speed is not None else 1.0)
                 if v not in AVAILABLE_VOICES:
                     v = DEFAULT_VOICE
                 resolved_speaker_map[spk_key.strip().upper()] = {"voice": v, "speed": s}
@@ -471,6 +473,14 @@ class KokoroTtsService:
 
                 turn_audio = np.clip(turn_audio, -0.98, 0.98)
 
+                if len(turn_audio) == 0:
+                    continue
+
+                # Insert pause before subsequent non-empty turns
+                if audio_segments and len(silence_gap) > 0:
+                    audio_segments.append(silence_gap)
+                    current_sample_cursor += len(silence_gap)
+
                 start_ms = int(round((current_sample_cursor / SAMPLE_RATE) * 1000.0))
                 end_ms = start_ms + int(round((len(turn_audio) / SAMPLE_RATE) * 1000.0))
 
@@ -484,11 +494,6 @@ class KokoroTtsService:
 
                 audio_segments.append(turn_audio)
                 current_sample_cursor += len(turn_audio)
-
-                # Insert pause between turns (except after final turn)
-                if i < len(turns) - 1:
-                    audio_segments.append(silence_gap)
-                    current_sample_cursor += len(silence_gap)
 
         if not audio_segments:
             raise RuntimeError("Không có âm thanh nào được tạo ra từ kịch bản hội thoại.")

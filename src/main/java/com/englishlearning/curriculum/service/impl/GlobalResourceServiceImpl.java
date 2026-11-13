@@ -3,6 +3,7 @@ package com.englishlearning.curriculum.service.impl;
 import com.englishlearning.curriculum.service.*;
 
 import com.englishlearning.auth.entity.User;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.GlobalResourceResponse;
 import com.englishlearning.curriculum.entity.GlobalResource;
@@ -31,18 +32,14 @@ public class GlobalResourceServiceImpl implements GlobalResourceService {
 
     @Transactional(readOnly = true)
     public List<GlobalResourceResponse> getResourcesByType(String type) {
-        String normalized = (type != null) ? type.trim().toUpperCase() : "DOC";
-        if ("DOCUMENT".equals(normalized)) {
-            normalized = "DOC";
-        }
-        GlobalResource.ResourceType resourceType = GlobalResource.ResourceType.valueOf(normalized);
+        GlobalResource.ResourceType resourceType = parseResourceType(type, true);
         return repository.findByResourceTypeOrderByCreatedAtDesc(resourceType).stream()
                 .map(res -> GlobalResourceResponse.builder()
                         .id(res.getId())
                         .name(res.getName())
                         .size(formatSize(res.getSizeBytes()))
                         .usedCount(res.getUsedCount())
-                        .uploadedAt(FORMATTER.format(res.getCreatedAt()))
+                        .uploadedAt(res.getCreatedAt() != null ? FORMATTER.format(res.getCreatedAt()) : "")
                         .url(res.getStorageUrl())
                         .build())
                 .collect(Collectors.toList());
@@ -50,17 +47,36 @@ public class GlobalResourceServiceImpl implements GlobalResourceService {
 
     @Transactional
     public void uploadResource(MultipartFile file, String type, UUID adminId) {
+        GlobalResource.ResourceType resourceType = parseResourceType(type, false);
         String url = storageService.uploadFile(file);
         User admin = entityManager.getReference(User.class, adminId);
 
         GlobalResource resource = GlobalResource.builder()
                 .name(file.getOriginalFilename())
                 .storageUrl(url)
-                .resourceType(GlobalResource.ResourceType.valueOf(type.toUpperCase()))
+                .resourceType(resourceType)
                 .sizeBytes(file.getSize())
                 .uploadedBy(admin)
                 .build();
         repository.save(resource);
+    }
+
+    private GlobalResource.ResourceType parseResourceType(String type, boolean defaultToDocOnNull) {
+        if (type == null || type.isBlank()) {
+            if (defaultToDocOnNull) {
+                return GlobalResource.ResourceType.DOC;
+            }
+            throw new BadRequestException("Loại tài nguyên không được để trống");
+        }
+        String normalized = type.trim().toUpperCase();
+        if ("DOCUMENT".equals(normalized)) {
+            normalized = "DOC";
+        }
+        try {
+            return GlobalResource.ResourceType.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Loại tài nguyên không hợp lệ: " + type);
+        }
     }
 
     @Transactional

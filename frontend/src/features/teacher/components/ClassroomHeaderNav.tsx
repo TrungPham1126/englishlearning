@@ -15,7 +15,7 @@ import { teacherApi, type ClassroomItem } from "../api/teacherApi";
 
 interface ClassroomHeaderNavProps {
   classId: string;
-  activeTab?: "plans" | "students" | "details";
+  activeTab?: "plans" | "students" | "grading" | "exams" | "details";
   classroom?: ClassroomItem | null;
   actions?: React.ReactNode;
 }
@@ -71,7 +71,11 @@ export default function ClassroomHeaderNav({
       ? "plans"
       : location.pathname.includes("/students")
         ? "students"
-        : "details");
+        : location.pathname.includes("/grading")
+          ? "grading"
+          : location.pathname.includes("/exams")
+            ? "exams"
+            : "details");
 
   const tabs = [
     {
@@ -86,7 +90,21 @@ export default function ClassroomHeaderNav({
       label: "Học Viên & Điểm Số",
       path: `/teacher/classrooms/${classId}/students`,
       icon: Users,
-      desc: "Theo dõi thành tích, chuyên cần & quota AI",
+      desc: "Theo dõi thành tích, hồ sơ bài nộp & quota AI",
+    },
+    {
+      id: "grading",
+      label: "Chấm Bài & Đánh Giá",
+      path: `/teacher/classrooms/${classId}/grading`,
+      icon: Award,
+      desc: "Chấm điểm & nhận xét bài làm Speaking, Viết luận",
+    },
+    {
+      id: "exams",
+      label: "Bài Thi & Kiểm Tra",
+      path: `/teacher/classrooms/${classId}/exams`,
+      icon: ShieldCheck,
+      desc: "Soạn đề thi nhiều kỹ năng, AI sinh đề & chống gian lận",
     },
     {
       id: "details",

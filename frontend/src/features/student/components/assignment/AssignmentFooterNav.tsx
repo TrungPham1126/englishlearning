@@ -115,7 +115,7 @@ export const AssignmentFooterNav: React.FC<AssignmentFooterNavProps> = ({
                 <Send size={14} />
               )}
               <span>
-                Nộp Bài ({answeredCount}/{totalQuestions})
+                Nộp ({answeredCount}/{totalQuestions})
               </span>
             </button>
           )}

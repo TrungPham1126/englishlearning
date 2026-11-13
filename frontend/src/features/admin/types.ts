@@ -203,3 +203,175 @@ export interface AuditLogDto {
   metadataJson: string;
   createdAt: string;
 }
+
+// --- DATABASE & CLASSROOM STORAGE MANAGEMENT ---
+export interface ClassroomDatabaseItem {
+  id: string;
+  name: string;
+  level: string;
+  status: string;
+  teacherName: string;
+  startDate: string;
+  endDate: string;
+  studentCount: number;
+  lessonCount: number;
+  dailyPlanCount: number;
+  assignmentCount: number;
+  examCount: number;
+  attemptCount: number;
+  answerCount: number;
+  aiEvaluationCount: number;
+  dailyProgressCount: number;
+  videoWatchCount: number;
+  submissionAudioCount: number;
+  cheatingFlagCount: number;
+  averageScore: number;
+  estimatedSubmissionKb: number;
+  eligibleForCleanPurge: boolean;
+}
+
+export interface AdminDatabaseOverview {
+  totalClassrooms: number;
+  completedClassrooms: number;
+  totalEnrolledStudents: number;
+  totalAssignments: number;
+  totalExams: number;
+  totalAttempts: number;
+  totalStudentAnswers: number;
+  totalAiEvaluations: number;
+  totalDailyProgressRecords: number;
+  totalSubmissionAudioFiles: number;
+  estimatedSubmissionDataKb: number;
+  classrooms: ClassroomDatabaseItem[];
+}
+
+export interface ClassroomPurgeResult {
+  classroomId: string;
+  classroomName: string;
+  entireClassroomDeleted: boolean;
+  deletedAiEvaluations: number;
+  deletedStudentAnswers: number;
+  deletedAttempts: number;
+  deletedDailyProgress: number;
+  deletedVideoWatchHistory: number;
+  deletedVocabularyProgress: number;
+  deletedR2MediaFiles: number;
+  freedEstimatedKb: number;
+  message: string;
+  executedAt: string;
+}
+
+export interface StudentReportRow {
+  studentId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  enrolledAt: string;
+  completedTasks: number;
+  totalTasks: number;
+  completionRate: number;
+  averageScore: number;
+  totalAttempts: number;
+  examAttempts: number;
+  cheatingFlags: number;
+  totalStudyMinutes: number;
+  classification: string;
+}
+
+export interface AttemptReportRow {
+  attemptId: string;
+  studentName: string;
+  studentEmail: string;
+  assignmentTitle: string;
+  skillType: string;
+  exam: boolean;
+  attemptNumber: number;
+  status: string;
+  submittedAt: string;
+  durationSeconds?: number;
+  totalScore?: number;
+  violationCount: number;
+  cheatingFlagged: boolean;
+  cheatingReason?: string;
+  teacherFeedback?: string;
+}
+
+export interface ClassroomDetailedReport {
+  classroomId: string;
+  classroomName: string;
+  description?: string;
+  level: string;
+  status: string;
+  teacherName: string;
+  teacherEmail: string;
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  totalStudents: number;
+  totalLessons: number;
+  totalDailyPlans: number;
+  totalAssignments: number;
+  totalExams: number;
+  totalAttempts: number;
+  completedAttempts: number;
+  flaggedCheatingAttempts: number;
+  classAverageScore: number;
+  averageCompletionRate: number;
+  students: StudentReportRow[];
+  submissions: AttemptReportRow[];
+}
+
+// --- CLOUDFLARE R2 STORAGE & COST REPORT ---
+export interface R2CategoryBreakdown {
+  categoryKey: string;
+  label: string;
+  prefix: string;
+  objectCount: number;
+  totalBytes: number;
+  sizeMb: number;
+  sharePercent: number;
+  estimatedGrossStorageUsd: number;
+}
+
+export interface R2LargestObject {
+  key: string;
+  category: string;
+  sizeBytes: number;
+  sizeMb: number;
+  lastModified?: string;
+}
+
+export interface R2CostReport {
+  bucketName: string;
+  endpoint?: string;
+  publicUrl?: string;
+  liveConnected: boolean;
+  dataSourceMode: "LIVE_R2" | "DATABASE_ESTIMATE" | string;
+  statusMessage: string;
+  totalObjects: number;
+  totalBytes: number;
+  totalStorageGb: number;
+  freeStorageGb: number;
+  billableStorageGb: number;
+  freeTierUsagePercent: number;
+  classAOps: number;
+  freeClassAOps: number;
+  billableClassAOps: number;
+  classBOps: number;
+  freeClassBOps: number;
+  billableClassBOps: number;
+  deleteOps: number;
+  storageCostUsd: number;
+  classACostUsd: number;
+  classBCostUsd: number;
+  egressCostUsd: number;
+  totalPayableUsd: number;
+  totalPayableVnd: number;
+  grossEquivalentUsd: number;
+  grossEquivalentVnd: number;
+  monthlyBudgetUsd: number;
+  usdToVndRate: number;
+  categoryBreakdowns: R2CategoryBreakdown[];
+  largestObjects: R2LargestObject[];
+  generatedAt: string;
+}

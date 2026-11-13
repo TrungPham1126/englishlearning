@@ -1,5 +1,5 @@
 // src/features/student/components/SkillAccordion.tsx
-import React, { useMemo } from "react";
+import React from "react";
 import {
   BookText,
   Headphones,
@@ -8,9 +8,6 @@ import {
   BookOpen,
   ChevronDown,
   CheckCircle2,
-  PlayCircle,
-  Clock,
-  Layers,
 } from "lucide-react";
 
 export type SkillCategory =
@@ -47,8 +44,8 @@ export interface SkillThemeConfig {
 export const SKILL_THEMES: Record<SkillCategory, SkillThemeConfig> = {
   READING: {
     category: "READING",
-    title: "Kỹ Năng Đọc (Reading)",
-    subtitle: "Đọc hiểu, phân tích ngữ cảnh & suy luận văn bản",
+    title: "Đọc",
+    subtitle: "",
     icon: BookText,
     border: "border-slate-200/90 dark:border-slate-800",
     borderHover: "hover:border-slate-300 dark:hover:border-slate-700",
@@ -70,8 +67,8 @@ export const SKILL_THEMES: Record<SkillCategory, SkillThemeConfig> = {
   },
   LISTENING: {
     category: "LISTENING",
-    title: "Kỹ Năng Nghe (Listening)",
-    subtitle: "Luyện nghe chọn từ, bắt key & điền thông tin",
+    title: "Nghe",
+    subtitle: "",
     icon: Headphones,
     border: "border-slate-200/90 dark:border-slate-800",
     borderHover: "hover:border-slate-300 dark:hover:border-slate-700",
@@ -93,8 +90,8 @@ export const SKILL_THEMES: Record<SkillCategory, SkillThemeConfig> = {
   },
   SPEAKING: {
     category: "SPEAKING",
-    title: "Kỹ Năng Nói & Phát Âm (Speaking)",
-    subtitle: "Luyện phát âm, Shadowing ngữ điệu & hỏi đáp phản xạ",
+    title: "Nói",
+    subtitle: "",
     icon: Mic,
     border: "border-slate-200/90 dark:border-slate-800",
     borderHover: "hover:border-slate-300 dark:hover:border-slate-700",
@@ -116,8 +113,8 @@ export const SKILL_THEMES: Record<SkillCategory, SkillThemeConfig> = {
   },
   WRITING: {
     category: "WRITING",
-    title: "Kỹ Năng Viết (Writing)",
-    subtitle: "Sắp xếp từ, hoàn chỉnh câu & viết đoạn văn ngắn",
+    title: "Viết",
+    subtitle: "",
     icon: PenTool,
     border: "border-slate-200/90 dark:border-slate-800",
     borderHover: "hover:border-slate-300 dark:hover:border-slate-700",
@@ -139,8 +136,8 @@ export const SKILL_THEMES: Record<SkillCategory, SkillThemeConfig> = {
   },
   VOCABULARY_GRAMMAR: {
     category: "VOCABULARY_GRAMMAR",
-    title: "Từ Vựng & Ngữ Pháp (Vocabulary & Grammar)",
-    subtitle: "Ghi nhớ từ vựng, nối từ & áp dụng quy tắc ngữ pháp",
+    title: "Từ vựng & Ngữ pháp",
+    subtitle: "",
     icon: BookOpen,
     border: "border-slate-200/90 dark:border-slate-800",
     borderHover: "hover:border-slate-300 dark:hover:border-slate-700",
@@ -220,33 +217,15 @@ export interface SkillAccordionToolbarProps {
 }
 
 export const SkillAccordionToolbar: React.FC<SkillAccordionToolbarProps> = ({
-  totalSkills,
   completedTasks,
   totalTasks,
-  onExpandAll,
-  onCollapseAll,
 }) => {
-  const completionPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800/80 shadow-2xs">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-600/15 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-600/30">
-          <Layers size={14} />
-        </div>
-        <div>
-          <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-            <span>Phân nhóm theo Kỹ Năng</span>
-            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              {totalSkills} kỹ năng
-            </span>
-          </span>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400">
-            Tiến độ: <b className="text-emerald-600 dark:text-emerald-400">{completedTasks}/{totalTasks}</b> nhiệm vụ ({completionPct}%)
-          </p>
-        </div>
-      </div>
-
+    <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-600 dark:text-slate-400">
+      <span>Kỹ năng</span>
+      <span className="tabular-nums text-slate-800 dark:text-slate-200">
+        {completedTasks}/{totalTasks} xong
+      </span>
     </div>
   );
 };
@@ -268,7 +247,6 @@ export interface SkillAccordionCardProps {
 export const SkillAccordionCard: React.FC<SkillAccordionCardProps> = ({
   category,
   customTitle,
-  customSubtitle,
   totalTasks,
   completedTasks,
   isExpanded,
@@ -283,74 +261,53 @@ export const SkillAccordionCard: React.FC<SkillAccordionCardProps> = ({
 
   return (
     <div
-      className={`rounded-xl border transition-all duration-200 shadow-2xs overflow-hidden bg-white dark:bg-[#111827] ${
+      className={`rounded-xl border transition-all duration-200 overflow-hidden bg-white dark:bg-[#111827] ${
         isExpanded
-          ? `${theme.borderActive} ${theme.accentGlow}`
+          ? theme.borderActive
           : `${theme.border} ${theme.borderHover}`
       }`}
     >
-      {/* Header Accordion Toggle Button */}
       <button
         type="button"
         onClick={onToggle}
-        className={`w-full px-3.5 py-2.5 sm:px-4 sm:py-2.5 flex items-center justify-between gap-2.5 text-left transition-colors duration-200 cursor-pointer select-none ${
+        className={`w-full px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left transition-colors duration-200 cursor-pointer select-none ${
           isExpanded ? theme.bgActive : theme.bgHeaderHover
         }`}
         aria-expanded={isExpanded}
       >
-        {/* CỘT TRÁI: SQUIRCLE ICON & TÊN KỸ NĂNG */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className={`flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg border ${theme.squircleBg} ${theme.squircleBorder} ${theme.squircleText} shadow-2xs transition-transform duration-200 group-hover:scale-105`}
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${theme.squircleBg} ${theme.squircleBorder} ${theme.squircleText}`}
           >
             <Icon size={15} />
           </div>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {customTitle || theme.title}
-              </h3>
-              {isAllDone && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.2 text-[9px] font-extrabold uppercase text-emerald-700 dark:text-emerald-400 border border-emerald-200/70 dark:border-emerald-500/30">
-                  <CheckCircle2 size={10} /> Đã xong
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-              {customSubtitle || theme.subtitle}
-            </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              {customTitle || theme.title}
+            </h3>
+            {isAllDone && (
+              <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            )}
           </div>
         </div>
 
-        {/* CỘT GIỮA & PHẢI: PROGRESS BAR + BADGE + CHEVRON */}
-        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-          {/* Mini Progress Bar dạng Pill (Ẩn trên Mobile, hiện từ sm trở lên) */}
-          <div className="hidden sm:flex flex-col items-end gap-0.5">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">
-              <span>{completedTasks}/{totalTasks} bài</span>
-              <span className={`text-[9px] px-1 py-0.2 rounded font-black tabular-nums ${isAllDone ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
-                {completionPct}%
-              </span>
-            </div>
-            <div className={`w-20 md:w-24 h-1.5 rounded-full overflow-hidden ${theme.progressBarBg}`}>
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${theme.progressGradient}`}
-                style={{ width: `${completionPct}%` }}
-              />
-            </div>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className={`hidden sm:block w-16 h-1.5 rounded-full overflow-hidden ${theme.progressBarBg}`}>
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${theme.progressGradient}`}
+              style={{ width: `${completionPct}%` }}
+            />
           </div>
 
-          {/* Badge đếm số lượng bài */}
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border tabular-nums ${theme.badgeBg} ${theme.badgeBorder} ${theme.badgeText}`}
+            className={`text-[11px] font-bold px-2 py-0.5 rounded-md border tabular-nums ${theme.badgeBg} ${theme.badgeBorder} ${theme.badgeText}`}
           >
-            {totalTasks} bài
+            {completedTasks}/{totalTasks}
           </span>
 
-          {/* Icon Chevron xoay 180 độ */}
           <div
-            className={`flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-transform duration-200 ease-in-out ${
+            className={`flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-transform duration-200 ${
               isExpanded ? "rotate-180 bg-slate-200 dark:bg-slate-700" : ""
             }`}
           >
@@ -359,14 +316,13 @@ export const SkillAccordionCard: React.FC<SkillAccordionCardProps> = ({
         </div>
       </button>
 
-      {/* EXPANDED ACCORDION BODY */}
       <div
         className={`grid transition-all duration-200 ease-in-out ${
           isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0 pointer-events-none"
         }`}
       >
         <div className="overflow-hidden">
-          <div className="p-3 sm:p-3.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+          <div className="p-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
             {children}
           </div>
         </div>

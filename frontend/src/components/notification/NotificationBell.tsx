@@ -29,13 +29,15 @@ export function NotificationBell() {
     useState<NotificationItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
 
   const fetchNotifications = async () => {
     try {
-      setIsLoading(true);
+      if (isMountedRef.current) setIsLoading(true);
       const res: any = await axiosClient.get(
         "/api/v1/notifications?page=0&size=30",
       );
+      if (!isMountedRef.current) return;
       const rawData = res.data?.data ?? res.data;
       const rawList = Array.isArray(rawData)
         ? rawData
@@ -69,11 +71,12 @@ export function NotificationBell() {
     } catch (err) {
       console.error("Lỗi khi tải thông báo trên Header:", err);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchNotifications();
 
     const interval = setInterval(fetchNotifications, 30000);
@@ -83,10 +86,18 @@ export function NotificationBell() {
         setIsOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
+      isMountedRef.current = false;
       clearInterval(interval);
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 

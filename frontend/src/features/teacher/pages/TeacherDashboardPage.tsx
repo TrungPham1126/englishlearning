@@ -70,7 +70,7 @@ export default function TeacherDashboardPage() {
       color: "bg-amber-50 dark:bg-amber-950/40",
       textColor: "text-amber-600 dark:text-amber-400",
       border: "border-slate-200 dark:border-amber-500/30",
-      actionLink: "/teacher/grading",
+      actionLink: "/teacher/classrooms",
     },
     {
       label: "Tỷ lệ hoàn thành TB",

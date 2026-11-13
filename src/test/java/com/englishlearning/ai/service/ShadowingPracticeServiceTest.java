@@ -168,4 +168,43 @@ class ShadowingPracticeServiceTest {
         verifyNoInteractions(entityManager);
         verifyNoInteractions(aiEvaluationRepository);
     }
+
+    @Test
+    @DisplayName("Cập nhật AiEvaluation sẵn có, KPI null vẫn an toàn & cập nhật Analytics khi Student khác null")
+    void should_UpdateExistingEvaluationAndAnalytics_andHandleNullSessionAndDbFailure() {
+        UUID studentId = UUID.randomUUID();
+        com.englishlearning.auth.entity.Student student = com.englishlearning.auth.entity.Student.builder()
+                .id(studentId).build();
+        com.englishlearning.submission.entity.AssignmentAttempt attempt =
+                com.englishlearning.submission.entity.AssignmentAttempt.builder().student(student).build();
+        StudentAnswer answer = StudentAnswer.builder().id(sampleAnswerId).attempt(attempt).build();
+        AiEvaluation existing = AiEvaluation.builder().studentAnswer(answer).build();
+
+        when(entityManager.find(StudentAnswer.class, sampleAnswerId)).thenReturn(answer);
+        when(aiEvaluationRepository.findByStudentAnswerId(sampleAnswerId)).thenReturn(Optional.of(existing));
+
+        ShadowingEvaluationResponse noKpiResp = ShadowingEvaluationResponse.builder()
+                .overallScore(90).isPassed(true).evaluatedBy("PYTHON_ACOUSTIC_ENGINE").kpi(null).build();
+        when(aiEvaluationService.evaluateSpeech(eq(sampleAudio), eq("a.wav"), eq(sampleReference)))
+                .thenReturn(noKpiResp);
+
+        shadowingPracticeService.practiceShadowing(sampleAnswerId, sampleAudio, "a.wav", sampleReference);
+
+        assertThat(existing.getOverallScore()).isEqualTo(9.0);
+        assertThat(existing.getPronunciationScore()).isZero();
+        assertThat(existing.getFluencyScore()).isZero();
+        verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 0.9);
+
+        // sessionId null -> chunk_default.wav
+        when(aiEvaluationService.evaluateSpeech(eq(sampleAudio), eq("chunk_default.wav"), eq(sampleReference)))
+                .thenReturn(noKpiResp);
+        shadowingPracticeService.processAudioChunk(null, sampleAudio, sampleReference);
+        verify(aiEvaluationService).evaluateSpeech(eq(sampleAudio), eq("chunk_default.wav"), eq(sampleReference));
+
+        // Lỗi lưu DB được catch nhẹ nhàng và vẫn trả response
+        when(aiEvaluationRepository.save(any())).thenThrow(new RuntimeException("DB lock timeout"));
+        ShadowingEvaluationResponse resilient = shadowingPracticeService.practiceShadowing(
+                sampleAnswerId, sampleAudio, "a.wav", sampleReference);
+        assertThat(resilient.getOverallScore()).isEqualTo(90);
+    }
 }

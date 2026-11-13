@@ -63,6 +63,8 @@ export default function VideoPlayer({
   const bufferingTimerRef = useRef<number | null>(null);
   const hideControlsTimerRef = useRef<number | null>(null);
   const lastSyncRef = useRef<number>(initialSeconds);
+  const isMountedRef = useRef<boolean>(true);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   // Video State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -84,16 +86,34 @@ export default function VideoPlayer({
   const [hoverTime, setHoverTime] = useState<number | null>(null);
 
   const normalizedStreamUrl = normalizeStreamUrl(streamUrl);
+  const rawFallbackUrl = videoId ? `/api/v1/videos/${videoId}/raw` : normalizedStreamUrl;
+  const [activeStreamUrl, setActiveStreamUrl] = useState<string>(normalizedStreamUrl);
 
-  // Reset seek guard when switching to another video
+  // Sync activeStreamUrl when streamUrl prop changes; onError below falls back from .m3u8 to /raw when unsupported
   useEffect(() => {
+    setActiveStreamUrl(normalizedStreamUrl);
+  }, [normalizedStreamUrl]);
+
+  // Reset seek guard and playback UI state when switching to another video
+  useEffect(() => {
+    dragCleanupRef.current?.();
     hasAppliedInitialSeekRef.current = false;
     lastSyncRef.current = initialSeconds;
+    setCurrentTime(0);
+    setDuration(0);
+    setBufferedEnd(0);
+    setIsPlaying(false);
+    setIsBuffering(false);
+    setCompleted(false);
+    setIsScrubbing(false);
   }, [videoId]);
 
-  // Clean up timers on unmount
+  // Clean up timers and active drag listeners on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
+      dragCleanupRef.current?.();
       if (bufferingTimerRef.current) {
         window.clearTimeout(bufferingTimerRef.current);
       }
@@ -335,6 +355,7 @@ export default function VideoPlayer({
   const handleScrubberMouseDown = (e: ReactMouseEvent) => {
     e.preventDefault();
     if (!videoRef.current) return;
+    dragCleanupRef.current?.();
     setIsScrubbing(true);
     const target = calculateScrubPosition(e);
     videoRef.current.currentTime = target;
@@ -347,12 +368,22 @@ export default function VideoPlayer({
       setCurrentTime(nextTarget);
     };
 
-    const onMouseUp = () => {
-      setIsScrubbing(false);
+    const cleanupDrag = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      if (dragCleanupRef.current === cleanupDrag) {
+        dragCleanupRef.current = null;
+      }
     };
 
+    const onMouseUp = () => {
+      cleanupDrag();
+      if (isMountedRef.current) {
+        setIsScrubbing(false);
+      }
+    };
+
+    dragCleanupRef.current = cleanupDrag;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
@@ -451,11 +482,16 @@ export default function VideoPlayer({
       {/* 2. FOREGROUND VIDEO: Video phát chính duy nhất */}
       <video
         ref={videoRef}
-        src={normalizedStreamUrl}
+        src={activeStreamUrl}
         preload="auto"
         crossOrigin="anonymous"
         playsInline
         controls={false}
+        onError={() => {
+          if (activeStreamUrl.toLowerCase().includes(".m3u8") && rawFallbackUrl && activeStreamUrl !== rawFallbackUrl) {
+            setActiveStreamUrl(rawFallbackUrl);
+          }
+        }}
         onClick={togglePlay}
         onDoubleClick={toggleFullscreen}
         onPlay={() => setIsPlaying(true)}
@@ -466,12 +502,15 @@ export default function VideoPlayer({
         onWaiting={handleWaiting}
         onPlaying={handlePlaying}
         onEnded={async () => {
+          if (!isMountedRef.current) return;
           setIsPlaying(false);
-          setCompleted(true);
-          if (enableProgressSync && videoRef.current) {
-            const dur = Math.floor(videoRef.current.duration || currentTime);
+          const videoEl = videoRef.current;
+          if (enableProgressSync && videoEl) {
+            const dur = Math.floor(videoEl.duration || currentTime);
             try {
               await studentApi.updateVideoProgress(videoId, dur, true);
+              if (!isMountedRef.current) return;
+              setCompleted(true);
               window.dispatchEvent(
                 new CustomEvent("student-progress-updated", {
                   detail: { videoId, completed: true, watchedSeconds: dur },
@@ -479,7 +518,12 @@ export default function VideoPlayer({
               );
             } catch (e) {
               console.error("Không thể cập nhật tiến độ video khi kết thúc:", e);
+              if (isMountedRef.current) {
+                setCompleted(true);
+              }
             }
+          } else {
+            setCompleted(true);
           }
         }}
         className="relative z-10 w-full h-full object-contain cursor-pointer"

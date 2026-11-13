@@ -1,6 +1,9 @@
 package com.englishlearning.video.entity;
 
 import com.englishlearning.auth.entity.Student;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -20,6 +23,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class VideoWatchHistory {
 
     @Id
@@ -28,10 +32,12 @@ public class VideoWatchHistory {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "video_id", nullable = false)
     private Video video;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
     private Student student;
@@ -47,6 +53,11 @@ public class VideoWatchHistory {
     @Column(name = "is_completed", nullable = false)
     @Builder.Default
     private Boolean isCompleted = false;
+
+    @JsonProperty("completed")
+    public Boolean getCompleted() {
+        return isCompleted;
+    }
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -7,7 +7,7 @@ import tempfile
 import wave
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Tuple
+from typing import Generator, Optional, Tuple
 
 import numpy as np
 import scipy.signal
@@ -84,6 +84,16 @@ def convert_to_praat_sound(audio_bytes: bytes) -> "parselmouth.Sound":
         raise RuntimeError("parselmouth library is not installed.")
 
     try:
+        if HAS_SOUNDFILE:
+            try:
+                with io.BytesIO(audio_bytes) as bio:
+                    data, sr = sf.read(bio, dtype="float32")
+                if data is not None and len(data) > 0:
+                    if data.ndim > 1:
+                        data = np.mean(data, axis=1)
+                    return parselmouth.Sound(data, sampling_frequency=float(sr))
+            except Exception:
+                pass
         if HAS_PYDUB:
             audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
             audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
@@ -91,8 +101,7 @@ def convert_to_praat_sound(audio_bytes: bytes) -> "parselmouth.Sound":
             audio.export(wav_io, format="wav")
             wav_io.seek(0)
             return parselmouth.Sound(wav_io.read())
-        else:
-            return parselmouth.Sound(audio_bytes)
+        return parselmouth.Sound(audio_bytes)
     except Exception as conv_err:
         logger.warning("Lỗi chuyển đổi âm thanh qua pydub sang WAV: %s. Thử nạp trực tiếp...", conv_err)
         try:
@@ -131,8 +140,16 @@ class AudioPreprocessor:
         data: Optional[np.ndarray] = None
         sr: int = self.target_sample_rate
 
-        # 1. Thử giải mã qua pydub trước (xử lý tốt nhất WebM/Opus từ trình duyệt)
-        if HAS_PYDUB:
+        # 1. Thử soundfile trước trong RAM (WAV, FLAC, OGG nhanh tức thời, không gọi subprocess/ffprobe)
+        if HAS_SOUNDFILE:
+            try:
+                with io.BytesIO(audio_bytes) as bio:
+                    data, sr = sf.read(bio, dtype="float32")
+            except Exception:
+                data = None
+
+        # 2. Thử giải mã qua pydub nếu soundfile không hỗ trợ định dạng (WebM/Opus, MP3, M4A)
+        if data is None and HAS_PYDUB:
             try:
                 audio_seg = AudioSegment.from_file(io.BytesIO(audio_bytes))
                 audio_seg = audio_seg.set_frame_rate(self.target_sample_rate).set_channels(1).set_sample_width(2)
@@ -142,14 +159,6 @@ class AudioPreprocessor:
                     sr = self.target_sample_rate
             except Exception as pydub_err:
                 logger.debug("pydub decoding error, falling back: %s", pydub_err)
-
-        # 2. Thử soundfile nếu pydub chưa đọc được (cho WAV chuẩn, FLAC)
-        if data is None and HAS_SOUNDFILE:
-            try:
-                with io.BytesIO(audio_bytes) as bio:
-                    data, sr = sf.read(bio, dtype="float32")
-            except Exception:
-                pass
 
         # 3. Fallback qua ffmpeg subprocess
         if data is None:
@@ -187,7 +196,9 @@ class AudioPreprocessor:
             temp_in_path = temp_in.name
 
         try:
-            ffmpeg_cmd = FFMPEG_BIN or get_ffmpeg_executable()
+            ffmpeg_cmd = get_ffmpeg_executable() or FFMPEG_BIN
+            if not ffmpeg_cmd:
+                raise UnsupportedAudioError("Máy chủ chưa cấu hình bộ giải mã ffmpeg để đọc định dạng âm thanh này.")
             cmd = [
                 ffmpeg_cmd,
                 "-y",
@@ -202,6 +213,7 @@ class AudioPreprocessor:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=30,
                 check=True
             )
             raw_audio = process.stdout
@@ -209,6 +221,8 @@ class AudioPreprocessor:
                 raise UnsupportedAudioError("ffmpeg không thể trích xuất dữ liệu âm thanh.")
             audio_data = np.frombuffer(raw_audio, dtype=np.float32)
             return audio_data, self.target_sample_rate
+        except subprocess.TimeoutExpired:
+            raise UnsupportedAudioError("Quá trình giải mã audio qua ffmpeg bị quá thời gian (timeout).")
         except subprocess.CalledProcessError as ex:
             err_msg = ex.stderr.decode("utf-8", errors="ignore")[:300]
             raise UnsupportedAudioError(f"Lỗi giải mã audio qua ffmpeg: {err_msg}")

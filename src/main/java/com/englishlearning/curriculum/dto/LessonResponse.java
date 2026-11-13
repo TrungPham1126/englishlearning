@@ -22,6 +22,9 @@ public class LessonResponse {
     private int progressPercentage;
     private int watchedSeconds;
 
+    private boolean hasVideo;
+    private int documentsCount;
+
     @JsonProperty("isCompleted")
     public boolean getIsCompleted() {
         return completed;

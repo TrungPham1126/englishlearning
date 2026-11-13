@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Search,
   Users,
+  FileSpreadsheet,
+  Database,
 } from "lucide-react";
 
 export default function ClassroomManagementPage() {
@@ -140,12 +142,21 @@ export default function ClassroomManagementPage() {
             Tổng cộng: <span className="font-semibold text-slate-900 dark:text-white">{classes.length}</span> lớp ({filteredClasses.length} lớp hiển thị theo bộ lọc).
           </p>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
-        >
-          <Plus size={18} /> Khởi tạo Lớp Mới
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => navigate("/admin/database")}
+            className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+          >
+            <Database size={16} className="text-blue-700 dark:text-blue-400" /> Quản Lý CSDL &amp; R2
+          </button>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
+          >
+            <Plus size={18} /> Khởi tạo Lớp Mới
+          </button>
+        </div>
       </div>
 
       {/* FILTER CONTROLS */}
@@ -252,8 +263,24 @@ export default function ClassroomManagementPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end text-xs font-bold text-blue-700 dark:text-blue-400">
-                Truy cập quản trị <ChevronRight size={14} className="ml-1" />
+              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    adminApi
+                      .downloadClassroomReportExcel(cls.id, cls.name)
+                      .catch((err: any) =>
+                        alert(err.response?.data?.message || "Lỗi xuất báo cáo lớp"),
+                      );
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition cursor-pointer"
+                >
+                  <FileSpreadsheet size={13} /> Xuất Báo Cáo
+                </button>
+                <span className="inline-flex items-center text-blue-700 dark:text-blue-400">
+                  Truy cập quản trị <ChevronRight size={14} className="ml-1" />
+                </span>
               </div>
             </div>
           ))}

@@ -46,7 +46,7 @@ public class JwtServiceImpl implements JwtService {
                 .toList();
         extraClaims.put("roles", roles);
 
-        if (userDetails instanceof CustomUserDetails customUser) {
+        if (userDetails instanceof CustomUserDetails customUser && customUser.getId() != null) {
             extraClaims.put("userId", customUser.getId().toString());
         }
         return buildToken(extraClaims, userDetails.getUsername(), appProperties.getJwt().getAccessTokenExpirationMs());
