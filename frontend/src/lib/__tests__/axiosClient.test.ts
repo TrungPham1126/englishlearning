@@ -257,6 +257,15 @@ describe("lib/axiosClient - Interceptors & Refresh Token Queue", () => {
     expect(logoutSpy).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().accessToken).toBeNull();
+
+    // Trường hợp endpoint /api/v1/auth/refresh-token trả về lỗi HTTP 401/500 trực tiếp
+    useAuthStore.getState().setAuth("expired-token-2", mockUser);
+    refreshSpy.mockRejectedValueOnce(new Error("Refresh token expired or revoked"));
+
+    await expect(axiosClient.get("/api/v1/c")).rejects.toThrow("Refresh token expired or revoked");
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().accessToken).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
     consoleErrorSpy.mockRestore();
   });
 
@@ -295,5 +304,48 @@ describe("lib/axiosClient - Interceptors & Refresh Token Queue", () => {
     await expect(axiosClient.get("/api/v1/always-401")).rejects.toThrow();
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
+  });
+
+  it("chủ động refresh JWT sắp hết hạn trước khi gửi FormData upload để tránh server đóng kết nối 401 giữa chừng", async () => {
+    const expiredPayload = btoa(
+      JSON.stringify({ sub: "teacher@elp.vn", exp: Math.floor(Date.now() / 1000) - 60 }),
+    );
+    const expiredJwt = `eyJhbGciOiJIUzI1NiJ9.${expiredPayload}.sig`;
+    useAuthStore.getState().setAuth(expiredJwt, mockUser);
+
+    let sentAuthHeader: unknown = null;
+    axiosClient.defaults.adapter = async (config) => {
+      sentAuthHeader = config.headers.get("Authorization");
+      return {
+        data: { uploaded: true },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+
+    const refreshSpy = vi.spyOn(axios, "post").mockResolvedValue({
+      data: { status: "SUCCESS", data: { accessToken: "fresh-upload-token" } },
+    });
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["video"], { type: "video/mp4" }), "lesson.mp4");
+
+    await axiosClient.post("/api/v1/videos?lessonId=1", formData);
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(sentAuthHeader).toBe("Bearer fresh-upload-token");
+
+    // Token còn hạn (> 60s) thì không gọi refresh thêm lần nữa
+    const validPayload = btoa(
+      JSON.stringify({ sub: "teacher@elp.vn", exp: Math.floor(Date.now() / 1000) + 600 }),
+    );
+    const validJwt = `eyJhbGciOiJIUzI1NiJ9.${validPayload}.sig`;
+    useAuthStore.getState().setAuth(validJwt, mockUser);
+
+    await axiosClient.post("/api/v1/videos?lessonId=2", formData);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(sentAuthHeader).toBe(`Bearer ${validJwt}`);
   });
 });

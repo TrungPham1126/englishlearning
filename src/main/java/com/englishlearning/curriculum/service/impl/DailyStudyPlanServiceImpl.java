@@ -6,6 +6,7 @@ import com.englishlearning.assignment.entity.Assignment;
 import com.englishlearning.classroom.entity.Classroom;
 // hoặc:
 
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.*;
 import com.englishlearning.curriculum.entity.DailyPlanItem;
@@ -38,6 +39,7 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
     private final EntityManager entityManager;
     private final com.englishlearning.classroom.repository.ClassStudentRepository classStudentRepository;
     private final com.englishlearning.assignment.repository.AssignmentRepository assignmentRepository;
+    private final UserStreakService userStreakService;
 
     private static final DateTimeFormatter DATE_SUMMARY_FORMATTER = DateTimeFormatter.ofPattern("EEE dd-MM-yyyy",
             Locale.ENGLISH);
@@ -54,13 +56,25 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
             throw new com.englishlearning.common.exception.ForbiddenException("Học viên không thuộc lớp học này");
         }
 
+        StudentStreakResponse streakInfo = (studentId != null && userStreakService != null)
+                ? userStreakService.getStreakSummary(studentId)
+                : null;
+        int currentStreak = (streakInfo != null && streakInfo.getCurrentStreak() != null)
+                ? streakInfo.getCurrentStreak()
+                : 0;
+        boolean hasHomeworkToday = streakInfo != null && Boolean.TRUE.equals(streakInfo.getHasHomeworkToday());
+        boolean completedToday = streakInfo != null && Boolean.TRUE.equals(streakInfo.getCompletedToday());
+
         List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
 
-        if (plans.isEmpty()) {
+        if (plans == null || plans.isEmpty()) {
             return DailyHomeworkOverviewResponse.builder()
                     .completionPercentage(100)
                     .totalDays(0)
                     .completedDays(0)
+                    .currentStreak(currentStreak)
+                    .hasHomeworkToday(hasHomeworkToday)
+                    .completedToday(completedToday)
                     .days(Collections.emptyList())
                     .currentSelectedDay(null)
                     .build();
@@ -115,8 +129,8 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
             }
             boolean isCompleted = !planItems.isEmpty() && planCompletedCount >= planItems.size();
 
-            boolean isCurrentDay = today.isEqual(plan.getScheduledDate());
-            boolean isTodayOrPast = !plan.getScheduledDate().isAfter(today);
+            boolean isCurrentDay = plan.getScheduledDate() != null && today.isEqual(plan.getScheduledDate());
+            boolean isTodayOrPast = plan.getScheduledDate() != null && !plan.getScheduledDate().isAfter(today);
             boolean isUnlocked = Boolean.TRUE.equals(plan.getIsUnlocked()) || isTodayOrPast;
 
             if (isUnlocked) {
@@ -147,7 +161,10 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
 
         // Nếu chưa chọn được DAY cụ thể, ưu tiên DAY hôm nay, hoặc DAY mới nhất đã unlock
         if (targetPlan == null) {
-            targetPlan = plans.stream().filter(p -> !p.getScheduledDate().isAfter(today)).findFirst().orElse(plans.get(0));
+            targetPlan = plans.stream()
+                    .filter(p -> p.getScheduledDate() != null && !p.getScheduledDate().isAfter(today))
+                    .findFirst()
+                    .orElse(plans.get(0));
         }
 
         int percentage = unlockedCount > 0 ? Math.round(((float) completedCount / unlockedCount) * 100) : 100;
@@ -159,6 +176,9 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                 .completionPercentage(percentage)
                 .totalDays(unlockedCount)
                 .completedDays(completedCount)
+                .currentStreak(currentStreak)
+                .hasHomeworkToday(hasHomeworkToday)
+                .completedToday(completedToday)
                 .days(daySummaries)
                 .currentSelectedDay(currentSelectedDay)
                 .build();
@@ -173,10 +193,11 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
     }
 
     private DayDetailDto buildDayDetailDto(DailyStudyPlan plan, UUID studentId, List<DailyPlanItem> items, Set<UUID> completedAssignmentIds) {
+        List<DailyPlanItem> safeItems = items != null ? items : Collections.emptyList();
         int completedCount = 0;
         Map<String, List<TaskItemDto>> grouped = new LinkedHashMap<>();
 
-        for (DailyPlanItem item : items) {
+        for (DailyPlanItem item : safeItems) {
             boolean itemDone = false;
             if (studentId != null && item.getAssignment() != null) {
                 UUID aId = item.getAssignment().getId();
@@ -199,7 +220,7 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
             grouped.computeIfAbsent(item.getSectionName() != null ? item.getSectionName() : "CORE", k -> new ArrayList<>()).add(taskDto);
         }
 
-        boolean isTrulyDayCompleted = !items.isEmpty() && completedCount >= items.size();
+        boolean isTrulyDayCompleted = !safeItems.isEmpty() && completedCount >= safeItems.size();
 
         List<SectionGroupDto> sections = grouped.entrySet().stream()
                 .map(entry -> SectionGroupDto.builder()
@@ -231,21 +252,39 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
      */
     @Transactional
     public DailyStudyPlan createDailyPlan(CreateDailyPlanRequest request) {
+        if (request == null || request.getClassroomId() == null) {
+            throw new BadRequestException("ID lớp học không được để trống");
+        }
+        if (request.getScheduledDate() == null) {
+            throw new BadRequestException("Ngày lên lịch mở bài không được để trống");
+        }
+
         Classroom classroom = entityManager.find(Classroom.class, request.getClassroomId());
         if (classroom == null) {
             throw new ResourceNotFoundException("Không tìm thấy lớp học với ID: " + request.getClassroomId());
         }
 
         String title = request.getTitle();
-        if (title == null || title.isBlank()) {
-            title = "DAY " + request.getDayNumber();
+        boolean isTodayOrPast = !request.getScheduledDate().isAfter(LocalDate.now());
+
+        Integer resolvedDayNumber = request.getDayNumber();
+        if (resolvedDayNumber == null || resolvedDayNumber <= 0) {
+            List<DailyStudyPlan> existing = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(request.getClassroomId());
+            int maxDay = existing == null ? 0 : existing.stream()
+                    .map(DailyStudyPlan::getDayNumber)
+                    .filter(Objects::nonNull)
+                    .max(Integer::compareTo)
+                    .orElse(0);
+            resolvedDayNumber = maxDay + 1;
         }
 
-        boolean isTodayOrPast = !request.getScheduledDate().isAfter(LocalDate.now());
+        if (title == null || title.isBlank()) {
+            title = "DAY " + resolvedDayNumber;
+        }
 
         DailyStudyPlan plan = DailyStudyPlan.builder()
                 .classroom(classroom)
-                .dayNumber(request.getDayNumber())
+                .dayNumber(resolvedDayNumber)
                 .title(title)
                 .scheduledDate(request.getScheduledDate())
                 .estimatedMinutes(request.getEstimatedMinutes())
@@ -260,6 +299,13 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
      */
     @Transactional
     public DailyStudyPlan updateDailyPlan(UUID planId, UpdateDailyPlanRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu cập nhật không hợp lệ");
+        }
+        if (request.getDayNumber() != null && request.getDayNumber() <= 0) {
+            throw new BadRequestException("Số thứ tự ngày phải lớn hơn 0");
+        }
+
         DailyStudyPlan plan = dailyStudyPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kế hoạch học tập: " + planId));
 
@@ -371,6 +417,24 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
             if (assignment == null) {
                 throw new ResourceNotFoundException("Không tìm thấy bài tập với ID: " + request.getAssignmentId());
             }
+            List<DailyPlanItem> currentItems = (plan.getItems() != null && !plan.getItems().isEmpty())
+                    ? plan.getItems()
+                    : dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(planId);
+            if (currentItems != null) {
+                Optional<DailyPlanItem> existingItem = currentItems.stream()
+                        .filter(it -> it.getAssignment() != null && request.getAssignmentId().equals(it.getAssignment().getId()))
+                        .findFirst();
+                if (existingItem.isPresent()) {
+                    DailyPlanItem itemToUpdate = existingItem.get();
+                    itemToUpdate.setSectionName(request.getSectionName());
+                    itemToUpdate.setTitle(request.getTitle());
+                    itemToUpdate.setItemType(request.getItemType());
+                    if (request.getOrderIndex() != null) {
+                        itemToUpdate.setOrderIndex(request.getOrderIndex());
+                    }
+                    return dailyPlanItemRepository.save(itemToUpdate);
+                }
+            }
         }
 
         DailyPlanItem item = DailyPlanItem.builder()
@@ -441,11 +505,17 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
 
         java.util.List<com.englishlearning.curriculum.dto.DailyProgressStatResponse> responseList = new java.util.ArrayList<>();
 
-        if (enrollments.isEmpty()) {
+        if (enrollments == null || enrollments.isEmpty()) {
             return responseList;
         }
 
-        java.util.List<UUID> studentIds = enrollments.stream().map(cs -> cs.getStudent().getId()).collect(Collectors.toList());
+        java.util.List<UUID> studentIds = enrollments.stream()
+                .filter(cs -> cs != null && cs.getStudent() != null && cs.getStudent().getId() != null)
+                .map(cs -> cs.getStudent().getId())
+                .collect(Collectors.toList());
+        if (studentIds.isEmpty()) {
+            return responseList;
+        }
 
         java.util.List<com.englishlearning.submission.entity.AssignmentAttempt> allAttempts = entityManager.createQuery(
                 "SELECT a FROM AssignmentAttempt a JOIN FETCH a.student s JOIN FETCH a.assignment assign WHERE a.student.id IN :studentIds AND a.status IN ('SUBMITTED', 'GRADING', 'COMPLETED')",
@@ -454,6 +524,9 @@ public class DailyStudyPlanServiceImpl implements DailyStudyPlanService {
                 .getResultList();
 
         for (com.englishlearning.classroom.entity.ClassStudent cs : enrollments) {
+            if (cs == null || cs.getStudent() == null || cs.getStudent().getUser() == null) {
+                continue;
+            }
             com.englishlearning.auth.entity.Student student = cs.getStudent();
             com.englishlearning.auth.entity.User user = student.getUser();
 

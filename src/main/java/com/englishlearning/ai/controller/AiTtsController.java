@@ -66,9 +66,9 @@ public class AiTtsController {
         String customText = (request != null && request.getText() != null && !request.getText().trim().isEmpty())
                 ? request.getText().trim()
                 : null;
-        String customVoice = (request != null && request.getText() != null && request.getVoice() != null && !request.getVoice().trim().isEmpty())
+        String customVoice = (request != null && request.getVoice() != null && !request.getVoice().trim().isEmpty())
                 ? request.getVoice().trim()
-                : (request != null ? request.getVoice() : null);
+                : null;
 
         log.info("Generating TTS for text: {} (questionId: {}, user: {}, isStudent: {})",
                 customText != null ? customText : "[resolved-from-question-db]",

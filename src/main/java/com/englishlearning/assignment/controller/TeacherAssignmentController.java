@@ -9,6 +9,7 @@ import com.englishlearning.assignment.service.AssignmentService;
 import com.englishlearning.assignment.service.ExcelImportService;
 import com.englishlearning.assignment.service.ExerciseAudioService;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.BadRequestException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -49,10 +50,15 @@ public class TeacherAssignmentController {
 
     // 0B. Tổng hợp giọng nói Neural TTS offline/local chất lượng cao
     @PostMapping("/assignments/synthesize-audio")
-    public ResponseEntity<ApiResponse<String>> synthesizeAudio(@RequestBody Map<String, String> payload) {
-        String text = payload.get("text");
-        String voice = payload.getOrDefault("voice", "af_heart");
-        String speed = payload.getOrDefault("speed", "1.0x");
+    public ResponseEntity<ApiResponse<String>> synthesizeAudio(@RequestBody(required = false) Map<String, String> payload) {
+        String text = payload != null ? payload.get("text") : null;
+        if (text == null || text.isBlank()) {
+            throw new BadRequestException("Nội dung văn bản để tổng hợp âm thanh không được để trống.");
+        }
+        String voice = (payload.get("voice") != null && !payload.get("voice").isBlank())
+                ? payload.get("voice") : "af_heart";
+        String speed = (payload.get("speed") != null && !payload.get("speed").isBlank())
+                ? payload.get("speed") : "1.0x";
 
         String audioUrl = ttsService.synthesizeAudio(text, voice, speed);
         return ResponseEntity.ok(ApiResponse.success("Tổng hợp giọng nói thành công", audioUrl));
@@ -90,12 +96,12 @@ public class TeacherAssignmentController {
         List<Assignment> assignments = assignmentService.getAssignmentsByClassroom(classroomId);
         if (gradingOnly && assignments != null) {
             assignments = assignments.stream()
-                    .filter(a -> Boolean.TRUE.equals(a.getIsExam())
+                    .filter(a -> a != null && (Boolean.TRUE.equals(a.getIsExam())
                             || a.getSkillType() == SkillType.WRITING
                             || a.getSkillType() == SkillType.SPEAKING
                             || (a.getQuestions() != null && a.getQuestions().stream().anyMatch(q ->
-                                    q.getQuestionType() == QuestionType.ESSAY
-                                    || q.getQuestionType() == QuestionType.AUDIO_RESPONSE)))
+                                    q != null && (q.getQuestionType() == QuestionType.ESSAY
+                                            || q.getQuestionType() == QuestionType.AUDIO_RESPONSE)))))
                     .toList();
         }
         return ResponseEntity.ok(ApiResponse.success("Assignments retrieved successfully", assignments));

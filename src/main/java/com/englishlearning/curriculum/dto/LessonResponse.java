@@ -23,7 +23,12 @@ public class LessonResponse {
     private int watchedSeconds;
 
     private boolean hasVideo;
+    private UUID videoId;
+    private String videoStatus;
+    private String videoRejectionReason;
     private int documentsCount;
+    private int vocabulariesCount;
+    private int grammarTopicsCount;
 
     @JsonProperty("isCompleted")
     public boolean getIsCompleted() {

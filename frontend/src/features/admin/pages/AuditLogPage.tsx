@@ -94,7 +94,7 @@ export default function AuditLogPage() {
     if (meta.includes("TIER 3") || meta.includes("RULE") || act.includes("FALLBACK_LOCAL")) {
       return {
         variant: "destructive" as const,
-        label: "Tier 3 • Rule Fallback",
+        label: "Tier 3 • Fallback",
       };
     }
 
@@ -127,7 +127,7 @@ export default function AuditLogPage() {
 
     return {
       variant: "neutral" as const,
-      label: "Core System",
+      label: "Hệ thống",
     };
   };
 
@@ -161,19 +161,19 @@ export default function AuditLogPage() {
       ent.includes("TEACHER")
     )
       return "Tài khoản";
-    if (ent.includes("VIDEO")) return "Video Bài giảng";
+    if (ent.includes("VIDEO")) return "Video";
     if (
       ent.includes("ASSIGNMENT") ||
       ent.includes("QUESTION") ||
       ent.includes("ATTEMPT")
     )
-      return "Bài tập / Đề thi";
+      return "Bài tập / Thi";
     if (
       ent.includes("CLASS") ||
       ent.includes("LESSON") ||
       ent.includes("CURRICULUM")
     )
-      return "Lớp học / Giáo trình";
+      return "Lớp / Giáo trình";
     return entityName;
   };
 
@@ -181,7 +181,7 @@ export default function AuditLogPage() {
     if (!jsonStr || jsonStr === "{}" || jsonStr === "null") {
       return (
         <span className="text-slate-400 dark:text-slate-500 italic text-xs">
-          Không có thông tin chi tiết
+          Không có chi tiết
         </span>
       );
     }
@@ -192,13 +192,13 @@ export default function AuditLogPage() {
         method: "Thao tác",
         reason: "Lý do",
         status: "Trạng thái",
-        role: "Phân quyền",
-        email: "Tài khoản",
-        fileName: "Tên tệp",
-        score: "Điểm số",
+        role: "Quyền",
+        email: "Email",
+        fileName: "Tệp",
+        score: "Điểm",
         level: "Cấp độ",
-        tier: "Tầng AI",
-        model: "Mô hình AI",
+        tier: "Tier AI",
+        model: "Model AI",
       };
 
       const valueDictionary: Record<string, string> = {
@@ -347,25 +347,20 @@ export default function AuditLogPage() {
 
   const filterTabs: { id: FilterType; label: string; icon: React.ReactNode }[] = [
     { id: "ALL", label: "Tất cả", icon: <Activity size={14} /> },
-    { id: "AI_PIPELINE", label: "AI & Fallback 3 Tầng", icon: <Cpu size={14} /> },
+    { id: "AI_PIPELINE", label: "AI 3 tầng", icon: <Cpu size={14} /> },
     { id: "ACCOUNT", label: "Tài khoản", icon: <Users size={14} /> },
     { id: "ASSIGNMENT", label: "Bài tập & Thi", icon: <FileText size={14} /> },
     { id: "CLASS", label: "Lớp học", icon: <School size={14} /> },
-    { id: "VIDEO", label: "Video bài giảng", icon: <Video size={14} /> },
+    { id: "VIDEO", label: "Video", icon: <Video size={14} /> },
   ];
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 animate-in fade-in duration-200">
       {/* 1. Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800/80">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-            Nhật Ký Kiểm Toán (Audit Logs)
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tra cứu thao tác quản trị, giám sát điều phối AI 3 tầng (Tier 1 / Tier 2 / Tier 3) và phân loại cảnh báo.
-          </p>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+          Audit Log
+        </h1>
 
         {/* Severity Summary Pills */}
         <div className="flex items-center gap-2">
@@ -400,7 +395,7 @@ export default function AuditLogPage() {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Tìm theo người thao tác, hành động, email hoặc chi tiết..."
+              placeholder="Tìm người dùng, hành động, chi tiết..."
               startIcon={<Search size={15} />}
             />
           </div>
@@ -471,8 +466,7 @@ export default function AuditLogPage() {
         ) : sortedLogs.length === 0 ? (
           <EmptyState
             icon={<Activity size={28} />}
-            title="Không tìm thấy bản ghi Audit Log nào"
-            description="Không có dữ liệu phù hợp với bộ lọc hiện tại. Hãy thử thay đổi từ khóa hoặc thiết lập lại bộ lọc."
+            title="Không có bản ghi Audit Log"
           />
         ) : (
           <div>
@@ -485,7 +479,7 @@ export default function AuditLogPage() {
                       onClick={() => handleSort("createdAt")}
                     >
                       <div className="flex items-center gap-1">
-                        <span>Thời Gian</span>
+                        <span>Thời gian</span>
                         <ArrowUpDown size={12} />
                       </div>
                     </th>
@@ -494,22 +488,22 @@ export default function AuditLogPage() {
                       onClick={() => handleSort("severity")}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <span>Mức Độ</span>
+                        <span>Mức độ</span>
                         <ArrowUpDown size={12} />
                       </div>
                     </th>
-                    <th className="py-3 px-4 w-44 text-center">Tầng AI / Xử Lý</th>
+                    <th className="py-3 px-4 w-44 text-center">Tầng AI</th>
                     <th
                       className="py-3 px-4 w-44 cursor-pointer select-none hover:text-blue-700 transition"
                       onClick={() => handleSort("userName")}
                     >
                       <div className="flex items-center gap-1">
-                        <span>Người Thao Tác</span>
+                        <span>Người thao tác</span>
                         <ArrowUpDown size={12} />
                       </div>
                     </th>
-                    <th className="py-3 px-4 w-36">Hành Động</th>
-                    <th className="py-3 px-4">Chi Tiết Kỹ Thuật (Metadata)</th>
+                    <th className="py-3 px-4 w-36">Hành động</th>
+                    <th className="py-3 px-4">Chi tiết</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
@@ -572,7 +566,7 @@ export default function AuditLogPage() {
                             className="font-bold text-xs text-blue-800 dark:text-blue-400 truncate max-w-[160px]"
                             title={log.userName || log.userId}
                           >
-                            {log.userName || "Hệ thống tự động"}
+                            {log.userName || "Hệ thống"}
                           </div>
                           <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[160px] font-mono">
                             ID: {log.userId ? String(log.userId).slice(0, 8) : "system"}
@@ -619,7 +613,7 @@ export default function AuditLogPage() {
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                 </select>
-                <span>trong tổng số <strong className="text-slate-800 dark:text-slate-200 font-mono">{sortedLogs.length}</strong> bản ghi</span>
+                <span>/ <strong className="text-slate-800 dark:text-slate-200 font-mono">{sortedLogs.length}</strong> bản ghi</span>
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -634,7 +628,7 @@ export default function AuditLogPage() {
                 </Button>
 
                 <div className="px-3 text-xs font-bold text-slate-700 dark:text-slate-300 font-mono tabular-nums">
-                  Trang {validCurrentPage} / {totalPages}
+                  {validCurrentPage} / {totalPages}
                 </div>
 
                 <Button

@@ -494,14 +494,15 @@ async def evaluate_phonetics(
         phonemes_schema: List[PhonemeSchema] = []
         w_win_start = max(0, int(word_obj.start * settings.SAMPLE_RATE) - 320)
         w_win_end = min(len(audio_data), int(word_obj.end * settings.SAMPLE_RATE) + 320)
-        if not is_mocked_align and w_win_end - w_win_start > 640:
-            if getattr(alignment_result, "frame_tokens", None):
-                w_raw_tokens = alignment_result.get_window_emitted_tokens(
-                    max(0.0, word_obj.start - 0.02),
-                    word_obj.end + 0.02,
-                )
-            else:
-                w_raw_tokens = decode_raw_speech(audio_data[w_win_start:w_win_end])
+        if getattr(alignment_result, "frame_tokens", None):
+            w_raw_tokens = alignment_result.get_window_emitted_tokens(
+                max(0.0, word_obj.start - 0.02),
+                word_obj.end + 0.02,
+            )
+        elif getattr(alignment_result, "raw_emitted_tokens", None) and len(alignment_result.words) == 1:
+            w_raw_tokens = list(alignment_result.raw_emitted_tokens)
+        elif not is_mocked_align and w_win_end - w_win_start > 640:
+            w_raw_tokens = decode_raw_speech(audio_data[w_win_start:w_win_end])
         else:
             w_raw_tokens = []
 
@@ -666,7 +667,14 @@ async def evaluate_phonetics(
                     p_score = min(p_score, 15.0)
                     p_status = MeasurementStatus.INSUFFICIENT_EVIDENCE
                     custom_cons_feedback = f"Bạn đã phát âm sai hoặc bỏ sót phụ âm /{clean_cons_sym}/ trong từ '{word_obj.word}'."
-                elif not is_coda_r and gop_m is not None and gop_m < -1.8 and p_score < 60.0 and custom_cons_feedback is None:
+                elif (
+                    not is_coda_r
+                    and not (p_obj.is_word_final and (not has_evidence or canon_p < 0.04))
+                    and gop_m is not None
+                    and gop_m < -1.8
+                    and p_score < 60.0
+                    and custom_cons_feedback is None
+                ):
                     custom_cons_feedback = f"Âm /{clean_cons_sym}/ bị phát âm lệch sang phụ âm khác trong từ '{word_obj.word}'."
 
                 p_feedback = custom_cons_feedback or generate_phoneme_pedagogical_feedback(

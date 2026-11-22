@@ -40,8 +40,11 @@ public class AdminUserController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String direction) {
 
-        Sort sort = direction.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        String safeSortBy = (sortBy != null && !sortBy.isBlank()) ? sortBy.trim() : "createdAt";
+        Sort sort = "asc".equalsIgnoreCase(direction) ? Sort.by(safeSortBy).ascending() : Sort.by(safeSortBy).descending();
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
 
         return ResponseEntity.ok(ApiResponse.success(adminUserService.getAllUsers(role, keyword, pageable)));
     }

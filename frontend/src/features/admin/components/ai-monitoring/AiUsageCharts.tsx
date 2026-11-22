@@ -27,7 +27,7 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
     if (studentCost === 0 && teacherCost === 0) {
       return [
         {
-          name: "Chưa phát sinh chi phí",
+          name: "Chưa có chi phí",
           value: 1,
           color: "#94a3b8",
         },
@@ -36,12 +36,12 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
 
     return [
       {
-        name: "Học viên (Speaking Shadowing)",
+        name: "Học viên (Speaking)",
         value: studentCost,
         color: "#6366f1",
       },
       {
-        name: "Giáo viên (Soạn đề thi/bài tập)",
+        name: "Giáo viên (Tạo đề)",
         value: teacherCost,
         color: "#10b981",
       },
@@ -53,17 +53,12 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
       {/* 7-Day Token Trends AreaChart */}
       <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <TrendingUp size={18} className="text-blue-700 dark:text-blue-400" />
-              Thống Kê Token Tiêu Thụ (7 Ngày)
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Dữ liệu phân tích giữa Token gửi đi (Input) và Token nhận về (Output)
-            </p>
-          </div>
+          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <TrendingUp size={18} className="text-blue-700 dark:text-blue-400" />
+            Token tiêu thụ (7 ngày)
+          </h3>
           <span className="text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900/50 px-2.5 py-1 rounded-lg">
-            Token Analytics
+            Input / Output
           </span>
         </div>
 
@@ -102,7 +97,7 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
                 itemStyle={{ color: "#f8fafc" }}
                 formatter={(val: any, name: any) => [
                   Number(val).toLocaleString() + " tokens",
-                  name === "promptTokens" ? "Prompt Tokens" : name === "completionTokens" ? "Completion Tokens" : name,
+                  name === "promptTokens" ? "Input" : name === "completionTokens" ? "Output" : name,
                 ]}
               />
               <Legend
@@ -112,7 +107,7 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
                 iconType="circle"
                 formatter={(value) => (
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                    {value === "promptTokens" ? "Prompt (Input)" : "Completion (Output)"}
+                    {value === "promptTokens" ? "Input" : "Output"}
                   </span>
                 )}
               />
@@ -142,11 +137,8 @@ export const AiUsageCharts: React.FC<AiUsageChartsProps> = ({ stats }) => {
         <div className="pb-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
             <PieIcon size={18} className="text-emerald-600 dark:text-emerald-400" />
-            Tỷ Lệ Phân Bổ Chi Phí AI
+            Phân bổ chi phí AI
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Phân bổ ngân sách giữa tính năng Luyện Nói (Speaking) và Soạn Đề Thi
-          </p>
         </div>
 
         <div className="h-56 w-full relative flex items-center justify-center">

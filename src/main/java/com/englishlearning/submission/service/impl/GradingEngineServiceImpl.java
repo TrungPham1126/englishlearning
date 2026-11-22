@@ -3,6 +3,7 @@ package com.englishlearning.submission.service.impl;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import com.englishlearning.assignment.entity.QuestionOption;
 import com.englishlearning.assignment.entity.QuestionType;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.englishlearning.submission.dto.GradingResult;
 import com.englishlearning.submission.dto.SubmissionRequest;
 import com.englishlearning.submission.service.GradingEngineService;
@@ -35,12 +36,12 @@ public class GradingEngineServiceImpl implements GradingEngineService {
         }
 
         Map<UUID, SubmissionRequest.AnswerDto> answerMap = (answers != null)
-                ? answers.stream().filter(a -> a.getQuestionId() != null)
+                ? answers.stream().filter(a -> a != null && a.getQuestionId() != null)
                     .collect(Collectors.toMap(SubmissionRequest.AnswerDto::getQuestionId, a -> a, (a1, a2) -> a1))
                 : Collections.emptyMap();
 
         Map<UUID, AssignmentQuestion> questionMap = questions.stream()
-                .filter(q -> q.getId() != null)
+                .filter(q -> q != null && q.getId() != null)
                 .collect(Collectors.toMap(AssignmentQuestion::getId, q -> q, (q1, q2) -> q1));
 
         double totalEarned = 0.0;
@@ -50,6 +51,9 @@ public class GradingEngineServiceImpl implements GradingEngineService {
         List<UUID> aiQuestions = new ArrayList<>();
 
         for (AssignmentQuestion q : questions) {
+            if (q == null) {
+                continue;
+            }
             double point = q.getPoints() != null ? q.getPoints() : 1.0;
             maxPossible += point;
 
@@ -87,8 +91,7 @@ public class GradingEngineServiceImpl implements GradingEngineService {
             correctMap.put(q.getId(), isCorrect);
         }
 
-        double scaled = maxPossible > 0 ? (totalEarned / maxPossible) * 10.0 : 0.0;
-        scaled = Math.round(scaled * 10.0) / 10.0;
+        double scaled = maxPossible > 0 ? ScoreScaleUtils.clampScale10((totalEarned / maxPossible) * 10.0) : 0.0;
 
         return GradingResult.builder()
                 .totalScore(totalEarned)
@@ -205,7 +208,7 @@ public class GradingEngineServiceImpl implements GradingEngineService {
     }
 
     private boolean gradeMatchingQuestion(AssignmentQuestion q, String studentText, UUID selectedOptId, Map<UUID, AssignmentQuestion> questionMap) {
-        String targetAnswer = q.getCorrectAnswer() != null ? q.getCorrectAnswer().trim() : "";
+        String targetAnswer = normalizeText(q.getCorrectAnswer());
 
         // 1. So khớp trực tiếp nội dung textAnswer với correctAnswer (không phân biệt hoa thường và khoảng trắng)
         if (!studentText.isBlank() && !targetAnswer.isBlank()) {
@@ -218,24 +221,24 @@ public class GradingEngineServiceImpl implements GradingEngineService {
         if (!studentText.isBlank() && studentText.startsWith("{")) {
             try {
                 Map<?, ?> jsonMap = objectMapper.readValue(studentText, Map.class);
-                String qIdStr = q.getId().toString();
-                Object matchedVal = jsonMap.get(qIdStr);
+                String qIdStr = q.getId() != null ? q.getId().toString() : null;
+                Object matchedVal = qIdStr != null ? jsonMap.get(qIdStr) : null;
                 if (matchedVal == null && q.getPromptText() != null) {
                     matchedVal = jsonMap.get(q.getPromptText().trim());
                 }
                 if (matchedVal != null) {
                     String valStr = normalizeText(String.valueOf(matchedVal));
-                    if (!targetAnswer.isBlank() && valStr.equalsIgnoreCase(normalizeText(targetAnswer))) {
+                    if (!targetAnswer.isBlank() && valStr.equalsIgnoreCase(targetAnswer)) {
                         return true;
                     }
-                    if (valStr.equalsIgnoreCase(qIdStr)) {
+                    if (qIdStr != null && valStr.equalsIgnoreCase(qIdStr)) {
                         return true;
                     }
                     try {
                         UUID targetUuid = UUID.fromString(valStr);
                         AssignmentQuestion peer = questionMap.get(targetUuid);
                         if (peer != null && peer.getCorrectAnswer() != null && !targetAnswer.isBlank()
-                                && normalizeText(peer.getCorrectAnswer()).equalsIgnoreCase(normalizeText(targetAnswer))) {
+                                && normalizeText(peer.getCorrectAnswer()).equalsIgnoreCase(targetAnswer)) {
                             return true;
                         }
                     } catch (IllegalArgumentException ignored) {
@@ -247,14 +250,14 @@ public class GradingEngineServiceImpl implements GradingEngineService {
 
         // 3. So khớp selectedOptionId với ID câu hỏi (tự quy chiếu câu hỏi 1-1)
         if (selectedOptId != null) {
-            if (selectedOptId.equals(q.getId())) {
+            if (q.getId() != null && selectedOptId.equals(q.getId())) {
                 return true;
             }
 
             // Kiểm tra nếu selectedOptId trỏ tới câu hỏi khác có cùng correctAnswer hoặc prompt
             AssignmentQuestion targetQ = questionMap.get(selectedOptId);
             if (targetQ != null && targetQ.getCorrectAnswer() != null && !targetAnswer.isBlank()) {
-                if (targetQ.getCorrectAnswer().trim().equalsIgnoreCase(targetAnswer)) {
+                if (normalizeText(targetQ.getCorrectAnswer()).equalsIgnoreCase(targetAnswer)) {
                     return true;
                 }
             }
@@ -273,8 +276,8 @@ public class GradingEngineServiceImpl implements GradingEngineService {
             if (!studentText.isBlank()) {
                 boolean optTextMatch = q.getOptions().stream()
                         .anyMatch(opt -> Boolean.TRUE.equals(opt.getIsCorrect())
-                                && ((opt.getOptionText() != null && opt.getOptionText().trim().equalsIgnoreCase(studentText))
-                                 || (opt.getMatchText() != null && opt.getMatchText().trim().equalsIgnoreCase(studentText))));
+                                && ((opt.getOptionText() != null && normalizeText(opt.getOptionText()).equalsIgnoreCase(studentText))
+                                 || (opt.getMatchText() != null && normalizeText(opt.getMatchText()).equalsIgnoreCase(studentText))));
                 if (optTextMatch) return true;
             }
         }

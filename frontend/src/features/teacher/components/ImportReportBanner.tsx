@@ -29,7 +29,7 @@ export default function ImportReportBanner({
   return (
     <div
       role="region"
-      aria-label="Báo cáo kết quả nhập dữ liệu"
+      aria-label="Báo cáo nhập dữ liệu"
       className={`rounded-xl border p-4 transition-all duration-200 animate-in fade-in ${
         hasErrors && !isSuccess
           ? "border-rose-300 dark:border-rose-500/30 bg-rose-50/90 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100"
@@ -54,34 +54,30 @@ export default function ImportReportBanner({
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-xs font-black uppercase tracking-wider">
                 {isSuccess
-                  ? `Nhập Thành Công ${report.imported} Câu Hỏi Từ ${report.source === "EXCEL" ? "File Excel" : "Văn Bản Thô"}`
-                  : `Không Thể Nhập Câu Hỏi Từ ${report.source === "EXCEL" ? "File Excel" : "Văn Bản Thô"}`}
+                  ? `Đã nhập ${report.imported} câu (${report.source === "EXCEL" ? "Excel" : "Text"})`
+                  : `Nhập thất bại (${report.source === "EXCEL" ? "Excel" : "Text"})`}
               </h4>
 
               {groups.length > 1 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                   <Layers className="h-3 w-3" />
-                  Phát hiện {groups.length} nhóm kỹ năng
+                  {groups.length} nhóm kỹ năng
                 </span>
               )}
             </div>
 
             <p className="text-xs leading-relaxed opacity-90">
               {isSuccess ? (
-                <>
-                  Hệ thống đã tự động chuẩn hóa định dạng câu hỏi và chuyển sang <b>Bước 2 (Xem &amp; Chỉnh sửa)</b>. Bạn có thể kiểm tra đề bài, các lựa chọn và đáp án trước khi lưu.
-                </>
+                <>Đã nạp vào <b>Bước 2</b>. Kiểm tra trước khi lưu.</>
               ) : (
-                <>
-                  Vui lòng kiểm tra lại cấu trúc file hoặc văn bản nhập vào theo các thông báo chi tiết bên dưới.
-                </>
+                <>Kiểm tra lại định dạng theo lỗi bên dưới.</>
               )}
             </p>
 
             {/* Các nhóm kỹ năng nếu file Excel chứa nhiều kỹ năng cùng lúc */}
             {groups.length > 1 && onSwitchGroup && (
               <div className="flex items-center gap-1.5 pt-2 flex-wrap">
-                <span className="text-[11px] font-bold opacity-80 mr-1">Chuyển nhóm kỹ năng:</span>
+                <span className="text-[11px] font-bold opacity-80 mr-1">Nhóm:</span>
                 {groups.map((g) => {
                   const isActive = g.key === activeGroupKey;
                   return (
@@ -95,7 +91,7 @@ export default function ImportReportBanner({
                           : "bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
                       }`}
                     >
-                      {g.skill} ({g.questions.length} câu)
+                      {g.skill} ({g.questions.length})
                     </button>
                   );
                 })}
@@ -119,7 +115,7 @@ export default function ImportReportBanner({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng thông báo"
+            aria-label="Đóng"
             className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 opacity-70 hover:opacity-100 transition cursor-pointer"
           >
             <X className="h-4 w-4" />
@@ -133,7 +129,7 @@ export default function ImportReportBanner({
           {report.errors.length > 0 && (
             <div className="space-y-1">
               <span className="font-extrabold text-rose-700 dark:text-rose-400 block">
-                ⛔ Các dòng có lỗi ({report.errors.length}):
+                Lỗi ({report.errors.length}):
               </span>
               <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-rose-800 dark:text-rose-200">
                 {report.errors.map((err, i) => (
@@ -146,7 +142,7 @@ export default function ImportReportBanner({
           {report.warnings.length > 0 && (
             <div className="space-y-1">
               <span className="font-extrabold text-amber-700 dark:text-amber-400 block">
-                ⚠️ Cảnh báo tự động điều chỉnh ({report.warnings.length}):
+                Cảnh báo ({report.warnings.length}):
               </span>
               <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-800 dark:text-amber-200">
                 {report.warnings.map((warn, i) => (

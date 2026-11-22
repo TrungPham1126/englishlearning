@@ -66,7 +66,7 @@ export default function ClassroomManagementPage() {
       setClassForm(initialClassForm);
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi tạo lớp");
+      alert(err.response?.data?.message || "Tạo lớp thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -112,23 +112,18 @@ export default function ClassroomManagementPage() {
       {pendingVideoCount > 0 && (
         <div
           onClick={() => navigate("/admin/video-moderation")}
-          className="bg-rose-50 border-2 border-rose-400 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in slide-in-from-top cursor-pointer hover:border-rose-500 transition"
+          className="bg-rose-50 border-2 border-rose-400 rounded-xl p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in slide-in-from-top cursor-pointer hover:border-rose-500 transition"
         >
-          <div className="flex items-center gap-4">
-            <div className="bg-rose-600 text-white p-3.5 rounded-xl shadow-md animate-pulse">
-              <Video size={28} />
+          <div className="flex items-center gap-3.5">
+            <div className="bg-rose-600 text-white p-3 rounded-xl shadow-md animate-pulse">
+              <Video size={24} />
             </div>
-            <div>
-              <h3 className="text-xl font-black text-rose-800 flex items-center gap-2">
-                <AlertTriangle size={20} className="text-rose-600" />
-                Cảnh báo: Có {pendingVideoCount} Video đang chờ duyệt!
-              </h3>
-              <p className="text-sm text-rose-700 font-medium mt-1">
-                Giáo viên đã tải video bài giảng lên. Bấm vào đây để chuyển đến trang phê duyệt.
-              </p>
-            </div>
+            <h3 className="text-base md:text-lg font-black text-rose-800 flex items-center gap-2">
+              <AlertTriangle size={18} className="text-rose-600" />
+              {pendingVideoCount} video chờ duyệt
+            </h3>
           </div>
-          <span className="text-xs font-bold text-rose-700 underline">Xem chi tiết &rarr;</span>
+          <span className="text-xs font-bold text-rose-700 underline">Duyệt ngay &rarr;</span>
         </div>
       )}
 
@@ -136,10 +131,10 @@ export default function ClassroomManagementPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Quản Lý Khóa Học & Lớp Học
+            Lớp học
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tổng cộng: <span className="font-semibold text-slate-900 dark:text-white">{classes.length}</span> lớp ({filteredClasses.length} lớp hiển thị theo bộ lọc).
+            <span className="font-semibold text-slate-900 dark:text-white">{filteredClasses.length}</span>/{classes.length} lớp
           </p>
         </div>
         <div className="flex items-center gap-2.5">
@@ -148,13 +143,13 @@ export default function ClassroomManagementPage() {
             onClick={() => navigate("/admin/database")}
             className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
           >
-            <Database size={16} className="text-blue-700 dark:text-blue-400" /> Quản Lý CSDL &amp; R2
+            <Database size={16} className="text-blue-700 dark:text-blue-400" /> CSDL &amp; R2
           </button>
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
           >
-            <Plus size={18} /> Khởi tạo Lớp Mới
+            <Plus size={18} /> Tạo lớp
           </button>
         </div>
       </div>
@@ -164,11 +159,11 @@ export default function ClassroomManagementPage() {
         {/* Status Filter */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto">
           {[
-            { label: "Tất Cả", value: "ALL" },
-            { label: "Tuyển Sinh", value: "OPEN" },
-            { label: "Đang Học", value: "IN_PROGRESS" },
-            { label: "Kế Hoạch", value: "PLANNING" },
-            { label: "Kết Thúc", value: "COMPLETED" },
+            { label: "Tất cả", value: "ALL" },
+            { label: "Tuyển sinh", value: "OPEN" },
+            { label: "Đang học", value: "IN_PROGRESS" },
+            { label: "Kế hoạch", value: "PLANNING" },
+            { label: "Kết thúc", value: "COMPLETED" },
           ].map((st) => (
             <button
               key={st.value}
@@ -191,11 +186,11 @@ export default function ClassroomManagementPage() {
             onChange={(e) => setLevelFilter(e.target.value)}
             className="border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-700 bg-white dark:bg-[#0b1120]"
           >
-            <option value="ALL">Tất cả Trình độ</option>
-            <option value="A1">Level A1</option>
-            <option value="A2">Level A2</option>
-            <option value="B1">Level B1</option>
-            <option value="B2">Level B2</option>
+            <option value="ALL">Tất cả trình độ</option>
+            <option value="A1">A1</option>
+            <option value="A2">A2</option>
+            <option value="B1">B1</option>
+            <option value="B2">B2</option>
             <option value="IELTS_PREP">IELTS PREP</option>
           </select>
 
@@ -205,7 +200,7 @@ export default function ClassroomManagementPage() {
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Tìm theo tên lớp, GV..."
+              placeholder="Tìm lớp, GV..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-blue-700"
             />
           </div>
@@ -215,10 +210,7 @@ export default function ClassroomManagementPage() {
       {filteredClasses.length === 0 ? (
         <div className="bg-white dark:bg-[#111827] p-16 rounded-xl border border-slate-200 dark:border-slate-800 text-center shadow-sm transition-colors">
           <School size={48} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-          <h4 className="text-base font-bold text-slate-800 dark:text-white">Không tìm thấy lớp học nào</h4>
-          <p className="text-xs text-slate-400 mt-1">
-            Thử thay đổi bộ lọc trạng thái, trình độ hoặc từ khóa tìm kiếm.
-          </p>
+          <h4 className="text-base font-bold text-slate-800 dark:text-white">Chưa có lớp học</h4>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 md:grid-cols-2 gap-6">
@@ -243,20 +235,20 @@ export default function ClassroomManagementPage() {
                 {cls.name}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-5 line-clamp-2">
-                {cls.description || "Chưa có mô tả"}
+                {cls.description || "—"}
               </p>
 
               <div className="space-y-3 mt-auto border-t border-slate-100 dark:border-slate-800 pt-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500 dark:text-slate-400 font-semibold">
-                    Giảng viên:
+                    Giảng viên
                   </span>
                   <span className="font-bold text-slate-800 dark:text-slate-100">
                     {cls.teacherName || "Chưa gán"}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500 dark:text-slate-400 font-semibold">Sĩ số:</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-semibold">Sĩ số</span>
                   <span className="font-bold text-slate-800 dark:text-slate-100">
                     {cls.currentStudentsCount} / {cls.maxStudents || "∞"}
                   </span>
@@ -271,15 +263,15 @@ export default function ClassroomManagementPage() {
                     adminApi
                       .downloadClassroomReportExcel(cls.id, cls.name)
                       .catch((err: any) =>
-                        alert(err.response?.data?.message || "Lỗi xuất báo cáo lớp"),
+                        alert(err.response?.data?.message || "Xuất báo cáo thất bại."),
                       );
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition cursor-pointer"
                 >
-                  <FileSpreadsheet size={13} /> Xuất Báo Cáo
+                  <FileSpreadsheet size={13} /> Xuất Excel
                 </button>
                 <span className="inline-flex items-center text-blue-700 dark:text-blue-400">
-                  Truy cập quản trị <ChevronRight size={14} className="ml-1" />
+                  Chi tiết <ChevronRight size={14} className="ml-1" />
                 </span>
               </div>
             </div>
@@ -293,7 +285,7 @@ export default function ClassroomManagementPage() {
           <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-xl shadow-card w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-[#162033]">
               <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                Tạo Lớp Học Mới
+                Tạo lớp mới
               </h2>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
@@ -305,7 +297,7 @@ export default function ClassroomManagementPage() {
             <form onSubmit={handleCreateClass} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Tên Lớp (Bắt buộc)
+                  Tên lớp
                 </label>
                 <input
                   required
@@ -315,13 +307,13 @@ export default function ClassroomManagementPage() {
                     setClassForm({ ...classForm, name: e.target.value })
                   }
                   className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 dark:text-slate-100"
-                  placeholder="VD: IELTS Intensive K01"
+                  placeholder="IELTS Intensive K01"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Cấp độ đào tạo
+                    Trình độ
                   </label>
                   <select
                     value={classForm.level}
@@ -370,7 +362,7 @@ export default function ClassroomManagementPage() {
                   {isSaving ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : null}{" "}
-                  Khởi tạo
+                  Tạo lớp
                 </button>
               </div>
             </form>

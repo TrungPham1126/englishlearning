@@ -108,7 +108,9 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
                     throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã đạt giới hạn lượt sử dụng AI hôm nay. Vui lòng quay lại vào ngày mai.");
                 }
                 LocalDate today = LocalDate.now();
-                if (quota.getLastResetDate().isEqual(today) && quota.getUsedToday() >= quota.getDailyLimit()) {
+                int used = quota.getUsedToday() != null ? quota.getUsedToday() : 0;
+                int limit = quota.getDailyLimit() != null ? quota.getDailyLimit() : 20;
+                if (quota.getLastResetDate() != null && quota.getLastResetDate().isEqual(today) && used >= limit) {
                     quota.setIsBlocked(true);
                     quotaRepository.save(quota);
                     throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã đạt giới hạn lượt sử dụng AI hôm nay. Vui lòng quay lại vào ngày mai.");
@@ -205,13 +207,15 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
                 });
 
                 if (quota != null) {
-                    if (!quota.getLastResetDate().isEqual(today)) {
+                    int limit = quota.getDailyLimit() != null ? quota.getDailyLimit() : 20;
+                    if (quota.getLastResetDate() == null || !quota.getLastResetDate().isEqual(today)) {
                         quota.setUsedToday(1);
                         quota.setLastResetDate(today);
-                        quota.setIsBlocked(false);
+                        quota.setIsBlocked(limit <= 1);
                     } else {
-                        quota.setUsedToday(quota.getUsedToday() + 1);
-                        if (quota.getUsedToday() >= quota.getDailyLimit()) {
+                        int used = quota.getUsedToday() != null ? quota.getUsedToday() : 0;
+                        quota.setUsedToday(used + 1);
+                        if (quota.getUsedToday() >= limit) {
                             quota.setIsBlocked(true);
                         }
                     }
@@ -299,7 +303,7 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
         long studentTotalTokens = studentPromptTokens + studentCompletionTokens;
 
         double studentCost = (studentPromptTokens * (GEMINI_INPUT_COST_PER_M / 1_000_000.0)) +
-                (studentCompletionTokens * (GEMINI_OUTPUT_COST_PER_M / 1_000_000.0)) + liveGeminiCostUsd.get();
+                (studentCompletionTokens * (GEMINI_OUTPUT_COST_PER_M / 1_000_000.0));
 
         // 2. Giáo viên (Groq LLaMA: sinh đề thi, bài tập trắc nghiệm)
         long dbTeacherCompletionTokens = 0L;
@@ -315,10 +319,10 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
         double dbTeacherCost = (dbTeacherPromptTokens * (GROQ_INPUT_COST_PER_M / 1_000_000.0)) +
                 (dbTeacherCompletionTokens * (GROQ_OUTPUT_COST_PER_M / 1_000_000.0));
 
-        long teacherPromptTokens = dbTeacherPromptTokens + liveTeacherPromptTokens.get() + liveGroqPromptTokens.get();
-        long teacherCompletionTokens = dbTeacherCompletionTokens + liveTeacherCompletionTokens.get() + liveGroqCompletionTokens.get();
+        long teacherPromptTokens = dbTeacherPromptTokens + Math.max(liveTeacherPromptTokens.get(), liveGroqPromptTokens.get());
+        long teacherCompletionTokens = dbTeacherCompletionTokens + Math.max(liveTeacherCompletionTokens.get(), liveGroqCompletionTokens.get());
         long teacherTotalTokens = teacherPromptTokens + teacherCompletionTokens;
-        double teacherCost = dbTeacherCost + liveTeacherCostUsd.get() + liveGroqCostUsd.get();
+        double teacherCost = dbTeacherCost + Math.max(liveTeacherCostUsd.get(), liveGroqCostUsd.get());
 
         // 3. Tổng hợp toàn hệ thống
         long totalPromptTokens = studentPromptTokens + teacherPromptTokens;
@@ -470,7 +474,7 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
                             .student(student).build()));
 
             // Tự động reset daily usage nếu qua ngày mới
-            if (!quota.getLastResetDate().isEqual(today)) {
+            if (quota.getLastResetDate() == null || !quota.getLastResetDate().isEqual(today)) {
                 quota.setUsedToday(0);
                 quota.setLastResetDate(today);
                 quota.setIsBlocked(false);
@@ -605,12 +609,15 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
     @Transactional
     @Override
     public void updateQuota(UUID userId, UpdateQuotaRequest request) {
+        if (request == null) {
+            return;
+        }
         if (studentRepository.existsById(userId)) {
             StudentAiQuota quota = quotaRepository.findByStudentId(userId)
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy Quota của học viên này"));
 
             if (request.getDailyLimit() != null)
-                quota.setDailyLimit(request.getDailyLimit());
+                quota.setDailyLimit(Math.max(0, request.getDailyLimit()));
             if (request.getIsBlocked() != null)
                 quota.setIsBlocked(request.getIsBlocked());
 
@@ -618,7 +625,7 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
         } else {
             // Cập nhật quota cho giáo viên
             if (request.getDailyLimit() != null) {
-                teacherCustomLimits.put(userId, request.getDailyLimit());
+                teacherCustomLimits.put(userId, Math.max(0, request.getDailyLimit()));
             }
             if (request.getIsBlocked() != null) {
                 teacherBlockedMap.put(userId, request.getIsBlocked());

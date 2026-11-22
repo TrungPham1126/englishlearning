@@ -88,6 +88,8 @@ class AdminDashboardControllerTest {
                 .totalClasses(8L)
                 .completionRate(87.5)
                 .averageSkillScores(Map.of("Listening", 80.0, "Reading", 75.0))
+                .completionDistribution(AdminDashboardStats.CompletionDistributionDto.builder()
+                        .high(60.0).medium(30.0).low(10.0).build())
                 .build();
         when(adminDashboardService.getDashboardStats()).thenReturn(stats);
 
@@ -107,6 +109,7 @@ class AdminDashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalUsers").value(120))
                 .andExpect(jsonPath("$.data.completionRate").value(87.5))
-                .andExpect(jsonPath("$.data.averageSkillScores.Listening").value(80.0));
+                .andExpect(jsonPath("$.data.averageSkillScores.Listening").value(80.0))
+                .andExpect(jsonPath("$.data.completionDistribution.high").value(60.0));
     }
 }

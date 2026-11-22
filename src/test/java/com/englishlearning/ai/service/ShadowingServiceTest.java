@@ -5,9 +5,12 @@ import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.repository.AiEvaluationRepository;
 import com.englishlearning.ai.service.impl.ShadowingServiceImpl;
 import com.englishlearning.analytics.service.AnalyticsService;
+import com.englishlearning.assignment.entity.AssignmentQuestion;
+import com.englishlearning.submission.entity.AttemptStatus;
 import com.englishlearning.submission.entity.StudentAnswer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -204,5 +208,85 @@ public class ShadowingServiceTest {
                 RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
                                 () -> shadowingService.evaluateShadowing(audio, null, "Hi there"));
                 Assertions.assertTrue(thrown.getMessage().contains("Chấm bài Shadowing thất bại"));
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void testEvaluateShadowing_StudentAnswerNotFoundById_FallsBackToQuestionIdAndExtractsPrompt() {
+                UUID questionId = UUID.randomUUID();
+                UUID answerId = UUID.randomUUID();
+                AssignmentQuestion question = AssignmentQuestion.builder()
+                                .id(questionId)
+                                .promptText("Read aloud: Practice makes perfect.")
+                                .build();
+                StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
+                answer.setQuestion(question);
+
+                TypedQuery<StudentAnswer> query = mock(TypedQuery.class);
+                when(entityManager.find(StudentAnswer.class, questionId)).thenReturn(null);
+                when(entityManager.createQuery(anyString(), eq(StudentAnswer.class))).thenReturn(query);
+                when(query.setParameter(eq("qId"), eq(questionId))).thenReturn(query);
+                when(query.setParameter(eq("status"), eq(AttemptStatus.IN_PROGRESS))).thenReturn(query);
+                when(query.getResultList()).thenReturn(List.of(answer));
+                when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
+
+                MockMultipartFile audio = new MockMultipartFile("audio", "test.wav", "audio/wav",
+                                new byte[] { 1, 2, 3 });
+                when(pythonIntegrationService.evaluatePhonetics(any(), any(), eq("Practice makes perfect.")))
+                                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(80).isPassed(true).build());
+
+                ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(audio, questionId, null);
+
+                Assertions.assertEquals(80, res.getOverallScore());
+                Assertions.assertEquals(8.0, answer.getEarnedPoints());
+                verify(pythonIntegrationService).evaluatePhonetics(any(), eq("test.wav"), eq("Practice makes perfect."));
+                verify(aiEvaluationRepository).save(any(AiEvaluation.class));
+        }
+
+        @Test
+        void testEvaluateShadowing_PythonReturnsNullOverallScore_TriggersWhisperAndGeminiFallback() {
+                UUID answerId = UUID.randomUUID();
+                StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
+                when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
+                when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
+
+                when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(null).build());
+                when(groqClientService.transcribeAudioVerbose(any(), any()))
+                                .thenThrow(new RuntimeException("Verbose unsupported"));
+                when(groqClientService.transcribeAudio(any(byte[].class), anyString()))
+                                .thenReturn("Hello world");
+                when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                                .thenReturn("{\"overallScore\":86,\"isPassed\":true,\"passScore\":80}");
+
+                MockMultipartFile audio = new MockMultipartFile("audio", "voice.wav", "audio/wav",
+                                new byte[] { 1, 2, 3 });
+                ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(audio, answerId, "Hello world");
+
+                Assertions.assertEquals("GEMINI_AI_FALLBACK", res.getEvaluatedBy());
+                verify(geminiClientService).generateWithSystemInstruction(anyString(),
+                                argThat(p -> p != null && p.contains("Hello world")));
+
+                ArgumentCaptor<AiEvaluation> captor = ArgumentCaptor.forClass(AiEvaluation.class);
+                verify(aiEvaluationRepository).save(captor.capture());
+                Assertions.assertEquals("Hello world", captor.getValue().getSttTranscript());
+                Assertions.assertEquals("GEMINI_AI_FALLBACK", captor.getValue().getEvaluationEngine());
+        }
+
+        @Test
+        void testEvaluateShadowing_NullAudioAndNoUrl_SkipsPythonAndCallsAiWithSilenceMarker() {
+                when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                                .thenReturn("{\"overallScore\":0,\"isPassed\":false,\"passScore\":80}");
+
+                ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(null, null, "Good morning");
+
+                Assertions.assertEquals(0, res.getOverallScore());
+                Assertions.assertEquals("GEMINI_AI_FALLBACK", res.getEvaluatedBy());
+                verifyNoInteractions(pythonIntegrationService);
+                verifyNoInteractions(groqClientService);
+                verify(geminiClientService).generateWithSystemInstruction(anyString(),
+                                argThat(p -> p != null && p.contains("[SILENCE / NO SPEECH DETECTED]")));
         }
 }

@@ -67,8 +67,10 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        Map<String, Object> sysInstructionMap = Map.of("parts", List.of(Map.of("text", systemInstruction)));
-        Map<String, Object> userContentMap = Map.of("parts", List.of(Map.of("text", userPrompt)));
+        String safeSystem = systemInstruction != null ? systemInstruction : "";
+        String safeUser = userPrompt != null ? userPrompt : "";
+        Map<String, Object> sysInstructionMap = Map.of("parts", List.of(Map.of("text", safeSystem)));
+        Map<String, Object> userContentMap = Map.of("parts", List.of(Map.of("text", safeUser)));
 
         Map<String, Object> body = Map.of(
                 "systemInstruction", sysInstructionMap,
@@ -95,11 +97,13 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
+        String safeSystem = systemInstruction != null ? systemInstruction : "";
+        String safeUser = userPrompt != null ? userPrompt : "";
         String base64Audio = Base64.getEncoder().encodeToString(audioBytes);
-        Map<String, Object> sysInstructionMap = Map.of("parts", List.of(Map.of("text", systemInstruction)));
+        Map<String, Object> sysInstructionMap = Map.of("parts", List.of(Map.of("text", safeSystem)));
 
         Map<String, Object> audioPart = Map.of("inline_data", Map.of("mime_type", mimeType, "data", base64Audio));
-        Map<String, Object> textPart = Map.of("text", userPrompt);
+        Map<String, Object> textPart = Map.of("text", safeUser);
 
         Map<String, Object> userContentMap = Map.of("parts", List.of(textPart, audioPart));
 
@@ -111,8 +115,8 @@ public class GeminiClientServiceImpl implements GeminiClientService {
                         "response_mime_type", "application/json",
                         "maxOutputTokens", 8192));
 
-        int promptLength = (systemInstruction != null ? systemInstruction.length() : 0)
-                + (userPrompt != null ? userPrompt.length() : 0)
+        int promptLength = safeSystem.length()
+                + safeUser.length()
                 + (audioBytes != null ? audioBytes.length / 50 : 0);
         return executeRequest(url, new HttpEntity<>(body, headers), studentId, isTeacher, promptLength);
     }
@@ -121,7 +125,15 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
             JsonNode root = objectMapper.readTree(response.getBody());
-            String text = root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
+            JsonNode candidates = root.path("candidates");
+            if (!candidates.isArray() || candidates.isEmpty()) {
+                throw new IllegalStateException("Gemini API không trả về nội dung candidates/parts hợp lệ.");
+            }
+            JsonNode parts = candidates.get(0).path("content").path("parts");
+            if (!parts.isArray() || parts.isEmpty()) {
+                throw new IllegalStateException("Gemini API không trả về nội dung candidates/parts hợp lệ.");
+            }
+            String text = parts.get(0).path("text").asText();
 
             // Bóc tách usageMetadata từ Gemini
             JsonNode usage = root.path("usageMetadata");

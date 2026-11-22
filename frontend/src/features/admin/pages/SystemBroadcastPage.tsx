@@ -156,7 +156,7 @@ export default function SystemBroadcastPage() {
     if (!trimmedTitle || !trimmedMessage) {
       setFeedback({
         type: "error",
-        message: "Vui lòng nhập đầy đủ tiêu đề và nội dung thông báo.",
+        message: "Nhập đủ tiêu đề và nội dung.",
       });
       return;
     }
@@ -164,7 +164,7 @@ export default function SystemBroadcastPage() {
     if (scope === "CLASSROOM" && !selectedClassId) {
       setFeedback({
         type: "error",
-        message: "Vui lòng chọn lớp học cần gửi thông báo.",
+        message: "Chưa chọn lớp học.",
       });
       return;
     }
@@ -172,7 +172,7 @@ export default function SystemBroadcastPage() {
     if (scope === "INDIVIDUAL" && !selectedRecipient) {
       setFeedback({
         type: "error",
-        message: "Vui lòng tìm và chọn người nhận thông báo cụ thể.",
+        message: "Chưa chọn người nhận.",
       });
       return;
     }
@@ -208,22 +208,22 @@ export default function SystemBroadcastPage() {
 
       await adminApi.broadcastNotification(payload);
 
-      let successMsg = "Đã gửi thông báo thành công!";
+      let successMsg = "Đã gửi thông báo.";
       if (scope === "SYSTEM") {
-        successMsg = "Đã phát thông báo thành công đến TOÀN BỘ HỆ THỐNG!";
+        successMsg = "Đã gửi toàn hệ thống.";
       } else if (scope === "ROLE") {
         const roleLabel =
           targetRole === "ROLE_STUDENT"
-            ? "tất cả Học viên"
+            ? "Học viên"
             : targetRole === "ROLE_TEACHER"
-            ? "tất cả Giảng viên"
-            : "Ban Quản trị";
-        successMsg = `Đã phát thông báo thành công đến ${roleLabel}!`;
+            ? "Giảng viên"
+            : "Quản trị";
+        successMsg = `Đã gửi đến ${roleLabel}.`;
       } else if (scope === "CLASSROOM") {
         const cls = classrooms.find((c) => c.id === selectedClassId);
-        successMsg = `Đã gửi thông báo thành công đến toàn bộ học sinh lớp "${cls?.name || "đã chọn"}"!`;
+        successMsg = `Đã gửi đến lớp "${cls?.name || "đã chọn"}".`;
       } else if (scope === "INDIVIDUAL") {
-        successMsg = `Đã gửi thông báo riêng đến cá nhân "${selectedRecipient?.fullName}" (${selectedRecipient?.email})!`;
+        successMsg = `Đã gửi đến ${selectedRecipient?.fullName} (${selectedRecipient?.email}).`;
       }
 
       setFeedback({
@@ -249,7 +249,7 @@ export default function SystemBroadcastPage() {
         message:
           err.response?.data?.message ||
           err.message ||
-          "Lỗi khi gửi thông báo. Vui lòng kiểm tra lại kết nối.",
+          "Gửi thông báo thất bại.",
       });
     } finally {
       setIsSending(false);
@@ -259,15 +259,10 @@ export default function SystemBroadcastPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Phát Thông Báo Đa Kênh
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Hỗ trợ gửi tức thì đến Từng cá nhân, Toàn lớp học, Theo nhóm vai trò hoặc Toàn bộ hệ thống qua Realtime WebSocket &amp; Hộp thư.
-          </p>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Phát thông báo
+        </h1>
       </div>
 
       {/* Main Grid: Form Phát Thông Báo (7 cols) & Lịch Sử (5 cols) */}
@@ -279,7 +274,7 @@ export default function SystemBroadcastPage() {
                 <Send size={16} />
               </div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Soạn &amp; Định Tuyến Thông Báo
+                Soạn thông báo
               </h2>
             </div>
           </div>
@@ -305,7 +300,7 @@ export default function SystemBroadcastPage() {
             {/* 1. Phạm Vi Gửi (Scope Tabs) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                1. Chọn Phạm Vi Gửi Thông Báo <span className="text-red-500">*</span>
+                Phạm vi gửi <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
@@ -331,7 +326,7 @@ export default function SystemBroadcastPage() {
                   }`}
                 >
                   <Users size={18} />
-                  <span>Theo vai trò</span>
+                  <span>Vai trò</span>
                 </button>
 
                 <button
@@ -344,7 +339,7 @@ export default function SystemBroadcastPage() {
                   }`}
                 >
                   <School size={18} />
-                  <span>Toàn lớp học</span>
+                  <span>Lớp học</span>
                 </button>
 
                 <button
@@ -357,7 +352,7 @@ export default function SystemBroadcastPage() {
                   }`}
                 >
                   <User size={18} />
-                  <span>Từng cá nhân</span>
+                  <span>Cá nhân</span>
                 </button>
               </div>
             </div>
@@ -366,16 +361,16 @@ export default function SystemBroadcastPage() {
             {scope === "ROLE" && (
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-1.5 animate-in fade-in duration-150">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Chọn nhóm đối tượng người nhận:
+                  Đối tượng nhận
                 </label>
                 <select
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value)}
                   className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 font-bold text-xs bg-white dark:bg-[#111827] text-slate-900 dark:text-white"
                 >
-                  <option value="ROLE_STUDENT">🎓 Tất cả Học viên (ROLE_STUDENT)</option>
-                  <option value="ROLE_TEACHER">👨‍🏫 Tất cả Giảng viên (ROLE_TEACHER)</option>
-                  <option value="ROLE_ADMIN">🛡️ Ban Quản trị hệ thống (ROLE_ADMIN)</option>
+                  <option value="ROLE_STUDENT">Học viên</option>
+                  <option value="ROLE_TEACHER">Giảng viên</option>
+                  <option value="ROLE_ADMIN">Quản trị viên</option>
                 </select>
               </div>
             )}
@@ -384,7 +379,7 @@ export default function SystemBroadcastPage() {
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-2 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Chọn lớp học nhận thông báo:
+                    Lớp học
                   </label>
                   <button
                     type="button"
@@ -392,14 +387,14 @@ export default function SystemBroadcastPage() {
                     className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                   >
                     <RefreshCw size={11} className={isLoadingClasses ? "animate-spin" : ""} />
-                    Làm mới danh sách
+                    Làm mới
                   </button>
                 </div>
 
                 {isLoadingClasses ? (
-                  <p className="text-xs text-slate-400 py-2">Đang tải danh sách lớp học...</p>
+                  <p className="text-xs text-slate-400 py-2">Đang tải...</p>
                 ) : classrooms.length === 0 ? (
-                  <p className="text-xs text-amber-600 py-2">Không tìm thấy lớp học nào khả dụng.</p>
+                  <p className="text-xs text-amber-600 py-2">Không có lớp học</p>
                 ) : (
                   <select
                     value={selectedClassId}
@@ -408,7 +403,7 @@ export default function SystemBroadcastPage() {
                   >
                     {classrooms.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.joinCode ? `[Mã: ${c.joinCode}]` : ""} • GV: {c.teacherName || "Chưa gán"} • ({c.studentCount || 0} học viên)
+                        {c.name} {c.joinCode ? `(${c.joinCode})` : ""} • GV: {c.teacherName || "—"} • {c.studentCount || 0} HV
                       </option>
                     ))}
                   </select>
@@ -422,7 +417,7 @@ export default function SystemBroadcastPage() {
                 className="relative p-3.5 rounded-xl bg-slate-50 dark:bg-[#0b1120] border border-slate-200 dark:border-slate-800 space-y-2 animate-in fade-in duration-150"
               >
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Tìm kiếm và chọn người nhận cụ thể:
+                  Người nhận
                 </label>
 
                 {selectedRecipient ? (
@@ -457,7 +452,7 @@ export default function SystemBroadcastPage() {
                       type="button"
                       onClick={() => setSelectedRecipient(null)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-white dark:hover:bg-slate-800 transition cursor-pointer"
-                      title="Đổi người nhận khác"
+                      title="Đổi người nhận"
                     >
                       <X size={16} />
                     </button>
@@ -474,7 +469,7 @@ export default function SystemBroadcastPage() {
                           setShowUserDropdown(true);
                         }}
                         onFocus={() => setShowUserDropdown(true)}
-                        placeholder="Nhập họ tên hoặc email người nhận..."
+                        placeholder="Tìm tên, email..."
                         className="w-full pl-9 pr-8 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 text-xs bg-white dark:bg-[#111827] text-slate-900 dark:text-white font-medium"
                       />
                       {isSearchingUser && (
@@ -487,8 +482,8 @@ export default function SystemBroadcastPage() {
                         {recipientResults.length === 0 ? (
                           <p className="text-center text-xs text-slate-400 py-3">
                             {isSearchingUser
-                              ? "Đang tìm kiếm..."
-                              : "Không tìm thấy người dùng phù hợp."}
+                              ? "Đang tìm..."
+                              : "Không tìm thấy"}
                           </p>
                         ) : (
                           recipientResults.map((u) => (
@@ -537,35 +532,35 @@ export default function SystemBroadcastPage() {
             {/* 3. Phân loại & Hình thức thông báo */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   <Bell size={13} className="text-blue-600 dark:text-blue-400" />
-                  Mức độ thông báo
+                  Mức độ
                 </label>
                 <select
                   value={notificationType}
                   onChange={(e) => setNotificationType(e.target.value)}
                   className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 font-bold text-xs bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-white"
                 >
-                  <option value="ANNOUNCEMENT">Thông báo chung (ANNOUNCEMENT)</option>
-                  <option value="SYSTEM_ALERT">Cảnh báo hệ thống (SYSTEM_ALERT)</option>
+                  <option value="ANNOUNCEMENT">Thông báo</option>
+                  <option value="SYSTEM_ALERT">Cảnh báo</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   <Layers size={13} className="text-blue-600 dark:text-blue-400" />
-                  Loại hành động (Action Type)
+                  Loại hành động
                 </label>
                 <select
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value)}
                   className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 font-bold text-xs bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-white"
                 >
-                  <option value="TEXT_ANNOUNCEMENT">Thông báo văn bản (TEXT_ANNOUNCEMENT)</option>
-                  <option value="NEW_ASSIGNMENT">Bài tập mới (NEW_ASSIGNMENT)</option>
-                  <option value="NEW_LESSON">Bài giảng mới (NEW_LESSON)</option>
-                  <option value="GRADED">Kết quả chấm điểm (GRADED)</option>
-                  <option value="AI_EVALUATION">Đánh giá AI (AI_EVALUATION)</option>
+                  <option value="TEXT_ANNOUNCEMENT">Văn bản</option>
+                  <option value="NEW_ASSIGNMENT">Bài tập mới</option>
+                  <option value="NEW_LESSON">Bài giảng mới</option>
+                  <option value="GRADED">Kết quả chấm</option>
+                  <option value="AI_EVALUATION">Đánh giá AI</option>
                 </select>
               </div>
             </div>
@@ -573,7 +568,7 @@ export default function SystemBroadcastPage() {
             {/* 4. Tiêu đề */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Tiêu đề thông báo <span className="text-red-500">*</span>
+                Tiêu đề <span className="text-red-500">*</span>
               </label>
               <input
                 required
@@ -581,14 +576,14 @@ export default function SystemBroadcastPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-white font-bold text-xs"
-                placeholder="VD: Nhắc nhở hoàn thành bài kiểm tra Speaking tuần này"
+                placeholder="Nhập tiêu đề..."
               />
             </div>
 
             {/* 5. Nội dung chi tiết */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Nội dung chi tiết <span className="text-red-500">*</span>
+                Nội dung <span className="text-red-500">*</span>
               </label>
               <textarea
                 required
@@ -596,21 +591,21 @@ export default function SystemBroadcastPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-white text-xs leading-relaxed"
-                placeholder="Nhập nội dung đầy đủ cần truyền đạt đến người nhận..."
+                placeholder="Nhập nội dung..."
               />
             </div>
 
             {/* 6. Link điều hướng */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Link điều hướng (URL khi người nhận nhấp chuột)
+                URL điều hướng
               </label>
               <input
                 type="text"
                 value={targetUrl}
                 onChange={(e) => setTargetUrl(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-600 bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-white text-xs"
-                placeholder="VD: /student/courses hoặc /student/submissions"
+                placeholder="/student/courses"
               />
             </div>
 
@@ -623,12 +618,12 @@ export default function SystemBroadcastPage() {
               {isSending ? (
                 <>
                   <Loader2 className="animate-spin" size={16} />
-                  <span>ĐANG ĐIỀU PHỐI VÀ GỬI THÔNG BÁO...</span>
+                  <span>Đang gửi...</span>
                 </>
               ) : (
                 <>
                   <Send size={16} />
-                  <span>GỬI THÔNG BÁO NGAY</span>
+                  <span>Gửi thông báo</span>
                 </>
               )}
             </button>
@@ -641,14 +636,14 @@ export default function SystemBroadcastPage() {
             <div className="flex items-center gap-2">
               <History className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Lịch Sử Đã Phát ({history.length})
+                Lịch sử ({history.length})
               </h2>
             </div>
             <button
               type="button"
               onClick={loadHistory}
               disabled={historyLoading}
-              title="Làm mới lịch sử"
+              title="Làm mới"
               className="p-1.5 text-slate-500 hover:text-blue-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw size={15} className={historyLoading ? "animate-spin" : ""} />
@@ -658,12 +653,12 @@ export default function SystemBroadcastPage() {
           {historyLoading ? (
             <div className="flex flex-col items-center justify-center p-8 text-slate-400 space-y-2">
               <Loader2 className="h-6 w-6 animate-spin text-blue-700" />
-              <span className="text-xs">Đang tải lịch sử thông báo...</span>
+              <span className="text-xs">Đang tải...</span>
             </div>
           ) : history.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-slate-400 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
               <Bell size={28} className="text-slate-300 dark:text-slate-600" />
-              <p className="text-xs font-medium">Chưa có thông báo nào được lưu trong hệ thống.</p>
+              <p className="text-xs font-medium">Chưa có thông báo</p>
             </div>
           ) : (
             <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1 custom-scrollbar">

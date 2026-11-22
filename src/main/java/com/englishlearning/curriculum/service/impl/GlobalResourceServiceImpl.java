@@ -47,6 +47,9 @@ public class GlobalResourceServiceImpl implements GlobalResourceService {
 
     @Transactional
     public void uploadResource(MultipartFile file, String type, UUID adminId) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("File tài nguyên không được để trống");
+        }
         GlobalResource.ResourceType resourceType = parseResourceType(type, false);
         String url = storageService.uploadFile(file);
         User admin = entityManager.getReference(User.class, adminId);
@@ -82,13 +85,20 @@ public class GlobalResourceServiceImpl implements GlobalResourceService {
     @Transactional
     public void deleteResource(UUID id) {
         GlobalResource resource = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Not found"));
+        String storageUrl = resource.getStorageUrl();
         repository.delete(resource);
+        if (storageUrl != null && !storageUrl.isBlank()) {
+            try {
+                storageService.deleteFileByUrl(storageUrl);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private String formatSize(Long bytes) {
         if (bytes == null)
             return "0 MB";
         double mb = bytes / (1024.0 * 1024.0);
-        return String.format("%.2f MB", mb);
+        return String.format(java.util.Locale.US, "%.2f MB", mb);
     }
 }

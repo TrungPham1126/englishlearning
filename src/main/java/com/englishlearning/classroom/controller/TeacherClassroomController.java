@@ -5,6 +5,7 @@ import com.englishlearning.classroom.dto.ClassroomResponse;
 import com.englishlearning.classroom.dto.StudentProgressResponse;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.exception.ForbiddenException;
 import com.englishlearning.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -43,13 +44,39 @@ public class TeacherClassroomController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy chi tiết lớp học theo ID")
-    public ResponseEntity<ApiResponse<ClassroomResponse>> getClassDetail(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(classroomService.getClassroomById(id)));
+    public ResponseEntity<ApiResponse<ClassroomResponse>> getClassDetail(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
+        ClassroomResponse classroom = classroomService.getClassroomById(id);
+        enforceClassroomOwnership(classroom, userDetails);
+        return ResponseEntity.ok(ApiResponse.success(classroom));
     }
 
     @GetMapping("/{id}/students")
     @Operation(summary = "Lấy danh sách học viên trong lớp (kèm tiến độ)")
-    public ResponseEntity<ApiResponse<List<StudentProgressResponse>>> getClassStudents(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponse<List<StudentProgressResponse>>> getClassStudents(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập");
+        }
+        ClassroomResponse classroom = classroomService.getClassroomById(id);
+        enforceClassroomOwnership(classroom, userDetails);
         return ResponseEntity.ok(ApiResponse.success(classroomService.getClassStudentsProgress(id)));
+    }
+
+    private void enforceClassroomOwnership(ClassroomResponse classroom, CustomUserDetails userDetails) {
+        boolean isAdmin = userDetails.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (isAdmin) {
+            return;
+        }
+        if (classroom == null || classroom.getTeacherId() == null
+                || !classroom.getTeacherId().equals(userDetails.getId())) {
+            throw new ForbiddenException("Bạn không có quyền truy cập lớp học này");
+        }
     }
 }

@@ -4,6 +4,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { axiosClient } from "@/lib/axiosClient";
 import type { NotificationItem } from "@/types/notification";
+import type { TeacherTaskToastDetail } from "@/utils/teacherTaskNotification";
 import { resolveNotificationAction } from "@/utils/notificationAction";
 import { NotificationDetailModal } from "./NotificationDetailModal";
 import {
@@ -17,6 +18,10 @@ import {
   MessageSquare,
   Clock,
   Layers,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  X,
 } from "lucide-react";
 
 export function NotificationBell() {
@@ -28,8 +33,21 @@ export function NotificationBell() {
   const [selectedNotification, setSelectedNotification] =
     useState<NotificationItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [toasts, setToasts] = useState<TeacherTaskToastDetail[]>([]);
   const bellRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const dismissToast = (toastId: string) => {
+    const existingTimer = toastTimersRef.current.get(toastId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      toastTimersRef.current.delete(toastId);
+    }
+    if (isMountedRef.current) {
+      setToasts((prev) => prev.filter((t) => t.id !== toastId));
+    }
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -65,9 +83,20 @@ export function NotificationBell() {
           }
         }
       }
-      const list = Array.from(dedupMap.values());
-      setNotifications(list);
-      setUnreadCount(list.filter((n: NotificationItem) => !n.isRead).length);
+      const serverList = Array.from(dedupMap.values());
+      setNotifications((prev) => {
+        const preservedLocal = prev.filter((item) => {
+          const idStr = String(item.id || "");
+          if (!idStr.startsWith("task-") && !idStr.startsWith("local-")) {
+            return false;
+          }
+          const key = `${(item.title || "").trim()}||${(item.message || item.content || "").trim()}`;
+          return !dedupMap.has(key);
+        });
+        const merged = [...preservedLocal, ...serverList];
+        setUnreadCount(merged.filter((n: NotificationItem) => !n.isRead).length);
+        return merged;
+      });
     } catch (err) {
       console.error("Lỗi khi tải thông báo trên Header:", err);
     } finally {
@@ -91,13 +120,73 @@ export function NotificationBell() {
         setIsOpen(false);
       }
     };
+    const handleNotificationUpdated = () => {
+      void fetchNotifications();
+    };
+
+    const handleLocalNotification = (event: Event) => {
+      const customEvent = event as CustomEvent<NotificationItem>;
+      const incoming = customEvent.detail;
+      if (!incoming || !isMountedRef.current) return;
+
+      const incomingKey = `${(incoming.title || "").trim()}||${(incoming.message || incoming.content || "").trim()}`;
+      setNotifications((prev) => {
+        const filtered = prev.filter((item) => {
+          const itemKey = `${(item.title || "").trim()}||${(item.message || item.content || "").trim()}`;
+          return item.id !== incoming.id && itemKey !== incomingKey;
+        });
+        const nextList = [incoming, ...filtered];
+        setUnreadCount(nextList.filter((n) => !n.isRead).length);
+        return nextList;
+      });
+    };
+
+    const handleTaskToast = (event: Event) => {
+      const customEvent = event as CustomEvent<TeacherTaskToastDetail>;
+      const toast = customEvent.detail;
+      if (!toast || !isMountedRef.current) return;
+
+      setToasts((prev) => {
+        const next = toast.taskKey
+          ? prev.filter((item) => {
+              if (item.taskKey === toast.taskKey) {
+                const oldTimer = toastTimersRef.current.get(item.id);
+                if (oldTimer) {
+                  clearTimeout(oldTimer);
+                  toastTimersRef.current.delete(item.id);
+                }
+                return false;
+              }
+              return true;
+            })
+          : prev;
+        return [toast, ...next].slice(0, 4);
+      });
+
+      const durationMs =
+        toast.status === "ERROR" ? 12000 : toast.status === "SUCCESS" ? 7000 : 6000;
+      const timer = setTimeout(() => {
+        dismissToast(toast.id);
+      }, durationMs);
+      toastTimersRef.current.set(toast.id, timer);
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("teacher-notification-updated", handleNotificationUpdated);
+    window.addEventListener("teacher-notification-local", handleLocalNotification);
+    window.addEventListener("teacher-task-toast", handleTaskToast);
+
     return () => {
       isMountedRef.current = false;
       clearInterval(interval);
+      toastTimersRef.current.forEach((timer) => clearTimeout(timer));
+      toastTimersRef.current.clear();
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("teacher-notification-updated", handleNotificationUpdated);
+      window.removeEventListener("teacher-notification-local", handleLocalNotification);
+      window.removeEventListener("teacher-task-toast", handleTaskToast);
     };
   }, []);
 
@@ -278,6 +367,60 @@ export function NotificationBell() {
           </div>
         )}
       </div>
+
+      {/* Floating non-blocking teacher task toast notifications */}
+      {toasts.length > 0 && (
+        <div
+          aria-live="polite"
+          className="fixed top-20 right-4 z-[100] flex flex-col gap-2.5 w-80 sm:w-96 pointer-events-none"
+        >
+          {toasts.map((toast) => {
+            const isError = toast.status === "ERROR";
+            const isSuccess = toast.status === "SUCCESS";
+            const containerClass = isError
+              ? "border-rose-300 dark:border-rose-800 bg-rose-50/95 dark:bg-rose-950/95 text-rose-950 dark:text-rose-100"
+              : isSuccess
+              ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/95 dark:bg-emerald-950/95 text-emerald-950 dark:text-emerald-100"
+              : "border-blue-300 dark:border-blue-800 bg-blue-50/95 dark:bg-slate-900/95 text-slate-900 dark:text-slate-100";
+
+            return (
+              <div
+                key={toast.id}
+                role="status"
+                className={`pointer-events-auto rounded-xl border p-3.5 shadow-xl backdrop-blur-md transition-all animate-in fade-in slide-in-from-right-4 ${containerClass}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="shrink-0 mt-0.5">
+                    {isError ? (
+                      <AlertCircle className="h-4.5 w-4.5 text-rose-600 dark:text-rose-400" />
+                    ) : isSuccess ? (
+                      <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Loader2 className="h-4.5 w-4.5 text-blue-600 dark:text-blue-400 animate-spin" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-extrabold leading-snug">
+                      {toast.title}
+                    </p>
+                    <p className="text-[11px] opacity-90 mt-1 leading-relaxed">
+                      {toast.message}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => dismissToast(toast.id)}
+                    aria-label="Đóng thông báo"
+                    className="shrink-0 rounded-md p-1 opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modal chi tiết thông báo */}
       <NotificationDetailModal

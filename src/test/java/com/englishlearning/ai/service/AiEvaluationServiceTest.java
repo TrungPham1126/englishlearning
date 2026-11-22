@@ -273,4 +273,103 @@ class AiEvaluationServiceTest {
         assertThat(noAudio.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
         verifyNoInteractions(pythonIntegrationService);
     }
+
+    @Test
+    @DisplayName("Tầng 1 -> 2: engine rỗng tự điền PYTHON_ACOUSTIC_ENGINE; overallScore=null chuyển sang Gemini")
+    void evaluateSpeech_pythonBlankEngineDefaultsAndNullScoreFallsBackToGemini() {
+        ShadowingEvaluationResponse blankEngineResp = ShadowingEvaluationResponse.builder()
+                .overallScore(88)
+                .isPassed(true)
+                .evaluatedBy("   ")
+                .build();
+        when(pythonIntegrationService.evaluatePhonetics(eq(sampleAudio), eq("audio.wav"), eq(sampleReference)))
+                .thenReturn(blankEngineResp);
+
+        ShadowingEvaluationResponse pyResult = aiEvaluationService.evaluateSpeech(sampleAudio, null, sampleReference);
+        assertThat(pyResult.getEvaluatedBy()).isEqualTo("PYTHON_ACOUSTIC_ENGINE");
+        assertThat(pyResult.getOverallScore()).isEqualTo(88);
+
+        ShadowingEvaluationResponse nullScoreResp = ShadowingEvaluationResponse.builder()
+                .overallScore(null)
+                .build();
+        when(pythonIntegrationService.evaluatePhonetics(eq(sampleAudio), eq("audio.wav"), eq(sampleReference)))
+                .thenReturn(nullScoreResp);
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("{\"overallScore\":79,\"isPassed\":false}");
+
+        ShadowingEvaluationResponse geminiResult = aiEvaluationService.evaluateSpeech(sampleAudio, "audio.wav", sampleReference);
+        assertThat(geminiResult.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
+        assertThat(geminiResult.getOverallScore()).isEqualTo(79);
+        verify(geminiClientService).generateWithSystemInstruction(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("Tầng 2 Cloud Fallback: Gemini multimodal rỗng lùi về text; Groq Whisper lỗi vẫn chấm JSON")
+    void evaluateSpeech_geminiMultimodalBlankFallsBackToTextAndGroqWhisperErrorStillScores() {
+        byte[] realWav = new byte[64];
+        realWav[0] = 'R'; realWav[1] = 'I'; realWav[2] = 'F'; realWav[3] = 'F';
+
+        when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                .thenThrow(new RuntimeException("Python offline"));
+        when(geminiClientService.evaluateAudioWithInstruction(anyString(), eq(realWav), eq("audio/wav"), anyString()))
+                .thenReturn("   ");
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("```json\n{\"overallScore\":84,\"isPassed\":true}\n```");
+
+        ShadowingEvaluationResponse textFallback = aiEvaluationService.evaluateSpeech(realWav, "speech.wav", sampleReference);
+        assertThat(textFallback.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
+        assertThat(textFallback.getOverallScore()).isEqualTo(84);
+        verify(geminiClientService).generateWithSystemInstruction(anyString(), anyString());
+
+        when(geminiClientService.evaluateAudioWithInstruction(anyString(), eq(realWav), eq("audio/wav"), anyString()))
+                .thenThrow(new RuntimeException("Gemini quota exceeded"));
+        when(groqClientService.transcribeAudioVerbose(eq(realWav), eq("speech.wav")))
+                .thenThrow(new RuntimeException("Whisper 502"));
+        when(groqClientService.chatCompletionJson(anyString(), anyString()))
+                .thenReturn("{\"overallScore\":74,\"isPassed\":false}");
+
+        ShadowingEvaluationResponse groqResult = aiEvaluationService.evaluateSpeech(realWav, "speech.wav", sampleReference);
+        assertThat(groqResult.getEvaluatedBy()).isEqualTo("GROQ_AI_FALLBACK");
+        assertThat(groqResult.getOverallScore()).isEqualTo(74);
+        verify(groqClientService).chatCompletionJson(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("Tầng 3 Offline Heuristic: dấu câu tách rời không làm giảm completeness xuống dưới 100%")
+    void evaluateSpeech_offlineFallbackWithStandalonePunctuation_calculatesFullCompleteness() {
+        byte[] realWav = new byte[64];
+        when(pythonIntegrationService.evaluatePhonetics(any(), any(), any()))
+                .thenThrow(new RuntimeException("Python down"));
+        when(geminiClientService.evaluateAudioWithInstruction(anyString(), any(), anyString(), anyString()))
+                .thenThrow(new RuntimeException("Gemini down"));
+        when(groqClientService.chatCompletionJson(anyString(), anyString()))
+                .thenThrow(new RuntimeException("Groq down"));
+
+        ShadowingEvaluationResponse offline = aiEvaluationService.evaluateSpeech(realWav, "voice.wav", "Hello — world !");
+        assertThat(offline.getEvaluatedBy()).isEqualTo("RULE_BASED_OFFLINE_FALLBACK");
+        assertThat(offline.getOverallScore()).isEqualTo(75);
+        assertThat(offline.getIsPassed()).isFalse();
+        assertThat(offline.getSentenceTokens()).hasSize(2);
+        assertThat(offline.getKpi().getCompleteness()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("calculateMetrics: xử lý an toàn wordRows rỗng, totalReferenceWords=0 & WPM âm/quá cao")
+    void calculateMetrics_handlesEmptyWordRowsZeroTotalAndExtremeWpm() {
+        ShadowingEvaluationResponse.KpiMetrics lowBound = aiEvaluationService.calculateMetrics(
+                List.of(), List.of(), 0, -20);
+        assertThat(lowBound.getPronunciation()).isZero();
+        assertThat(lowBound.getCompleteness()).isZero();
+        assertThat(lowBound.getFluency()).isZero();
+        assertThat(lowBound.getProsody()).isZero();
+
+        ShadowingEvaluationResponse.KpiMetrics highBound = aiEvaluationService.calculateMetrics(
+                List.of(ShadowingEvaluationResponse.SentenceToken.builder().word("Great").wordStatus("SPOKEN").build()),
+                List.of(ShadowingEvaluationResponse.WordPhonemeDetail.builder().word("Great").score(100).build()),
+                1, 200);
+        assertThat(highBound.getPronunciation()).isEqualTo(100);
+        assertThat(highBound.getCompleteness()).isEqualTo(100);
+        assertThat(highBound.getFluency()).isEqualTo(100);
+        assertThat(highBound.getProsody()).isEqualTo(100);
+    }
 }

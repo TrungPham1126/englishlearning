@@ -114,17 +114,35 @@ describe("context/ThemeContext & common components", () => {
     expect(screen.getByText("0")).toBeInTheDocument();
   });
 
-  it("StreakBadge hiển thị chuỗi ngày học và lọc bỏ NaN/số âm từ localStorage", () => {
+  it("StreakBadge mặc định 0 khi localStorage rỗng/lỗi, đọc giá trị hợp lệ và cập nhật theo event student-streak-updated", () => {
+    localStorage.clear();
+    const empty = render(<StreakBadge />);
+    expect(screen.getByText("0")).toBeInTheDocument();
+    empty.unmount();
+
     localStorage.setItem("elp_student_streak", "NaN");
-    const first = render(<StreakBadge />);
-    // Giá trị NaN bị bỏ qua -> giữ nguyên default initialStreak = 5
-    expect(screen.getByText("5")).toBeInTheDocument();
-    first.unmount();
+    const invalidNaN = render(<StreakBadge />);
+    expect(screen.getByText("0")).toBeInTheDocument();
+    invalidNaN.unmount();
+
+    localStorage.setItem("elp_student_streak", "-3");
+    const invalidNegative = render(<StreakBadge />);
+    expect(screen.getByText("0")).toBeInTheDocument();
+    invalidNegative.unmount();
 
     localStorage.setItem("elp_student_streak", "14");
-    const second = render(<StreakBadge />);
+    const fromStorage = render(<StreakBadge />);
     expect(screen.getByText("14")).toBeInTheDocument();
-    second.unmount();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("student-streak-updated", {
+          detail: { currentStreak: 15, hasHomeworkToday: true, completedToday: true },
+        }),
+      );
+    });
+    expect(screen.getByText("15")).toBeInTheDocument();
+    fromStorage.unmount();
 
     localStorage.removeItem("elp_student_streak");
     render(<StreakBadge initialStreak={21} />);

@@ -92,15 +92,10 @@ export default function TeacherClassroomsPage() {
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* 1. Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <GraduationCap className="h-7 w-7 text-blue-700 dark:text-blue-400" />
-            Lớp Học Phụ Trách
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Quản lý kế hoạch học tập theo ngày, điểm danh học sinh và kiểm duyệt bài nộp.
-          </p>
-        </div>
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
+          <GraduationCap className="h-7 w-7 text-blue-700 dark:text-blue-400" />
+          Lớp học
+        </h1>
 
         {/* View Mode Toggle */}
         <div className="flex items-center gap-2 self-start md:self-center">
@@ -138,7 +133,7 @@ export default function TeacherClassroomsPage() {
         <Card className="p-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Tổng số lớp phụ trách
+              Tổng lớp
             </p>
             <p className="text-2xl font-black text-blue-700 dark:text-blue-400 mt-1 font-mono tabular-nums">
               {classes.length}
@@ -152,7 +147,7 @@ export default function TeacherClassroomsPage() {
         <Card className="p-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Tổng số học viên
+              Học viên
             </p>
             <p className="text-2xl font-black text-sky-600 dark:text-sky-400 mt-1 font-mono tabular-nums">
               {totalStudents}
@@ -166,7 +161,7 @@ export default function TeacherClassroomsPage() {
         <Card className="p-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Đang mở hoạt động
+              Đang mở
             </p>
             <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono tabular-nums">
               {openClassesCount}
@@ -180,7 +175,7 @@ export default function TeacherClassroomsPage() {
         <Card className="p-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Đang lên kế hoạch
+              Sắp mở
             </p>
             <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 font-mono tabular-nums">
               {planningClassesCount}
@@ -198,7 +193,7 @@ export default function TeacherClassroomsPage() {
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm theo tên lớp hoặc mô tả khóa học..."
+            placeholder="Tìm lớp học..."
             startIcon={<Search size={15} />}
           />
         </div>
@@ -209,7 +204,7 @@ export default function TeacherClassroomsPage() {
             {[
               { id: "ALL", label: "Tất cả" },
               { id: "OPEN", label: "Đang mở" },
-              { id: "PLANNING", label: "Chuẩn bị mở" },
+              { id: "PLANNING", label: "Sắp mở" },
               { id: "CLOSED", label: "Đã đóng" },
             ].map((st) => (
               <button
@@ -234,13 +229,13 @@ export default function TeacherClassroomsPage() {
               onChange={(e) => setLevelFilter(e.target.value)}
               className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0b1120] px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:border-blue-600 transition cursor-pointer"
             >
-              <option value="ALL">Tất cả trình độ CEFR</option>
-              <option value="A1">A1 (Beginner)</option>
-              <option value="A2">A2 (Elementary)</option>
-              <option value="B1">B1 (Intermediate)</option>
-              <option value="B2">B2 (Upper-Intermediate)</option>
-              <option value="C1">C1 (Advanced)</option>
-              <option value="C2">C2 (Proficiency)</option>
+              <option value="ALL">Tất cả CEFR</option>
+              <option value="A1">A1</option>
+              <option value="A2">A2</option>
+              <option value="B1">B1</option>
+              <option value="B2">B2</option>
+              <option value="C1">C1</option>
+              <option value="C2">C2</option>
             </select>
           </div>
         </div>
@@ -252,10 +247,12 @@ export default function TeacherClassroomsPage() {
           icon={<GraduationCap size={28} />}
           title={
             classes.length === 0
-              ? "Bạn chưa được phân công phụ trách lớp học nào."
-              : "Không tìm thấy lớp học phù hợp với bộ lọc tìm kiếm."
+              ? "Chưa có lớp học."
+              : "Không có lớp phù hợp."
           }
-          description="Hãy thử thay đổi từ khóa hoặc chọn lại bộ lọc trạng thái và trình độ CEFR."
+          description={
+            classes.length > 0 ? "Thử từ khóa hoặc bộ lọc khác." : undefined
+          }
         />
       ) : viewMode === "GRID" ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -290,7 +287,7 @@ export default function TeacherClassroomsPage() {
                       {cls.status === "OPEN"
                         ? "Đang mở"
                         : cls.status === "PLANNING"
-                        ? "Chuẩn bị mở"
+                        ? "Sắp mở"
                         : "Đã đóng"}
                     </Badge>
                   </div>
@@ -303,7 +300,7 @@ export default function TeacherClassroomsPage() {
                       {cls.name}
                     </Link>
                     <p className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      {cls.description || "Chưa có mô tả chi tiết cho lớp học này."}
+                      {cls.description || "Chưa có mô tả."}
                     </p>
                   </div>
                 </div>
@@ -341,7 +338,7 @@ export default function TeacherClassroomsPage() {
                       onClick={() => navigate(`/teacher/classrooms/${cls.id}/students`)}
                       leftIcon={<Users size={13} />}
                     >
-                      DS Học viên
+                      Học viên
                     </Button>
                     <Button
                       variant="outline"
@@ -373,11 +370,11 @@ export default function TeacherClassroomsPage() {
             <table className="w-full text-left border-collapse min-w-[720px]">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <th className="py-3 px-4">Tên Lớp Học &amp; Mô Tả</th>
-                  <th className="py-3 px-4 text-center">Trình Độ</th>
-                  <th className="py-3 px-4 text-center">Trạng Thái</th>
-                  <th className="py-3 px-4">Sĩ Số</th>
-                  <th className="py-3 px-4 text-right">Thao Tác</th>
+                  <th className="py-3 px-4">Lớp học</th>
+                  <th className="py-3 px-4 text-center">Trình độ</th>
+                  <th className="py-3 px-4 text-center">Trạng thái</th>
+                  <th className="py-3 px-4">Sĩ số</th>
+                  <th className="py-3 px-4 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
@@ -399,7 +396,7 @@ export default function TeacherClassroomsPage() {
                           {cls.name}
                         </Link>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                          {cls.description || "Chưa có mô tả chi tiết"}
+                          {cls.description || "Chưa có mô tả."}
                         </p>
                       </td>
                       <td className="py-3.5 px-4 text-center">
@@ -422,7 +419,7 @@ export default function TeacherClassroomsPage() {
                           {cls.status === "OPEN"
                             ? "Đang mở"
                             : cls.status === "PLANNING"
-                            ? "Chuẩn bị mở"
+                            ? "Sắp mở"
                             : "Đã đóng"}
                         </Badge>
                       </td>

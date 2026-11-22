@@ -45,6 +45,10 @@ public class CbtExerciseServiceImpl implements CbtExerciseService {
     @Override
     @Transactional
     public AttemptResponse submitCbtExercise(UUID studentId, UUID attemptId, SubmissionRequest request, Instant submitTime) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu nộp bài không được để trống.");
+        }
+
         AssignmentAttempt attempt = attemptRepository.findByIdAndStudentId(attemptId, studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lượt làm bài với ID: " + attemptId));
 
@@ -65,14 +69,29 @@ public class CbtExerciseServiceImpl implements CbtExerciseService {
         }
 
         // 2. Chấm điểm qua GradingEngineService
-        List<AssignmentQuestion> questions = questionRepository.findByAssignmentId(request.getAssignmentId());
+        UUID resolvedAssignmentId = request.getAssignmentId() != null
+                ? request.getAssignmentId()
+                : (assignment != null ? assignment.getId() : null);
+        List<AssignmentQuestion> questions = questionRepository.findByAssignmentId(resolvedAssignmentId);
         GradingResult gradingResult = gradingEngineService.evaluateSubmission(questions, request.getAnswers());
+
+        if (attempt.getAnswers() == null) {
+            attempt.setAnswers(new ArrayList<>());
+        }
 
         // 3. Cập nhật câu trả lời chi tiết của học sinh
         if (request.getAnswers() != null) {
+            Map<UUID, Double> earnedMap = gradingResult.getEarnedPointsPerQuestion() != null
+                    ? gradingResult.getEarnedPointsPerQuestion() : Collections.emptyMap();
+            Map<UUID, Boolean> correctMap = gradingResult.getCorrectnessPerQuestion() != null
+                    ? gradingResult.getCorrectnessPerQuestion() : Collections.emptyMap();
+
             for (SubmissionRequest.AnswerDto ansDto : request.getAnswers()) {
+                if (ansDto == null || ansDto.getQuestionId() == null) {
+                    continue;
+                }
                 StudentAnswer answer = attempt.getAnswers().stream()
-                        .filter(a -> a.getQuestion() != null && a.getQuestion().getId().equals(ansDto.getQuestionId()))
+                        .filter(a -> a != null && a.getQuestion() != null && ansDto.getQuestionId().equals(a.getQuestion().getId()))
                         .findFirst()
                         .orElseGet(() -> {
                             StudentAnswer newAns = new StudentAnswer();
@@ -90,8 +109,8 @@ public class CbtExerciseServiceImpl implements CbtExerciseService {
                     answer.setTextResponse(ansDto.getSelectedOptionId().toString());
                 }
 
-                Double earned = gradingResult.getEarnedPointsPerQuestion().get(ansDto.getQuestionId());
-                Boolean isCorrect = gradingResult.getCorrectnessPerQuestion().get(ansDto.getQuestionId());
+                Double earned = earnedMap.get(ansDto.getQuestionId());
+                Boolean isCorrect = correctMap.get(ansDto.getQuestionId());
                 answer.setEarnedPoints(earned != null ? earned : 0.0);
                 answer.setIsCorrect(Boolean.TRUE.equals(isCorrect));
                 studentAnswerRepository.save(answer);
@@ -117,10 +136,19 @@ public class CbtExerciseServiceImpl implements CbtExerciseService {
                 log.error("Lỗi khi gửi message vào queue AI grading: {}", e.getMessage());
             }
         } else {
-            // Đề thi khách quan hoàn toàn -> Đóng lượt làm bài và cập nhật streak
+            // Đề thi khách quan hoàn toàn -> Đóng lượt làm bài, lưu DB trước rồi tính lại streak
             attempt.setStatus(AttemptStatus.COMPLETED);
+            attemptRepository.save(attempt);
             LocalDate completionDate = effectiveSubmitTime.atZone(ZoneId.systemDefault()).toLocalDate();
             userStreakService.updateStreakOnPlanCompletion(studentId, completionDate);
+            return AttemptResponse.builder()
+                    .attemptId(attempt.getId())
+                    .assignmentId(assignment != null ? assignment.getId() : null)
+                    .status(attempt.getStatus().name())
+                    .score(attempt.getTotalScore())
+                    .startedAt(attempt.getStartedAt())
+                    .submittedAt(attempt.getSubmittedAt())
+                    .build();
         }
 
         attemptRepository.save(attempt);

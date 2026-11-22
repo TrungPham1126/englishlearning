@@ -557,4 +557,45 @@ public class NotificationServiceTest {
 
         verify(notificationRepository).markAllAsReadByUserId(userId);
     }
+
+    @Test
+    @DisplayName("Broadcast theo targetAudience STUDENT/ADMIN, fallback khi toàn bộ user inactive và bắt lỗi WebSocket broadcast")
+    void processNotificationMessage_handlesStudentAdminAudiencesInactiveFallbackAndWsErrors() {
+        Role adminRole = Role.builder().name(RoleName.ROLE_ADMIN).build();
+        Role studentRole = Role.builder().name(RoleName.ROLE_STUDENT).build();
+
+        User adminUser = User.builder().id(UUID.randomUUID()).isActive(true).roles(Set.of(adminRole)).build();
+        User studentUser = User.builder().id(UUID.randomUUID()).isActive(true).roles(Set.of(studentRole)).build();
+
+        when(userRepository.findAll()).thenReturn(List.of(adminUser, studentUser));
+        when(notificationRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new MessagingException("WS user offline"))
+                .when(messagingTemplate).convertAndSendToUser(anyString(), anyString(), any());
+        doThrow(new MessagingException("WS topic offline"))
+                .when(messagingTemplate).convertAndSend(eq("/topic/system-announcements"), any(Object.class));
+
+        // 1. targetAudience = ROLE_ADMIN
+        notificationService.processNotificationMessage(NotificationDto.builder()
+                .title("Admin Alert").targetAudience("ROLE_ADMIN").targetUrl("/admin").build());
+
+        // 2. targetAudience = STUDENT
+        notificationService.processNotificationMessage(NotificationDto.builder()
+                .title("Student Alert").targetAudience("STUDENT").build());
+
+        // 3. Toàn bộ user đều inactive và không lọc role -> fallback gửi cho toàn bộ allUsers
+        User inactiveOnly = User.builder().id(UUID.randomUUID()).isActive(false).email("in@elp.edu.vn").build();
+        when(userRepository.findAll()).thenReturn(List.of(inactiveOnly));
+        notificationService.processNotificationMessage(NotificationDto.builder()
+                .title("Fallback All").build());
+
+        verify(notificationRepository, times(3)).saveAll(anyList());
+
+        // 4. searchRecipients với query rỗng, role ADMIN và user không có role (mặc định ROLE_STUDENT)
+        User noRoleUser = User.builder().id(UUID.randomUUID()).email("norole@elp.edu.vn").isActive(true).roles(Collections.emptySet()).build();
+        when(userRepository.findAll()).thenReturn(List.of(adminUser, noRoleUser));
+        assertThat(notificationService.searchRecipients(null, "ADMIN")).hasSize(1);
+        List<NotificationRecipientDto> allRecips = notificationService.searchRecipients("", null);
+        assertThat(allRecips).hasSize(2);
+        assertThat(allRecips.get(1).getRole()).isEqualTo("ROLE_STUDENT");
+    }
 }

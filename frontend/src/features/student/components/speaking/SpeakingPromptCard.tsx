@@ -12,6 +12,7 @@ import { cleanShadowingSentence } from "@/features/student/components/SpeakingSh
 
 export interface SpeakingPromptCardProps {
   question: any;
+  isShadowingMode?: boolean;
   isSynthesizingTts: boolean;
   isPlayingRefTts: boolean;
   selectedVoice: string;
@@ -36,6 +37,7 @@ const SPEEDS = [0.75, 1.0, 1.25, 1.5];
 
 export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
   question,
+  isShadowingMode = false,
   isSynthesizingTts,
   isPlayingRefTts,
   selectedVoice,
@@ -60,36 +62,38 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
       <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
         Câu hỏi
       </span>
-      <div className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 leading-relaxed bg-slate-50/70 dark:bg-slate-800/60 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-        "{promptText}"
+      <div className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 leading-relaxed bg-slate-50/70 dark:bg-slate-800/60 p-3.5 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
+        {promptText}
       </div>
 
-      {/* Cụm nút phát âm mẫu chuẩn, phát lại bản thu, tốc độ và gợi ý */}
+      {/* Cụm nút phát âm mẫu chuẩn (chỉ Shadowing), phát lại bản thu, tốc độ và gợi ý */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        {/* NÚT 1: NGHE CÂU MẪU CHUẨN */}
-        <button
-          type="button"
-          disabled={isSynthesizingTts}
-          onClick={onPlayTts}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold bg-blue-800 hover:bg-blue-700 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer"
-        >
-          {isSynthesizingTts ? (
-            <>
-              <Loader2 size={13} className="animate-spin text-blue-200" />
-              <span>Đang tải...</span>
-            </>
-          ) : isPlayingRefTts ? (
-            <>
-              <Pause size={13} />
-              <span>Dừng</span>
-            </>
-          ) : (
-            <>
-              <Volume2 size={13} />
-              <span>Nghe mẫu</span>
-            </>
-          )}
-        </button>
+        {/* NÚT 1: NGHE CÂU MẪU CHUẨN (Chỉ dành cho Shadowing, ẩn ở Q&A / Part 2 / Part 3) */}
+        {isShadowingMode && (
+          <button
+            type="button"
+            disabled={isSynthesizingTts}
+            onClick={onPlayTts}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold bg-blue-800 hover:bg-blue-700 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer"
+          >
+            {isSynthesizingTts ? (
+              <>
+                <Loader2 size={13} className="animate-spin text-blue-200" />
+                <span>Đang tải...</span>
+              </>
+            ) : isPlayingRefTts ? (
+              <>
+                <Pause size={13} />
+                <span>Dừng</span>
+              </>
+            ) : (
+              <>
+                <Volume2 size={13} />
+                <span>Nghe mẫu</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* NÚT 2: NGHE LẠI BẢN THU CỦA BẠN (Tách biệt hoàn toàn state & nguồn audio) */}
         {activeAudioUrl && onTogglePlayStudentAudio && (
@@ -112,41 +116,44 @@ export const SpeakingPromptCard: React.FC<SpeakingPromptCardProps> = ({
           </button>
         )}
 
-        {/* Bộ chọn giọng đọc mẫu */}
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
-          {VOICES.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => onChangeVoice(v.id)}
-              className={`px-2 py-0.5 text-[11px] rounded-md transition ${
-                selectedVoice === v.id
-                  ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs font-bold"
-                  : "hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        {/* Bộ chọn giọng & tốc độ đọc mẫu (chỉ hiển thị cho Shadowing) */}
+        {isShadowingMode && (
+          <>
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
+              {VOICES.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => onChangeVoice(v.id)}
+                  className={`px-2 py-0.5 text-[11px] rounded-md transition ${
+                    selectedVoice === v.id
+                      ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs font-bold"
+                      : "hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
 
-        {/* Tốc độ đọc */}
-        <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 tabular-nums">
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onChangeSpeed(s)}
-              className={`px-1.5 py-0.5 rounded-md transition ${
-                ttsSpeed === s
-                  ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs font-bold"
-                  : "hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              {s}x
-            </button>
-          ))}
-        </div>
+            <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 tabular-nums">
+              {SPEEDS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onChangeSpeed(s)}
+                  className={`px-1.5 py-0.5 rounded-md transition ${
+                    ttsSpeed === s
+                      ? "bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-2xs font-bold"
+                      : "hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {(question.explanation || question.correctAnswer) && (
           <button

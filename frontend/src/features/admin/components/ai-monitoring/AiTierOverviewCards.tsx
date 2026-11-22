@@ -38,7 +38,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Hạn Ngạch Chi Phí (Tháng)
+                  Chi phí tháng
                 </span>
                 <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                   <DollarSign size={20} />
@@ -57,7 +57,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                 />
               </div>
               <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Đã dùng: <strong className="text-slate-700 dark:text-slate-300">{costPct}%</strong> ngân sách</span>
+                <span>Đã dùng: <strong className="text-slate-700 dark:text-slate-300">{costPct}%</strong></span>
                 <span className="font-bold">Reset: 1/tháng</span>
               </div>
             </div>
@@ -75,7 +75,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Quota Token Tiêu Thụ
+                  Quota Token
                 </span>
                 <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
                   <Activity size={20} />
@@ -102,7 +102,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Dung Lượng Quota Hệ Thống
+              Quota còn lại
             </span>
             <div
               className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -149,7 +149,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                   : "text-emerald-600 dark:text-emerald-400"
               }`}
             >
-              {isQuotaDanger ? "⚠️ Sắp hết Quota" : isQuotaWarning ? "⚡ Cảnh báo ngưỡng" : "✓ Hạn mức an toàn"}
+              {isQuotaDanger ? "⚠️ Sắp hết Quota" : isQuotaWarning ? "⚡ Gần ngưỡng" : "✓ An toàn"}
             </span>
             <span className="font-bold">Hôm nay</span>
           </div>
@@ -166,7 +166,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Học Viên AI &amp; Chặn Spam
+                  Người dùng AI
                 </span>
                 <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
                   <Users size={20} />
@@ -185,7 +185,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                 />
               </div>
               <div className="mt-2.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>Chặn spam (HTTP 429):</span>
+                <span>Chặn 429:</span>
                 <span
                   className={`font-bold px-2 py-0.5 rounded-full ${
                     blockedU > 0
@@ -193,7 +193,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                       : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
                   }`}
                 >
-                  {blockedU} bị khóa
+                  {blockedU} khóa
                 </span>
               </div>
             </div>
@@ -211,27 +211,27 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                  Kiến Trúc Điều Phối &amp; Lịch Sử Fallback AI 3 Tầng (3-Tier AI Pipeline)
+                  Kiến trúc AI 3 tầng (Fallback)
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/50">
-                  Tier 1: Groq Cloud
+                  Tier 1: Groq
                 </span>
                 <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
-                  Tier 2: Gemini 2.5 Flash
+                  Tier 2: Gemini
                 </span>
                 <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">
-                  Tier 3: Local Rule / Edge
+                  Tier 3: Local
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Hệ thống tự động chuyển tầng dự phòng (Auto-Failover) giữa <strong>Tier 1 (Groq LLaMA 3.3)</strong> &rarr; <strong>Tier 2 (Gemini 2.5 Flash)</strong> &rarr; <strong>Tier 3 (Rule-based / Local)</strong> khi phát sinh lỗi mạng hoặc chạm ngưỡng Rate Limit 429.
+                Auto-Failover khi lỗi mạng hoặc chạm ngưỡng 429.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            3-Tier Failover Active
+            Failover Active
           </div>
         </div>
 
@@ -245,17 +245,17 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
                 <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                  Tier 1 • Primary Cloud
+                  Tier 1 • Primary
                 </span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                  INFO • 99.4%
+                  99.4%
                 </span>
               </div>
               <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
                 Groq LLaMA 3.3 70B &amp; Whisper
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Xử lý chính cho sinh bài tập &amp; nhận diện giọng nói tốc độ cao (&lt;800ms).
+                Sinh bài &amp; STT (&lt;800ms)
               </p>
             </div>
           </div>
@@ -268,17 +268,17 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
                 <span className="text-xs font-black text-blue-800 dark:text-blue-400 uppercase tracking-wider">
-                  Tier 2 • Multimodal / Failover
+                  Tier 2 • Failover
                 </span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
-                  WARN • Standby
+                  Standby
                 </span>
               </div>
               <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
                 Google Gemini 2.5 Flash
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Chấm phát âm Multimodal &amp; tự động tiếp quản khi Tier 1 quá tải (HTTP 429).
+                Chấm phát âm &amp; dự phòng 429
               </p>
             </div>
           </div>
@@ -291,7 +291,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
                 <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-                  Tier 3 • Deterministic Fallback
+                  Tier 3 • Fallback
                 </span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300">
                   Safe-Mode
@@ -301,7 +301,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                 Local Phonetic / Rule Engine
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Đảm bảo phiên học 0% gián đoạn ngay cả khi đứt kết nối Cloud AI.
+                Dự phòng offline khi mất Cloud
               </p>
             </div>
           </div>
@@ -317,39 +317,34 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                   <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
                     <Cpu size={20} />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-black text-slate-900 dark:text-white text-base">
-                        Mô hình Soạn Đề &amp; Xử Lý Văn Bản
-                      </h3>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        LLaMA 3.3 70B
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      Phạm vi: Sinh đề thi trắc nghiệm, bài tập ngữ pháp, bài đọc hiểu.
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">
+                      Soạn đề &amp; Văn bản
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      LLaMA 3.3 70B
+                    </span>
                   </div>
                 </div>
                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Đang hoạt động
+                  Hoạt động
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-3 my-4">
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-emerald-100 dark:border-emerald-950/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Lượt Tạo Đề
+                    Lượt tạo
                   </span>
                   <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
-                    {(stats?.groqStats?.totalRequests || 0).toLocaleString()} <span className="text-xs font-semibold text-slate-500">đề thi</span>
+                    {(stats?.groqStats?.totalRequests || 0).toLocaleString()} <span className="text-xs font-semibold text-slate-500">đề</span>
                   </span>
                 </div>
 
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-emerald-100 dark:border-emerald-950/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Token Tiêu Thụ
+                    Tokens
                   </span>
                   <span className="text-xl font-black text-slate-900 dark:text-white mt-1 block">
                     {(stats?.groqStats?.totalTokens || 0).toLocaleString()}
@@ -358,7 +353,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
 
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-emerald-100 dark:border-emerald-950/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Chi Phí ($)
+                    Chi phí
                   </span>
                   <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
                     ${stats?.groqStats?.costUsd?.toFixed(4) || "0.0000"}
@@ -367,13 +362,10 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
               </div>
             </div>
 
-            <div className="pt-2 border-t border-emerald-100 dark:border-emerald-950/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+            <div className="pt-2.5 border-t border-emerald-100 dark:border-emerald-950/60 text-[11px] text-slate-500 dark:text-slate-400">
               <div className="flex items-center justify-between">
                 <span>In: {(stats?.groqStats?.promptTokens || 0).toLocaleString()} | Out: {(stats?.groqStats?.completionTokens || 0).toLocaleString()} tokens</span>
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">{stats?.groqStats?.pricingModel || "$0.59 / $0.79 per 1M"}</span>
-              </div>
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
-                Cơ chế dự phòng: Tự động chuyển hướng sang Gemini khi vượt hạn mức (Rate Limit).
               </div>
             </div>
           </div>
@@ -386,30 +378,25 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
                   <div className="w-10 h-10 rounded-xl bg-blue-800 text-white flex items-center justify-center shadow-xs">
                     <Bot size={20} />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-black text-slate-900 dark:text-white text-base">
-                        Mô hình Chấm Phát Âm &amp; Đa Phương Thức
-                      </h3>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        Gemini 2.5 Flash
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      Phạm vi: Đánh giá âm học Speaking, phân tích phát âm và dự phòng tạo đề.
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">
+                      Chấm phát âm &amp; Multimodal
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      Gemini 2.5 Flash
+                    </span>
                   </div>
                 </div>
                 <span className="flex items-center gap-1.5 text-xs font-bold text-blue-800 dark:text-blue-300 bg-blue-100/80 dark:bg-slate-900/50 px-2.5 py-1 rounded-full border border-blue-200 dark:border-blue-900 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-blue-600" />
-                  Sẵn sàng dự phòng
+                  Dự phòng
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-3 my-4">
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Số Lượt Chấm Nói
+                    Lượt chấm
                   </span>
                   <span className="text-xl font-black text-blue-700 dark:text-blue-400 mt-1 block">
                     {(stats?.geminiStats?.totalRequests || 0).toLocaleString()} <span className="text-xs font-semibold text-slate-500">lượt</span>
@@ -418,7 +405,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
 
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Token Tiêu Thụ
+                    Tokens
                   </span>
                   <span className="text-xl font-black text-slate-900 dark:text-white mt-1 block">
                     {(stats?.geminiStats?.totalTokens || 0).toLocaleString()}
@@ -427,7 +414,7 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
 
                 <div className="bg-white/90 dark:bg-slate-800/70 p-3 rounded-xl border border-blue-100 dark:border-blue-900/50">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Chi Phí ($)
+                    Chi phí
                   </span>
                   <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
                     ${stats?.geminiStats?.costUsd?.toFixed(4) || "0.0000"}
@@ -436,13 +423,10 @@ export const AiTierOverviewCards: React.FC<AiTierOverviewCardsProps> = ({ stats 
               </div>
             </div>
 
-            <div className="pt-2 border-t border-blue-100 dark:border-blue-900/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+            <div className="pt-2.5 border-t border-blue-100 dark:border-blue-900/60 text-[11px] text-slate-500 dark:text-slate-400">
               <div className="flex items-center justify-between">
                 <span>In: {(stats?.geminiStats?.promptTokens || 0).toLocaleString()} | Out: {(stats?.geminiStats?.completionTokens || 0).toLocaleString()} tokens</span>
                 <span className="font-semibold text-blue-700 dark:text-blue-400">{stats?.geminiStats?.pricingModel || "$0.075 / $0.30 per 1M"}</span>
-              </div>
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg">
-                Cơ chế dự phòng: Kích hoạt tự động khi dịch vụ chính gặp sự cố.
               </div>
             </div>
           </div>

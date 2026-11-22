@@ -252,12 +252,26 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
             const secLower = (item.sectionName || "").toLowerCase();
             const descLower = (item.assignment?.description || "").toLowerCase();
 
+            const combinedMeta = `${titleLower} ${secLower} ${descLower}`;
+            const isExplicitNonShadow =
+              combinedMeta.includes("q&a") ||
+              combinedMeta.includes("hỏi - đáp") ||
+              combinedMeta.includes("hỏi đáp") ||
+              combinedMeta.includes("phỏng vấn") ||
+              combinedMeta.includes("part 1") ||
+              combinedMeta.includes("part 2") ||
+              combinedMeta.includes("part_2") ||
+              combinedMeta.includes("part 3") ||
+              combinedMeta.includes("part_3") ||
+              combinedMeta.includes("cue card") ||
+              combinedMeta.includes("speaking_qa");
             const isShadow =
-              titleLower.includes("shadow") ||
-              titleLower.includes("nhại") ||
-              secLower.includes("shadow") ||
-              descLower.includes("shadow") ||
-              descLower.includes("nhại");
+              !isExplicitNonShadow &&
+              (titleLower.includes("shadow") ||
+                titleLower.includes("nhại") ||
+                secLower.includes("shadow") ||
+                descLower.includes("shadow") ||
+                descLower.includes("nhại"));
             // Chỉ nhận bài thực sự thuộc kỹ năng Speaking (theo skillType / loại mục),
             // không đoán theo từ khóa trong mô tả để tránh nhận nhầm bài từ vựng, đọc...
             const itemAsgId = item.assignment?.id || item.assignmentId;
@@ -544,7 +558,26 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
       selectedAsgMeta?.description ||
       ""
     ).toLowerCase();
-    const currentPromptLower = (currentQ?.promptText || "").toLowerCase();
+    const currentPrompt = currentQ?.promptText || "";
+    const currentPromptLower = currentPrompt.toLowerCase();
+    const metaCombined = `${attemptTitleLower} ${attemptDescLower}`;
+
+    const isExplicitNonShadow =
+      metaCombined.includes("q&a") ||
+      metaCombined.includes("hỏi - đáp") ||
+      metaCombined.includes("hỏi đáp") ||
+      metaCombined.includes("phỏng vấn") ||
+      metaCombined.includes("part 1") ||
+      metaCombined.includes("part 2") ||
+      metaCombined.includes("part_2") ||
+      metaCombined.includes("part 3") ||
+      metaCombined.includes("part_3") ||
+      metaCombined.includes("cue card") ||
+      metaCombined.includes("speaking_qa") ||
+      currentPromptLower.includes("you should say:") ||
+      currentPrompt.trim().endsWith("?");
+
+    if (isExplicitNonShadow) return false;
 
     return (
       !!selectedAsgMeta?.isShadowing ||
@@ -627,10 +660,28 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
 
         const topicText =
           currentQ.promptText || currentAttempt.assignmentTitle || "Speaking Topic";
+        const metaCombined = `${currentAttempt.assignmentTitle || ""} ${
+          (currentAttempt as any)?.assignmentDescription || ""
+        } ${topicText}`.toLowerCase();
+        const resolvedSpeakingMode: "PART_2" | "PART_3" | "QA" =
+          metaCombined.includes("part 2") ||
+          metaCombined.includes("part_2") ||
+          metaCombined.includes("cue card") ||
+          metaCombined.includes("you should say:")
+            ? "PART_2"
+            : metaCombined.includes("part 3") ||
+              metaCombined.includes("part_3") ||
+              metaCombined.includes("thảo luận chuyên sâu")
+            ? "PART_3"
+            : "QA";
         const result = await studentApi.evaluateSpeakingAI(
           topicText,
           cleanFile,
           targetAnswerId || "",
+          {
+            speakingMode: resolvedSpeakingMode,
+            keyPoints: currentQ.correctAnswer,
+          },
         );
         if (!isMountedRef.current) return;
 
@@ -676,6 +727,12 @@ export function useSpeakingDailyPlans(options?: UseSpeakingDailyPlansOptions) {
           selectedAssignmentId,
           currentAttempt.attemptId,
           answerPayload,
+        );
+
+        window.dispatchEvent(
+          new CustomEvent("student-progress-updated", {
+            detail: { assignmentId: selectedAssignmentId, attemptId: currentAttempt.attemptId },
+          }),
         );
 
         const detail = await studentApi.getAttemptDetail(

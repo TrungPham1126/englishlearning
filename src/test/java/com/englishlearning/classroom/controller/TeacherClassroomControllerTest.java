@@ -33,6 +33,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -205,6 +207,8 @@ class TeacherClassroomControllerTest {
                                 .build()))
                 .build();
 
+        when(classroomService.getClassroomById(classId)).thenReturn(
+                ClassroomResponse.builder().id(classId).teacherId(teacherId).build());
         when(classroomService.getClassStudentsProgress(classId)).thenReturn(List.of(sp));
 
         mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
@@ -217,5 +221,123 @@ class TeacherClassroomControllerTest {
         mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
                         .with(user(createStudentUserDetails())))
                 .andExpect(status().isForbidden());
+    }
+
+    private CustomUserDetails createAdminUserDetails() {
+        User admin = User.builder()
+                .id(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+                .email("admin@englishlearning.com")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(Role.builder().name(RoleName.ROLE_ADMIN).build()))
+                .build();
+        return new CustomUserDetails(admin);
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id} - Giảng viên xem lớp của người khác -> Trả về 403 Forbidden")
+    void getClassDetail_teacherDoesNotOwnClassroom_returns403() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        UUID otherTeacherId = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        ClassroomResponse otherClass = ClassroomResponse.builder()
+                .id(classId)
+                .name("Other Teacher Class")
+                .teacherId(otherTeacherId)
+                .build();
+        when(classroomService.getClassroomById(classId)).thenReturn(otherClass);
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", classId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id} - ADMIN xem được bất kỳ lớp nào -> Trả về 200 OK")
+    void getClassDetail_adminAccessesAnyClassroom_returns200() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        UUID otherTeacherId = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        ClassroomResponse otherClass = ClassroomResponse.builder()
+                .id(classId)
+                .name("Other Teacher Class")
+                .teacherId(otherTeacherId)
+                .build();
+        when(classroomService.getClassroomById(classId)).thenReturn(otherClass);
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", classId)
+                        .with(user(createAdminUserDetails())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Other Teacher Class"));
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id} - Principal không phải CustomUserDetails -> Trả về 401 Unauthorized")
+    void getClassDetail_principalNotCustomUserDetails_returns401() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}", classId)
+                        .with(user("plainTeacher").roles("TEACHER")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id}/students - Giảng viên xem tiến độ lớp không phải mình dạy -> Trả về 403 và không query tiến độ")
+    void getClassStudents_teacherDoesNotOwnClassroom_returns403() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        UUID otherTeacherId = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        ClassroomResponse otherClass = ClassroomResponse.builder()
+                .id(classId)
+                .teacherId(otherTeacherId)
+                .build();
+        when(classroomService.getClassroomById(classId)).thenReturn(otherClass);
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verify(classroomService, never()).getClassStudentsProgress(any());
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id}/students - ADMIN xem tiến độ học viên mọi lớp -> Trả về 200 OK")
+    void getClassStudents_adminAccessesAnyClassroom_returns200() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        UUID otherTeacherId = UUID.fromString("99999999-8888-7777-6666-555555555555");
+        when(classroomService.getClassroomById(classId))
+                .thenReturn(ClassroomResponse.builder().id(classId).teacherId(otherTeacherId).build());
+        when(classroomService.getClassStudentsProgress(classId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
+                        .with(user(createAdminUserDetails())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200));
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id}/students - Lớp không tồn tại -> Trả về 404 Not Found")
+    void getClassStudents_classroomNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(classroomService.getClassroomById(missingId))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy lớp học"));
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", missingId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+
+        verify(classroomService, never()).getClassStudentsProgress(any());
+    }
+
+    @Test
+    @DisplayName("GET /api/teacher/classrooms/{id}/students - Principal không phải CustomUserDetails -> Trả về 401 Unauthorized")
+    void getClassStudents_principalNotCustomUserDetails_returns401() throws Exception {
+        UUID classId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+
+        mockMvc.perform(get("/api/teacher/classrooms/{id}/students", classId)
+                        .with(user("plainTeacher").roles("TEACHER")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 }

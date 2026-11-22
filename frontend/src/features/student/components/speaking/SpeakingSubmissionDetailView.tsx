@@ -435,17 +435,19 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
                 "Câu hỏi Speaking"}
             </h3>
 
-            {/* Nút nghe lại câu mẫu bản xứ */}
-            <div className="flex justify-center pt-1">
-              <button
-                type="button"
-                onClick={onPlayTtsPrompt}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
-              >
-                <Volume2 size={13} />
-                <span>Nghe mẫu</span>
-              </button>
-            </div>
+            {/* Nút nghe lại câu mẫu bản xứ (chỉ hiển thị cho Shadowing) */}
+            {isShadowingMode && (
+              <div className="flex justify-center pt-1">
+                <button
+                  type="button"
+                  onClick={onPlayTtsPrompt}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+                >
+                  <Volume2 size={13} />
+                  <span>Nghe mẫu</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* D. ĐIỂM SỐ & TRẠNG THÁI CÂU HỎI */}
@@ -577,6 +579,7 @@ export const SpeakingSubmissionDetailView: React.FC<SpeakingSubmissionDetailView
             <>
               <SpeakingPromptCard
                 question={currentQ}
+                isShadowingMode={isShadowingMode}
                 isSynthesizingTts={isSynthesizingTts}
                 isPlayingRefTts={isPlayingRefTts}
                 selectedVoice={selectedVoice}

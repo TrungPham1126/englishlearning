@@ -65,7 +65,11 @@ export interface SpeakingAiEvaluationResult {
   wordsPerMinute: number;
   isOffTopic?: boolean;
   taskAchievement?: TaskAchievementDetail;
+  taskResponseScore?: number;
   overallBand: number;
+  overallScore?: number;
+  isPassed?: boolean;
+  speakingMode?: string;
   estimatedCefr: string;
   pronunciationScore: number;
   fluencyScore: number;
@@ -76,6 +80,7 @@ export interface SpeakingAiEvaluationResult {
   mistakes: SpeakingAiMistake[];
   suggestions: SpeakingAiSuggestion[];
   generalFeedback: string;
+  phoneticEvaluation?: ShadowingEvaluationResponse;
 }
 
 export type FullSpeakingAiResult = SpeakingAiEvaluationResult & {
@@ -108,11 +113,45 @@ export interface DaySpeakingGroup {
   speakingTasks: SpeakingAssignmentItem[];
 }
 
+export type WritingTaskType = 'TASK_1' | 'TASK_2' | 'PARAGRAPH' | 'WRITING_SHORT_EMAIL';
+
+export interface WritingCriterionHighlight {
+  inEssay: string;
+  rewritten: string;
+  critique: string;
+  howToFix: string;
+}
+
+export interface WritingCriterionDetail {
+  code: string;
+  name: string;
+  band: number;
+  summary: string;
+  nextBand: number;
+  nextBandAdvice: string;
+  highlights?: WritingCriterionHighlight[];
+}
+
+export interface WritingSuggestedVocab {
+  word: string;
+  ipa: string;
+  meaning: string;
+  example: string;
+  usageContext: string;
+}
+
 export interface WritingAiEvaluationResult {
   wordCount: number;
+  correctedWordCount?: number;
+  writingTask?: WritingTaskType | string;
+  writingSubType?: string;
   isOffTopic?: boolean;
   taskAchievement?: TaskAchievementDetail;
+  taskResponseScore?: number;
   overallBand: number;
+  overallScore?: number;
+  isPassed?: boolean;
+  speakingMode?: string;
   estimatedCefr: string;
   grammarScore: number;
   vocabularyScore: number;
@@ -120,7 +159,10 @@ export interface WritingAiEvaluationResult {
   correctedText: string;
   mistakes: SpeakingAiMistake[];
   suggestions: SpeakingAiSuggestion[];
+  criteriaDetails?: Record<string, WritingCriterionDetail>;
+  suggestedVocabulary?: WritingSuggestedVocab[];
   generalFeedback: string;
+  phoneticEvaluation?: ShadowingEvaluationResponse;
 }
 
 // ================= 3. KHÓA HỌC & GIÁO TRÌNH (CURRICULUM) =================
@@ -202,10 +244,13 @@ export interface LessonDetailResponse {
 
 export interface VideoResponse {
   id: string;
-  title: string;
+  title?: string;
+  originalFileName?: string;
   videoUrl?: string;
   hlsPlaylistUrl?: string;
-  durationSeconds: number;
+  rawStorageUrl?: string;
+  status?: "DRAFT" | "PROCESSING" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "ARCHIVED";
+  durationSeconds?: number;
 }
 
 export interface VideoWatchHistory {
@@ -353,10 +398,22 @@ export interface DayDetailDto {
   sections: SectionGroupDto[];
 }
 
+export interface StudentStreakResponse {
+  currentStreak: number;
+  lastActiveDate?: string | null;
+  hasHomeworkToday: boolean;
+  completedToday: boolean;
+  todayCompletedTasks: number;
+  todayTotalTasks: number;
+}
+
 export interface DailyHomeworkOverviewResponse {
   completionPercentage: number;
   totalDays: number;
   completedDays: number;
+  currentStreak?: number;
+  hasHomeworkToday?: boolean;
+  completedToday?: boolean;
   days: DaySummaryDto[];
   currentSelectedDay: DayDetailDto | null;
 }

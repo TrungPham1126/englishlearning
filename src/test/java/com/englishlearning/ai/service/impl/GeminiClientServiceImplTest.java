@@ -21,12 +21,15 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -154,5 +157,54 @@ class GeminiClientServiceImplTest {
         assertThat(GeminiClientService.stripMarkdown("```json\n{\"a\":1}\n```")).isEqualTo("{\"a\":1}");
         assertThat(GeminiClientService.stripMarkdown("```\n{\"b\":2}\n```")).isEqualTo("{\"b\":2}");
         assertThat(GeminiClientService.stripMarkdown("  {\"c\":3}  ")).isEqualTo("{\"c\":3}");
+    }
+
+    @Test
+    @DisplayName("executeRequest: candidates hoặc parts rỗng ném BadRequestException có thông báo rõ ràng")
+    void generateWithSystemInstruction_emptyCandidatesOrPartsThrowsBadRequest() {
+        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"candidates\":[]}"))
+                .thenReturn(ResponseEntity.ok("{\"candidates\":[{\"content\":{\"parts\":[]}}]}"));
+
+        assertThatThrownBy(() -> service.generateWithSystemInstruction("Sys", "Prompt", 0.2, UUID.randomUUID(), false))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("candidates/parts");
+
+        assertThatThrownBy(() -> service.generateWithSystemInstruction("Sys", "Prompt", 0.2, UUID.randomUUID(), false))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("candidates/parts");
+    }
+
+    @Test
+    @DisplayName("Phân giải String email principal (ROLE_ADMIN), ngữ cảnh ẩn danh, prompt null & kẹp temperature [-0.5->0.0, 3.0->1.5]")
+    @SuppressWarnings("unchecked")
+    void generateWithSystemInstruction_resolvesEmailPrincipalAnonymousContextNullPromptsAndClampsTemp() {
+        UUID adminId = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin@english.test", null,
+                        List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+        when(userRepository.findByEmail("admin@english.test"))
+                .thenReturn(Optional.of(User.builder().id(adminId).email("admin@english.test").build()));
+        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{}\"}]}}]}"));
+
+        service.generateWithSystemInstruction(null, null, -0.5);
+
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), captor.capture(), eq(String.class));
+        Map<String, Object> genCfg1 = (Map<String, Object>) captor.getValue().getBody().get("generationConfig");
+        assertThat(genCfg1.get("temperature")).isEqualTo(0.0);
+        verify(aiMonitoringService).recordTokenUsage(eq(adminId), eq("TEACHER"), eq(1L), anyLong(), eq("GEMINI"));
+
+        // Ngữ cảnh ẩn danh (anonymous) + temperature > 1.5 + evaluateAudioWithInstruction với prompt null
+        SecurityContextHolder.clearContext();
+        service.generateWithSystemInstruction("Sys", "User", 3.0);
+        service.evaluateAudioWithInstruction(null, new byte[40], "audio/wav", null);
+
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> allCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(3)).postForEntity(anyString(), allCaptor.capture(), eq(String.class));
+        Map<String, Object> genCfg2 = (Map<String, Object>) allCaptor.getAllValues().get(1).getBody().get("generationConfig");
+        assertThat(genCfg2.get("temperature")).isEqualTo(1.5);
+        verify(aiMonitoringService, times(2)).recordTokenUsage(isNull(), eq("STUDENT"), anyLong(), anyLong(), eq("GEMINI"));
     }
 }

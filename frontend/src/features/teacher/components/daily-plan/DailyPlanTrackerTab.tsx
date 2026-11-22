@@ -26,7 +26,7 @@ export const DailyPlanTrackerTab: React.FC<DailyPlanTrackerTabProps> = ({
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm tên học viên..."
+            placeholder="Tìm học viên..."
             value={searchStudent}
             onChange={(e) => setSearchStudent(e.target.value)}
             className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
@@ -39,7 +39,7 @@ export const DailyPlanTrackerTab: React.FC<DailyPlanTrackerTabProps> = ({
           </span>
           <span className="flex items-center">
             <div className="w-3 h-3 rounded-full bg-amber-500 mr-1.5"></div>{" "}
-            Đang làm dở
+            Đang làm
           </span>
           <span className="flex items-center">
             <div className="w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-700 mr-1.5"></div>{" "}
@@ -56,7 +56,7 @@ export const DailyPlanTrackerTab: React.FC<DailyPlanTrackerTabProps> = ({
                 Học viên
               </th>
               <th className="px-4 py-4 text-center border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#162033]">
-                Tổng tiến độ
+                Tiến độ
               </th>
               {plans.map((p) => (
                 <th
@@ -75,7 +75,7 @@ export const DailyPlanTrackerTab: React.FC<DailyPlanTrackerTabProps> = ({
                   colSpan={plans.length + 2}
                   className="p-8 text-center text-slate-500"
                 >
-                  Không có dữ liệu tiến độ.
+                  Chưa có dữ liệu.
                 </td>
               </tr>
             ) : (

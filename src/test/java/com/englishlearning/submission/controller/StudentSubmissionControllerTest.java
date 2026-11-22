@@ -36,8 +36,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -297,5 +296,82 @@ class StudentSubmissionControllerTest {
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Upload thành công"));
+    }
+
+    @Test
+    @DisplayName("getAssignmentsByClass_whenTeacherRole_returns403")
+    void getAssignmentsByClass_whenTeacherRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/student/classrooms/{classId}/assignments", UUID.randomUUID())
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("submitAttempt_whenTeacherRole_returns403")
+    void submitAttempt_whenTeacherRole_returns403() throws Exception {
+        mockMvc.perform(post("/api/v1/student/assignments/{assignmentId}/attempts/{attemptId}/submit", assignmentId, attemptId)
+                        .with(user(createTeacherUserDetails()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"assignmentId\":\"" + assignmentId + "\",\"answers\":[]}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("getMyAttempts_whenTeacherRole_returns403")
+    void getMyAttempts_whenTeacherRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/student/assignments/{assignmentId}/attempts", assignmentId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("getAttemptDetail_whenTeacherRole_returns403")
+    void getAttemptDetail_whenTeacherRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/student/assignments/attempts/{attemptId}", attemptId)
+                        .with(user(createTeacherUserDetails())))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("uploadAudio_whenTeacherRole_returns403")
+    void uploadAudio_whenTeacherRole_returns403() throws Exception {
+        MockMultipartFile audio = new MockMultipartFile("audio", "speech.wav", "audio/wav", new byte[]{1, 2});
+
+        mockMvc.perform(multipart("/api/v1/student/assignments/attempts/{attemptId}/questions/{questionId}/audio",
+                        attemptId, UUID.randomUUID())
+                        .file(audio)
+                        .with(user(createTeacherUserDetails()))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("recordAttemptViolation_whenNoBody_returns200")
+    void recordAttemptViolation_whenNoBody_returns200() throws Exception {
+        AttemptResponse resp = AttemptResponse.builder()
+                .attemptId(attemptId)
+                .violationCount(1)
+                .status("IN_PROGRESS")
+                .build();
+        when(submissionService.recordAttemptViolation(eq(studentId), eq(attemptId), eq(null)))
+                .thenReturn(resp);
+
+        mockMvc.perform(post("/api/v1/student/assignments/attempts/{attemptId}/violation", attemptId)
+                        .with(user(createStudentUserDetails()))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Violation recorded"))
+                .andExpect(jsonPath("$.data.violationCount").value(1));
     }
 }

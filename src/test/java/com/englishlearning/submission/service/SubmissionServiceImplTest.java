@@ -62,6 +62,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -1032,6 +1033,78 @@ class SubmissionServiceImplTest {
     }
 
     @Test
+    @DisplayName("submitAttempt với ESSAY đã có Writing AiEvaluation (Band 0-9) tự động quy đổi (Band / 9.0) * 10")
+    void submitAttempt_EssayWithWritingAiBand_ConvertsBandToTenScale() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID qId = UUID.randomUUID();
+        UUID ansId = UUID.randomUUID();
+
+        AssignmentQuestion essayQ = AssignmentQuestion.builder()
+                .id(qId)
+                .questionType(QuestionType.ESSAY)
+                .points(10.0)
+                .build();
+        Assignment assignment = Assignment.builder()
+                .id(assId)
+                .title("IELTS Writing Task 2")
+                .skillType(SkillType.WRITING)
+                .questions(List.of(essayQ))
+                .build();
+        StudentAnswer existingAns = new StudentAnswer();
+        existingAns.setId(ansId);
+        existingAns.setQuestion(essayQ);
+        existingAns.setTextResponse("In my opinion, public transport reduces congestion...");
+        // Simulates AiLabServiceImpl.evaluateWriting saving raw overallBand=6.5 before submission
+        existingAns.setEarnedPoints(6.5);
+
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .student(Student.builder().id(studentId).build())
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .startedAt(Instant.now().minusSeconds(120))
+                .answers(new ArrayList<>(List.of(existingAns)))
+                .build();
+        existingAns.setAttempt(attempt);
+
+        AiEvaluation eval = AiEvaluation.builder()
+                .id(UUID.randomUUID())
+                .evalType(com.englishlearning.ai.entity.AiEvaluationType.WRITING)
+                .overallScore(6.5)
+                .build();
+
+        GradingResult gradingResult = GradingResult.builder()
+                .totalScore(0.0)
+                .maxPossibleScore(0.0)
+                .scaledScore(0.0)
+                .earnedPointsPerQuestion(Map.of())
+                .correctnessPerQuestion(Map.of())
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assId)).thenReturn(List.of(essayQ));
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(gradingResult);
+        when(aiEvaluationRepository.findByStudentAnswerId(ansId)).thenReturn(Optional.of(eval));
+        when(dailyPlanItemRepository.findByAssignmentIdWithDailyPlan(assId)).thenReturn(java.util.Collections.emptyList());
+
+        SubmissionRequest req = SubmissionRequest.builder()
+                .assignmentId(assId)
+                .answers(java.util.Collections.emptyList())
+                .build();
+
+        AttemptResponse res = submissionService.submitAttempt(studentId, attemptId, req);
+
+        // Band 6.5 / 9.0 * 10.0 = 7.222... -> 7.2; ESSAY attempts remain SUBMITTED for teacher confirmation
+        assertThat(res.getStatus()).isEqualTo("SUBMITTED");
+        assertThat(res.getScore()).isEqualTo(7.2);
+        assertThat(existingAns.getEarnedPoints()).isEqualTo(7.2);
+        assertThat(existingAns.getIsCorrect()).isTrue();
+    }
+
+    @Test
     @DisplayName("submitAttempt với cheatingFlagged=true chuyển SUBMITTED và gửi cảnh báo gian lận cho giáo viên")
     void submitAttempt_CheatingFlagged_MarksSubmittedAndNotifiesTeacher() {
         UUID studentId = UUID.randomUUID();
@@ -1350,5 +1423,445 @@ class SubmissionServiceImplTest {
                 .assignment(Assignment.builder().skillType(SkillType.SPEAKING).build())
                 .build();
         assertThat(submissionService.computeRemedialMessage(speakingPass)).contains("đạt chuẩn");
+    }
+
+    @Test
+    @DisplayName("submitAttempt với AUDIO_RESPONSE có points=null và AI score=8.0 không bị nhân 10 lần lên 80.0")
+    void submitAttempt_SubjectiveWithNullPointsAndAiScore_DoesNotMultiplyByTen() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID qId = UUID.randomUUID();
+        UUID ansId = UUID.randomUUID();
+
+        AssignmentQuestion speakingQ = AssignmentQuestion.builder()
+                .id(qId)
+                .questionType(QuestionType.AUDIO_RESPONSE)
+                .points(null)
+                .build();
+
+        Assignment assignment = Assignment.builder()
+                .id(assId)
+                .title("Speaking Practice")
+                .skillType(SkillType.SPEAKING)
+                .isExam(false)
+                .questions(List.of(speakingQ))
+                .build();
+
+        Student student = Student.builder()
+                .id(studentId)
+                .user(User.builder().id(studentId).firstName("Lan").lastName("Tran").build())
+                .build();
+
+        StudentAnswer preEvaluated = new StudentAnswer();
+        preEvaluated.setId(ansId);
+        preEvaluated.setQuestion(speakingQ);
+        preEvaluated.setAudioResponseUrl("https://r2.example/speaking.wav");
+
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .student(student)
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .startedAt(Instant.now().minusSeconds(60))
+                .answers(new ArrayList<>(List.of(preEvaluated)))
+                .build();
+
+        AiEvaluation eval = AiEvaluation.builder()
+                .id(UUID.randomUUID())
+                .studentAnswer(preEvaluated)
+                .evalType(AiEvaluationType.SPEAKING)
+                .overallScore(8.0)
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assId)).thenReturn(List.of(speakingQ));
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder()
+                        .earnedPointsPerQuestion(Map.of())
+                        .correctnessPerQuestion(Map.of())
+                        .build()
+        );
+        when(aiEvaluationRepository.findByStudentAnswerId(ansId)).thenReturn(Optional.of(eval));
+
+        AttemptResponse res = submissionService.submitAttempt(
+                studentId,
+                attemptId,
+                SubmissionRequest.builder()
+                        .assignmentId(assId)
+                        .answers(List.of(SubmissionRequest.AnswerDto.builder().questionId(qId).build()))
+                        .build()
+        );
+
+        assertThat(res.getScore()).isEqualTo(8.0);
+        assertThat(attempt.getTotalScore()).isLessThanOrEqualTo(10.0);
+    }
+
+    @Test
+    @DisplayName("gradeSubmission từ chối finalScore ngoài khoảng [0.0, 10.0]")
+    void gradeSubmission_RejectsOutOfRangeScores() {
+        UUID attemptId = UUID.randomUUID();
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .status(AttemptStatus.SUBMITTED)
+                .answers(new ArrayList<>())
+                .build();
+        when(attemptRepository.findById(attemptId)).thenReturn(Optional.of(attempt));
+
+        TeacherGradeRequest tooHigh = new TeacherGradeRequest();
+        tooHigh.setFinalScore(85.0);
+        tooHigh.setFeedback("Scale 100");
+        assertThatThrownBy(() -> submissionService.gradeSubmission(attemptId, tooHigh))
+                .isInstanceOf(BadRequestException.class);
+
+        TeacherGradeRequest negative = new TeacherGradeRequest();
+        negative.setFinalScore(-1.0);
+        negative.setFeedback("Negative");
+        assertThatThrownBy(() -> submissionService.gradeSubmission(attemptId, negative))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName("startAttempt_whenPassScoreConfiguredWithoutMaxAllowedError_blocksRetakeWhenScoreMeetsPassScore")
+    void startAttempt_whenPassScoreConfiguredWithoutMaxAllowedError_blocksRetakeWhenScoreMeetsPassScore() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        Assignment assignment = Assignment.builder()
+                .id(assId)
+                .maxAttempts(3)
+                .maxAllowedErrorPercent(null)
+                .passScore(7.0)
+                .questions(new ArrayList<>())
+                .build();
+        AssignmentAttempt completed = AssignmentAttempt.builder()
+                .id(UUID.randomUUID())
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.COMPLETED)
+                .totalScore(7.5)
+                .submittedAt(Instant.now().minusSeconds(30))
+                .build();
+
+        when(assignmentRepository.findById(assId)).thenReturn(Optional.of(assignment));
+        when(attemptRepository.findByStudentIdAndAssignmentId(studentId, assId)).thenReturn(List.of(completed));
+
+        assertThatThrownBy(() -> submissionService.startAttempt(studentId, assId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("ĐẠT CHUẨN");
+    }
+
+    @Test
+    @DisplayName("startAttempt_whenHasEssayAndReachedMaxAttempts_throwsEssayWaitingGradingBadRequest")
+    void startAttempt_whenHasEssayAndReachedMaxAttempts_throwsEssayWaitingGradingBadRequest() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        Assignment assignment = Assignment.builder()
+                .id(assId)
+                .maxAttempts(1)
+                .questions(List.of(AssignmentQuestion.builder().id(UUID.randomUUID()).questionType(QuestionType.ESSAY).build()))
+                .build();
+        AssignmentAttempt submittedEssay = AssignmentAttempt.builder()
+                .id(UUID.randomUUID())
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.SUBMITTED)
+                .submittedAt(Instant.now().minusSeconds(60))
+                .build();
+
+        when(assignmentRepository.findById(assId)).thenReturn(Optional.of(assignment));
+        when(attemptRepository.findByStudentIdAndAssignmentId(studentId, assId)).thenReturn(List.of(submittedEssay));
+
+        assertThatThrownBy(() -> submissionService.startAttempt(studentId, assId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("tự luận");
+    }
+
+    @Test
+    @DisplayName("startAttempt_whenPreviousAttemptsNullAndExamHasQuestions_createsFirstAttemptAndPersistsAnswers")
+    void startAttempt_whenPreviousAttemptsNullAndExamHasQuestions_createsFirstAttemptAndPersistsAnswers() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        AssignmentQuestion mcq = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .questionType(QuestionType.MULTIPLE_CHOICE)
+                .promptText("Choose A")
+                .points(2.0)
+                .build();
+        Assignment exam = Assignment.builder()
+                .id(assId)
+                .title("Midterm Exam")
+                .skillType(SkillType.READING)
+                .isExam(true)
+                .questions(List.of(mcq))
+                .build();
+        Student studentRef = Student.builder().id(studentId).build();
+
+        when(assignmentRepository.findById(assId)).thenReturn(Optional.of(exam));
+        when(attemptRepository.findByStudentIdAndAssignmentId(studentId, assId)).thenReturn(null);
+        when(entityManager.getReference(Student.class, studentId)).thenReturn(studentRef);
+        when(attemptRepository.save(any(AssignmentAttempt.class))).thenAnswer(inv -> {
+            AssignmentAttempt a = inv.getArgument(0);
+            if (a.getId() == null) {
+                a.setId(attemptId);
+            }
+            return a;
+        });
+        when(attemptRepository.findByIdAndStudentId(eq(attemptId), eq(studentId))).thenAnswer(inv ->
+                Optional.of(AssignmentAttempt.builder()
+                        .id(attemptId)
+                        .student(studentRef)
+                        .assignment(exam)
+                        .attemptNumber(1)
+                        .status(AttemptStatus.IN_PROGRESS)
+                        .startedAt(Instant.now())
+                        .answers(new ArrayList<>())
+                        .build()));
+        when(assignmentRepository.findByIdWithQuestions(assId)).thenReturn(Optional.of(exam));
+
+        AttemptResponse res = submissionService.startAttempt(studentId, assId);
+
+        assertThat(res.getAttemptId()).isEqualTo(attemptId);
+        assertThat(res.getAttemptNumber()).isEqualTo(1);
+        assertThat(res.getAnswersPersisted()).isTrue();
+        verify(answerRepository).save(any(StudentAnswer.class));
+        verify(attemptRepository, times(2)).save(any(AssignmentAttempt.class));
+    }
+
+    @Test
+    @DisplayName("submitAttempt_whenRequestNullOrAttemptNotFound_throwsBadRequestOrNotFound")
+    void submitAttempt_whenRequestNullOrAttemptNotFound_throwsBadRequestOrNotFound() {
+        UUID studentId = UUID.randomUUID();
+        UUID missingAttemptId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> submissionService.submitAttempt(studentId, missingAttemptId, null))
+                .isInstanceOf(BadRequestException.class);
+
+        when(attemptRepository.findByIdAndStudentId(missingAttemptId, studentId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> submissionService.submitAttempt(studentId, missingAttemptId, new SubmissionRequest()))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("submitAttempt_whenAlreadySubmittedWithCheatingFlagged_returnsAttemptDetailInsteadOfThrowing")
+    void submitAttempt_whenAlreadySubmittedWithCheatingFlagged_returnsAttemptDetailInsteadOfThrowing() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        Assignment exam = Assignment.builder().id(assId).title("Exam").isExam(true).questions(new ArrayList<>()).build();
+        AssignmentAttempt flaggedAttempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .assignment(exam)
+                .attemptNumber(1)
+                .status(AttemptStatus.SUBMITTED)
+                .submittedAt(Instant.now().minusSeconds(30))
+                .isCheatingFlagged(true)
+                .cheatingReason("Exited fullscreen")
+                .totalScore(0.0)
+                .answers(new ArrayList<>())
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(flaggedAttempt));
+        when(assignmentRepository.findByIdWithQuestions(assId)).thenReturn(Optional.of(exam));
+
+        AttemptResponse res = submissionService.submitAttempt(studentId, attemptId, new SubmissionRequest());
+
+        assertThat(res.getAttemptId()).isEqualTo(attemptId);
+        assertThat(res.getIsCheatingFlagged()).isTrue();
+        verify(attemptRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("submitAttempt_whenAudioResponseUnscored_setsStatusSubmittedAndNotifiesTeacher")
+    void submitAttempt_whenAudioResponseUnscored_setsStatusSubmittedAndNotifiesTeacher() {
+        UUID studentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
+        UUID classId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID qId = UUID.randomUUID();
+        UUID ansId = UUID.randomUUID();
+
+        Teacher teacher = new Teacher();
+        teacher.setId(teacherId);
+        Classroom classroom = Classroom.builder().id(classId).teacher(teacher).build();
+        AssignmentQuestion audioQ = AssignmentQuestion.builder()
+                .id(qId)
+                .questionType(QuestionType.AUDIO_RESPONSE)
+                .points(10.0)
+                .build();
+        Assignment speakingAss = Assignment.builder()
+                .id(assId)
+                .title("Speaking Practice")
+                .classroom(classroom)
+                .skillType(SkillType.SPEAKING)
+                .questions(List.of(audioQ))
+                .build();
+        Student student = Student.builder()
+                .id(studentId)
+                .user(User.builder().id(studentId).firstName("Hoa").lastName("Nguyen").build())
+                .build();
+        StudentAnswer ungradedAudioAns = new StudentAnswer();
+        ungradedAudioAns.setId(ansId);
+        ungradedAudioAns.setQuestion(audioQ);
+        ungradedAudioAns.setAudioResponseUrl("https://r2.dev/audio.wav");
+        ungradedAudioAns.setEarnedPoints(0.0);
+
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .student(student)
+                .assignment(speakingAss)
+                .status(AttemptStatus.IN_PROGRESS)
+                .startedAt(Instant.now().minusSeconds(40))
+                .answers(new ArrayList<>(List.of(ungradedAudioAns)))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assId)).thenReturn(List.of(audioQ));
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder().earnedPointsPerQuestion(Map.of()).correctnessPerQuestion(Map.of()).build());
+        when(aiEvaluationRepository.findByStudentAnswerId(ansId)).thenReturn(Optional.empty());
+        when(dailyPlanItemRepository.findByAssignmentIdWithDailyPlan(assId)).thenReturn(java.util.Collections.emptyList());
+
+        AttemptResponse res = submissionService.submitAttempt(
+                studentId, attemptId, SubmissionRequest.builder().assignmentId(assId).answers(List.of()).build());
+
+        assertThat(res.getStatus()).isEqualTo("SUBMITTED");
+        assertThat(res.getScore()).isZero();
+        verify(analyticsService, never()).updateSkillScore(any(), any(), anyDouble());
+        verify(notificationService).sendSystemNotification(
+                eq(teacherId), anyString(), anyString(), anyString(), eq("SUBMISSION_RECEIVED"), anyString(), eq(attemptId));
+    }
+
+    @Test
+    @DisplayName("submitAttempt_whenEssayAndAudioHaveLegacyScale100AiScores_normalizesBothToScale10")
+    void submitAttempt_whenEssayAndAudioHaveLegacyScale100AiScores_normalizesBothToScale10() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID essayQId = UUID.randomUUID();
+        UUID audioQId = UUID.randomUUID();
+        UUID essayAnsId = UUID.randomUUID();
+        UUID audioAnsId = UUID.randomUUID();
+
+        AssignmentQuestion essayQ = AssignmentQuestion.builder()
+                .id(essayQId).questionType(QuestionType.ESSAY).points(10.0).build();
+        AssignmentQuestion audioQ = AssignmentQuestion.builder()
+                .id(audioQId).questionType(QuestionType.AUDIO_RESPONSE).points(10.0).build();
+        Assignment assignment = Assignment.builder()
+                .id(assId).title("Mixed Subjective").skillType(SkillType.WRITING).questions(List.of(essayQ, audioQ)).build();
+
+        StudentAnswer essayAns = new StudentAnswer();
+        essayAns.setId(essayAnsId);
+        essayAns.setQuestion(essayQ);
+        StudentAnswer audioAns = new StudentAnswer();
+        audioAns.setId(audioAnsId);
+        audioAns.setQuestion(audioQ);
+
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .student(Student.builder().id(studentId).build())
+                .assignment(assignment)
+                .status(AttemptStatus.IN_PROGRESS)
+                .startedAt(Instant.now().minusSeconds(120))
+                .answers(new ArrayList<>(List.of(essayAns, audioAns)))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assId)).thenReturn(List.of(essayQ, audioQ));
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder().earnedPointsPerQuestion(Map.of()).correctnessPerQuestion(Map.of()).build());
+        when(aiEvaluationRepository.findByStudentAnswerId(essayAnsId)).thenReturn(Optional.of(
+                AiEvaluation.builder().evalType(AiEvaluationType.WRITING).overallScore(85.0).build()));
+        when(aiEvaluationRepository.findByStudentAnswerId(audioAnsId)).thenReturn(Optional.of(
+                AiEvaluation.builder().evalType(AiEvaluationType.SPEAKING).overallScore(80.0).build()));
+        when(dailyPlanItemRepository.findByAssignmentIdWithDailyPlan(assId)).thenReturn(java.util.Collections.emptyList());
+
+        AttemptResponse res = submissionService.submitAttempt(
+                studentId, attemptId, SubmissionRequest.builder().assignmentId(assId).answers(List.of()).build());
+
+        assertThat(essayAns.getEarnedPoints()).isEqualTo(8.5);
+        assertThat(audioAns.getEarnedPoints()).isEqualTo(8.0);
+        assertThat(res.getScore()).isEqualTo(8.3);
+        assertThat(res.getStatus()).isEqualTo("SUBMITTED");
+    }
+
+    @Test
+    @DisplayName("submitAssignment_delegatesDirectlyToSubmitAttempt")
+    void submitAssignment_delegatesDirectlyToSubmitAttempt() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        Assignment assignment = Assignment.builder().id(assId).title("Quick Task").skillType(SkillType.READING).build();
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .student(Student.builder().id(studentId).build())
+                .assignment(assignment)
+                .status(AttemptStatus.IN_PROGRESS)
+                .startedAt(Instant.now().minusSeconds(20))
+                .answers(null)
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assId)).thenReturn(List.of());
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder().earnedPointsPerQuestion(Map.of()).correctnessPerQuestion(Map.of()).build());
+        when(dailyPlanItemRepository.findByAssignmentIdWithDailyPlan(assId)).thenReturn(java.util.Collections.emptyList());
+
+        AttemptResponse res = submissionService.submitAssignment(
+                studentId, attemptId, SubmissionRequest.builder().assignmentId(assId).answers(List.of()).build());
+
+        assertThat(res.getAttemptId()).isEqualTo(attemptId);
+        assertThat(res.getStatus()).isEqualTo("COMPLETED");
+        verify(attemptRepository).save(attempt);
+    }
+
+    @Test
+    @DisplayName("recordAttemptViolation_whenAlreadySubmittedOrRequestNullOrAttemptMissing_handlesAllBranches")
+    void recordAttemptViolation_whenAlreadySubmittedOrRequestNullOrAttemptMissing_handlesAllBranches() {
+        UUID studentId = UUID.randomUUID();
+        UUID missingAttemptId = UUID.randomUUID();
+        when(attemptRepository.findByIdAndStudentId(missingAttemptId, studentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> submissionService.recordAttemptViolation(studentId, missingAttemptId, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        UUID submittedId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        Assignment exam = Assignment.builder().id(assId).title("Exam").isExam(true).maxViolations(3).questions(new ArrayList<>()).build();
+        AssignmentAttempt alreadySubmitted = AssignmentAttempt.builder()
+                .id(submittedId)
+                .assignment(exam)
+                .attemptNumber(1)
+                .status(AttemptStatus.SUBMITTED)
+                .submittedAt(Instant.now().minusSeconds(10))
+                .violationCount(2)
+                .answers(new ArrayList<>())
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(submittedId, studentId)).thenReturn(Optional.of(alreadySubmitted));
+        when(assignmentRepository.findByIdWithQuestions(assId)).thenReturn(Optional.of(exam));
+
+        AttemptResponse existingDetail = submissionService.recordAttemptViolation(studentId, submittedId, null);
+        assertThat(existingDetail.getViolationCount()).isEqualTo(2);
+        verify(attemptRepository, never()).save(alreadySubmitted);
+
+        UUID inProgId = UUID.randomUUID();
+        AssignmentAttempt inProg = AssignmentAttempt.builder()
+                .id(inProgId)
+                .assignment(exam)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .violationCount(0)
+                .answers(new ArrayList<>())
+                .build();
+        when(attemptRepository.findByIdAndStudentId(inProgId, studentId)).thenReturn(Optional.of(inProg));
+
+        AttemptResponse warningRes = submissionService.recordAttemptViolation(studentId, inProgId, null);
+        assertThat(warningRes.getViolationCount()).isEqualTo(1);
+        assertThat(warningRes.getIsCheatingFlagged()).isFalse();
+        assertThat(warningRes.getViolationLogJson()).contains("FOCUS_LOST");
+        verify(attemptRepository).save(inProg);
     }
 }

@@ -149,7 +149,7 @@ export default function TeacherClassExamsPage() {
     if (!selectedSub) return;
     const parsedScore = parseFloat(inputScore);
     if (Number.isNaN(parsedScore) || parsedScore < 0 || parsedScore > 10) {
-      alert("Vui lòng nhập điểm tổng hợp lệ từ 0.0 đến 10.0.");
+      alert("Nhập điểm từ 0 đến 10.");
       return;
     }
     try {
@@ -160,7 +160,7 @@ export default function TeacherClassExamsPage() {
         feedback,
         ...(Object.keys(answerScores).length > 0 ? { answerScores } : {}),
       });
-      setSaveSuccess(`Đã lưu điểm ${parsedScore}/10 và nhận xét bài thi cho học viên.`);
+      setSaveSuccess(`Đã lưu điểm ${parsedScore}/10.`);
       setSubmissions((prev) =>
         prev.map((item) =>
           item.attemptId === selectedSub.attemptId
@@ -183,19 +183,19 @@ export default function TeacherClassExamsPage() {
       );
     } catch (err: any) {
       console.error("Lỗi chấm lại bài thi:", err);
-      alert(err?.response?.data?.message || "Không thể lưu điểm bài thi.");
+      alert(err?.response?.data?.message || "Lưu điểm thất bại.");
     } finally {
       setSavingGrade(false);
     }
   };
 
   const handleDeleteExam = async (examId: string, examTitle: string) => {
-    if (!window.confirm(`Bạn chắc chắn muốn xóa bài thi "${examTitle}"?`)) return;
+    if (!window.confirm(`Xóa bài thi "${examTitle}"?`)) return;
     try {
       await teacherApi.deleteAssignment(examId);
       loadExams();
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Không thể xóa bài thi.");
+      alert(err?.response?.data?.message || "Xóa bài thi thất bại.");
     }
   };
 
@@ -234,7 +234,7 @@ export default function TeacherClassExamsPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-blue-600 transition cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              <span>Tạo Bài Thi Mới</span>
+              <span>Tạo bài thi</span>
             </button>
           }
         />
@@ -243,30 +243,22 @@ export default function TeacherClassExamsPage() {
       {/* Danh sách Đề thi của lớp */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-blue-600" />
-              Danh Sách Bài Thi Chính Thức ({exams.length})
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Tất cả bài thi đều lưu toàn bộ bài làm của học sinh, hỗ trợ AI sinh đề và giám sát toàn màn hình chống gian lận.
-            </p>
-          </div>
+          <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-blue-600" />
+            Bài thi ({exams.length})
+          </h2>
         </div>
 
         {loadingExams ? (
           <div className="py-10 text-center text-xs text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
-            Đang tải danh sách bài thi...
+            Đang tải...
           </div>
         ) : exams.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-10 text-center space-y-3">
+          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
             <FileCheck2 className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto" />
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              Lớp học chưa có bài thi nào
-            </p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Nhấn &quot;Tạo Bài Thi Mới&quot; để chọn nhiều kỹ năng, dùng AI sinh đề tự động hoặc chọn câu hỏi từ lớp.
+              Chưa có bài thi
             </p>
           </div>
         ) : (
@@ -303,7 +295,7 @@ export default function TeacherClassExamsPage() {
                           }
                           setBuilderOpen(true);
                         }}
-                        title="Sửa đề thi"
+                        title="Sửa"
                         className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-blue-600"
                       >
                         <Edit3 className="h-3.5 w-3.5" />
@@ -311,7 +303,7 @@ export default function TeacherClassExamsPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteExam(exam.id, exam.title)}
-                        title="Xóa đề thi"
+                        title="Xóa"
                         className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

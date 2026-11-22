@@ -29,24 +29,14 @@ export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
       <div>
         {hideClassSelector ? (
-          <>
-            <h2 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <Award className="h-5 w-5 text-blue-700 dark:text-blue-400" />
-              Chấm Bài &amp; Đánh Giá Theo Bài Tập
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Chọn bài tập Viết / Nói trong lớp để xem danh sách bài nộp, kết quả AI chấm và chấm điểm
-            </p>
-          </>
+          <h2 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <Award className="h-5 w-5 text-blue-700 dark:text-blue-400" />
+            Chấm bài
+          </h2>
         ) : (
-          <>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Trung Tâm Chấm Bài &amp; Đánh Giá
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Xem bài nộp phần Viết đoạn văn (Writing) &amp; Luyện nói (Speaking), tham khảo gợi ý AI và chấm điểm thủ công
-            </p>
-          </>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Chấm bài
+          </h1>
         )}
       </div>
 
@@ -64,11 +54,11 @@ export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
             >
               {loadingClasses ? (
                 <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                  Đang tải lớp học...
+                  Đang tải...
                 </option>
               ) : classes.length === 0 ? (
                 <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                  Chưa có lớp phụ trách
+                  Chưa có lớp
                 </option>
               ) : (
                 classes.map((c) => (
@@ -77,7 +67,7 @@ export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
                     value={c.id}
                     className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                   >
-                    {c.name} ({c.level || "Chưa set level"})
+                    {c.level ? `${c.name} (${c.level})` : c.name}
                   </option>
                 ))
               )}
@@ -103,17 +93,17 @@ export const SubmissionFilterBar: React.FC<SubmissionFilterBarProps> = ({
           >
             {loadingAssignments ? (
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                Đang tải bài tập...
+                Đang tải...
               </option>
             ) : assignments.length === 0 ? (
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                Không có bài tập Viết / Nói nào
+                Không có bài tập
               </option>
             ) : (
               assignments.map((a) => {
                 const isWriting = a.skillType === "WRITING";
                 const isSpeaking = a.skillType === "SPEAKING";
-                const badgeLabel = isWriting ? "Viết (Writing)" : isSpeaking ? "Nói (Speaking)" : a.skillType || "Tự luận";
+                const badgeLabel = isWriting ? "Writing" : isSpeaking ? "Speaking" : a.skillType || "Tự luận";
                 return (
                   <option
                     key={a.id}

@@ -111,4 +111,100 @@ class DailyAssignmentSchedulerTest {
         assertThat(plan.getIsUnlocked()).isTrue();
         verify(dailyStudyPlanRepository).saveAll(List.of(plan));
     }
+
+    @Test
+    @DisplayName("unlockDailyAssignments_whenRepositoryReturnsNull_exitsSafelyWithoutSavingOrNotifying")
+    void unlockDailyAssignments_whenRepositoryReturnsNull_exitsSafelyWithoutSavingOrNotifying() {
+        // Given
+        when(dailyStudyPlanRepository.findByScheduledDateAndIsUnlockedFalse(LocalDate.now()))
+                .thenReturn(null);
+
+        // When
+        scheduler.unlockDailyAssignments();
+
+        // Then
+        verifyNoInteractions(notificationService);
+        verify(dailyStudyPlanRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("unlockDailyAssignments_whenPlanTitleIsBlank_usesDefaultDayLabelInNotification")
+    void unlockDailyAssignments_whenPlanTitleIsBlank_usesDefaultDayLabelInNotification() {
+        // Given
+        UUID classId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        DailyStudyPlan plan = DailyStudyPlan.builder()
+                .id(planId)
+                .dayNumber(6)
+                .title("   ")
+                .classroom(Classroom.builder().id(classId).build())
+                .isUnlocked(false)
+                .build();
+
+        when(dailyStudyPlanRepository.findByScheduledDateAndIsUnlockedFalse(LocalDate.now()))
+                .thenReturn(List.of(plan));
+
+        // When
+        scheduler.unlockDailyAssignments();
+
+        // Then
+        ArgumentCaptor<NotificationDto> captor = ArgumentCaptor.forClass(NotificationDto.class);
+        verify(notificationService).dispatchNotification(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("Lộ trình học mới: DAY 6");
+        assertThat(captor.getValue().getMessage()).contains("(DAY 6)");
+        assertThat(plan.getIsUnlocked()).isTrue();
+        verify(dailyStudyPlanRepository).saveAll(List.of(plan));
+    }
+
+    @Test
+    @DisplayName("unlockDailyAssignments_whenClassroomIdIsNull_unlocksAndSavesWithoutSendingNotification")
+    void unlockDailyAssignments_whenClassroomIdIsNull_unlocksAndSavesWithoutSendingNotification() {
+        // Given
+        DailyStudyPlan plan = DailyStudyPlan.builder()
+                .id(UUID.randomUUID())
+                .dayNumber(7)
+                .title("DAY 7")
+                .classroom(Classroom.builder().id(null).build())
+                .isUnlocked(false)
+                .build();
+
+        when(dailyStudyPlanRepository.findByScheduledDateAndIsUnlockedFalse(LocalDate.now()))
+                .thenReturn(List.of(plan));
+
+        // When
+        scheduler.unlockDailyAssignments();
+
+        // Then
+        assertThat(plan.getIsUnlocked()).isTrue();
+        verifyNoInteractions(notificationService);
+        verify(dailyStudyPlanRepository).saveAll(List.of(plan));
+    }
+
+    @Test
+    @DisplayName("unlockDailyAssignments_whenPlanIdIsNull_sendsNotificationWithNullReferenceId")
+    void unlockDailyAssignments_whenPlanIdIsNull_sendsNotificationWithNullReferenceId() {
+        // Given
+        UUID classId = UUID.randomUUID();
+        DailyStudyPlan plan = DailyStudyPlan.builder()
+                .id(null)
+                .dayNumber(8)
+                .title("DAY 8: Grammar")
+                .classroom(Classroom.builder().id(classId).build())
+                .isUnlocked(false)
+                .build();
+
+        when(dailyStudyPlanRepository.findByScheduledDateAndIsUnlockedFalse(LocalDate.now()))
+                .thenReturn(List.of(plan));
+
+        // When
+        scheduler.unlockDailyAssignments();
+
+        // Then
+        assertThat(plan.getIsUnlocked()).isTrue();
+        ArgumentCaptor<NotificationDto> captor = ArgumentCaptor.forClass(NotificationDto.class);
+        verify(notificationService).dispatchNotification(captor.capture());
+        assertThat(captor.getValue().getReferenceId()).isNull();
+        assertThat(captor.getValue().getClassroomId()).isEqualTo(classId);
+        verify(dailyStudyPlanRepository).saveAll(List.of(plan));
+    }
 }

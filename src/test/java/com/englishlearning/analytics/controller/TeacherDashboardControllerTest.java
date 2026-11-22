@@ -112,4 +112,107 @@ class TeacherDashboardControllerTest {
         assertThat(data.getPendingGrading()).isEqualTo(2L);
         assertThat(data.getAvgCompletionRate()).isEqualTo(90.0);
     }
+
+    @Test
+    @DisplayName("getStats quy đổi điểm radar kỹ năng thang 0-100 về thang 10 chuẩn thay vì kẹp cứng 10.0")
+    @SuppressWarnings("unchecked")
+    void getStats_normalizesSkillProfile0To100ScoresToScale10() {
+        Query mockTotalClassesQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("COUNT(c) FROM Classroom c"))).thenReturn(mockTotalClassesQuery);
+        when(mockTotalClassesQuery.setParameter(anyString(), any())).thenReturn(mockTotalClassesQuery);
+        when(mockTotalClassesQuery.getSingleResult()).thenReturn(1L);
+
+        Query mockTotalStudentsQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("COUNT(cs) FROM ClassStudent cs"))).thenReturn(mockTotalStudentsQuery);
+        when(mockTotalStudentsQuery.setParameter(anyString(), any())).thenReturn(mockTotalStudentsQuery);
+        when(mockTotalStudentsQuery.getSingleResult()).thenReturn(5L);
+
+        Query mockPendingGradingQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("a.status = :status"))).thenReturn(mockPendingGradingQuery);
+        when(mockPendingGradingQuery.setParameter(anyString(), any())).thenReturn(mockPendingGradingQuery);
+        when(mockPendingGradingQuery.getSingleResult()).thenReturn(0L);
+
+        jakarta.persistence.TypedQuery<Object[]> mockPendingAttemptsQuery = mock(jakarta.persistence.TypedQuery.class);
+        when(entityManager.createQuery(contains("ORDER BY a.submittedAt ASC"), eq(Object[].class))).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.setParameter(anyString(), any())).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.setMaxResults(anyInt())).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.getResultList()).thenReturn(Collections.emptyList());
+
+        Query mockSkillQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("AVG(p.listeningScore)"))).thenReturn(mockSkillQuery);
+        when(mockSkillQuery.setParameter(anyString(), any())).thenReturn(mockSkillQuery);
+        when(mockSkillQuery.getSingleResult()).thenReturn(new Object[]{78.0, 82.0, 65.0, 90.0});
+
+        when(classroomRepository.findByTeacherId(teacherId)).thenReturn(Collections.emptyList());
+
+        ResponseEntity<ApiResponse<TeacherDashboardResponse>> response = teacherDashboardController.getStats(userDetails);
+
+        TeacherDashboardResponse data = response.getBody().getData();
+        assertThat(data).isNotNull();
+        assertThat(data.getSkills())
+                .extracting(TeacherDashboardResponse.SkillAnalysis::getScore)
+                .containsExactly(7.8, 8.2, 6.5, 9.0);
+    }
+
+    @Test
+    @DisplayName("getStats xử lý an toàn khi truy vấn kỹ năng lỗi hoặc chứa phần tử null và khi lớp chưa có bài tập")
+    @SuppressWarnings("unchecked")
+    void getStats_handlesFallbackWhenSkillQueryFailsAndNullElementsInAggregates() {
+        Query mockTotalClassesQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("COUNT(c) FROM Classroom c"))).thenReturn(mockTotalClassesQuery);
+        when(mockTotalClassesQuery.setParameter(anyString(), any())).thenReturn(mockTotalClassesQuery);
+        when(mockTotalClassesQuery.getSingleResult()).thenReturn(2L);
+
+        Query mockTotalStudentsQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("COUNT(cs) FROM ClassStudent cs"))).thenReturn(mockTotalStudentsQuery);
+        when(mockTotalStudentsQuery.setParameter(anyString(), any())).thenReturn(mockTotalStudentsQuery);
+        when(mockTotalStudentsQuery.getSingleResult()).thenReturn(4L);
+
+        Query mockPendingGradingQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("a.status = :status"))).thenReturn(mockPendingGradingQuery);
+        when(mockPendingGradingQuery.setParameter(anyString(), any())).thenReturn(mockPendingGradingQuery);
+        when(mockPendingGradingQuery.getSingleResult()).thenReturn(0L);
+
+        jakarta.persistence.TypedQuery<Object[]> mockPendingAttemptsQuery = mock(jakarta.persistence.TypedQuery.class);
+        when(entityManager.createQuery(contains("ORDER BY a.submittedAt ASC"), eq(Object[].class))).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.setParameter(anyString(), any())).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.setMaxResults(anyInt())).thenReturn(mockPendingAttemptsQuery);
+        when(mockPendingAttemptsQuery.getResultList()).thenReturn(Collections.emptyList());
+
+        // Trường hợp 1: skillQuery trả về mảng có phần tử null và các mức điểm Trung bình / Điểm yếu
+        Query mockSkillQuery = mock(Query.class);
+        when(entityManager.createQuery(contains("AVG(p.listeningScore)"))).thenReturn(mockSkillQuery);
+        when(mockSkillQuery.setParameter(anyString(), any())).thenReturn(mockSkillQuery);
+        when(mockSkillQuery.getSingleResult())
+                .thenReturn(new Object[]{null, 55.0, 52.0, 40.0})
+                .thenThrow(new RuntimeException("DB skill query timeout"));
+
+        UUID emptyClassId = UUID.randomUUID();
+        UUID activeClassId = UUID.randomUUID();
+        when(classroomRepository.findByTeacherId(teacherId)).thenReturn(List.of(
+                Classroom.builder().id(emptyClassId).name("Empty Class").build(),
+                Classroom.builder().id(activeClassId).name("Active Class").build()
+        ));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(emptyClassId)).thenReturn(0L);
+        when(assignmentRepository.findByClassroomId(emptyClassId)).thenReturn(Collections.emptyList());
+        when(assignmentAttemptRepository.countCompletedByClassroomId(emptyClassId)).thenReturn(0L);
+
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(activeClassId)).thenReturn(2L);
+        when(assignmentRepository.findByClassroomId(activeClassId)).thenReturn(List.of(Assignment.builder().id(UUID.randomUUID()).build()));
+        when(assignmentAttemptRepository.countCompletedByClassroomId(activeClassId)).thenReturn(5L); // vượt trần -> cap 100.0%
+
+        TeacherDashboardResponse firstData = teacherDashboardController.getStats(userDetails).getBody().getData();
+        assertThat(firstData).isNotNull();
+        assertThat(firstData.getAvgCompletionRate()).isEqualTo(100.0);
+        assertThat(firstData.getSkills())
+                .extracting(TeacherDashboardResponse.SkillAnalysis::getStatus)
+                .containsExactly("Cần rèn luyện", "Trung bình", "Cần cải thiện", "Điểm yếu lớn");
+
+        // Trường hợp 2: skillQuery ném lỗi -> fallback 4 kỹ năng "Chưa có dữ liệu"
+        TeacherDashboardResponse fallbackData = teacherDashboardController.getStats(userDetails).getBody().getData();
+        assertThat(fallbackData).isNotNull();
+        assertThat(fallbackData.getSkills())
+                .extracting(TeacherDashboardResponse.SkillAnalysis::getStatus)
+                .containsOnly("Chưa có dữ liệu");
+    }
 }

@@ -164,6 +164,53 @@ describe("features/student/api/studentApi", () => {
     expect(overview.currentSelectedDay?.sections[0].items).toEqual([]);
   });
 
+  it("chuẩn hóa dữ liệu chuỗi bài tập ngày trong getMyStreak", async () => {
+    vi.mocked(axiosClient.get).mockResolvedValueOnce({
+      data: {
+        data: {
+          currentStreak: 4,
+          lastActiveDate: "2026-11-18",
+          hasHomeworkToday: false,
+          completedToday: false,
+          todayCompletedTasks: null,
+          todayTotalTasks: undefined,
+        },
+      },
+    });
+
+    const streak = await studentApi.getMyStreak();
+    expect(axiosClient.get).toHaveBeenCalledWith(
+      "/api/v1/curriculum/daily-plans/my-streak",
+    );
+    expect(streak).toEqual({
+      currentStreak: 4,
+      lastActiveDate: "2026-11-18",
+      hasHomeworkToday: false,
+      completedToday: false,
+      todayCompletedTasks: 0,
+      todayTotalTasks: 0,
+    });
+
+    vi.mocked(axiosClient.get).mockResolvedValueOnce({
+      data: {
+        data: {
+          currentStreak: -2,
+          hasHomeworkToday: 1,
+          completedToday: 0,
+          todayCompletedTasks: -1,
+          todayTotalTasks: 3,
+        },
+      },
+    });
+
+    const sanitized = await studentApi.getMyStreak();
+    expect(sanitized.currentStreak).toBe(0);
+    expect(sanitized.hasHomeworkToday).toBe(true);
+    expect(sanitized.completedToday).toBe(false);
+    expect(sanitized.todayCompletedTasks).toBe(0);
+    expect(sanitized.todayTotalTasks).toBe(3);
+  });
+
   it("chuẩn hóa documents, vocabularies và grammarTopics trong getLessonDetail", async () => {
     vi.mocked(axiosClient.get).mockResolvedValueOnce({
       data: {
@@ -211,6 +258,71 @@ describe("features/student/api/studentApi", () => {
     expect(result.suggestions).toEqual([]);
   });
 
+  it("gửi query param writingTask trong evaluateWritingAI khi có options.writingTask và bỏ qua khi không truyền", async () => {
+    vi.mocked(axiosClient.post).mockResolvedValue({
+      data: {
+        data: {
+          overallBand: 6.5,
+          writingTask: "TASK_1",
+          mistakes: [],
+          suggestions: [],
+        },
+      },
+    });
+
+    await studentApi.evaluateWritingAI(
+      "Bar chart report",
+      "The chart illustrates sales figures.",
+      "sa-t1",
+      { writingTask: "TASK_1" },
+    );
+    expect(axiosClient.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/ai/writing/evaluate?topic=Bar%20chart%20report&studentAnswerId=sa-t1&writingTask=TASK_1",
+      "The chart illustrates sales figures.",
+      { headers: { "Content-Type": "text/plain" } },
+    );
+
+    await studentApi.evaluateWritingAI(
+      "Remote work essay",
+      "Remote work offers clear benefits.",
+      "sa-t2",
+      { writingTask: "TASK_2" },
+    );
+    expect(axiosClient.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/ai/writing/evaluate?topic=Remote%20work%20essay&studentAnswerId=sa-t2&writingTask=TASK_2",
+      "Remote work offers clear benefits.",
+      { headers: { "Content-Type": "text/plain" } },
+    );
+
+    await studentApi.evaluateWritingAI(
+      "My hobby paragraph",
+      "Reading books helps me relax.",
+      "sa-p",
+      { writingTask: "PARAGRAPH" },
+    );
+    expect(axiosClient.post).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/ai/writing/evaluate?topic=My%20hobby%20paragraph&studentAnswerId=sa-p&writingTask=PARAGRAPH",
+      "Reading books helps me relax.",
+      { headers: { "Content-Type": "text/plain" } },
+    );
+
+    await studentApi.evaluateWritingAI(
+      "Default essay",
+      "Body text here.",
+      "sa-default",
+      { writingTask: undefined },
+    );
+    expect(axiosClient.post).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/ai/writing/evaluate?topic=Default%20essay&studentAnswerId=sa-default",
+      "Body text here.",
+      { headers: { "Content-Type": "text/plain" } },
+    );
+  });
+
   it("trả về mảng rỗng khi getKokoroVoices nhận dữ liệu không phải mảng", async () => {
     vi.mocked(axiosClient.get)
       .mockResolvedValueOnce({ data: { data: [{ id: "af_bella", name: "Bella" }] } })
@@ -252,5 +364,57 @@ describe("features/student/api/studentApi", () => {
 
     await studentApi.markAllNotificationsAsRead();
     expect(axiosClient.put).toHaveBeenCalledWith("/api/v1/notifications/read-all");
+  });
+
+  it("truyền speakingMode và keyPoints vào FormData của evaluateSpeakingAI và xử lý tên file wav/webm trong evaluateShadowingAI", async () => {
+    vi.mocked(axiosClient.post)
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            overallBand: 6.5,
+            speakingMode: "PART_2",
+            mistakes: [],
+            suggestions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            overallScore: 91,
+            sentenceTokens: [],
+            wordRows: [],
+          },
+        },
+      });
+
+    const webmBlob = new Blob(["audio-webm"], { type: "audio/webm" });
+    await studentApi.evaluateSpeakingAI(
+      "Describe a book you read recently.",
+      webmBlob,
+      "sa-part2",
+      {
+        speakingMode: "PART_2",
+        keyPoints: "  author, plot, why memorable  ",
+      },
+    );
+
+    const [speakUrl, speakFormData] = vi.mocked(axiosClient.post).mock.calls[0];
+    expect(speakUrl).toBe("/api/v1/ai/speaking/evaluate");
+    const form = speakFormData as FormData;
+    expect(form.get("topic")).toBe("Describe a book you read recently.");
+    expect(form.get("studentAnswerId")).toBe("sa-part2");
+    expect(form.get("speakingMode")).toBe("PART_2");
+    expect(form.get("keyPoints")).toBe("author, plot, why memorable");
+
+    const wavBlob = new Blob(["audio-wav"], { type: "audio/wav" });
+    await studentApi.evaluateShadowingAI(wavBlob, "  sa-shad-1  ", "  Practice daily  ");
+
+    const [shadUrl, shadFormData] = vi.mocked(axiosClient.post).mock.calls[1];
+    expect(shadUrl).toBe("/api/v1/ai/speaking/shadowing-evaluate");
+    const shadForm = shadFormData as FormData;
+    expect(shadForm.get("studentAnswerId")).toBe("sa-shad-1");
+    expect(shadForm.get("referenceSentence")).toBe("Practice daily");
+    expect((shadForm.get("audio") as File).name).toBe("shadowing.wav");
   });
 });

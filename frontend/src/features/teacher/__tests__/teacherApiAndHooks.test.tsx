@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import axiosClient from "@/lib/axiosClient";
-import { teacherApi } from "../api/teacherApi";
+import { teacherApi, detectDocumentFileType } from "../api/teacherApi";
 import { useCreateAssignmentForm } from "../components/assignment-modal/useCreateAssignmentForm";
 import { useTeacherDailyPlan } from "../components/daily-plan/useTeacherDailyPlan";
 import { useTeacherGrading } from "../components/grading/useTeacherGrading";
@@ -95,6 +95,123 @@ describe("Teacher Module - teacherApi & Custom Hooks", () => {
         expect.any(FormData),
         { headers: { "Content-Type": "multipart/form-data" } }
       );
+    });
+
+    it("detects document types and calls lesson material & my-uploads CRUD endpoints", async () => {
+      (axiosClient.get as any).mockResolvedValue({ data: { data: [] } });
+      (axiosClient.post as any).mockResolvedValue({ data: { data: {} } });
+      (axiosClient.put as any).mockResolvedValue({ data: { data: {} } });
+      (axiosClient.delete as any).mockResolvedValue({ data: {} });
+
+      expect(detectDocumentFileType(new File(["a"], "handout.docx"))).toBe("DOCX");
+      expect(detectDocumentFileType(new File(["a"], "deck.pptx"))).toBe("PPTX");
+      expect(detectDocumentFileType(new File(["a"], "listen.mp3"))).toBe("AUDIO");
+      expect(detectDocumentFileType(new File(["a"], "diagram.png"))).toBe("IMAGE");
+      expect(detectDocumentFileType(new File(["a"], "fallback.unknown"))).toBe("PDF");
+
+      const docxFile = new File(["doc"], "notes.docx");
+      const slideFile = new File(["ppt"], "slides.pptx");
+      await teacherApi.uploadLessonDocument("l-1", docxFile);
+      expect(axiosClient.post).toHaveBeenCalledWith(
+        "/api/curriculum/lessons/l-1/documents?fileType=DOCX",
+        expect.any(FormData),
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      await teacherApi.uploadLessonDocument("l-1", slideFile);
+      expect(axiosClient.post).toHaveBeenCalledWith(
+        "/api/curriculum/lessons/l-1/documents?fileType=PPTX",
+        expect.any(FormData),
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      await teacherApi.getLessonDetail("l-1");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/curriculum/lessons/l-1");
+
+      await teacherApi.updateLesson("l-1", { title: "Lesson 1B", objectives: "Obj", content: "Body", orderIndex: 2 });
+      expect(axiosClient.put).toHaveBeenCalledWith("/api/curriculum/lessons/l-1", {
+        title: "Lesson 1B",
+        objectives: "Obj",
+        content: "Body",
+        orderIndex: 2,
+      });
+
+      await teacherApi.getLessonDocuments("l-1");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/curriculum/lessons/l-1/documents");
+
+      await teacherApi.updateDocument("doc-1", { fileName: "Renamed.pdf", fileType: "PDF" });
+      expect(axiosClient.put).toHaveBeenCalledWith("/api/curriculum/documents/doc-1", {
+        fileName: "Renamed.pdf",
+        fileType: "PDF",
+      });
+
+      await teacherApi.replaceDocumentFile("doc-1", docxFile, { fileName: "NewNotes.docx" });
+      expect(axiosClient.put).toHaveBeenCalledWith(
+        "/api/curriculum/documents/doc-1/file",
+        expect.any(FormData),
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      const replaceFormData = (axiosClient.put as any).mock.calls.find(
+        (c: any[]) => c[0] === "/api/curriculum/documents/doc-1/file"
+      )?.[1] as FormData;
+      expect(replaceFormData.get("fileName")).toBe("NewNotes.docx");
+      expect(replaceFormData.get("fileType")).toBe("DOCX");
+
+      await teacherApi.deleteDocument("doc-1");
+      expect(axiosClient.delete).toHaveBeenCalledWith("/api/curriculum/documents/doc-1");
+
+      await teacherApi.getLessonVocabularies("l-1");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/curriculum/lessons/l-1/vocabularies");
+
+      await teacherApi.addVocabulary("l-1", { word: "lucid", meaning: "rõ ràng", ipa: "/ˈluːsɪd/" });
+      expect(axiosClient.post).toHaveBeenCalledWith("/api/curriculum/lessons/l-1/vocabularies", {
+        word: "lucid",
+        meaning: "rõ ràng",
+        ipa: "/ˈluːsɪd/",
+      });
+
+      await teacherApi.updateVocabulary("v-1", { word: "lucid", meaning: "minh bạch", exampleSentence: "" });
+      expect(axiosClient.put).toHaveBeenCalledWith("/api/curriculum/vocabularies/v-1", {
+        word: "lucid",
+        meaning: "minh bạch",
+        exampleSentence: "",
+      });
+
+      await teacherApi.deleteVocabulary("v-1");
+      expect(axiosClient.delete).toHaveBeenCalledWith("/api/curriculum/vocabularies/v-1");
+
+      await teacherApi.getLessonGrammarTopics("l-1");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/curriculum/lessons/l-1/grammar");
+
+      await teacherApi.addGrammarTopic("l-1", { title: "Present Simple", ruleSummary: "Habits" });
+      expect(axiosClient.post).toHaveBeenCalledWith("/api/curriculum/lessons/l-1/grammar", {
+        title: "Present Simple",
+        ruleSummary: "Habits",
+      });
+
+      await teacherApi.updateGrammarTopic("g-1", { title: "Present Perfect", ruleSummary: "Experience", formula: "S + have/has + V3" });
+      expect(axiosClient.put).toHaveBeenCalledWith("/api/curriculum/grammar/g-1", {
+        title: "Present Perfect",
+        ruleSummary: "Experience",
+        formula: "S + have/has + V3",
+      });
+
+      await teacherApi.deleteGrammarTopic("g-1");
+      expect(axiosClient.delete).toHaveBeenCalledWith("/api/curriculum/grammar/g-1");
+
+      await teacherApi.getLessonVideo("l-1");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/v1/videos/lesson/l-1");
+
+      await teacherApi.getMyUploadedVideos();
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/v1/videos/my-uploads");
+
+      await teacherApi.getMyUploadedVideos("ALL");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/v1/videos/my-uploads");
+
+      await teacherApi.getMyUploadedVideos("REJECTED");
+      expect(axiosClient.get).toHaveBeenCalledWith("/api/v1/videos/my-uploads?status=REJECTED");
+
+      await teacherApi.deleteVideo("vid-1");
+      expect(axiosClient.delete).toHaveBeenCalledWith("/api/v1/videos/vid-1");
     });
 
     it("calls assignment, daily plan, grading, exam, AI quiz, announcement, and TTS endpoints", async () => {
@@ -430,6 +547,103 @@ describe("Teacher Module - teacherApi & Custom Hooks", () => {
         speed: "1x",
       });
       expect(result.current.mainAudioUrl).toBe("/uploads/tts_sample.wav");
+    });
+
+    it("strips A./B. prefixes without corrupting correctAnswer and keeps READING_MATCHING as MULTIPLE_CHOICE & READING_YES_NO as TRUE_FALSE", async () => {
+      const { result } = renderHook(() =>
+        useCreateAssignmentForm({
+          isOpen: true,
+          classId: "class-1",
+          onClose: vi.fn(),
+        })
+      );
+
+      await waitFor(() => expect(result.current.dailyPlans.length).toBe(1));
+
+      // Case 1: READING_MATCHING with 4 options and "B. went"-style answer
+      act(() => {
+        result.current.setAssignmentType("READING");
+        result.current.setAiLevel("IELTS");
+        result.current.setReadingPassageIelts(2);
+        result.current.setSelectedSubFormat("READING_MATCHING");
+      });
+
+      vi.spyOn(teacherApi, "generateAiQuiz").mockResolvedValueOnce({
+        data: {
+          data: {
+            rawResponseJson: JSON.stringify({
+              readingPassage: "[Paragraph A] Solar growth.",
+              questions: [
+                {
+                  questionType: "MULTIPLE_CHOICE",
+                  prompt: "Best heading for Paragraph A?",
+                  options: ["A. Decline", "B. Solar expansion", "C. Coal", "D. Mining"],
+                  correctAnswer: "B. Solar expansion",
+                  explanation: "Đoạn A nói về mở rộng điện mặt trời.",
+                },
+              ],
+            }),
+          },
+        },
+      } as any);
+
+      await act(async () => {
+        await result.current.handleGenerateAiQuestions("Solar Energy");
+      });
+
+      expect(teacherApi.generateAiQuiz).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          topic: "Passage 2: Solar Energy",
+          level: "IELTS",
+          exerciseType: "READING_MATCHING",
+        })
+      );
+      expect(result.current.questions[0].questionType).toBe("MULTIPLE_CHOICE");
+      expect(result.current.questions[0].options).toEqual([
+        "Decline",
+        "Solar expansion",
+        "Coal",
+        "Mining",
+      ]);
+      expect(result.current.questions[0].correctAnswer).toBe("Solar expansion");
+
+      // Case 2: READING_YES_NO normalizes NOT GIVEN and YES
+      act(() => {
+        result.current.setSelectedSubFormat("READING_YES_NO");
+      });
+
+      vi.spyOn(teacherApi, "generateAiQuiz").mockResolvedValueOnce({
+        data: {
+          data: {
+            rawResponseJson: JSON.stringify({
+              readingPassage: "Short passage.",
+              questions: [
+                {
+                  questionType: "TRUE_FALSE",
+                  prompt: "Statement 1",
+                  correctAnswer: "NOT GIVEN",
+                  explanation: "Không có trong bài.",
+                },
+                {
+                  questionType: "TRUE_FALSE",
+                  prompt: "Statement 2",
+                  correctAnswer: "YES",
+                  explanation: "Khớp quan điểm tác giả.",
+                },
+              ],
+            }),
+          },
+        },
+      } as any);
+
+      await act(async () => {
+        await result.current.handleGenerateAiQuestions("Passage 3: Ethics");
+      });
+
+      expect(result.current.questions[0].questionType).toBe("TRUE_FALSE");
+      expect(result.current.questions[0].options).toEqual(["TRUE", "FALSE", "NOT GIVEN"]);
+      expect(result.current.questions[0].correctAnswer).toBe("NOT GIVEN");
+      expect(result.current.questions[1].correctAnswer).toBe("TRUE");
     });
 
     it("loads EDIT mode initialData and preserves TRUE_FALSE, MATCHING, and MULTIPLE_CHOICE options on save", async () => {
@@ -830,6 +1044,300 @@ describe("Teacher Module - teacherApi & Custom Hooks", () => {
       });
       expect(result.current.filteredSubmissions).toHaveLength(1);
       expect(result.current.filteredSubmissions[0].attemptId).toBe("att-1");
+    });
+  });
+
+  // =========================================================================
+  // 5. Non-blocking Daily Plan Assignment & Notification UX Tests
+  // =========================================================================
+  describe("Non-blocking daily plan assignment flow", () => {
+    it("useCreateAssignmentForm CREATE mode closes modal immediately, emits PROCESSING then SUCCESS + daily-plan-updated", async () => {
+      let resolveCreate!: (val: any) => void;
+      const createPromise = new Promise((res) => {
+        resolveCreate = res;
+      });
+
+      vi.spyOn(teacherApi, "getGlobalResources").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      vi.spyOn(teacherApi, "getDailyPlans").mockResolvedValue({
+        data: {
+          data: [
+            {
+              id: "plan-1",
+              dayNumber: 1,
+              title: "DAY 1",
+              scheduledDate: "2026-05-10",
+              items: [],
+            },
+            {
+              id: "plan-17",
+              dayNumber: 17,
+              title: "DAY 17",
+              scheduledDate: "2026-05-26",
+              items: [],
+            },
+          ],
+        },
+      } as any);
+      const createAssignSpy = vi
+        .spyOn(teacherApi, "createAssignment")
+        .mockReturnValue(createPromise as any);
+      const createPlanSpy = vi
+        .spyOn(teacherApi, "createDailyPlan")
+        .mockResolvedValue({
+          data: {
+            data: {
+              id: "plan-18",
+              dayNumber: 18,
+              title: "DAY 18",
+              scheduledDate: "2026-05-27",
+              items: [],
+            },
+          },
+        } as any);
+      const addPlanItemSpy = vi
+        .spyOn(teacherApi, "addPlanItem")
+        .mockResolvedValue({ data: { data: { id: "item-new" } } } as any);
+
+      const onClose = vi.fn();
+      const onSuccess = vi.fn();
+
+      const toastEvents: any[] = [];
+      const planUpdatedEvents: any[] = [];
+      const onToast = (e: Event) =>
+        toastEvents.push((e as CustomEvent).detail);
+      const onPlanUpdated = (e: Event) =>
+        planUpdatedEvents.push((e as CustomEvent).detail);
+
+      window.addEventListener("teacher-task-toast", onToast);
+      window.addEventListener("daily-plan-updated", onPlanUpdated);
+
+      try {
+        const { result } = renderHook(() =>
+          useCreateAssignmentForm({
+            isOpen: true,
+            mode: "CREATE",
+            classId: "c-1",
+            initialDate: "2026-05-27",
+            onClose,
+            onSuccess,
+          }),
+        );
+
+        await waitFor(() => {
+          expect(teacherApi.getDailyPlans).toHaveBeenCalledWith("c-1");
+        });
+
+        act(() => {
+          result.current.setTitle("Listening Practice Day 18");
+          result.current.handleAddBlankQuestion();
+        });
+
+        const qId = result.current.questions[0].id;
+        act(() => {
+          result.current.handleUpdateQuestion(qId, "questionType", "MULTIPLE_CHOICE");
+          result.current.handleUpdateQuestion(qId, "prompt", "What does the speaker say?");
+          result.current.handleUpdateQuestion(qId, "options", ["A", "B", "C", "D"]);
+          result.current.handleUpdateQuestion(qId, "correctAnswer", "A");
+        });
+
+        let savePromise!: Promise<void>;
+        act(() => {
+          savePromise = result.current.handleFinalSave();
+        });
+
+        // Modal closes immediately and shows PROCESSING without waiting for backend
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(toastEvents[0]?.status).toBe("PROCESSING");
+        expect(createAssignSpy).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          resolveCreate({
+            data: {
+              data: { id: "assign-18", title: "Listening Practice Day 18" },
+            },
+          });
+          await savePromise;
+        });
+
+        // Should compute nextDayNumber = 18 (maxDayNum 17 + 1) because 2026-05-27 has no plan yet
+        expect(createPlanSpy).toHaveBeenCalledWith(
+          "c-1",
+          expect.objectContaining({
+            dayNumber: 18,
+            scheduledDate: "2026-05-27",
+          }),
+        );
+        expect(addPlanItemSpy).toHaveBeenCalledWith(
+          "plan-18",
+          expect.objectContaining({
+            assignmentId: "assign-18",
+            title: "Listening Practice Day 18",
+          }),
+        );
+        expect(onSuccess).toHaveBeenCalledTimes(1);
+        expect(planUpdatedEvents).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ classId: "c-1", planId: "plan-18" }),
+          ]),
+        );
+        expect(toastEvents.some((t) => t.status === "SUCCESS")).toBe(true);
+      } finally {
+        window.removeEventListener("teacher-task-toast", onToast);
+        window.removeEventListener("daily-plan-updated", onPlanUpdated);
+      }
+    });
+
+    it("useCreateAssignmentForm CREATE mode emits ERROR notification asking to re-assign when createAssignment fails", async () => {
+      vi.spyOn(teacherApi, "getGlobalResources").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      vi.spyOn(teacherApi, "getDailyPlans").mockResolvedValue({
+        data: {
+          data: [
+            {
+              id: "plan-1",
+              dayNumber: 1,
+              title: "DAY 1",
+              scheduledDate: "2026-05-10",
+              items: [],
+            },
+          ],
+        },
+      } as any);
+      vi.spyOn(teacherApi, "createAssignment").mockRejectedValue({
+        response: { data: { message: "Timeout lưu bài tập" } },
+      });
+
+      const onClose = vi.fn();
+      const toastEvents: any[] = [];
+      const localNotifications: any[] = [];
+      const onToast = (e: Event) =>
+        toastEvents.push((e as CustomEvent).detail);
+      const onLocalNotif = (e: Event) =>
+        localNotifications.push((e as CustomEvent).detail);
+
+      window.addEventListener("teacher-task-toast", onToast);
+      window.addEventListener("teacher-notification-local", onLocalNotif);
+
+      try {
+        const { result } = renderHook(() =>
+          useCreateAssignmentForm({
+            isOpen: true,
+            mode: "CREATE",
+            classId: "c-1",
+            initialDate: "2026-05-10",
+            initialPlanId: "plan-1",
+            onClose,
+            onSuccess: vi.fn(),
+          }),
+        );
+
+        await waitFor(() => {
+          expect(teacherApi.getDailyPlans).toHaveBeenCalledWith("c-1");
+        });
+
+        act(() => {
+          result.current.setTitle("Grammar Drill Error Case");
+          result.current.handleAddBlankQuestion();
+        });
+
+        const qId = result.current.questions[0].id;
+        act(() => {
+          result.current.handleUpdateQuestion(qId, "questionType", "MULTIPLE_CHOICE");
+          result.current.handleUpdateQuestion(qId, "prompt", "Q1?");
+          result.current.handleUpdateQuestion(qId, "options", ["Yes", "No"]);
+          result.current.handleUpdateQuestion(qId, "correctAnswer", "Yes");
+        });
+
+        await act(async () => {
+          await result.current.handleFinalSave();
+        });
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(toastEvents.map((t) => t.status)).toEqual(["PROCESSING", "ERROR"]);
+        expect(
+          toastEvents.find((t) => t.status === "ERROR")?.title,
+        ).toContain("Cần gán lại");
+        expect(localNotifications).toHaveLength(1);
+        expect(localNotifications[0].title).toContain("Lỗi gán bài tập");
+      } finally {
+        window.removeEventListener("teacher-task-toast", onToast);
+        window.removeEventListener("teacher-notification-local", onLocalNotif);
+      }
+    });
+
+    it("useTeacherDailyPlan.handleAddItemToPlan closes modal immediately and sends SUCCESS notification without blocking", async () => {
+      let resolveAddItem!: (val: any) => void;
+      const addItemPromise = new Promise((res) => {
+        resolveAddItem = res;
+      });
+
+      vi.spyOn(teacherApi, "getDailyPlans").mockResolvedValue({
+        data: {
+          data: [
+            {
+              id: "plan-5",
+              dayNumber: 5,
+              title: "DAY 5",
+              scheduledDate: "2026-05-15",
+              items: [],
+            },
+          ],
+        },
+      } as any);
+      vi.spyOn(teacherApi, "getClassAssignments").mockResolvedValue({
+        data: { data: [{ id: "assign-9", title: "Reading Passage 5" }] },
+      } as any);
+      vi.spyOn(teacherApi, "getGlobalResources").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      const addPlanItemSpy = vi
+        .spyOn(teacherApi, "addPlanItem")
+        .mockReturnValue(addItemPromise as any);
+
+      const toastEvents: any[] = [];
+      const onToast = (e: Event) =>
+        toastEvents.push((e as CustomEvent).detail);
+      window.addEventListener("teacher-task-toast", onToast);
+
+      try {
+        const { result } = renderHook(() => useTeacherDailyPlan("c-1"));
+
+        await waitFor(() => {
+          expect(result.current.plans).toHaveLength(1);
+        });
+
+        act(() => {
+          result.current.openAddItemModal("plan-5");
+        });
+        expect(result.current.showAddItemModal).toBe(true);
+        expect(result.current.selectedAssignmentId).toBe("assign-9");
+
+        const fakeEvent = { preventDefault: vi.fn() } as unknown as React.FormEvent;
+        let submitPromise!: Promise<void>;
+        act(() => {
+          submitPromise = result.current.handleAddItemToPlan(fakeEvent);
+        });
+
+        // Modal closes immediately & emits PROCESSING before backend promise resolves
+        expect(result.current.showAddItemModal).toBe(false);
+        expect(toastEvents[0]?.status).toBe("PROCESSING");
+        expect(addPlanItemSpy).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          resolveAddItem({ data: { data: { id: "item-99" } } });
+          await submitPromise;
+        });
+
+        expect(toastEvents.map((t) => t.status)).toEqual([
+          "PROCESSING",
+          "SUCCESS",
+        ]);
+      } finally {
+        window.removeEventListener("teacher-task-toast", onToast);
+      }
     });
   });
 });

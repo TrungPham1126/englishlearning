@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "@/features/student/api/studentApi";
 import type { StudentAssignmentSummaryResponse } from "@/features/student/types";
+import { formatScore10 } from "@/utils/scoreScale";
 import {
   ArrowLeft,
   FileText,
@@ -307,7 +308,7 @@ export default function ClassAssignmentsPage() {
                             <>
                               <span>•</span>
                               <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {Number(exam.highestScore).toFixed(1)}/10
+                                {formatScore10(exam.highestScore)}/10
                               </span>
                             </>
                           )}

@@ -712,6 +712,12 @@ export function useAssignmentTakeSession() {
         payloadAnswers,
       );
 
+      window.dispatchEvent(
+        new CustomEvent("student-progress-updated", {
+          detail: { assignmentId, attemptId: attempt.attemptId },
+        }),
+      );
+
       // Nạp lại chi tiết bài làm đã chấm
       const freshDetail = await studentApi.getAttemptDetail(res.attemptId || attempt.attemptId);
       setAttempt(freshDetail);

@@ -105,7 +105,7 @@ class VideoTranscodeConsumerTest {
 
         consumer.handleFallbackToRaw(video);
 
-        assertThat(video.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(video.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(video.getHlsPlaylistUrl()).isEqualTo("https://cdn.example.com/raw/" + videoId + "/lecture.mp4");
         assertThat(video.getRawStorageUrl()).isEqualTo("https://cdn.example.com/raw/" + videoId + "/lecture.mp4");
         assertThat(video.getRejectionReason()).isNull();
@@ -128,7 +128,7 @@ class VideoTranscodeConsumerTest {
 
         consumer.handleFallbackToRaw(video);
 
-        assertThat(video.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(video.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(video.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/raw");
         verify(videoRepository).save(video);
 
@@ -138,6 +138,7 @@ class VideoTranscodeConsumerTest {
                 .status(VideoStatus.DRAFT)
                 .build();
         consumer.handleFallbackToRaw(localhostVideo);
+        assertThat(localhostVideo.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(localhostVideo.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/raw");
     }
 
@@ -167,7 +168,7 @@ class VideoTranscodeConsumerTest {
 
         consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
 
-        assertThat(video.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(video.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(video.getHlsPlaylistUrl()).isEqualTo("https://cdn.example.com/raw/v1.mp4");
         verify(videoRepository).save(video);
     }
@@ -206,7 +207,43 @@ class VideoTranscodeConsumerTest {
     }
 
     @Test
-    @DisplayName("processVideoTranscode fallback về raw APPROVED khi R2 upload lỗi giữa chừng hoặc FFmpeg thoát mã khác 0")
+    @DisplayName("processVideoTranscode tạo master.m3u8 đa chất lượng (360p, 480p, 720p, 1080p) ở chế độ local")
+    void should_GenerateMultiQualityMasterPlaylist_when_LocalHlsTranscodeSucceeds() throws IOException {
+        Path fakeOk = createFakeFfmpegScript(0);
+        ReflectionTestUtils.setField(consumer, "ffmpegPath", fakeOk.toAbsolutePath().toString());
+        ReflectionTestUtils.setField(consumer, "publicCloudUrl", "http://localhost:8080/uploads/videos");
+
+        Path rawFile = tempDir.resolve("lesson.mp4");
+        Files.writeString(rawFile, "raw-video-payload");
+        Video video = Video.builder()
+                .id(videoId)
+                .rawStorageUrl(rawFile.toAbsolutePath().toString())
+                .status(VideoStatus.DRAFT)
+                .build();
+
+        when(videoRepository.findById(videoId)).thenReturn(Optional.of(video));
+
+        consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
+
+        Path masterPlaylist = tempDir.resolve("hls").resolve(videoId.toString()).resolve("master.m3u8");
+        assertThat(Files.exists(masterPlaylist)).isTrue();
+        String content = Files.readString(masterPlaylist);
+        assertThat(content)
+                .contains("#EXTM3U")
+                .contains("stream_360p.m3u8")
+                .contains("stream_480p.m3u8")
+                .contains("stream_720p.m3u8")
+                .contains("stream_1080p.m3u8")
+                .contains("RESOLUTION=640x360")
+                .contains("RESOLUTION=1280x720")
+                .contains("RESOLUTION=1920x1080");
+        assertThat(video.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/hls/master.m3u8");
+        assertThat(video.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
+        verifyNoInteractions(r2StorageService);
+    }
+
+    @Test
+    @DisplayName("processVideoTranscode fallback về raw PENDING_REVIEW khi R2 upload lỗi giữa chừng hoặc FFmpeg thoát mã khác 0")
     void should_FallbackToRaw_when_R2UploadThrowsOrFfmpegExitsNonZero() throws IOException {
         // Case 1: FFmpeg OK nhưng R2 upload lỗi
         Path fakeOk = createFakeFfmpegScript(0);
@@ -226,7 +263,7 @@ class VideoTranscodeConsumerTest {
 
         consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
 
-        assertThat(v1.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(v1.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(v1.getHlsPlaylistUrl()).isEqualTo("https://cdn.example.com/raw/fallback.mp4");
         verify(notificationService).sendSystemNotification(eq(null), any(), any(), eq("SYSTEM_ALERT"), any());
 
@@ -253,7 +290,110 @@ class VideoTranscodeConsumerTest {
 
         consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
 
-        assertThat(v2.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(v2.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
         assertThat(v2.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/raw");
+    }
+
+    @Test
+    @DisplayName("processVideoTranscode trích xuất Duration từ log FFmpeg và fallback an toàn khi thiếu file nguồn")
+    void should_ParseFfmpegDurationAndHandleMissingRawFileSafely() throws IOException {
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        Path durationFfmpeg;
+        if (isWindows) {
+            durationFfmpeg = tempDir.resolve("duration-ffmpeg.cmd");
+            Files.writeString(durationFfmpeg,
+                    "@echo off\r\necho ffmpeg version 7.1\r\necho   Duration: 00:01:23.45, start: 0.000000\r\nexit /b 0\r\n");
+        } else {
+            durationFfmpeg = tempDir.resolve("duration-ffmpeg.sh");
+            Files.writeString(durationFfmpeg,
+                    "#!/bin/sh\necho 'ffmpeg version 7.1'\necho '  Duration: 00:01:23.45, start: 0.000000'\nexit 0\n");
+            durationFfmpeg.toFile().setExecutable(true);
+        }
+
+        ReflectionTestUtils.setField(consumer, "ffmpegPath", durationFfmpeg.toAbsolutePath().toString());
+        ReflectionTestUtils.setField(consumer, "publicCloudUrl", "http://127.0.0.1:8080/uploads/videos");
+
+        Path rawFile = tempDir.resolve("timed.mp4");
+        Files.writeString(rawFile, "raw-bytes");
+        Video timedVideo = Video.builder()
+                .id(videoId)
+                .rawStorageUrl(rawFile.toAbsolutePath().toString())
+                .status(VideoStatus.DRAFT)
+                .build();
+        when(videoRepository.findById(videoId)).thenReturn(Optional.of(timedVideo));
+
+        consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
+
+        assertThat(timedVideo.getDurationSeconds()).isEqualTo(83);
+        assertThat(timedVideo.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
+        assertThat(timedVideo.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/hls/master.m3u8");
+
+        // File nguồn cục bộ không còn tồn tại -> chuyển sang fallback PENDING_REVIEW, không ném ngoại lệ
+        UUID missingId = UUID.randomUUID();
+        Video missingRawVideo = Video.builder()
+                .id(missingId)
+                .rawStorageUrl(tempDir.resolve("deleted.mp4").toString())
+                .status(VideoStatus.DRAFT)
+                .build();
+        when(videoRepository.findById(missingId)).thenReturn(Optional.of(missingRawVideo));
+
+        consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(missingId).build());
+
+        assertThat(missingRawVideo.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
+        assertThat(missingRawVideo.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + missingId + "/raw");
+    }
+
+    @Test
+    @DisplayName("Tra cứu fallback uploaderId khi lazy proxy lỗi, làm tròn thời lượng < 1s lên 1s và giữ nguyên trạng thái APPROVED khi fallback")
+    void should_FallbackUploaderLookupRoundSubSecondDurationAndPreserveApprovedStatus() throws IOException {
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        Path subSecFfmpeg;
+        if (isWindows) {
+            subSecFfmpeg = tempDir.resolve("subsec-ffmpeg.cmd");
+            Files.writeString(subSecFfmpeg,
+                    "@echo off\r\necho ffmpeg version 7.1\r\necho   Duration: 00:00:00.50, start: 0.000000\r\nexit /b 0\r\n");
+        } else {
+            subSecFfmpeg = tempDir.resolve("subsec-ffmpeg.sh");
+            Files.writeString(subSecFfmpeg,
+                    "#!/bin/sh\necho 'ffmpeg version 7.1'\necho '  Duration: 00:00:00.50, start: 0.000000'\nexit 0\n");
+            subSecFfmpeg.toFile().setExecutable(true);
+        }
+        ReflectionTestUtils.setField(consumer, "ffmpegPath", subSecFfmpeg.toAbsolutePath().toString());
+        ReflectionTestUtils.setField(consumer, "publicCloudUrl", "http://localhost:8080/uploads/videos");
+
+        Path rawFile = tempDir.resolve("short.mp4");
+        Files.writeString(rawFile, "raw-bytes");
+
+        User brokenProxy = mock(User.class);
+        when(brokenProxy.getId()).thenThrow(new RuntimeException("LazyInitializationException"));
+
+        Video video = Video.builder()
+                .id(videoId)
+                .rawStorageUrl(rawFile.toAbsolutePath().toString())
+                .uploadedBy(brokenProxy)
+                .status(VideoStatus.DRAFT)
+                .build();
+        when(videoRepository.findById(videoId)).thenReturn(Optional.of(video));
+        when(videoRepository.findUploadedById(videoId)).thenReturn(Optional.of(uploaderId));
+        doThrow(new RuntimeException("Notification service offline"))
+                .when(notificationService).sendSystemNotification(eq(uploaderId), any(), any(), any(), any());
+
+        consumer.processVideoTranscode(VideoTranscodeMessage.builder().videoId(videoId).build());
+
+        assertThat(video.getDurationSeconds()).isEqualTo(1);
+        assertThat(video.getStatus()).isEqualTo(VideoStatus.PENDING_REVIEW);
+        verify(videoRepository).findUploadedById(videoId);
+        verify(notificationService).sendSystemNotification(
+                eq(uploaderId), contains("xử lý xong"), any(), eq("SYSTEM_ALERT"), eq("/videos/" + videoId));
+
+        // handleFallbackToRaw giữ nguyên APPROVED nếu video đã được duyệt trước đó
+        Video approvedVideo = Video.builder()
+                .id(videoId)
+                .rawStorageUrl("http://localhost:8080/uploads/v.mp4")
+                .status(VideoStatus.APPROVED)
+                .build();
+        consumer.handleFallbackToRaw(approvedVideo);
+        assertThat(approvedVideo.getStatus()).isEqualTo(VideoStatus.APPROVED);
+        assertThat(approvedVideo.getHlsPlaylistUrl()).isEqualTo("/api/v1/videos/" + videoId + "/raw");
     }
 }

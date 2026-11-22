@@ -110,6 +110,17 @@ class AuditLogServiceImplTest {
         assertThat(saved.getUser()).isNull();
         assertThat(saved.getAction()).isEqualTo("UNKNOWN_ACTION");
         assertThat(saved.getIpAddress()).isEqualTo("127.0.0.1");
+
+        AuditLog blankSaved = auditLogService.recordAuditLog(
+                (User) null,
+                "   ",
+                "SystemConfig",
+                "cfg-2",
+                "   ",
+                "{}"
+        );
+        assertThat(blankSaved.getAction()).isEqualTo("UNKNOWN_ACTION");
+        assertThat(blankSaved.getIpAddress()).isEqualTo("127.0.0.1");
     }
 
     @Test

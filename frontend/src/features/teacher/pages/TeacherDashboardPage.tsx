@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { teacherApi } from "../api/teacherApi";
+import { normalizeScoreTo10OrZero } from "@/utils/scoreScale";
 import {
   Users,
   BookOpen,
@@ -36,7 +37,7 @@ export default function TeacherDashboardPage() {
       <div className="flex h-[80vh] flex-col items-center justify-center space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-blue-700 dark:text-blue-400" />
         <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
-          Đang tổng hợp dữ liệu học tập...
+          Đang tải...
         </p>
       </div>
     );
@@ -45,18 +46,16 @@ export default function TeacherDashboardPage() {
   // Khởi tạo mảng stats từ data API
   const stats = [
     {
-      label: "Lớp học phụ trách",
+      label: "Lớp học",
       value: data?.totalClasses || 0,
-      subText: "Đang hoạt động",
       icon: BookOpen,
       color: "bg-blue-50 dark:bg-blue-950/40",
       textColor: "text-blue-600 dark:text-blue-400",
       border: "border-slate-200 dark:border-blue-500/30",
     },
     {
-      label: "Tổng học viên",
+      label: "Học viên",
       value: data?.totalStudents || 0,
-      subText: "Trên toàn bộ các lớp",
       icon: Users,
       color: "bg-emerald-50 dark:bg-emerald-950/40",
       textColor: "text-emerald-600 dark:text-emerald-400",
@@ -65,7 +64,6 @@ export default function TeacherDashboardPage() {
     {
       label: "Bài chờ chấm",
       value: data?.pendingGrading || 0,
-      subText: "Nhiệm vụ ưu tiên cao",
       icon: FileCheck,
       color: "bg-amber-50 dark:bg-amber-950/40",
       textColor: "text-amber-600 dark:text-amber-400",
@@ -73,9 +71,8 @@ export default function TeacherDashboardPage() {
       actionLink: "/teacher/classrooms",
     },
     {
-      label: "Tỷ lệ hoàn thành TB",
+      label: "Hoàn thành TB",
       value: `${data?.avgCompletionRate || 0}%`,
-      subText: "Tiến độ học tập",
       icon: TrendingUp,
       color: "bg-indigo-50 dark:bg-indigo-950/40",
       textColor: "text-blue-700 dark:text-blue-400",
@@ -85,16 +82,11 @@ export default function TeacherDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
-        <div className="space-y-1.5 max-w-2xl">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Chào mừng trở lại, Giảng viên!
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tổng hợp dữ liệu học tập, tiến độ làm bài và đề xuất phân tích điểm yếu học viên từ trợ lý AI.
-          </p>
-        </div>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Tổng quan
+        </h1>
       </div>
 
       {/* Grid thống kê 4 ô */}
@@ -120,16 +112,13 @@ export default function TeacherDashboardPage() {
                 <span className="text-2xl font-black text-slate-900 dark:text-white">
                   {item.value}
                 </span>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {item.subText}
-                </p>
               </div>
               {item.actionLink && (
                 <Link
                   to={item.actionLink}
                   className="mt-3 flex items-center text-xs font-bold text-blue-700 dark:text-blue-400 hover:underline"
                 >
-                  <span>Chấm bài ngay</span>
+                  <span>Chấm bài</span>
                   <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
                 </Link>
               )}
@@ -142,49 +131,47 @@ export default function TeacherDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-7 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#121a2d] p-6 space-y-6 shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-                <Award className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
-                Thống Kê Điểm Năng Lực &amp; Điểm Yếu Học Viên
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Điểm trung bình theo 4 kỹ năng được phân tích tự động
-              </p>
-            </div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+              <Award className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
+              Điểm năng lực (4 kỹ năng)
+            </h2>
           </div>
           <div className="space-y-4">
-            {data?.skills?.map((s: any, i: number) => (
-              <div key={i} className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {s.skill}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-slate-500 dark:text-slate-400 text-[11px]">
-                      {s.status}
+            {data?.skills?.map((s: any, i: number) => {
+              const score10 = normalizeScoreTo10OrZero(s.score);
+              const widthPct = Math.min(100, Math.max(0, (score10 / 10) * 100));
+              return (
+                <div key={i} className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {s.skill}
                     </span>
-                    <span className="font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-2 py-0.5 rounded">
-                      {s.score} / 10
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                        {s.status}
+                      </span>
+                      <span className="font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 px-2 py-0.5 rounded">
+                        {score10} / 10
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-100 dark:bg-slate-800/80 rounded-full h-2">
+                    <div
+                      className={`${s.barColor} h-2 rounded-full transition-all duration-500`}
+                      style={{ width: `${widthPct}%` }}
+                    ></div>
                   </div>
                 </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-800/80 rounded-full h-2">
-                  <div
-                    className={`${s.barColor} h-2 rounded-full transition-all duration-500`}
-                    style={{ width: `${(s.score / 10) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="rounded-xl border border-blue-200 dark:border-blue-600/20 bg-blue-50/60 dark:bg-blue-600/5 p-4 text-xs text-slate-700 dark:text-slate-300 flex items-start space-x-3">
             <Bot className="h-5 w-5 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold text-blue-800 dark:text-blue-300 block mb-0.5">
-                Khuyến nghị từ trợ lý AI cho giáo viên:
+                Đề xuất AI:
               </span>
-              Học viên đang gặp trở ngại lớn nhất ở kỹ năng Nói (Speaking
-              Fluency) và Viết (Coherence). Hãy giao thêm các bài tập bổ trợ tại Lộ trình học của lớp.
+              Yếu Speaking Fluency &amp; Coherence — giao thêm bài ở Lộ trình.
             </div>
           </div>
         </div>
@@ -193,11 +180,8 @@ export default function TeacherDashboardPage() {
           <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
               <Clock className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
-              Công Việc Cần Xử Lý
+              Việc cần làm
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Nhiệm vụ ưu tiên trong ngày
-            </p>
           </div>
           <div className="space-y-3">
             {data?.tasks?.map((task: any) => (
@@ -224,7 +208,7 @@ export default function TeacherDashboardPage() {
               to="/teacher/classrooms"
               className="w-full flex items-center justify-center space-x-2 rounded-xl bg-blue-800 py-2.5 text-xs font-semibold text-white hover:bg-blue-600 transition shadow-sm"
             >
-              <span>Vào Danh Sách Lớp Học</span>
+              <span>Xem lớp học</span>
               <ArrowUpRight className="h-4 w-4" />
             </Link>
           </div>

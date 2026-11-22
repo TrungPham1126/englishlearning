@@ -348,4 +348,90 @@ class AiMonitoringServiceImplTest {
         assertThat(existing.getIsBlocked()).isFalse();
         verify(quotaRepository).save(existing);
     }
+
+    @Test
+    @DisplayName("getStats: không cộng trùng token/chi phí live Groq & Gemini và phản ánh trạng thái isHealthy khi Kill-Switch bật")
+    void getStats_doesNotDoubleCountLiveGroqAndGeminiTokensAndReflectsKillSwitch() {
+        UUID teacherId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        when(studentRepository.existsById(studentId)).thenReturn(true);
+        when(quotaRepository.findAll()).thenReturn(List.of());
+        when(aiEvaluationRepository.findAll()).thenReturn(List.of());
+        when(aiGeneratedExerciseRepository.findAll()).thenReturn(List.of());
+        when(studentRepository.findAll()).thenReturn(List.of());
+        when(teacherRepository.findAll()).thenReturn(List.of());
+
+        service.recordTokenUsage(teacherId, "TEACHER", 1_000_000L, 1_000_000L, "GROQ");
+        service.recordTokenUsage(studentId, "STUDENT", 1_000_000L, 1_000_000L, "GEMINI");
+        service.toggleGlobalKillSwitch();
+
+        AiStatsResponse stats = service.getStats();
+
+        assertThat(stats.getGroqStats().getTotalTokens()).isEqualTo(2_000_000L);
+        assertThat(stats.getGroqStats().getCostUsd()).isCloseTo(1.38, within(1e-6));
+        assertThat(stats.getGeminiStats().getTotalTokens()).isEqualTo(2_000_000L);
+        assertThat(stats.getGeminiStats().getCostUsd()).isCloseTo(0.375, within(1e-6));
+        assertThat(stats.getEstimatedCostUsd()).isCloseTo(1.755, within(1e-6));
+        assertThat(stats.getTotalTokens()).isEqualTo(4_000_000L);
+        assertThat(stats.isSystemKillSwitchActive()).isTrue();
+        assertThat(stats.getGeminiStats().isHealthy()).isFalse();
+        assertThat(stats.getGroqStats().isHealthy()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Giới hạn ANON (null userId), lastResetDate=null an toàn ở mọi hàm & kẹp dailyLimit âm khi Admin cập nhật")
+    void checkRateLimitAndQuota_anonymousRateLimitsNullResetDateAndNegativeLimitClamping() {
+        // 1. Anonymous student (3/phút) & anonymous teacher (5/phút)
+        for (int i = 0; i < 3; i++) {
+            service.checkRateLimitAndQuota(null, false);
+        }
+        assertThatThrownBy(() -> service.checkRateLimitAndQuota(null, false))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("tối đa 3 lần/phút");
+
+        for (int i = 0; i < 5; i++) {
+            service.checkRateLimitAndQuota(null, true);
+        }
+        assertThatThrownBy(() -> service.checkRateLimitAndQuota(null, true))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("tối đa 5 lần/phút");
+
+        // 2. lastResetDate == null không gây NullPointerException ở checkRateLimitAndQuota, recordTokenUsage & getAllQuotas
+        UUID nullDateStudent = UUID.randomUUID();
+        Student student = Student.builder().id(nullDateStudent).build();
+        StudentAiQuota nullDateQuota = StudentAiQuota.builder()
+                .student(student).dailyLimit(20).usedToday(null).lastResetDate(null).isBlocked(false).build();
+        when(quotaRepository.findByStudentId(nullDateStudent)).thenReturn(Optional.of(nullDateQuota));
+        when(studentRepository.existsById(nullDateStudent)).thenReturn(true);
+        when(quotaRepository.save(any(StudentAiQuota.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.checkRateLimitAndQuota(nullDateStudent, false);
+        service.recordTokenUsage(nullDateStudent, "STUDENT", 100L, 100L, "GEMINI");
+        assertThat(nullDateQuota.getLastResetDate()).isEqualTo(LocalDate.now());
+        assertThat(nullDateQuota.getUsedToday()).isEqualTo(1);
+
+        nullDateQuota.setLastResetDate(null);
+        when(studentRepository.findAll()).thenReturn(List.of(student));
+        when(teacherRepository.findAll()).thenReturn(List.of());
+        when(aiEvaluationRepository.findAll()).thenReturn(List.of());
+        when(aiGeneratedExerciseRepository.findAll()).thenReturn(List.of());
+        service.getAllQuotas();
+        assertThat(nullDateQuota.getLastResetDate()).isEqualTo(LocalDate.now());
+        assertThat(nullDateQuota.getUsedToday()).isZero();
+
+        // 3. updateQuota với request null bỏ qua an toàn; dailyLimit âm bị kẹp về 0 cho cả học viên lẫn giáo viên
+        service.updateQuota(nullDateStudent, null);
+
+        UpdateQuotaRequest negativeLimit = new UpdateQuotaRequest();
+        negativeLimit.setDailyLimit(-10);
+        service.updateQuota(nullDateStudent, negativeLimit);
+        assertThat(nullDateQuota.getDailyLimit()).isZero();
+
+        UUID teacherId = UUID.randomUUID();
+        when(studentRepository.existsById(teacherId)).thenReturn(false);
+        service.updateQuota(teacherId, negativeLimit);
+        assertThatThrownBy(() -> service.checkRateLimitAndQuota(teacherId, true))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("0 lượt/ngày");
+    }
 }

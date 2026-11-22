@@ -1,6 +1,7 @@
 import React from "react";
 import { Search, Loader2, Clock, ShieldAlert } from "lucide-react";
 import type { GradingSubmission } from "./gradingTypes";
+import { normalizeScoreTo10 } from "@/utils/scoreScale";
 
 interface SubmissionListSidebarProps {
   submissions: GradingSubmission[];
@@ -70,7 +71,7 @@ export const SubmissionListSidebar: React.FC<SubmissionListSidebarProps> = ({
         <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Tìm theo tên hoặc email học viên..."
+          placeholder="Tìm tên, email..."
           value={search}
           onChange={(e) => onChangeSearch(e.target.value)}
           className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b1120] pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-blue-600 transition shadow-sm"
@@ -82,13 +83,13 @@ export const SubmissionListSidebar: React.FC<SubmissionListSidebarProps> = ({
         {loadingSubmissions ? (
           <div className="p-10 text-center text-slate-400 flex flex-col items-center justify-center">
             <Loader2 className="animate-spin h-6 w-6 text-blue-600 mb-2" />
-            <span className="text-xs">Đang tải danh sách bài nộp...</span>
+            <span className="text-xs">Đang tải...</span>
           </div>
         ) : filteredSubmissions.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center text-slate-500 text-xs">
             {submissions.length === 0
-              ? "Chưa có học sinh nào nộp bài tập này."
-              : "Không tìm thấy học sinh phù hợp với bộ lọc."}
+              ? "Chưa có bài nộp"
+              : "Không có kết quả"}
           </div>
         ) : (
           filteredSubmissions.map((sub) => {
@@ -130,7 +131,7 @@ export const SubmissionListSidebar: React.FC<SubmissionListSidebarProps> = ({
                     {isCompleted ? (
                       <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                         {sub.score !== null && sub.score !== undefined
-                          ? `${sub.score} đ`
+                          ? `${normalizeScoreTo10(sub.score)} đ`
                           : "Đã chấm"}
                       </span>
                     ) : (
@@ -155,7 +156,7 @@ export const SubmissionListSidebar: React.FC<SubmissionListSidebarProps> = ({
                       : "Gần đây"}
                   </span>
                   {sub.attemptNumber && (
-                    <span>Lần nộp #{sub.attemptNumber}</span>
+                    <span>Lần #{sub.attemptNumber}</span>
                   )}
                 </div>
               </div>

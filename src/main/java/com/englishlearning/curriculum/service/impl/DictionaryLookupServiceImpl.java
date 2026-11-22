@@ -70,6 +70,7 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
                 .partOfSpeech("noun")
                 .build();
 
+        boolean apiSucceeded = false;
         try {
             String encodedWord = URLEncoder.encode(cleanWord, StandardCharsets.UTF_8);
             String apiUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/" + encodedWord;
@@ -113,7 +114,10 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
                     JsonNode meanings = firstItem.path("meanings");
                     if (meanings.isArray() && !meanings.isEmpty()) {
                         JsonNode firstMeaning = meanings.get(0);
-                        entry.setPartOfSpeech(firstMeaning.path("partOfSpeech").asText("noun"));
+                        String pos = firstMeaning.path("partOfSpeech").asText("");
+                        if (pos != null && !pos.isBlank()) {
+                            entry.setPartOfSpeech(pos.trim());
+                        }
 
                         JsonNode defs = firstMeaning.path("definitions");
                         if (defs.isArray() && !defs.isEmpty()) {
@@ -123,17 +127,14 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
                     }
                 }
             }
+            apiSucceeded = true;
         } catch (Exception e) {
             log.warn("Free Dictionary API lookup failed for word '{}': {}. Using fallback providers.", cleanWord, e.getMessage());
         }
 
         // Chuẩn hóa định dạng IPA /.../
-        if (entry.getIpa() == null || entry.getIpa().isBlank()) {
-            entry.setIpa("/" + cleanWord + "/");
-        } else {
-            String formattedIpa = entry.getIpa().replace("/", "").trim();
-            entry.setIpa("/" + formattedIpa + "/");
-        }
+        String formattedIpa = entry.getIpa() != null ? entry.getIpa().replace("/", "").trim() : "";
+        entry.setIpa(formattedIpa.isEmpty() ? "/" + cleanWord + "/" : "/" + formattedIpa + "/");
 
         // Fallback Audio giọng bản xứ chất lượng cao từ Youdao voice nếu chưa có audio
         if (entry.getAudioUrl() == null || entry.getAudioUrl().isBlank()) {
@@ -150,7 +151,9 @@ public class DictionaryLookupServiceImpl implements DictionaryLookupService {
             entry.setExampleSentence("Practice using \"" + cleanWord + "\" in daily conversations.");
         }
 
-        cache.put(cleanWord, entry);
+        if (apiSucceeded) {
+            cache.put(cleanWord, entry);
+        }
         return entry;
     }
 }

@@ -5,7 +5,9 @@ import com.englishlearning.ai.service.PythonIntegrationService;
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
@@ -18,7 +20,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -27,20 +31,149 @@ public class PythonIntegrationServiceImpl implements PythonIntegrationService {
 
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final RestTemplate writingRestTemplate;
     private final String evaluatePhoneticsUrl;
+    private final String evaluateWritingUrl;
+    private final boolean writingServiceEnabled;
 
+    public PythonIntegrationServiceImpl(
+            ObjectMapper objectMapper,
+            String evaluatePhoneticsUrl,
+            int connectTimeout,
+            int readTimeout) {
+        this(
+                objectMapper,
+                evaluatePhoneticsUrl,
+                connectTimeout,
+                readTimeout,
+                "http://localhost:8001",
+                "",
+                true,
+                Math.min(connectTimeout, 5000),
+                Math.min(readTimeout, 30000)
+        );
+    }
+
+    @Autowired
     public PythonIntegrationServiceImpl(
             ObjectMapper objectMapper,
             @Value("${python.audio-service.evaluate-phonetics-url:http://localhost:8000/api/v1/audio/evaluate-phonetics}") String evaluatePhoneticsUrl,
             @Value("${python.audio-service.connect-timeout:5000}") int connectTimeout,
-            @Value("${python.audio-service.read-timeout:60000}") int readTimeout) {
+            @Value("${python.audio-service.read-timeout:60000}") int readTimeout,
+            @Value("${python.writing-service.url:http://localhost:8001}") String writingServiceUrl,
+            @Value("${python.writing-service.evaluate-url:}") String writingEvaluateUrl,
+            @Value("${python.writing-service.enabled:true}") boolean writingServiceEnabled,
+            @Value("${python.writing-service.connect-timeout:5000}") int writingConnectTimeout,
+            @Value("${python.writing-service.read-timeout:30000}") int writingReadTimeout) {
         this.objectMapper = objectMapper;
         this.evaluatePhoneticsUrl = evaluatePhoneticsUrl;
+        this.evaluateWritingUrl = resolveWritingEvaluateUrl(writingServiceUrl, writingEvaluateUrl);
+        this.writingServiceEnabled = writingServiceEnabled;
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
         factory.setReadTimeout(readTimeout);
         this.restTemplate = new RestTemplate(factory);
+
+        SimpleClientHttpRequestFactory writingFactory = new SimpleClientHttpRequestFactory();
+        writingFactory.setConnectTimeout(writingConnectTimeout);
+        writingFactory.setReadTimeout(writingReadTimeout);
+        this.writingRestTemplate = new RestTemplate(writingFactory);
+    }
+
+    private static String resolveWritingEvaluateUrl(String baseUrl, String explicitEvaluateUrl) {
+        if (explicitEvaluateUrl != null && !explicitEvaluateUrl.isBlank()) {
+            return explicitEvaluateUrl.trim();
+        }
+        String cleanBase = (baseUrl != null && !baseUrl.isBlank()) ? baseUrl.trim() : "http://localhost:8001";
+        while (cleanBase.endsWith("/")) {
+            cleanBase = cleanBase.substring(0, cleanBase.length() - 1);
+        }
+        if (cleanBase.endsWith("/api/v1/writing/evaluate")) {
+            return cleanBase;
+        }
+        return cleanBase + "/api/v1/writing/evaluate";
+    }
+
+    @Override
+    public boolean isWritingServiceEnabled() {
+        return writingServiceEnabled;
+    }
+
+    /**
+     * Gửi bài viết IELTS Writing tới local Python FastAPI microservice
+     * POST /api/v1/writing/evaluate (application/json)
+     */
+    @Override
+    public JsonNode evaluateWriting(
+            String topic,
+            String essayText,
+            String assignmentTitle,
+            String keyPoints,
+            String rubrics,
+            String writingTask) {
+        if (!writingServiceEnabled) {
+            log.debug("Python writing-scorer service is disabled via configuration.");
+            return null;
+        }
+        if (essayText == null || essayText.isBlank()) {
+            throw new IllegalArgumentException("Nội dung bài viết không được để trống khi gửi tới Python writing service.");
+        }
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8));
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+
+            String effectiveWritingTask = (writingTask != null && !writingTask.isBlank())
+                    ? writingTask.trim()
+                    : "TASK_2";
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("topic", topic != null ? topic : "");
+            payload.put("essayText", essayText);
+            payload.put("writingTask", effectiveWritingTask);
+            if (assignmentTitle != null && !assignmentTitle.isBlank()) {
+                payload.put("assignmentTitle", assignmentTitle);
+            }
+            if (keyPoints != null && !keyPoints.isBlank()) {
+                payload.put("keyPoints", keyPoints);
+            }
+            if (rubrics != null && !rubrics.isBlank()) {
+                payload.put("rubrics", rubrics);
+            }
+
+            HttpEntity<String> requestEntity = new HttpEntity<>(objectMapper.writeValueAsString(payload), headers);
+            log.info("Gửi request POST tới Python writing service: {} (writingTask={}, essay chars: {})",
+                    evaluateWritingUrl, effectiveWritingTask, essayText.length());
+
+            ResponseEntity<String> responseEntity = writingRestTemplate.postForEntity(
+                    evaluateWritingUrl,
+                    requestEntity,
+                    String.class
+            );
+
+            if (!responseEntity.getStatusCode().is2xxSuccessful() || responseEntity.getBody() == null
+                    || responseEntity.getBody().isBlank()) {
+                throw new RuntimeException("Python writing microservice trả về phản hồi không hợp lệ: "
+                        + responseEntity.getStatusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(responseEntity.getBody());
+            if (root == null || !root.isObject() || !root.has("overallBand")) {
+                throw new RuntimeException("Phản hồi JSON từ Python writing service thiếu trường 'overallBand'.");
+            }
+            return root;
+        } catch (org.springframework.web.client.HttpStatusCodeException httpEx) {
+            log.warn("Python writing service trả về HTTP {}: {}",
+                    httpEx.getStatusCode(), httpEx.getResponseBodyAsString());
+            throw new RuntimeException("Python writing service báo lỗi HTTP " + httpEx.getStatusCode()
+                    + ": " + httpEx.getMessage(), httpEx);
+        } catch (Exception e) {
+            log.warn("Không thể kết nối hoặc chấm điểm qua Python writing service ({}): {}",
+                    evaluateWritingUrl, e.getMessage());
+            throw new RuntimeException("Lỗi giao tiếp với Python writing service: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -96,14 +229,16 @@ public class PythonIntegrationServiceImpl implements PythonIntegrationService {
                     httpEx.getStatusCode(), httpEx.getResponseBodyAsString());
             try {
                 JsonNode errNode = objectMapper.readTree(httpEx.getResponseBodyAsString());
-                JsonNode detailNode = errNode.path("detail");
-                String msg = detailNode.path("message").asText("Chất lượng ghi âm chưa đạt chuẩn hoặc không khớp câu mẫu.");
-                String sugg = detailNode.path("suggestion").asText("Vui lòng đọc to, rõ ràng và đúng theo câu mẫu.");
-                return buildLowConfidenceResponse(script, msg + " " + sugg);
+                JsonNode detailNode = errNode != null ? errNode.path("detail") : null;
+                if (detailNode != null && detailNode.isObject()) {
+                    String msg = detailNode.path("message").asText("Chất lượng ghi âm chưa đạt chuẩn hoặc không khớp câu mẫu.");
+                    String sugg = detailNode.path("suggestion").asText("Vui lòng đọc to, rõ ràng và đúng theo câu mẫu.");
+                    return buildLowConfidenceResponse(script, msg + " " + sugg);
+                }
             } catch (Exception parseEx) {
                 log.warn("Không thể parse error body từ Python service, rethrow để fallback: {}", parseEx.getMessage());
-                throw new RuntimeException("Python phonetic service báo lỗi: " + httpEx.getMessage(), httpEx);
             }
+            throw new RuntimeException("Python phonetic service báo lỗi: " + httpEx.getMessage(), httpEx);
         } catch (Exception e) {
             log.error("Lỗi khi kết nối tới Python phonetics microservice ({}): {}", evaluatePhoneticsUrl, e.getMessage());
             throw new RuntimeException("Lỗi giao tiếp với Python phonetics service: " + e.getMessage(), e);

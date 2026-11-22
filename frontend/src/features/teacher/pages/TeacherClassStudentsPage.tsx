@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { teacherApi } from "../api/teacherApi";
 import ClassroomHeaderNav from "../components/ClassroomHeaderNav";
 import { StudentLearningProfileModal } from "../components/students/StudentLearningProfileModal";
+import { formatScore10, normalizeScoreTo10OrZero } from "@/utils/scoreScale";
 import {
   Search,
   AlertTriangle,
@@ -81,12 +82,17 @@ export default function TeacherClassStudentsPage() {
             completedTasks: item.completedTasks || 0,
             totalTasks: item.totalTasks || 0,
             completionRate: item.completionRate || 0,
-            averageScore: item.averageScore ?? 0,
+            averageScore: normalizeScoreTo10OrZero(item.averageScore),
             weaknesses: item.weaknesses || [],
             aiQuota: quotaInfo,
             attendanceScore: item.attendanceScore || 0,
             totalStudyMinutes: item.totalStudyMinutes || 0,
-            dailyProgressDetails: item.dailyProgressDetails || [],
+            dailyProgressDetails: Array.isArray(item.dailyProgressDetails)
+              ? item.dailyProgressDetails.map((d: any) => ({
+                  ...d,
+                  score: normalizeScoreTo10OrZero(d?.score),
+                }))
+              : [],
           };
         });
         setStudents(mapped);
@@ -126,9 +132,18 @@ export default function TeacherClassStudentsPage() {
       ? Math.round(students.reduce((acc, s) => acc + (s.completionRate || 0), 0) / students.length)
       : 0;
 
+  const scoredStudents = students.filter(
+    (s) =>
+      normalizeScoreTo10OrZero(s.averageScore) > 0 || (s.completedTasks || 0) > 0,
+  );
   const avgClassScore =
-    students.length > 0
-      ? (students.reduce((acc, s) => acc + Number(s.averageScore || 0), 0) / students.length).toFixed(1)
+    scoredStudents.length > 0
+      ? (
+          scoredStudents.reduce(
+            (acc, s) => acc + normalizeScoreTo10OrZero(s.averageScore),
+            0,
+          ) / scoredStudents.length
+        ).toFixed(1)
       : "0.0";
 
   const aiAlertCount = students.filter((s) => {
@@ -179,7 +194,7 @@ export default function TeacherClassStudentsPage() {
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Sĩ Số Lớp Học
+              Sĩ số
             </span>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {students.length} <span className="text-xs font-semibold text-slate-400">học viên</span>
@@ -193,7 +208,7 @@ export default function TeacherClassStudentsPage() {
         <div className="rounded-xl border border-emerald-200/80 dark:border-emerald-500/20 bg-white dark:bg-slate-900 p-4 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Tiến Độ Hoàn Thành TB
+              Hoàn thành TB
             </span>
             <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
               {avgCompletion}%
@@ -207,7 +222,7 @@ export default function TeacherClassStudentsPage() {
         <div className="rounded-xl border border-sky-200/80 dark:border-sky-500/20 bg-white dark:bg-slate-900 p-4 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
-              Điểm Trung Bình Lớp
+              Điểm TB
             </span>
             <div className="text-2xl font-black text-sky-600 dark:text-sky-400 mt-1">
               {avgClassScore} <span className="text-xs font-semibold text-slate-400">/ 10</span>
@@ -221,7 +236,7 @@ export default function TeacherClassStudentsPage() {
         <div className="rounded-xl border border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-slate-900 p-4 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              Cảnh Báo Quota AI
+              Cảnh báo AI
             </span>
             <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
               {aiAlertCount} <span className="text-xs font-semibold text-slate-400">học viên</span>
@@ -239,7 +254,7 @@ export default function TeacherClassStudentsPage() {
           <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm theo họ tên hoặc email học viên..."
+            placeholder="Tìm tên, email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 pl-9 pr-4 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition"
@@ -250,8 +265,8 @@ export default function TeacherClassStudentsPage() {
           {[
             { id: "ALL", label: `Tất cả (${students.length})` },
             { id: "ACTIVE", label: "Tiến độ tốt" },
-            { id: "AT_RISK", label: "Cần kèm cặp" },
-            { id: "AI_LIMIT", label: "Sắp hết Quota AI" },
+            { id: "AT_RISK", label: "Cần hỗ trợ" },
+            { id: "AI_LIMIT", label: "Cảnh báo AI" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -272,13 +287,13 @@ export default function TeacherClassStudentsPage() {
       {loading ? (
         <div className="flex h-64 flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
           <Loader2 className="h-8 w-8 animate-spin text-blue-700 dark:text-blue-400" />
-          <span className="text-xs font-medium">Đang tải dữ liệu học viên &amp; AI Quota...</span>
+          <span className="text-xs font-medium">Đang tải...</span>
         </div>
       ) : filteredStudents.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center text-slate-500 dark:text-slate-400 text-xs">
           <Users className="h-10 w-10 mx-auto mb-2.5 text-slate-300 dark:text-slate-700" />
           <p className="font-bold text-sm text-slate-700 dark:text-slate-300">
-            Không tìm thấy học viên nào phù hợp.
+            Không có học viên phù hợp.
           </p>
         </div>
       ) : viewMode === "TABLE" ? (
@@ -287,12 +302,12 @@ export default function TeacherClassStudentsPage() {
             <table className="w-full text-left text-sm text-slate-700 dark:text-slate-300 min-w-[760px]">
               <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <tr>
-                  <th className="px-6 py-4">Học Viên</th>
-                  <th className="px-6 py-4 text-center">Tiến Độ Bài Tập</th>
+                  <th className="px-6 py-4">Học viên</th>
+                  <th className="px-6 py-4 text-center">Tiến độ</th>
                   <th className="px-6 py-4 text-center">Điểm TB</th>
-                  <th className="px-6 py-4 text-center">Trạng Thái Học Tập</th>
-                  <th className="px-6 py-4 text-center">Hạn Ngạch AI (Hôm Nay)</th>
-                  <th className="px-6 py-4 text-right">Thao Tác</th>
+                  <th className="px-6 py-4 text-center">Trạng thái</th>
+                  <th className="px-6 py-4 text-center">Quota AI</th>
+                  <th className="px-6 py-4 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800/60">
@@ -325,7 +340,7 @@ export default function TeacherClassStudentsPage() {
                               {student.email}
                             </div>
                             <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                              Gia nhập: {student.enrolledAt}
+                              Vào lớp: {student.enrolledAt}
                             </div>
                           </div>
                         </div>
@@ -334,7 +349,7 @@ export default function TeacherClassStudentsPage() {
                         <div className="inline-block w-40 text-left">
                           <div className="flex justify-between text-[11px] mb-1.5">
                             <span className="text-slate-500 dark:text-slate-400 font-medium">
-                              {student.completedTasks}/{student.totalTasks} nhiệm vụ
+                              {student.completedTasks}/{student.totalTasks} bài
                             </span>
                             <span
                               className={`font-extrabold ${
@@ -364,7 +379,7 @@ export default function TeacherClassStudentsPage() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className="inline-flex items-center rounded-xl bg-blue-50 dark:bg-blue-600/10 px-3 py-1 text-sm font-black text-blue-700 dark:text-blue-400 border border-blue-200/70 dark:border-blue-600/20">
-                          {student.averageScore}
+                          {formatScore10(student.averageScore)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -374,18 +389,18 @@ export default function TeacherClassStudentsPage() {
                           </span>
                         ) : student.completionRate >= 40 ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                            <Clock className="h-3 w-3" /> Đang theo học
+                            <Clock className="h-3 w-3" /> Đang học
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">
-                            <AlertTriangle className="h-3 w-3" /> Cần nhắc nhở
+                            <AlertTriangle className="h-3 w-3" /> Cần nhắc
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         {student.aiQuota.isBlocked ? (
                           <span className="inline-flex items-center text-[11px] bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 rounded-lg font-extrabold uppercase">
-                            <Ban className="w-3.5 h-3.5 mr-1" /> Đã khóa AI
+                            <Ban className="w-3.5 h-3.5 mr-1" /> Khóa AI
                           </span>
                         ) : (
                           <div className="inline-block w-36 text-left">
@@ -421,7 +436,7 @@ export default function TeacherClassStudentsPage() {
                           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-800 hover:border-blue-700 hover:text-white dark:hover:bg-blue-800 transition cursor-pointer shadow-2xs"
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          <span>Hồ sơ học tập</span>
+                          <span>Hồ sơ</span>
                         </button>
                       </td>
                     </tr>
@@ -456,7 +471,7 @@ export default function TeacherClassStudentsPage() {
                     </div>
                   </div>
                   <span className="inline-flex items-center rounded-xl bg-blue-50 dark:bg-blue-600/10 px-2.5 py-1 text-xs font-black text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-600/20">
-                    {student.averageScore} đ
+                    {formatScore10(student.averageScore)} đ
                   </span>
                 </div>
 
@@ -464,7 +479,7 @@ export default function TeacherClassStudentsPage() {
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-500 dark:text-slate-400">
-                        Tiến độ ({student.completedTasks}/{student.totalTasks} bài)
+                        Tiến độ ({student.completedTasks}/{student.totalTasks})
                       </span>
                       <span className="font-bold text-slate-900 dark:text-white">
                         {student.completionRate}%
@@ -487,7 +502,7 @@ export default function TeacherClassStudentsPage() {
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-500 dark:text-slate-400">
-                        Hạn ngạch AI hôm nay
+                        Quota AI
                       </span>
                       <span className="font-bold text-slate-800 dark:text-slate-200">
                         {used}/{limit} lượt ({quotaPct}%)
@@ -508,7 +523,7 @@ export default function TeacherClassStudentsPage() {
                   onClick={() => setSelectedStudent(student)}
                   className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-800 hover:text-white dark:hover:bg-blue-800 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
                 >
-                  Hồ sơ học tập &amp; Bài nộp
+                  Xem hồ sơ
                 </button>
               </div>
             );

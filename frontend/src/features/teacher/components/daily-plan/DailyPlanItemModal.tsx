@@ -174,7 +174,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
       await fetchDayAssignmentsFromDb();
       onRefresh?.();
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Lỗi khi gắn bài tập vào Day!");
+      alert(err?.response?.data?.message || "Lỗi gắn bài tập.");
     } finally {
       setAttaching(false);
     }
@@ -240,22 +240,15 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 font-black text-sm">
               {editingPlan ? `D${editingPlan.dayNumber}` : "+"}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {editingPlan ? `Chỉnh Sửa Day ${editingPlan.dayNumber}` : "Thêm Ngày Học Mới"}
-                </h2>
-                {editingPlan && (
-                  <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                    {dayAssignments.length} bài tập từ Database
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {editingPlan
-                  ? "Xem và quản lý các thông số đề bài, thời gian, giới hạn sai và đáp án của ngày này"
-                  : "Thiết lập thông tin ngày học mới trong lộ trình đào tạo"}
-              </p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {editingPlan ? `Sửa Day ${editingPlan.dayNumber}` : "Thêm ngày học"}
+              </h2>
+              {editingPlan && (
+                <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  {dayAssignments.length} bài tập
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -274,10 +267,10 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                1. Thông tin Ngày học (Lộ trình)
+                1. Thông tin ngày học
               </span>
               <span className="text-xs text-slate-400">
-                Hạn mở: <b className="text-slate-700 dark:text-slate-200">{scheduledDate || "Chưa đặt"}</b>
+                Ngày mở: <b className="text-slate-700 dark:text-slate-200">{scheduledDate || "Chưa đặt"}</b>
               </span>
             </div>
 
@@ -285,7 +278,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-3">
                   <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Day thứ:
+                    Day:
                   </label>
                   <input
                     type="number"
@@ -298,7 +291,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                 </div>
                 <div className="sm:col-span-4">
                   <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Ngày mở bài (Deadline):
+                    Ngày mở (Deadline):
                   </label>
                   <input
                     type="date"
@@ -310,7 +303,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                 </div>
                 <div className="sm:col-span-5">
                   <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                    Thời lượng ước tính (phút):
+                    Thời lượng (phút):
                   </label>
                   <div className="relative">
                     <input
@@ -328,12 +321,12 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                  Tiêu đề ngày học:
+                  Tiêu đề:
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Ví dụ: DAY 1: Core Office Vocabulary & Workplace Communication"
+                    placeholder="VD: DAY 1: Office Vocabulary"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600 font-medium"
@@ -343,7 +336,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                     type="submit"
                     className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs shadow-sm transition cursor-pointer shrink-0"
                   >
-                    {editingPlan ? "Lưu Thông Tin Day" : "Tạo Ngày Mới"}
+                    {editingPlan ? "Lưu" : "Tạo ngày"}
                   </button>
                 </div>
               </div>
@@ -354,25 +347,20 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
           {editingPlan && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    2. Danh Sách Bài Tập Của Day {editingPlan.dayNumber} ({dayAssignments.length} bài)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Dữ liệu được truy vấn trực tiếp từ bảng cơ sở dữ liệu `assignments` và `daily_plan_items`
-                  </p>
-                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  2. Bài tập Day {editingPlan.dayNumber} ({dayAssignments.length})
+                </h3>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={fetchDayAssignmentsFromDb}
                     disabled={loadingAssignments}
                     className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                    title="Làm mới từ cơ sở dữ liệu"
+                    title="Tải lại"
                   >
                     <RefreshCw className={`h-3 w-3 ${loadingAssignments ? "animate-spin text-blue-500" : ""}`} />
-                    Tải lại DB
+                    Tải lại
                   </button>
                   {onCreateNewAssignmentForDay && (
                     <button
@@ -384,7 +372,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                       className="flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Tạo Bài Mới Cho Day Này
+                      Tạo bài mới
                     </button>
                   )}
                 </div>
@@ -394,21 +382,16 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
               {loadingAssignments ? (
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 p-8 text-center text-slate-500">
                   <RefreshCw className="h-6 w-6 mx-auto mb-2 animate-spin text-blue-500" />
-                  <p className="text-xs">Đang truy vấn bài tập của Day {editingPlan.dayNumber} từ cơ sở dữ liệu...</p>
+                  <p className="text-xs">Đang tải...</p>
                 </div>
               ) : dayAssignments.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-800/10 p-8 text-center space-y-3">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-400">
                     <Info className="h-6 w-6" />
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                      Chưa có bài tập nào được giao cho Day {editingPlan.dayNumber}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
-                      Bạn có thể chọn một bài tập đã có trong lớp để gắn vào ngày này, hoặc tạo bài tập mới bằng công cụ AI / File Excel.
-                    </p>
-                  </div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Chưa có bài tập cho Day {editingPlan.dayNumber}
+                  </h4>
                 </div>
               ) : (
                 <div className="space-y-2.5">
@@ -455,10 +438,10 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                                 type="button"
                                 onClick={() => onViewAssignment(assignment)}
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/40 dark:hover:text-blue-300 text-slate-700 dark:text-slate-300 transition cursor-pointer"
-                                title="Xem toàn bộ đề bài, audio nghe, câu hỏi & đáp án đúng"
+                                title="Xem đề"
                               >
                                 <Eye className="h-3.5 w-3.5 text-blue-500" />
-                                <span>Xem Đề</span>
+                                <span>Xem đề</span>
                               </button>
                             )}
 
@@ -467,10 +450,10 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                                 type="button"
                                 onClick={() => onEditAssignment(assignment)}
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/40 dark:hover:text-emerald-300 text-slate-700 dark:text-slate-300 transition cursor-pointer"
-                                title="Chỉnh sửa mọi thông số: đề bài, thời gian, giới hạn sai, đáp án..."
+                                title="Sửa bài"
                               >
                                 <Edit3 className="h-3.5 w-3.5 text-emerald-500" />
-                                <span>Chỉnh Sửa</span>
+                                <span>Sửa</span>
                               </button>
                             )}
 
@@ -479,7 +462,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                                 type="button"
                                 onClick={() => onDeleteAssignment(assignment.id, assignment.title)}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
-                                title="Xóa vĩnh viễn bài tập này"
+                                title="Xóa"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -491,33 +474,33 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800/80 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">
                             <Clock className="h-3 w-3 text-blue-500" />
-                            Thời gian: <b>{timeLimit} phút</b>
+                            <b>{timeLimit} phút</b>
                           </span>
 
                           <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-950/30 px-2 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50">
                             <AlertTriangle className="h-3 w-3 text-rose-500" />
-                            Giới hạn sai: <b>≤ {maxError}%</b>
+                            Sai ≤ <b>{maxError}%</b>
                           </span>
 
                           <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50">
                             <CheckCircle className="h-3 w-3 text-emerald-500" />
-                            Điểm đạt chuẩn: <b>≥ {passScore}/10</b>
+                            Đạt ≥ <b>{passScore}/10</b>
                           </span>
 
                           <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
                             <RefreshCw className="h-3 w-3 text-amber-500" />
-                            Lượt làm: <b>{maxAttempts} lần</b>
+                            <b>{maxAttempts} lần</b>
                           </span>
 
                           <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 dark:bg-purple-950/30 px-2 py-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/50">
                             <HelpCircle className="h-3 w-3 text-purple-500" />
-                            Số câu hỏi: <b>{qCount > 0 ? `${qCount} câu` : "Chờ cập nhật"}</b>
+                            <b>{qCount > 0 ? `${qCount} câu` : "Chưa có câu"}</b>
                           </span>
 
                           {assignment.audioUrl && (
                             <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-950/30 px-2 py-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/50">
                               <Headphones className="h-3 w-3 text-indigo-500" />
-                              Có Audio mẫu
+                              Có Audio
                             </span>
                           )}
                         </div>
@@ -532,7 +515,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3.5 space-y-2">
                   <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <Plus className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                    Gắn thêm bài tập từ danh sách lớp vào Day {editingPlan.dayNumber}:
+                    Gắn bài tập vào Day {editingPlan.dayNumber}:
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <select
@@ -540,7 +523,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                       onChange={(e) => setSelectedAttachId(e.target.value)}
                       className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                     >
-                      <option value="">-- Chọn bài tập cần liên kết --</option>
+                      <option value="">-- Chọn bài tập --</option>
                       {availableToAttach.map((a) => (
                         <option key={a.id} value={a.id}>
                           [{a.skillType || "ASSIGNMENT"}] {a.title} ({a.timeLimitMinutes || 15}p)
@@ -558,7 +541,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
                       ) : (
                         <Plus className="h-3.5 w-3.5" />
                       )}
-                      Gắn Vào Day {editingPlan.dayNumber}
+                      Gắn vào Day {editingPlan.dayNumber}
                     </button>
                   </div>
                 </div>
@@ -570,7 +553,7 @@ export const DailyPlanItemModal: React.FC<DailyPlanItemModalProps> = ({
         {/* MODAL FOOTER */}
         <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 px-6 py-3 bg-slate-50/50 dark:bg-slate-800/40">
           <span className="text-[11px] text-slate-400">
-            {editingPlan ? `Đang chỉnh sửa Ngày ${editingPlan.dayNumber}` : "Lộ trình học theo ngày"}
+            {editingPlan ? `Day ${editingPlan.dayNumber}` : "Ngày học mới"}
           </span>
           <button
             type="button"

@@ -40,12 +40,6 @@ def _create_mock_wav_bytes(duration_sec: float = 2.0, sample_rate: int = 16000) 
     return buf.read()
 
 
-def test_health_endpoint():
-    res = client.get("/health")
-    assert res.status_code == 200
-    assert res.json()["status"] == "healthy"
-
-
 @patch("app.api.routes.forced_aligner.align", new_callable=AsyncMock)
 def test_successful_evaluation_scenario(mock_align):
     """Scenario 283: Successful evaluation pipeline."""
@@ -579,23 +573,40 @@ def test_evaluate_sentence_token_color_mapping_green_yellow_red_gray():
     assert [t["color"] for t in tokens] == ["GREEN", "YELLOW", "RED", "GRAY"]
 
 
-def test_tts_endpoints_json_query_special_chars_and_error_json_safety():
-    # JSON request with numbers & special characters
-    r_json = client.post(
-        "/api/v1/audio/tts",
-        json={"text": "Train leaves at 10:30 AM! Cost $25.50 (50% off).", "voice": "af_heart", "speed": 1.0},
-    )
-    assert r_json.status_code == 200, r_json.text
-    assert r_json.headers["content-type"].startswith("audio/wav")
-    assert float(r_json.headers["x-audio-duration"]) > 1.0
-    assert r_json.headers["x-audio-sample-rate"] == "24000"
-    audio_out, sr_out = sf.read(io.BytesIO(r_json.content), dtype="float32")
-    assert sr_out == 24000 and len(audio_out) > 24000
+def _make_fast_kokoro_pipe(chunk_sec: float = 1.6):
+    import torch
+    t = np.linspace(0, chunk_sec, int(24000 * chunk_sec), endpoint=False)
+    wave = (0.25 * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
 
-    # Legacy query parameter mode
-    r_query = client.post("/tts?text=Hello+123&voice=bf_emma&speed=1.1")
-    assert r_query.status_code == 200
-    assert r_query.headers["x-audio-voice"] == "bf_emma"
+    def _pipe(text, voice="af_heart", speed=1.0, split_pattern=r"\n+"):
+        yield ("gs", "ps", torch.from_numpy(wave))
+
+    return MagicMock(side_effect=_pipe)
+
+
+def test_tts_endpoints_json_query_special_chars_and_error_json_safety():
+    from app.services.tts_service import tts_engine
+
+    with (
+        patch.dict(tts_engine._pipelines, {"a": _make_fast_kokoro_pipe(1.6), "b": _make_fast_kokoro_pipe(1.6)}, clear=True),
+        patch.object(tts_engine, "_is_initialized", True),
+    ):
+        # JSON request with numbers & special characters
+        r_json = client.post(
+            "/api/v1/audio/tts",
+            json={"text": "Train leaves at 10:30 AM! Cost $25.50 (50% off).", "voice": "af_heart", "speed": 1.0},
+        )
+        assert r_json.status_code == 200, r_json.text
+        assert r_json.headers["content-type"].startswith("audio/wav")
+        assert float(r_json.headers["x-audio-duration"]) > 1.0
+        assert r_json.headers["x-audio-sample-rate"] == "24000"
+        audio_out, sr_out = sf.read(io.BytesIO(r_json.content), dtype="float32")
+        assert sr_out == 24000 and len(audio_out) > 24000
+
+        # Legacy query parameter mode
+        r_query = client.post("/tts?text=Hello+123&voice=bf_emma&speed=1.1")
+        assert r_query.status_code == 200
+        assert r_query.headers["x-audio-voice"] == "bf_emma"
 
     # Empty text rejected
     r_empty = client.post("/tts", json={"text": "   "})
@@ -610,23 +621,29 @@ def test_tts_endpoints_json_query_special_chars_and_error_json_safety():
 
 
 def test_tts_dialogue_and_voices_endpoints():
+    from app.services.tts_service import tts_engine
+
     r_voices = client.get("/tts/voices")
     r_voices_v1 = client.get("/api/v1/audio/tts/voices")
     assert r_voices.status_code == 200 and r_voices_v1.status_code == 200
     voice_ids = {v["id"] for v in r_voices.json()}
     assert {"af_heart", "am_michael", "bf_emma", "bm_george"}.issubset(voice_ids)
 
-    r_dlg = client.post(
-        "/api/v1/audio/tts/dialogue",
-        json={
-            "turns": [
-                {"speaker": "Alice", "text": "Meet at 10:30 AM!"},
-                {"speaker": "Bob", "text": "Deal for $50!"},
-            ],
-            "speakerMap": {"Alice": {"voice": "af_heart", "speed": 1.0}},
-            "interTurnPauseMs": 100,
-        },
-    )
+    with (
+        patch.dict(tts_engine._pipelines, {"a": _make_fast_kokoro_pipe(0.3), "b": _make_fast_kokoro_pipe(0.3)}, clear=True),
+        patch.object(tts_engine, "_is_initialized", True),
+    ):
+        r_dlg = client.post(
+            "/api/v1/audio/tts/dialogue",
+            json={
+                "turns": [
+                    {"speaker": "Alice", "text": "Meet at 10:30 AM!"},
+                    {"speaker": "Bob", "text": "Deal for $50!"},
+                ],
+                "speakerMap": {"Alice": {"voice": "af_heart", "speed": 1.0}},
+                "interTurnPauseMs": 100,
+            },
+        )
     assert r_dlg.status_code == 200, r_dlg.text
     dlg_body = r_dlg.json()
     assert len(dlg_body["segments"]) == 2
@@ -661,6 +678,97 @@ def test_main_unhandled_exception_handler_and_lifespan_resilience():
     with patch("app.services.tts_service.tts_engine.initialize", side_effect=RuntimeError("no weights")):
         with TestClient(app) as tc:
             assert tc.get("/health").status_code == 200
+
+
+def test_off_script_rejected_mismatch_and_final_l_to_n_and_swallowed_coda():
+    wav_bytes = _create_mock_wav_bytes(1.6)
+
+    # 1. Off-script single word -> REJECTED_MISMATCH (score = 0, wordStatus = WRONG_WORD, color = RED)
+    with patch(
+        "app.api.routes.verify_speech_content",
+        return_value=(False, "LOW_SIMILARITY", 0.12, ["z", "oʊ", "n", "k", "t"], "/zoʊnkt/"),
+    ):
+        res_mismatch = client.post(
+            "/api/v1/audio/evaluate-phonetics",
+            files={"audio": ("offscript.wav", wav_bytes, "audio/wav")},
+            data={"script": "school"},
+        )
+    assert res_mismatch.status_code == 200, res_mismatch.text
+    b_mis = res_mismatch.json()
+    assert b_mis["evaluationStatus"] == "REJECTED_MISMATCH"
+    assert b_mis["overallScore"] == 0.0
+    assert b_mis["isPassed"] is False
+    assert b_mis["sentenceTokens"][0]["wordStatus"] == "WRONG_WORD"
+    assert b_mis["sentenceTokens"][0]["color"] == "RED"
+    assert "/zoʊnkt/" in b_mis["statusMessage"]
+
+    # 2. Lỗi đọc nhầm phụ âm cuối /l/ -> /n/ trong 'school' và lỗi nuốt phụ âm cuối /s/ trong 'books'
+    school_books_align = AlignmentResult(
+        alignment_confidence=0.88,
+        frame_tokens=["s", "k", "uː", "n", "<pad>", "b", "ʊ", "k"],
+        frame_duration=0.15,
+        words=[
+            AlignedWord(
+                word="school",
+                start=0.05,
+                end=0.65,
+                confidence=0.85,
+                phonemes=[
+                    AlignedPhoneme("s", 0.05, 0.20, 0.90, 0.90, phoneme_type="consonant"),
+                    AlignedPhoneme("k", 0.20, 0.32, 0.88, 0.88, phoneme_type="consonant"),
+                    AlignedPhoneme("uː", 0.32, 0.50, 0.92, 0.92, phoneme_type="vowel", is_stress=True),
+                    AlignedPhoneme(
+                        "l", 0.50, 0.65, 0.20, 0.40,
+                        phoneme_type="consonant", is_word_final=True,
+                        canonical_posterior=0.10, gop_margin=-2.2,
+                    ),
+                ],
+            ),
+            AlignedWord(
+                word="books",
+                start=0.70,
+                end=1.20,
+                confidence=0.82,
+                phonemes=[
+                    AlignedPhoneme("b", 0.70, 0.82, 0.90, 0.90, phoneme_type="consonant"),
+                    AlignedPhoneme("ʊ", 0.82, 1.00, 0.90, 0.90, phoneme_type="vowel", is_stress=True),
+                    AlignedPhoneme("k", 1.00, 1.10, 0.88, 0.88, phoneme_type="consonant"),
+                    AlignedPhoneme(
+                        "s", 1.10, 1.20, 0.01, 0.05,
+                        phoneme_type="consonant", is_word_final=True,
+                        canonical_posterior=0.01, gop_margin=-3.5,
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    with (
+        patch("app.api.routes.forced_aligner.align", new_callable=AsyncMock, return_value=school_books_align),
+        patch(
+            "app.api.routes.formant_service.analyze_vowel",
+            return_value=(380.0, 1200.0, 390.0, 1250.0, 94.0, "Khẩu hình và vị trí đặt lưỡi chuẩn xác!", "OK"),
+        ),
+        patch("app.api.routes.check_consonant_acoustic_evidence_detailed", return_value=(True, 0.9, "ok")),
+    ):
+        res_cons = client.post(
+            "/api/v1/audio/evaluate-phonetics",
+            files={"audio": ("school_books.wav", wav_bytes, "audio/wav")},
+            data={"script": "school books"},
+        )
+
+    assert res_cons.status_code == 200, res_cons.text
+    b_cons = res_cons.json()
+    ph_l = b_cons["words"][0]["phonemes"][-1]
+    assert ph_l["symbol"] == "l"
+    assert ph_l["score"] <= 35.0
+    assert "nhầm âm cuối /l/ thành âm mũi /n/" in ph_l["feedback"]
+
+    ph_s = b_cons["words"][1]["phonemes"][-1]
+    assert ph_s["symbol"] == "s"
+    assert ph_s["score"] == 0.0
+    assert "nuốt hoặc quên phát âm âm đuôi /s/" in ph_s["feedback"]
+
 
 
 

@@ -6,7 +6,7 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Volume2,
+  FileText,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -23,16 +23,51 @@ import {
 import { studentApi } from "../api/studentApi";
 import type { SpeakingAiEvaluationResult } from "../types";
 import {
-  cleanShadowingSentence,
   isMockOrBrokenAudioUrl,
-  playSampleAudio,
+  isGradingRubricOrMetaText,
   resolveFullAudioUrl,
-  stopAllSampleAudio,
 } from "@/utils/sampleAudioPlayer";
+
+function resolveCleanPromptQuestion(
+  rawPrompt: string,
+  speakingMode: "QA" | "PART_2" | "PART_3",
+): string {
+  const trimmed = (rawPrompt || "").trim();
+  const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
+    trimmed,
+  );
+  const looksCorrupted =
+    !trimmed ||
+    (/^\(?1[.)]/.test(trimmed) && hasVietnamese) ||
+    (isGradingRubricOrMetaText(trimmed) && hasVietnamese);
+  if (!looksCorrupted) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (speakingMode === "PART_2") {
+    if (lower.includes("bãi biển") || lower.includes("beach")) {
+      return "Describe a memorable trip to the beach.\nYou should say:\n- where the beach is\n- when you went there\n- what main activities you did\nand explain why this trip was memorable to you.";
+    }
+    if (lower.includes("giáo viên") || lower.includes("teacher")) {
+      return "Describe a teacher you like at school.\nYou should say:\n- who this teacher is\n- what subject he or she teaches\n- what he or she is like\nand explain why you like this teacher.";
+    }
+    if (lower.includes("mái xanh") || lower.includes("môi trường") || lower.includes("sinh thái")) {
+      return "Describe an environmental initiative you know about.\nYou should say:\n- what the initiative is\n- how it works in practice\n- what benefits it brings\nand explain why you find it meaningful.";
+    }
+    return "Describe a memorable experience in your life.\nYou should say:\n- when and where it happened\n- who was with you\n- what you did there\nand explain why it was memorable to you.";
+  }
+  if (speakingMode === "PART_3") {
+    return "What are the main advantages and challenges of this topic in modern society, and how do you expect it to develop in the future?";
+  }
+  return "Could you share your personal experience and thoughts on this topic in detail?";
+}
 
 interface SpeakingQAStudioProps {
   questionId: string;
   studentAnswerId?: string;
+  currentStep?: number;
+  totalSteps?: number;
+  speakingMode?: "QA" | "PART_2" | "PART_3";
   promptQuestion: string;
   guidelines?: string;
   keyPoints?: string;
@@ -43,14 +78,20 @@ interface SpeakingQAStudioProps {
 export default function SpeakingQAStudio({
   questionId,
   studentAnswerId,
+  currentStep,
+  totalSteps,
+  speakingMode = "QA",
   promptQuestion,
   guidelines,
   keyPoints,
   savedAudioUrl,
   onAudioSubmitted,
 }: SpeakingQAStudioProps) {
-  // TTS State for reading the question out loud
-  const [isReadingPrompt, setIsReadingPrompt] = useState(false);
+  const displayPrompt = resolveCleanPromptQuestion(promptQuestion, speakingMode);
+  const [selectedPhoneticWordIdx, setSelectedPhoneticWordIdx] = useState<number | null>(null);
+  // Quick scratchpad notes for IELTS Part 2 (1-minute preparation)
+  const [quickNotes, setQuickNotes] = useState("");
+  const [showNotesPad, setShowNotesPad] = useState(false);
 
   // Guidelines accordion
   const [showGuidelines, setShowGuidelines] = useState(true);
@@ -123,7 +164,6 @@ export default function SpeakingQAStudio({
 
   useEffect(() => {
     activeSessionIdRef.current += 1;
-    stopAllSampleAudio();
     stopRecordingResources(true);
     if (prepTimerRef.current) {
       clearInterval(prepTimerRef.current);
@@ -131,10 +171,11 @@ export default function SpeakingQAStudio({
     }
     setIsPrepping(false);
     setPrepSeconds(60);
+    setQuickNotes("");
+    setShowNotesPad(speakingMode === "PART_2");
     setIsRecording(false);
     setRecordingSeconds(0);
     setIsEvaluating(false);
-    setIsReadingPrompt(false);
     setAudioBlob(null);
     setAiResult(null);
     setEvalError(null);
@@ -150,7 +191,7 @@ export default function SpeakingQAStudio({
     );
     // Only fully reset session when moving to a new question/prompt
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId, promptQuestion]);
+  }, [questionId, promptQuestion, speakingMode]);
 
   useEffect(() => {
     if (!ownedBlobUrlRef.current) {
@@ -180,7 +221,6 @@ export default function SpeakingQAStudio({
       if (studentAudioRef.current) {
         studentAudioRef.current.pause();
       }
-      stopAllSampleAudio();
     };
   }, []);
 
@@ -204,33 +244,6 @@ export default function SpeakingQAStudio({
   const stopPrepTimer = () => {
     if (prepTimerRef.current) clearInterval(prepTimerRef.current);
     setIsPrepping(false);
-  };
-
-  // Text-To-Speech for Question Prompt using Kokoro-82M & Web Speech English fallback
-  const handleReadPrompt = async () => {
-    if (isReadingPrompt) {
-      stopAllSampleAudio();
-      setIsReadingPrompt(false);
-      return;
-    }
-
-    const cleanPrompt = cleanShadowingSentence(promptQuestion?.trim());
-    if (!cleanPrompt) return;
-
-    if (studentAudioRef.current && isPlayingStudent) {
-      studentAudioRef.current.pause();
-      setIsPlayingStudent(false);
-    }
-
-    await playSampleAudio(cleanPrompt, {
-      voice: "am_michael",
-      lang: "en-US",
-      rate: 0.96,
-      studentAudioUrl: recordedAudioUrl,
-      onStart: () => setIsReadingPrompt(true),
-      onEnd: () => setIsReadingPrompt(false),
-      onError: () => setIsReadingPrompt(false),
-    });
   };
 
   // Start Mic Recording
@@ -332,12 +345,26 @@ export default function SpeakingQAStudio({
         promptQuestion,
         blob,
         targetId,
+        {
+          speakingMode,
+          keyPoints,
+        },
       );
       if (!isMountedRef.current || activeSessionIdRef.current !== sessionId) {
         return;
       }
-      setAiResult(result);
-      onAudioSubmitted(blob, result);
+      const band = typeof result.overallBand === "number" ? result.overallBand : 0;
+      const enrichedResult: SpeakingAiEvaluationResult = {
+        ...result,
+        speakingMode: result.speakingMode || speakingMode,
+        overallScore:
+          typeof result.overallScore === "number"
+            ? result.overallScore
+            : Math.round((band / 9) * 100 * 10) / 10,
+        isPassed: typeof result.isPassed === "boolean" ? result.isPassed : band >= 5.0,
+      };
+      setAiResult(enrichedResult);
+      onAudioSubmitted(blob, enrichedResult);
     } catch (err: any) {
       if (!isMountedRef.current || activeSessionIdRef.current !== sessionId) {
         return;
@@ -409,12 +436,39 @@ export default function SpeakingQAStudio({
           </div>
           <div>
             <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-              Hỏi - đáp Speaking
+              {speakingMode === "PART_2"
+                ? "IELTS Speaking Part 2 • Cue Card"
+                : speakingMode === "PART_3"
+                ? "IELTS Speaking Part 3 • Discussion"
+                : "Hỏi - đáp Speaking"}
             </h3>
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              {speakingMode === "PART_2"
+                ? "Chuẩn bị 1 phút & độc thoại liên tục 1–2 phút"
+                : speakingMode === "PART_3"
+                ? "Thảo luận chuyên sâu & lập luận học thuật"
+                : "Trả lời câu hỏi tiếng Anh bằng giọng nói"}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Quick Notes toggle for IELTS Part 2 */}
+          {speakingMode === "PART_2" && !aiResult && (
+            <button
+              type="button"
+              onClick={() => setShowNotesPad((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                showNotesPad
+                  ? "bg-blue-50 dark:bg-blue-500/15 border-blue-300 dark:border-blue-500/40 text-blue-700 dark:text-blue-300"
+                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>Ghi chú Cue Card</span>
+            </button>
+          )}
+
           {/* 60s Prep Timer Control */}
           {!isRecording && !aiResult && (
             <button
@@ -433,38 +487,73 @@ export default function SpeakingQAStudio({
               {isPrepping && <SkipForward className="h-3.5 w-3.5 ml-0.5 opacity-75" />}
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={handleReadPrompt}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
-              isReadingPrompt
-                ? "bg-blue-800 border-blue-600 text-white animate-pulse"
-                : "bg-blue-50 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-blue-200 dark:border-slate-700 text-blue-800 dark:text-slate-200"
-            }`}
-          >
-            <Volume2 className="h-4 w-4" />
-            <span>{isReadingPrompt ? "Đang đọc..." : "Nghe"}</span>
-          </button>
         </div>
       </div>
 
-      {/* 1. KHUNG CUE CARD / CÂU HỎI PHỎNG VẤN (QUESTION PROMPT) */}
+      {/* 1. KHUNG CUE CARD / CÂU HỎI PHỎNG VẤN (ENGLISH QUESTION PROMPT) */}
       <div className="rounded-xl border border-blue-200/80 dark:border-blue-600/30 bg-white dark:bg-surface-card p-5 sm:p-6 space-y-3.5 relative overflow-hidden shadow-card">
         <div className="flex items-center justify-between text-xs font-extrabold text-blue-700 dark:text-blue-400">
           <span className="flex items-center gap-1.5 uppercase tracking-wider">
-            <HelpCircle className="h-4 w-4" /> Câu hỏi
+            <HelpCircle className="h-4 w-4" />{" "}
+            {speakingMode === "PART_2"
+              ? "Cue Card Topic"
+              : speakingMode === "PART_3"
+              ? "Discussion Question"
+              : "Interview Question"}
           </span>
-          {keyPoints && (
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-              {keyPoints}
-            </span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+            {speakingMode === "PART_2"
+              ? "Target: 1–2 phút"
+              : speakingMode === "PART_3"
+              ? "Target: 45–90s"
+              : "Target: 30–60s"}
+          </span>
+        </div>
+
+        <div className="text-center space-y-2.5 py-2">
+          {typeof currentStep === "number" && typeof totalSteps === "number" && (
+            <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              {`Câu ${currentStep}/${totalSteps}, đọc trong ${
+                speakingMode === "PART_2" ? 120 : speakingMode === "PART_3" ? 90 : 60
+              } giây`}
+            </div>
+          )}
+          <div className="text-lg sm:text-2xl font-medium text-slate-900 dark:text-white leading-relaxed tracking-normal whitespace-pre-line max-w-2xl mx-auto">
+            {displayPrompt}
+          </div>
+          {aiResult && (
+            <div
+              className={`text-sm font-bold pt-1 ${
+                aiResult.isPassed || Number(aiResult.overallBand ?? 0) >= 5.0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              <div>{`Kết quả: ${Number(aiResult.overallBand ?? 0).toFixed(1)}/9.0 điểm`}</div>
+              <div className="text-xs font-medium mt-0.5">
+                {aiResult.isPassed || Number(aiResult.overallBand ?? 0) >= 5.0
+                  ? "Bạn đã đạt!"
+                  : "Chưa đạt — hãy thử lại!"}
+              </div>
+            </div>
           )}
         </div>
 
-        <p className="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white leading-relaxed tracking-tight">
-          "{promptQuestion}"
-        </p>
+        {/* Part 2 Quick Prep Notes Scratchpad */}
+        {speakingMode === "PART_2" && showNotesPad && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1.5">
+              Dàn ý nhanh của bạn (từ khóa 1 phút chuẩn bị - không gửi chấm điểm):
+            </label>
+            <textarea
+              rows={2}
+              value={quickNotes}
+              onChange={(e) => setQuickNotes(e.target.value)}
+              placeholder="Ghi nhanh từ khóa cho từng ý trên Cue Card..."
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/70 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
 
         {/* Guidelines / Hints Accordion */}
         {guidelines && guidelines.trim().length > 0 && (
@@ -510,7 +599,11 @@ export default function SpeakingQAStudio({
               {formatTimer(recordingSeconds)}
             </span>
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-              / 02:00
+              {speakingMode === "PART_2"
+                ? "/ 02:00"
+                : speakingMode === "PART_3"
+                ? "/ 01:30"
+                : "/ 01:00"}
             </span>
           </div>
 
@@ -820,6 +913,112 @@ export default function SpeakingQAStudio({
               );
             })}
           </div>
+
+          {/* Phân tích Phát âm Âm học từ Python Engine (Wav2Vec2 & Formant IPA) */}
+          {aiResult.phoneticEvaluation && (
+            <div className="p-4 sm:p-5 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-extrabold text-indigo-800 dark:text-indigo-300 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Award className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  Phân tích Phát âm Python (IPA &amp; Formant)
+                </span>
+                {aiResult.phoneticEvaluation.kpi && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 tabular-nums">
+                      {`Phát âm: ${aiResult.phoneticEvaluation.kpi.pronunciation ?? 0}%`}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-700/60 text-slate-700 dark:text-slate-300 tabular-nums">
+                      {`Trôi chảy: ${aiResult.phoneticEvaluation.kpi.fluency ?? 0}%`}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-700/60 text-slate-700 dark:text-slate-300 tabular-nums">
+                      {`Ngữ điệu: ${aiResult.phoneticEvaluation.kpi.prosody ?? 0}%`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {aiResult.phoneticEvaluation.wordRows &&
+                aiResult.phoneticEvaluation.wordRows.length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      Nhấp vào từng từ để xem chi tiết âm vị IPA và nhận xét từ Python acoustic engine:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiResult.phoneticEvaluation.wordRows.map((row, wIdx) => {
+                        const score = Number(row.score ?? 0);
+                        const chipStyle =
+                          score >= 80
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : score >= 60
+                            ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300"
+                            : "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-700/60 dark:bg-rose-950/40 dark:text-rose-300";
+                        const isSelected = selectedPhoneticWordIdx === wIdx;
+                        return (
+                          <button
+                            key={`${row.word}-${wIdx}`}
+                            type="button"
+                            onClick={() =>
+                              setSelectedPhoneticWordIdx(isSelected ? null : wIdx)
+                            }
+                            className={`px-2 py-1 rounded-lg border text-xs font-bold transition cursor-pointer ${chipStyle} ${
+                              isSelected ? "ring-2 ring-indigo-500" : ""
+                            }`}
+                          >
+                            <span>{row.word}</span>
+                            <span className="ml-1 opacity-75 text-[10px] tabular-nums">
+                              {`${score}%`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedPhoneticWordIdx !== null &&
+                      aiResult.phoneticEvaluation.wordRows[selectedPhoneticWordIdx] && (
+                        <div className="p-3 rounded-lg border border-indigo-200/80 dark:border-indigo-700/60 bg-white dark:bg-slate-900 space-y-2 text-xs">
+                          <div className="font-extrabold text-slate-900 dark:text-white flex items-center justify-between">
+                            <span>
+                              {`Chi tiết âm vị từ "${aiResult.phoneticEvaluation.wordRows[selectedPhoneticWordIdx].word}"`}
+                            </span>
+                            <span className="text-indigo-600 dark:text-indigo-400 tabular-nums">
+                              {`${aiResult.phoneticEvaluation.wordRows[selectedPhoneticWordIdx].score ?? 0}%`}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {(
+                              aiResult.phoneticEvaluation.wordRows[selectedPhoneticWordIdx]
+                                .phonemes || []
+                            ).map((ph, pIdx) => (
+                              <div
+                                key={pIdx}
+                                className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700"
+                              >
+                                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                  {ph.ipa}
+                                </span>
+                                <span className="text-[11px] text-slate-600 dark:text-slate-300 truncate flex-1">
+                                  {ph.note}
+                                </span>
+                                <span
+                                  className={`font-bold tabular-nums ${
+                                    (ph.score ?? 0) >= 80
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : (ph.score ?? 0) >= 60
+                                      ? "text-amber-600 dark:text-amber-400"
+                                      : "text-rose-600 dark:text-rose-400"
+                                  }`}
+                                >
+                                  {`${ph.score ?? 0}%`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+            </div>
+          )}
 
           {/* So Sánh Song Song: Bản Bóc Băng Giọng Nói (STT) vs Câu Trả Lời Mẫu Nâng Cấp (Model Answer) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

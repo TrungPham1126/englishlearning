@@ -60,7 +60,8 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         long pendingGrading = assignmentAttemptRepository.countByStatus(AttemptStatus.SUBMITTED);
 
         double completionRate = totalSubmissions > 0
-                ? Math.round(((double) (totalSubmissions - pendingGrading) / totalSubmissions * 100.0) * 10.0) / 10.0
+                ? Math.max(0.0, Math.min(100.0,
+                        Math.round(((double) (totalSubmissions - pendingGrading) / totalSubmissions * 100.0) * 10.0) / 10.0))
                 : 100.0;
 
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM");

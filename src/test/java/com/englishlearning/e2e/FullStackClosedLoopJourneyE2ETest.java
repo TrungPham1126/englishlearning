@@ -88,6 +88,7 @@ import com.englishlearning.curriculum.dto.DaySummaryDto;
 import com.englishlearning.curriculum.dto.LessonRequest;
 import com.englishlearning.curriculum.dto.LessonResponse;
 import com.englishlearning.curriculum.dto.SectionGroupDto;
+import com.englishlearning.curriculum.dto.StudentStreakResponse;
 import com.englishlearning.curriculum.dto.TaskItemDto;
 import com.englishlearning.curriculum.dto.VocabularyRequest;
 import com.englishlearning.curriculum.dto.VocabularyResponse;
@@ -98,6 +99,7 @@ import com.englishlearning.curriculum.service.CurriculumService;
 import com.englishlearning.curriculum.service.DailyStudyPlanService;
 import com.englishlearning.curriculum.service.DocumentStorageService;
 import com.englishlearning.curriculum.service.TtsService;
+import com.englishlearning.curriculum.service.UserStreakService;
 import com.englishlearning.curriculum.service.VocabularyService;
 import com.englishlearning.notification.controller.NotificationController;
 import com.englishlearning.notification.dto.NotificationDto;
@@ -245,6 +247,7 @@ class FullStackClosedLoopJourneyE2ETest {
     @MockBean private KokoroTtsClientService kokoroTtsClientService;
     @MockBean private ExcelImportService excelImportService;
     @MockBean private DailyStudyPlanService dailyStudyPlanService;
+    @MockBean private UserStreakService userStreakService;
     @MockBean private ShadowingService shadowingService;
     @MockBean private WhisperPronunciationService whisperPronunciationService;
     @MockBean private SubmissionService submissionService;
@@ -470,7 +473,6 @@ class FullStackClosedLoopJourneyE2ETest {
             WatchProgressRequest req = inv.getArgument(2);
             if (Boolean.TRUE.equals(req.getCompleted()) || (req.getWatchedSeconds() != null && req.getWatchedSeconds() >= 90)) {
                 state.completedVideoCount = Math.max(state.completedVideoCount, 1);
-                state.studentStreak = Math.max(state.studentStreak, 1);
             }
             return null;
         }).when(videoService).updateWatchProgress(any(UUID.class), any(UUID.class), any(WatchProgressRequest.class));
@@ -599,6 +601,15 @@ class FullStackClosedLoopJourneyE2ETest {
                             .isCompleted(first.getIsCompleted()).sections(sectionGroups).build())
                     .build();
         });
+
+        when(userStreakService.getStreakSummary(any(UUID.class))).thenAnswer(inv -> StudentStreakResponse.builder()
+                .currentStreak(state.studentStreak)
+                .lastActiveDate(state.studentStreak > 0 ? LocalDate.now() : null)
+                .hasHomeworkToday(true)
+                .completedToday(state.studentStreak > 0)
+                .todayCompletedTasks(state.studentStreak > 0 ? 1 : 0)
+                .todayTotalTasks(1)
+                .build());
 
         // --- Acoustic AI Shadowing (uses REAL AiEvaluationServiceImpl + deducts quota) ---
         when(shadowingService.evaluateShadowing(any(), any(), anyString())).thenAnswer(inv -> {
@@ -1223,6 +1234,9 @@ class FullStackClosedLoopJourneyE2ETest {
                 .andExpect(jsonPath("$.data.answersPersisted").value(true));
 
         assertThat(state.studentStreak).isEqualTo(1);
+        mockMvc.perform(get("/api/v1/curriculum/daily-plans/my-streak").with(user(studentUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.currentStreak").value(1));
 
         // =====================================================================
         // JOURNEY 3: TEACHER GRADES SUBJECTIVE ITEMS -> STUDENT RADAR + NOTIF -> ADMIN MONITORING / AUDIT / EXCEL EXPORT / R2

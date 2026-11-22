@@ -96,6 +96,8 @@ class AdminDatabaseControllerTest {
                 .thenReturn(ClassroomDetailedReportDto.builder().classroomId(classId).classroomName("IELTS K01").build());
         when(adminDatabaseService.exportClassroomReportExcel(any(ClassroomDetailedReportDto.class)))
                 .thenReturn(new byte[]{1, 2, 3});
+        when(adminDatabaseService.exportCenterOverviewExcel())
+                .thenReturn(new byte[]{4, 5, 6});
         when(adminDatabaseService.getR2CostReport())
                 .thenReturn(R2CostReportDto.builder().bucketName("test-r2").totalPayableUsd(0.0).build());
 
@@ -118,6 +120,11 @@ class AdminDatabaseControllerTest {
                 .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Bao_cao_lop_IELTS_K01.xlsx")));
 
+        mockMvc.perform(get("/api/v1/admin/database/export-center-report").with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Bao_cao_tong_hop_trung_tam_ELP.xlsx")));
+
         mockMvc.perform(get("/api/v1/admin/database/r2-report").with(user(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.bucketName").value("test-r2"));
@@ -137,5 +144,65 @@ class AdminDatabaseControllerTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/database/r2-report").with(user(student)))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/database/export-center-report").with(user(student)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/database/classrooms/{id}/report-summary", classId).with(user(teacher)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/database/overview"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Kiểm thử report-summary, purge force=true, mã lỗi 400/404 và làm sạch tên file Excel chống ký tự độc hại/SQLi")
+    void adminEndpoints_handleReportSummaryForcePurgeErrorCodesAndSafeFilenameSlug() throws Exception {
+        CustomUserDetails admin = userWithRole(adminId, RoleName.ROLE_ADMIN);
+
+        when(adminDatabaseService.getClassroomDetailedReport(classId))
+                .thenReturn(ClassroomDetailedReportDto.builder()
+                        .classroomId(classId)
+                        .classroomName("Lớp Đàm Thoại'; DROP TABLE users;--")
+                        .totalStudents(12)
+                        .build())
+                .thenReturn(ClassroomDetailedReportDto.builder()
+                        .classroomId(classId)
+                        .classroomName("Lớp Đàm Thoại'; DROP TABLE users;--")
+                        .build())
+                .thenReturn(ClassroomDetailedReportDto.builder()
+                        .classroomId(classId)
+                        .classroomName("   ??? ***   ")
+                        .build());
+        when(adminDatabaseService.exportClassroomReportExcel(any(ClassroomDetailedReportDto.class)))
+                .thenReturn(new byte[]{7, 8, 9});
+
+        mockMvc.perform(get("/api/v1/admin/database/classrooms/{id}/report-summary", classId).with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalStudents").value(12));
+
+        // Tên lớp chứa tiếng Việt có dấu đ/Đ và chuỗi SQL injection -> chuẩn hóa thành slug an toàn
+        mockMvc.perform(get("/api/v1/admin/database/classrooms/{id}/report", classId).with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("Bao_cao_lop_Lop_Dam_Thoai_DROP_TABLE_users_--.xlsx")));
+
+        // Tên lớp chỉ gồm ký tự đặc biệt -> fallback về Bao_cao_lop_lop_hoc.xlsx
+        mockMvc.perform(get("/api/v1/admin/database/classrooms/{id}/report", classId).with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("Bao_cao_lop_lop_hoc.xlsx")));
+
+        // Purge với force=true khi lớp không tồn tại (404) hoặc vi phạm điều kiện (400)
+        UUID missingId = UUID.randomUUID();
+        when(adminDatabaseService.purgeClassroomSubmissions(eq(missingId), eq(true), eq(adminId), any()))
+                .thenThrow(new com.englishlearning.common.exception.ResourceNotFoundException("Không tìm thấy lớp học"));
+        mockMvc.perform(post("/api/v1/admin/database/classrooms/{id}/purge-submissions", missingId)
+                        .param("force", "true")
+                        .with(user(admin)))
+                .andExpect(status().isNotFound());
+
+        when(adminDatabaseService.purgeClassroomSubmissions(eq(classId), eq(false), eq(adminId), any()))
+                .thenThrow(new com.englishlearning.common.exception.BadRequestException("Lớp chưa kết thúc"));
+        mockMvc.perform(post("/api/v1/admin/database/classrooms/{id}/purge-submissions", classId)
+                        .with(user(admin)))
+                .andExpect(status().isBadRequest());
     }
 }

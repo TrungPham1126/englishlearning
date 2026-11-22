@@ -1,6 +1,7 @@
 package com.englishlearning.video.service.impl;
 
 import com.englishlearning.video.dto.R2BucketSnapshot;
+import com.englishlearning.video.dto.R2ObjectStream;
 import com.englishlearning.video.service.R2StorageService;
 import com.englishlearning.video.service.R2UsageTracker;
 import lombok.RequiredArgsConstructor;
@@ -8,12 +9,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.File;
@@ -48,9 +56,10 @@ public class R2StorageServiceImpl implements R2StorageService {
      */
     @Override
     public String uploadFile(String key, File file, String contentType) {
+        String normalizedKey = stripLeadingAndTrailingSlashes(key);
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
-                .key(key)
+                .key(normalizedKey)
                 .contentType(contentType)
                 .build();
 
@@ -58,11 +67,122 @@ public class R2StorageServiceImpl implements R2StorageService {
         if (r2UsageTracker != null) {
             r2UsageTracker.recordPut();
         }
-        return publicUrl + "/" + key;
+        String base = normalizedPublicBaseUrl();
+        return base != null ? base + normalizedKey : "/" + normalizedKey;
+    }
+
+    @Override
+    public boolean isConfigured() {
+        return !isDummyStorageConfigured();
+    }
+
+    @Override
+    public boolean isManagedPublicUrl(String urlOrKey) {
+        if (!isConfigured() || urlOrKey == null || urlOrKey.isBlank()) {
+            return false;
+        }
+        String base = normalizedPublicBaseUrl();
+        return base != null && urlOrKey.trim().startsWith(base);
+    }
+
+    @Override
+    public String extractObjectKey(String urlOrKey) {
+        return extractKey(urlOrKey);
+    }
+
+    @Override
+    public Optional<R2ObjectStream> openObjectStream(String key, String rangeHeader, boolean headOnly) {
+        if (!isConfigured() || key == null || key.isBlank()) {
+            return Optional.empty();
+        }
+        String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
+        if (normalizedKey.isBlank()) {
+            return Optional.empty();
+        }
+        boolean hasRange = rangeHeader != null && !rangeHeader.isBlank();
+
+        try {
+            if (headOnly && !hasRange) {
+                HeadObjectResponse headRes = s3Client.headObject(HeadObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(normalizedKey)
+                        .build());
+                if (r2UsageTracker != null) {
+                    r2UsageTracker.recordGet();
+                }
+                long totalLength = headRes.contentLength() != null ? headRes.contentLength() : -1L;
+                return Optional.of(new R2ObjectStream(
+                        null,
+                        totalLength,
+                        totalLength,
+                        null,
+                        headRes.contentType(),
+                        false,
+                        false
+                ));
+            }
+
+            GetObjectRequest.Builder reqBuilder = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(normalizedKey);
+            if (hasRange) {
+                reqBuilder.range(rangeHeader.trim());
+            }
+
+            ResponseInputStream<GetObjectResponse> responseStream = s3Client.getObject(reqBuilder.build());
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordGet();
+            }
+            GetObjectResponse res = responseStream.response();
+            long contentLength = (res != null && res.contentLength() != null) ? res.contentLength() : -1L;
+            String contentRange = res != null ? res.contentRange() : null;
+            boolean partial = contentRange != null && !contentRange.isBlank();
+            long totalLength = partial ? parseTotalLengthFromContentRange(contentRange, contentLength) : contentLength;
+            String contentType = res != null ? res.contentType() : null;
+
+            if (headOnly) {
+                R2ObjectStream headStream = new R2ObjectStream(
+                        null,
+                        contentLength,
+                        totalLength,
+                        contentRange,
+                        contentType,
+                        partial,
+                        false
+                );
+                try {
+                    responseStream.close();
+                } catch (Exception ignored) {
+                }
+                return Optional.of(headStream);
+            }
+
+            return Optional.of(new R2ObjectStream(
+                    responseStream,
+                    contentLength,
+                    totalLength,
+                    contentRange,
+                    contentType,
+                    partial,
+                    false
+            ));
+        } catch (NoSuchKeyException ex) {
+            return Optional.empty();
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                return Optional.empty();
+            }
+            if (ex.statusCode() == 416) {
+                long totalLength = probeObjectLengthQuietly(normalizedKey);
+                return Optional.of(R2ObjectStream.notSatisfiable(totalLength, null));
+            }
+            throw ex;
+        }
     }
 
     /**
-     * Upload toàn bộ thư mục HLS (master.m3u8 và các file .ts)
+     * Upload toàn bộ thư mục HLS (segment .ts, playlist con và master.m3u8 sau cùng).
+     * Dừng ngay và dọn các object đã upload nếu có bất kỳ file nào thất bại.
      */
     @Override
     public void uploadHlsFolder(String s3Prefix, Path localFolderPath) {
@@ -76,20 +196,35 @@ public class R2StorageServiceImpl implements R2StorageService {
             return;
         }
 
-        log.info(">>> [R2-UPLOAD] Tìm thấy {} files, bắt đầu upload lên R2 bucket: {}", files.length, bucketName);
+        List<File> regularFiles = Arrays.stream(files)
+                .filter(File::isFile)
+                .sorted(Comparator
+                        .comparingInt((File f) -> hlsUploadOrder(f.getName()))
+                        .thenComparing(File::getName))
+                .toList();
 
-        for (File f : files) {
-            if (f.isFile()) {
-                String key = s3Prefix + "/" + f.getName();
-                String contentType = f.getName().endsWith(".m3u8")
-                        ? "application/vnd.apple.mpegurl"
-                        : "video/MP2T";
-                try {
-                    uploadFile(key, f, contentType);
-                    log.info(">>> [R2-UPLOAD] Upload thành công: {}", key);
-                } catch (Exception ex) {
-                    log.error(">>> [R2-UPLOAD] LỖI KHI UPLOAD FILE {}: {}", key, ex.getMessage(), ex);
-                }
+        if (regularFiles.isEmpty()) {
+            log.error(">>> [R2-UPLOAD] KHÔNG TÌM THẤY FILE HỢP LỆ NÀO trong thư mục: {}", folder.getAbsolutePath());
+            return;
+        }
+
+        String normalizedPrefix = stripLeadingAndTrailingSlashes(s3Prefix);
+        log.info(">>> [R2-UPLOAD] Tìm thấy {} files, bắt đầu upload lên R2 bucket: {}", regularFiles.size(), bucketName);
+
+        List<String> uploadedKeys = new ArrayList<>();
+        for (File f : regularFiles) {
+            String key = normalizedPrefix.isEmpty() ? f.getName() : normalizedPrefix + "/" + f.getName();
+            String contentType = f.getName().endsWith(".m3u8")
+                    ? "application/vnd.apple.mpegurl"
+                    : "video/MP2T";
+            try {
+                uploadFile(key, f, contentType);
+                uploadedKeys.add(key);
+                log.info(">>> [R2-UPLOAD] Upload thành công: {}", key);
+            } catch (Exception ex) {
+                log.error(">>> [R2-UPLOAD] LỖI KHI UPLOAD FILE {}: {}", key, ex.getMessage(), ex);
+                cleanupUploadedKeys(uploadedKeys);
+                throw new IllegalStateException("Upload HLS lên R2 thất bại tại file " + key, ex);
             }
         }
     }
@@ -348,6 +483,86 @@ public class R2StorageServiceImpl implements R2StorageService {
             }
         }
         return trimmed.startsWith("/") ? trimmed.substring(1) : trimmed;
+    }
+
+    private String normalizedPublicBaseUrl() {
+        if (publicUrl == null || publicUrl.isBlank()) {
+            return null;
+        }
+        String trimmed = publicUrl.trim();
+        return trimmed.endsWith("/") ? trimmed : trimmed + "/";
+    }
+
+    private int hlsUploadOrder(String fileName) {
+        if ("master.m3u8".equals(fileName)) {
+            return 2;
+        }
+        if (fileName.endsWith(".m3u8")) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private String stripLeadingAndTrailingSlashes(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String result = value.trim();
+        while (result.startsWith("/")) {
+            result = result.substring(1);
+        }
+        while (result.endsWith("/")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
+    }
+
+    private void cleanupUploadedKeys(List<String> uploadedKeys) {
+        if (uploadedKeys == null || uploadedKeys.isEmpty() || isDummyStorageConfigured()) {
+            return;
+        }
+        for (String key : uploadedKeys) {
+            try {
+                s3Client.deleteObject(DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(key)
+                        .build());
+                if (r2UsageTracker != null) {
+                    r2UsageTracker.recordDelete();
+                }
+            } catch (Exception cleanupEx) {
+                log.warn("[R2-UPLOAD] Không thể dọn object đã upload dở {}: {}", key, cleanupEx.getMessage());
+            }
+        }
+    }
+
+    private long parseTotalLengthFromContentRange(String contentRange, long fallbackLength) {
+        int slashIdx = contentRange.lastIndexOf('/');
+        if (slashIdx >= 0 && slashIdx + 1 < contentRange.length()) {
+            String totalPart = contentRange.substring(slashIdx + 1).trim();
+            if (!"*".equals(totalPart)) {
+                try {
+                    return Long.parseLong(totalPart);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return fallbackLength;
+    }
+
+    private long probeObjectLengthQuietly(String normalizedKey) {
+        try {
+            HeadObjectResponse headRes = s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(normalizedKey)
+                    .build());
+            if (r2UsageTracker != null) {
+                r2UsageTracker.recordGet();
+            }
+            return headRes.contentLength() != null ? headRes.contentLength() : -1L;
+        } catch (Exception ignored) {
+            return -1L;
+        }
     }
 
     private boolean isDummyStorageConfigured() {

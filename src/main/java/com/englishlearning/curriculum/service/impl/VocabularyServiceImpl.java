@@ -2,6 +2,7 @@ package com.englishlearning.curriculum.service.impl;
 
 import com.englishlearning.curriculum.service.*;
 
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.VocabularyRequest;
 import com.englishlearning.curriculum.dto.VocabularyResponse;
@@ -19,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,10 +36,17 @@ public class VocabularyServiceImpl implements VocabularyService {
 
     @Transactional
     public VocabularyResponse addVocabulary(UUID lessonId, VocabularyRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu từ vựng không được để trống");
+        }
+        String cleanWord = request.getWord() != null ? request.getWord().trim() : "";
+        if (cleanWord.isBlank()) {
+            throw new BadRequestException("Từ vựng không được để trống");
+        }
+
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài học"));
 
-        String cleanWord = request.getWord() != null ? request.getWord().trim() : "";
         DictionaryLookupService.DictionaryEntryDto info = dictionaryLookupService.lookup(cleanWord);
 
         // Ưu tiên dữ liệu giáo viên nhập, nếu bỏ trống thì dùng dữ liệu tự động cào
@@ -73,28 +82,44 @@ public class VocabularyServiceImpl implements VocabularyService {
     }
 
     public List<VocabularyResponse> getVocabulariesByLesson(UUID lessonId) {
-        return vocabularyRepository.findByLessonId(lessonId).stream()
+        List<VocabularyItem> items = vocabularyRepository.findByLessonId(lessonId);
+        if (items == null) {
+            return Collections.emptyList();
+        }
+        return items.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public VocabularyResponse updateVocabulary(UUID id, VocabularyRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu cập nhật từ vựng không được để trống");
+        }
+
         VocabularyItem item = vocabularyRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy từ vựng"));
 
-        String cleanWord = request.getWord() != null ? request.getWord().trim() : item.getWord();
+        String cleanWord = (request.getWord() != null && !request.getWord().isBlank())
+                ? request.getWord().trim()
+                : item.getWord();
         item.setWord(cleanWord);
 
-        // Nếu IPA hoặc Audio đang trống, tự động bổ sung
+        // Nếu IPA hoặc Audio đang trống, tự động bổ sung mà không ghi đè IPA đang có
         if (request.getIpa() != null && !request.getIpa().isBlank()) {
             item.setIpa(request.getIpa().trim());
-        } else if (item.getIpa() == null || item.getIpa().isBlank()) {
-            DictionaryLookupService.DictionaryEntryDto info = dictionaryLookupService.lookup(cleanWord);
-            if (info != null) {
-                item.setIpa(info.getIpa());
-                if (item.getAudioUrl() == null || item.getAudioUrl().isBlank()) {
-                    item.setAudioUrl(info.getAudioUrl());
+        } else {
+            boolean missingIpa = item.getIpa() == null || item.getIpa().isBlank();
+            boolean missingAudio = item.getAudioUrl() == null || item.getAudioUrl().isBlank();
+            if (missingIpa || missingAudio) {
+                DictionaryLookupService.DictionaryEntryDto info = dictionaryLookupService.lookup(cleanWord);
+                if (info != null) {
+                    if (missingIpa && info.getIpa() != null && !info.getIpa().isBlank()) {
+                        item.setIpa(info.getIpa());
+                    }
+                    if (missingAudio && info.getAudioUrl() != null && !info.getAudioUrl().isBlank()) {
+                        item.setAudioUrl(info.getAudioUrl());
+                    }
                 }
             }
         }
@@ -102,7 +127,7 @@ public class VocabularyServiceImpl implements VocabularyService {
         if (request.getMeaning() != null && !request.getMeaning().isBlank()) {
             item.setMeaning(request.getMeaning().trim());
         }
-        if (request.getExampleSentence() != null && !request.getExampleSentence().isBlank()) {
+        if (request.getExampleSentence() != null) {
             item.setExampleSentence(request.getExampleSentence().trim());
         }
         if (request.getPartOfSpeech() != null && !request.getPartOfSpeech().isBlank()) {

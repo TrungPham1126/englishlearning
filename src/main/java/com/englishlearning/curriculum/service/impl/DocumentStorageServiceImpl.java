@@ -43,16 +43,30 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                 || (endpoint != null && endpoint.toLowerCase().contains("dummy"));
     }
 
+    private String extractSafeExtension(String filename, String defaultExt) {
+        if (filename == null || filename.isBlank()) {
+            return defaultExt;
+        }
+        String baseName = filename.substring(Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\')) + 1);
+        int dotIndex = baseName.lastIndexOf('.');
+        if (dotIndex < 0) {
+            return defaultExt;
+        }
+        String ext = baseName.substring(dotIndex);
+        return ext.matches("^\\.[a-zA-Z0-9]{1,10}$") ? ext : defaultExt;
+    }
+
+    private String buildPublicUrl(String key) {
+        String base = publicUrl != null ? publicUrl.replaceAll("/+$", "") : "";
+        return base + "/" + key;
+    }
+
     public String uploadFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File tải lên không được để trống");
         }
 
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
+        String extension = extractSafeExtension(file.getOriginalFilename(), "");
 
         if (isDummyStorageConfigured()) {
             try {
@@ -87,7 +101,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
             log.info("Upload tài liệu thành công: {}", uniqueFileName);
 
             // Trả về full URL để frontend dùng luôn
-            return publicUrl + "/" + uniqueFileName;
+            return buildPublicUrl(uniqueFileName);
 
         } catch (IOException e) {
             log.error("Lỗi đọc luồng file khi upload lên R2: {}", e.getMessage(), e);
@@ -103,11 +117,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
             throw new IllegalArgumentException("File audio tải lên không được để trống");
         }
 
-        String originalFilename = file.getOriginalFilename();
-        String extension = ".mp3";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
+        String extension = extractSafeExtension(file.getOriginalFilename(), ".mp3");
 
         String uniqueFileName = "audio/" + UUID.randomUUID() + extension;
         String contentType = file.getContentType();
@@ -129,7 +139,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
             }
             log.info("Upload audio thành công: {}", uniqueFileName);
 
-            return publicUrl + "/" + uniqueFileName;
+            return buildPublicUrl(uniqueFileName);
 
         } catch (Exception e) {
             log.warn("Lỗi upload audio lên R2: {}. Sử dụng fallback lưu trữ cục bộ...", e.getMessage());
@@ -154,11 +164,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
         if (sourceFile == null || !sourceFile.exists()) {
             throw new IllegalArgumentException("File audio nguồn không tồn tại");
         }
-        String extension = ".mp3";
-        String name = sourceFile.getName();
-        if (name.contains(".")) {
-            extension = name.substring(name.lastIndexOf("."));
-        }
+        String extension = extractSafeExtension(sourceFile.getName(), ".mp3");
         String uniqueFileName = "audio/" + UUID.randomUUID() + extension;
         String contentType = extension.equalsIgnoreCase(".wav") ? "audio/wav" : "audio/mpeg";
 
@@ -174,7 +180,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                 r2UsageTracker.recordPut();
             }
             log.info("Upload audio thành công lên R2: {}", uniqueFileName);
-            return publicUrl + "/" + uniqueFileName;
+            return buildPublicUrl(uniqueFileName);
         } catch (Exception e) {
             log.warn("Lỗi upload audio lên R2: {}. Sử dụng fallback lưu trữ cục bộ...", e.getMessage());
             try {
@@ -198,10 +204,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
         if (audioBytes == null || audioBytes.length == 0) {
             throw new IllegalArgumentException("Dữ liệu audio bytes không được để trống");
         }
-        String extension = ".wav";
-        if (filename != null && filename.contains(".")) {
-            extension = filename.substring(filename.lastIndexOf("."));
-        }
+        String extension = extractSafeExtension(filename, ".wav");
         String uniqueFileName = "audio/" + UUID.randomUUID() + extension;
         String effectiveContentType = (contentType != null && !contentType.isBlank())
                 ? contentType
@@ -219,7 +222,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                 r2UsageTracker.recordPut();
             }
             log.info("Upload audio bytes thành công lên R2: {} (kích thước: {} bytes)", uniqueFileName, audioBytes.length);
-            return publicUrl + "/" + uniqueFileName;
+            return buildPublicUrl(uniqueFileName);
         } catch (Exception e) {
             log.warn("Lỗi upload audio bytes lên R2: {}. Sử dụng fallback lưu trữ cục bộ...", e.getMessage());
             try {
@@ -244,8 +247,9 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
             return;
         }
         try {
-            if (publicUrl != null && !publicUrl.isBlank() && fileUrl.startsWith(publicUrl + "/")) {
-                String key = fileUrl.substring((publicUrl + "/").length());
+            String basePrefix = publicUrl != null ? publicUrl.replaceAll("/+$", "") + "/" : "";
+            if (!basePrefix.equals("/") && !basePrefix.isBlank() && fileUrl.startsWith(basePrefix)) {
+                String key = fileUrl.substring(basePrefix.length());
                 software.amazon.awssdk.services.s3.model.DeleteObjectRequest deleteRequest =
                         software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder()
                                 .bucket(bucketName)
@@ -257,9 +261,14 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                 }
                 log.info("Đã xóa file cũ khỏi Cloud Storage: {}", key);
             } else if (fileUrl.startsWith("/uploads/")) {
-                java.nio.file.Path localPath = java.nio.file.Paths.get("." + fileUrl);
+                java.nio.file.Path uploadsRoot = java.nio.file.Paths.get("uploads").toAbsolutePath().normalize();
+                java.nio.file.Path localPath = java.nio.file.Paths.get("." + fileUrl).toAbsolutePath().normalize();
+                if (!localPath.startsWith(uploadsRoot)) {
+                    log.warn("Chặn đường dẫn xóa file ngoài thư mục uploads: {}", fileUrl);
+                    return;
+                }
                 java.nio.file.Files.deleteIfExists(localPath);
-                log.info("Đã xóa file audio cục bộ cũ: {}", localPath.toAbsolutePath());
+                log.info("Đã xóa file cục bộ cũ: {}", localPath);
             }
         } catch (Exception e) {
             log.warn("Không thể xóa file cũ {}: {}", fileUrl, e.getMessage());

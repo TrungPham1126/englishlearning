@@ -15,6 +15,7 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.common.config.SecurityConfig;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
 import com.englishlearning.common.exception.InvalidFileFormatException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
@@ -264,5 +265,203 @@ class TeacherAssignmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("PROCESSING"));
         verify(assignmentService).backfillAllAudios();
+    }
+
+    @Test
+    @DisplayName("getAssignmentsByClassroom_whenGradingOnlyTrue_includesExamSpeakingWritingEssayAndAudioResponse")
+    void getAssignmentsByClassroom_whenGradingOnlyTrue_includesExamSpeakingWritingEssayAndAudioResponse() throws Exception {
+        Assignment plainGrammarMcq = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("Grammar MCQ")
+                .skillType(SkillType.GRAMMAR)
+                .isExam(false)
+                .questions(List.of(AssignmentQuestion.builder().questionType(QuestionType.MULTIPLE_CHOICE).build()))
+                .build();
+        Assignment readingExam = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("Midterm Exam")
+                .skillType(SkillType.READING)
+                .isExam(true)
+                .questions(null)
+                .build();
+        Assignment speakingPractice = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("Shadowing")
+                .skillType(SkillType.SPEAKING)
+                .isExam(false)
+                .build();
+        Assignment mixedAudioQuestion = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("Reading + Oral Check")
+                .skillType(SkillType.READING)
+                .isExam(false)
+                .questions(List.of(AssignmentQuestion.builder().questionType(QuestionType.AUDIO_RESPONSE).build()))
+                .build();
+
+        when(assignmentService.getAssignmentsByClassroom(classroomId))
+                .thenReturn(java.util.Arrays.asList(null, plainGrammarMcq, readingExam, speakingPractice, mixedAudioQuestion));
+
+        mockMvc.perform(get("/api/v1/teacher/classrooms/{classroomId}/assignments", classroomId)
+                        .param("gradingOnly", "true")
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].title").value("Midterm Exam"))
+                .andExpect(jsonPath("$.data[1].title").value("Shadowing"))
+                .andExpect(jsonPath("$.data[2].title").value("Reading + Oral Check"));
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenStudentRole_returns403")
+    void createAssignment_whenStudentRole_returns403() throws Exception {
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Homework");
+        req.setClassroomId(classroomId);
+        req.setSkillType("READING");
+
+        mockMvc.perform(post("/api/v1/teacher/assignments")
+                        .with(user(createPrincipal(RoleName.ROLE_STUDENT)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenBadRequestFromService_returns400")
+    void createAssignment_whenBadRequestFromService_returns400() throws Exception {
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Invalid Exam");
+        req.setClassroomId(classroomId);
+        req.setSkillType("WRONG_SKILL");
+        when(assignmentService.createAssignment(any())).thenThrow(new BadRequestException("Invalid skillType: WRONG_SKILL"));
+
+        mockMvc.perform(post("/api/v1/teacher/assignments")
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid skillType: WRONG_SKILL"));
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenStudentRole_returns403")
+    void updateAssignment_whenStudentRole_returns403() throws Exception {
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Edited");
+        req.setClassroomId(classroomId);
+        req.setSkillType("READING");
+
+        mockMvc.perform(put("/api/v1/teacher/assignments/{id}", assignmentId)
+                        .with(user(createPrincipal(RoleName.ROLE_STUDENT)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenInvalidRequest_returns400")
+    void updateAssignment_whenInvalidRequest_returns400() throws Exception {
+        mockMvc.perform(put("/api/v1/teacher/assignments/{id}", assignmentId)
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.title").exists())
+                .andExpect(jsonPath("$.validationErrors.classroomId").exists())
+                .andExpect(jsonPath("$.validationErrors.skillType").exists());
+
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenAssignmentNotFound_returns404")
+    void updateAssignment_whenAssignmentNotFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Updated");
+        req.setClassroomId(classroomId);
+        req.setSkillType("WRITING");
+        when(assignmentService.updateAssignment(eq(missingId), any()))
+                .thenThrow(new ResourceNotFoundException("Assignment not found"));
+
+        mockMvc.perform(put("/api/v1/teacher/assignments/{id}", missingId)
+                        .with(user(createPrincipal(RoleName.ROLE_ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("deleteAssignment_whenStudentRole_returns403")
+    void deleteAssignment_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/teacher/assignments/{id}", assignmentId)
+                        .with(user(createPrincipal(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Test
+    @DisplayName("deleteAssignment_whenAssignmentNotFound_returns404")
+    void deleteAssignment_whenAssignmentNotFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Assignment not found"))
+                .when(assignmentService).deleteAssignment(missingId);
+
+        mockMvc.perform(delete("/api/v1/teacher/assignments/{id}", missingId)
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenTextBlank_returns400")
+    void synthesizeAudio_whenTextBlank_returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/teacher/assignments/synthesize-audio")
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(ttsService);
+    }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenVoiceAndSpeedExplicitNull_usesDefaults")
+    void synthesizeAudio_whenVoiceAndSpeedExplicitNull_usesDefaults() throws Exception {
+        when(ttsService.synthesizeAudio("Hello students", "af_heart", "1.0x"))
+                .thenReturn("/api/v1/files/audio/default.wav");
+
+        mockMvc.perform(post("/api/v1/teacher/assignments/synthesize-audio")
+                        .with(user(createPrincipal(RoleName.ROLE_TEACHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"Hello students\",\"voice\":null,\"speed\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("/api/v1/files/audio/default.wav"));
+
+        verify(ttsService).synthesizeAudio("Hello students", "af_heart", "1.0x");
+    }
+
+    @Test
+    @DisplayName("getExamsByClassroom_whenStudentRole_returns403")
+    void getExamsByClassroom_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/teacher/classrooms/{classroomId}/exams", classroomId)
+                        .with(user(createPrincipal(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assignmentService);
+    }
+
+    @Test
+    @DisplayName("getClassroomQuestionBank_whenStudentRole_returns403")
+    void getClassroomQuestionBank_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/teacher/classrooms/{classroomId}/question-bank", classroomId)
+                        .with(user(createPrincipal(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(assignmentService);
     }
 }

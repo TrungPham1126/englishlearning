@@ -35,6 +35,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -170,5 +172,56 @@ class AiTtsControllerTest {
                         .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value("af_heart"));
+    }
+
+    @Test
+    @DisplayName("POST /repair: cắt khoảng trắng voice khi text=null, chuẩn hóa voice rỗng về null, hỗ trợ ADMIN & chặn 401 khi chưa đăng nhập")
+    void repairAndReadEndpoints_trimVoiceWithoutTextNormalizeBlankVoiceAndEnforceAuth() throws Exception {
+        UUID questionId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/ai/tts/questions/{questionId}/repair", questionId))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/ai/tts/questions/{questionId}/status", questionId))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/ai/tts/voices"))
+                .andExpect(status().isUnauthorized());
+
+        ExerciseAudioResponseDto dto = ExerciseAudioResponseDto.builder()
+                .questionId(questionId).status(AudioGenerationStatus.READY).url("https://cdn.test/a.wav").build();
+        when(exerciseAudioService.repairAudio(eq(questionId), eq(adminId), eq(false), isNull(), eq("bm_george")))
+                .thenReturn(dto);
+        when(exerciseAudioService.repairAudio(eq(questionId), eq(studentId), eq(true), eq("Read again"), isNull()))
+                .thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/ai/tts/questions/{questionId}/repair", questionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"voice\":\"  bm_george  \"}")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.url").value("https://cdn.test/a.wav"));
+
+        mockMvc.perform(post("/api/v1/ai/tts/questions/{questionId}/repair", questionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"Read again\",\"voice\":\"   \"}")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk());
+
+        when(exerciseAudioService.getAudioStatus(questionId))
+                .thenReturn(ExerciseAudioResponseDto.builder().questionId(questionId).status(AudioGenerationStatus.READY).build());
+        when(exerciseAudioService.getKokoroVoices())
+                .thenReturn(List.of(KokoroVoiceDto.builder().id("bm_george").name("George").build()));
+
+        mockMvc.perform(get("/api/v1/ai/tts/questions/{questionId}/status", questionId)
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("READY"));
+        mockMvc.perform(get("/api/v1/ai/tts/voices")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("bm_george"));
+
+        verify(exerciseAudioService).repairAudio(eq(questionId), eq(adminId), eq(false), isNull(), eq("bm_george"));
+        verify(exerciseAudioService).repairAudio(eq(questionId), eq(studentId), eq(true), eq("Read again"), isNull());
     }
 }

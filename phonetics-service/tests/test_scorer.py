@@ -547,3 +547,49 @@ def test_generate_phoneme_pedagogical_feedback_all_tiers():
     assert "thiếu bằng chứng" in generate_phoneme_pedagogical_feedback("p", 20.0, "consonant", acoustic_detail="năng lượng quá nhỏ")
     assert "sai lệch" in generate_phoneme_pedagogical_feedback("p", 20.0, "consonant")
 
+
+def test_swallowed_final_consonant_zero_contradiction_feedback_and_calibrated_completeness(tmp_path):
+    id_scorer = Scorer(calibrator=ScoringCalibrator(mode="identity"))
+
+    # 1. Nuốt âm đuôi (is_word_final=True): score < 20 bị kẹp trần <= 52.0; 20 <= score < 60 bị kẹp trần <= 65.0
+    p_v = PhonemeSchema(symbol="aɪ", type=PhonemeType.VOWEL, score=95.0, status=MeasurementStatus.OK)
+    p_c_swallowed = PhonemeSchema(symbol="k", type=PhonemeType.CONSONANT, score=12.0, status=MeasurementStatus.OK)
+    p_c_weak = PhonemeSchema(symbol="k", type=PhonemeType.CONSONANT, score=45.0, status=MeasurementStatus.OK)
+    al_v = AlignedPhoneme(symbol="aɪ", start=0.0, end=0.15, is_stress=True)
+    al_c_final = AlignedPhoneme(symbol="k", start=0.15, end=0.20, is_word_final=True)
+
+    assert id_scorer.score_word([p_v, p_c_swallowed], [al_v, al_c_final]) <= 52.0
+    assert id_scorer.score_word([p_v, p_c_weak], [al_v, al_c_final]) <= 65.0
+
+    # 2. Zero-contradiction pedagogical feedback: nguyên âm điểm trung bình/thấp (65 hoặc 40) KHÔNG được trả câu khen "chuẩn xác"
+    fb_mid = generate_phoneme_pedagogical_feedback(
+        "iː", 65.0, "vowel", formant_feedback="Khẩu hình và vị trí đặt lưỡi chuẩn xác!"
+    )
+    fb_low = generate_phoneme_pedagogical_feedback(
+        "iː", 40.0, "vowel", formant_feedback="Khẩu hình và vị trí đặt lưỡi chuẩn xác!"
+    )
+    assert "chuẩn xác!" not in fb_mid
+    assert "tương đối tốt" in fb_mid
+    assert "chưa chuẩn xác" in fb_low
+
+    # 3. Hiệu chuẩn (calibration) có model 'overall' khi completeness < 95% phải nhân tỷ lệ completeness_ratio
+    cal_file = tmp_path / "cal_comp.json"
+    cal_file.write_text(
+        json.dumps({
+            "models": {
+                "overall": {
+                    "features": ["raw_pronunciation"],
+                    "means": [80.0],
+                    "stds": [10.0],
+                    "weights": [5.0],
+                    "intercept": 80.0,
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+    cal_scorer = Scorer(calibrator=ScoringCalibrator(mode="calibrated", calibration_path=cal_file))
+    res_half = cal_scorer.calibrate_utterance_scores(80.0, 80.0, 80.0, completeness=50.0, features={})
+    assert res_half["overall"] == 40.0
+
+

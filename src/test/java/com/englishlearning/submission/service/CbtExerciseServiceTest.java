@@ -11,12 +11,14 @@ import com.englishlearning.submission.dto.GradingResult;
 import com.englishlearning.submission.dto.SubmissionRequest;
 import com.englishlearning.submission.entity.AssignmentAttempt;
 import com.englishlearning.submission.entity.AttemptStatus;
+import com.englishlearning.submission.entity.StudentAnswer;
 import com.englishlearning.submission.repository.AssignmentAttemptRepository;
 import com.englishlearning.submission.repository.StudentAnswerRepository;
 import com.englishlearning.submission.service.impl.CbtExerciseServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -314,5 +316,165 @@ class CbtExerciseServiceTest {
         assertThat(attempt.getAnswers().get(1).getTextResponse()).isEqualTo("My essay response");
         verify(studentAnswerRepository, times(2)).save(any());
         verify(attemptRepository).save(attempt);
+    }
+
+    @Test
+    @DisplayName("submitCbtExercise_whenRequestNull_throwsBadRequestException")
+    void submitCbtExercise_whenRequestNull_throwsBadRequestException() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> cbtExerciseService.submitCbtExercise(studentId, attemptId, null, ON_TIME_SUBMIT))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(attemptRepository, questionRepository, gradingEngineService, rabbitTemplate);
+    }
+
+    @Test
+    @DisplayName("submitCbtExercise_whenAttemptHasNullAnswersListAndExistingAnswer_updatesExistingAnswerAndFallsBackToAssignmentId")
+    void submitCbtExercise_whenAttemptHasNullAnswersListAndExistingAnswer_updatesExistingAnswerAndFallsBackToAssignmentId() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID q1Id = UUID.randomUUID();
+
+        Assignment assignment = Assignment.builder().id(assignmentId).build();
+        AssignmentAttempt attemptWithNullList = AssignmentAttempt.builder()
+                .id(attemptId)
+                .assignment(assignment)
+                .startedAt(FIXED_START_TIME)
+                .answers(null)
+                .build();
+
+        SubmissionRequest reqWithoutAssId = SubmissionRequest.builder()
+                .assignmentId(null)
+                .answers(List.of(SubmissionRequest.AnswerDto.builder().questionId(q1Id).textAnswer("First").build()))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attemptWithNullList));
+        when(questionRepository.findByAssignmentId(assignmentId)).thenReturn(List.of());
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder()
+                        .totalScore(1.0)
+                        .maxPossibleScore(1.0)
+                        .scaledScore(10.0)
+                        .earnedPointsPerQuestion(Map.of(q1Id, 1.0))
+                        .correctnessPerQuestion(Map.of(q1Id, true))
+                        .requiresAiGrading(false)
+                        .build()
+        );
+
+        AttemptResponse res1 = cbtExerciseService.submitCbtExercise(studentId, attemptId, reqWithoutAssId, ON_TIME_SUBMIT);
+        assertThat(res1.getScore()).isEqualTo(10.0);
+        assertThat(attemptWithNullList.getAnswers()).hasSize(1);
+        verify(questionRepository).findByAssignmentId(assignmentId);
+
+        // Existing answer updated in place when question already present
+        UUID attempt2Id = UUID.randomUUID();
+        StudentAnswer existingAns = StudentAnswer.builder()
+                .id(UUID.randomUUID())
+                .question(AssignmentQuestion.builder().id(q1Id).build())
+                .textResponse("Old text")
+                .build();
+        AssignmentAttempt attemptWithExisting = AssignmentAttempt.builder()
+                .id(attempt2Id)
+                .assignment(assignment)
+                .startedAt(FIXED_START_TIME)
+                .answers(new ArrayList<>(List.of(existingAns)))
+                .build();
+        SubmissionRequest updateReq = SubmissionRequest.builder()
+                .assignmentId(assignmentId)
+                .answers(List.of(SubmissionRequest.AnswerDto.builder().questionId(q1Id).textAnswer("Updated text").build()))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attempt2Id, studentId)).thenReturn(Optional.of(attemptWithExisting));
+
+        cbtExerciseService.submitCbtExercise(studentId, attempt2Id, updateReq, ON_TIME_SUBMIT);
+
+        assertThat(attemptWithExisting.getAnswers()).hasSize(1);
+        assertThat(existingAns.getTextResponse()).isEqualTo("Updated text");
+        assertThat(existingAns.getEarnedPoints()).isEqualTo(1.0);
+        assertThat(existingAns.getIsCorrect()).isTrue();
+    }
+
+    @Test
+    @DisplayName("submitCbtExercise_whenSubmitTimeNullAndNoTimeLimit_usesCurrentTimeAndCompletes")
+    void submitCbtExercise_whenSubmitTimeNullAndNoTimeLimit_usesCurrentTimeAndCompletes() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+
+        Assignment noLimitAss = Assignment.builder().id(assignmentId).timeLimitMinutes(null).build();
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .assignment(noLimitAss)
+                .startedAt(Instant.parse("2020-01-01T00:00:00Z"))
+                .answers(new ArrayList<>())
+                .build();
+        SubmissionRequest req = SubmissionRequest.builder().assignmentId(assignmentId).answers(List.of()).build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assignmentId)).thenReturn(List.of());
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder()
+                        .totalScore(0.0)
+                        .maxPossibleScore(1.0)
+                        .scaledScore(0.0)
+                        .earnedPointsPerQuestion(Collections.emptyMap())
+                        .correctnessPerQuestion(Collections.emptyMap())
+                        .requiresAiGrading(false)
+                        .build()
+        );
+
+        AttemptResponse response = cbtExerciseService.submitCbtExercise(studentId, attemptId, req, null);
+
+        assertThat(response.getStatus()).isEqualTo(AttemptStatus.COMPLETED.name());
+        assertThat(attempt.getSubmittedAt()).isNotNull();
+        verify(userStreakService).updateStreakOnPlanCompletion(eq(studentId), any(LocalDate.class));
+    }
+
+    @Test
+    @DisplayName("submitCbtExercise_whenRequiresAiGrading_sendsExpectedPayloadToRabbitQueue")
+    @SuppressWarnings("unchecked")
+    void submitCbtExercise_whenRequiresAiGrading_sendsExpectedPayloadToRabbitQueue() {
+        UUID studentId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID essayQId = UUID.randomUUID();
+
+        Assignment assignment = Assignment.builder().id(assignmentId).timeLimitMinutes(60).build();
+        AssignmentAttempt attempt = AssignmentAttempt.builder()
+                .id(attemptId)
+                .assignment(assignment)
+                .startedAt(FIXED_START_TIME)
+                .answers(new ArrayList<>())
+                .build();
+        SubmissionRequest req = SubmissionRequest.builder()
+                .assignmentId(assignmentId)
+                .answers(List.of(SubmissionRequest.AnswerDto.builder().questionId(essayQId).textAnswer("Essay body").build()))
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(attemptId, studentId)).thenReturn(Optional.of(attempt));
+        when(questionRepository.findByAssignmentId(assignmentId)).thenReturn(List.of());
+        when(gradingEngineService.evaluateSubmission(any(), any())).thenReturn(
+                GradingResult.builder()
+                        .totalScore(0.0)
+                        .maxPossibleScore(10.0)
+                        .scaledScore(0.0)
+                        .earnedPointsPerQuestion(Map.of(essayQId, 0.0))
+                        .correctnessPerQuestion(Map.of(essayQId, false))
+                        .requiresAiGrading(true)
+                        .aiGradedQuestionIds(List.of(essayQId))
+                        .build()
+        );
+
+        cbtExerciseService.submitCbtExercise(studentId, attemptId, req, ON_TIME_SUBMIT);
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(rabbitTemplate).convertAndSend(eq(CbtExerciseServiceImpl.AI_GRADING_QUEUE), payloadCaptor.capture());
+        assertThat(payloadCaptor.getValue())
+                .containsEntry("attemptId", attemptId.toString())
+                .containsEntry("studentId", studentId.toString())
+                .containsEntry("assignmentId", assignmentId.toString())
+                .containsEntry("questionIds", List.of(essayQId));
     }
 }

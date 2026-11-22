@@ -90,6 +90,28 @@ public class CurriculumController {
                 curriculumService.getDocumentsByLesson(lessonId)));
     }
 
+    @PutMapping("/documents/{documentId}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Cập nhật thông tin tài liệu bài học")
+    public ResponseEntity<ApiResponse<DocumentResponse>> updateDocument(
+            @PathVariable UUID documentId,
+            @Valid @RequestBody DocumentUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Document updated successfully",
+                curriculumService.updateDocument(documentId, request)));
+    }
+
+    @PutMapping(value = "/documents/{documentId}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Thay thế file tài liệu bài học")
+    public ResponseEntity<ApiResponse<DocumentResponse>> replaceDocumentFile(
+            @PathVariable UUID documentId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "fileName", required = false) String fileName,
+            @RequestParam(value = "fileType", required = false) String fileType) {
+        return ResponseEntity.ok(ApiResponse.success("Document file replaced successfully",
+                curriculumService.replaceDocumentFile(documentId, file, fileName, fileType)));
+    }
+
     @DeleteMapping("/documents/{documentId}")
     @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
     @Operation(summary = "Xóa tài liệu bài học")
@@ -117,6 +139,16 @@ public class CurriculumController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Grammar topic added successfully",
                         curriculumService.addGrammarTopic(lessonId, request)));
+    }
+
+    @PutMapping("/grammar/{topicId}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    @Operation(summary = "Cập nhật chủ điểm ngữ pháp")
+    public ResponseEntity<ApiResponse<GrammarTopicResponse>> updateGrammarTopic(
+            @PathVariable UUID topicId,
+            @Valid @RequestBody GrammarTopicRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Grammar topic updated successfully",
+                curriculumService.updateGrammarTopic(topicId, request)));
     }
 
     @DeleteMapping("/grammar/{topicId}")

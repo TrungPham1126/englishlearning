@@ -73,7 +73,7 @@ export default function AdminDatabaseStoragePage() {
       const res = await adminApi.getClassroomDetailedReport(cls.id);
       setPreviewReport(res);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Không thể tải báo cáo chi tiết lớp.");
+      alert(err.response?.data?.message || "Tải báo cáo lớp thất bại.");
     } finally {
       setPreviewLoading(false);
     }
@@ -84,7 +84,7 @@ export default function AdminDatabaseStoragePage() {
     try {
       await adminApi.downloadClassroomReportExcel(classroomId, classroomName);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Không thể xuất file Excel cho lớp học.");
+      alert(err.response?.data?.message || "Xuất Excel lớp thất bại.");
     } finally {
       setExportingClassId(null);
     }
@@ -103,7 +103,7 @@ export default function AdminDatabaseStoragePage() {
       setTargetClassroom(null);
       await loadAllData(true);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Không thể thực hiện thao tác dữ liệu.");
+      alert(err.response?.data?.message || "Thao tác dữ liệu thất bại.");
     } finally {
       setActionProcessing(false);
     }
@@ -121,14 +121,9 @@ export default function AdminDatabaseStoragePage() {
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800/80">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Quản Lý Cơ Sở Dữ Liệu &amp; Chi Tiêu Cloud R2
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Dọn dẹp dữ liệu bài làm lớp đã hoàn thành, xuất báo cáo Excel từng lớp và giám sát chi phí lưu trữ Cloudflare R2.
-          </p>
-        </div>
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Quản trị DB &amp; Cloud R2
+        </h1>
 
         <button
           type="button"
@@ -137,7 +132,7 @@ export default function AdminDatabaseStoragePage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs cursor-pointer transition disabled:opacity-50"
         >
           <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
-          Đồng Bộ Thống Kê
+          Đồng bộ
         </button>
       </div>
 
@@ -169,7 +164,7 @@ export default function AdminDatabaseStoragePage() {
               : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
-          <Database size={16} /> Cơ Sở Dữ Liệu Lớp Học ({overview?.totalClassrooms ?? 0})
+          <Database size={16} /> CSDL Lớp học ({overview?.totalClassrooms ?? 0})
         </button>
 
         <button
@@ -181,7 +176,7 @@ export default function AdminDatabaseStoragePage() {
               : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
-          <Cloud size={16} /> Báo Cáo Chi Tiêu Cloud R2
+          <Cloud size={16} /> Chi phí R2
         </button>
       </div>
 

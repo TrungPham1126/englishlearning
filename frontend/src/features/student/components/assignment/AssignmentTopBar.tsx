@@ -12,6 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import type { AttemptResponse } from '@/features/student/types';
+import { normalizeScoreTo10 } from '@/utils/scoreScale';
 
 export interface AssignmentTopBarProps {
   attempt: AttemptResponse | null;
@@ -72,18 +73,21 @@ export const AssignmentTopBar: React.FC<AssignmentTopBarProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Tính điểm số chuẩn xác cho phần Review
+  const normalizedAttemptScore = normalizeScoreTo10(attempt?.score);
+  const normalizedTotalScore = normalizeScoreTo10((attempt as any)?.totalScore);
+
+  // Tính điểm số chuẩn xác cho phần Review (chuẩn thang 10)
   const displayScore = (() => {
     if (reviewStats.totalQuestions > 0 && reviewStats.correctCount === reviewStats.totalQuestions) {
       return '10.0';
     }
-    if (attempt?.score != null && Number(attempt.score) > 0) return Number(attempt.score).toFixed(1);
-    if ((attempt as any)?.totalScore != null && Number((attempt as any).totalScore) > 0) return Number((attempt as any).totalScore).toFixed(1);
+    if (normalizedAttemptScore != null && normalizedAttemptScore > 0) return normalizedAttemptScore.toFixed(1);
+    if (normalizedTotalScore != null && normalizedTotalScore > 0) return normalizedTotalScore.toFixed(1);
     if (reviewStats.totalQuestions > 0 && reviewStats.correctCount > 0) {
       return ((reviewStats.correctCount / reviewStats.totalQuestions) * 10).toFixed(1);
     }
-    if (attempt?.score != null) return Number(attempt.score).toFixed(1);
-    if ((attempt as any)?.totalScore != null) return Number((attempt as any).totalScore).toFixed(1);
+    if (normalizedAttemptScore != null) return normalizedAttemptScore.toFixed(1);
+    if (normalizedTotalScore != null) return normalizedTotalScore.toFixed(1);
     return '0.0';
   })();
 

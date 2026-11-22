@@ -27,6 +27,9 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".webp", ".gif");
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+            "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
+    );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
     @Override
@@ -41,17 +44,26 @@ public class UserServiceImpl implements UserService {
         }
 
         String originalFilename = file.getOriginalFilename();
-        String extension = ".jpg";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+        if (originalFilename != null
+                && (originalFilename.contains("/") || originalFilename.contains("\\") || originalFilename.contains(".."))) {
+            throw new BadRequestException("Tên file ảnh không hợp lệ");
         }
 
         String contentType = file.getContentType();
-        boolean validContentType = contentType != null && contentType.toLowerCase().startsWith("image/");
-        boolean validExtension = ALLOWED_EXTENSIONS.contains(extension);
+        String normalizedContentType = contentType != null ? contentType.toLowerCase().trim() : "";
+        boolean validContentType = ALLOWED_CONTENT_TYPES.contains(normalizedContentType);
 
-        if (!validContentType && !validExtension) {
-            throw new BadRequestException("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+        String extension;
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+            if (!ALLOWED_EXTENSIONS.contains(extension)) {
+                throw new BadRequestException("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+            }
+        } else {
+            if (!validContentType) {
+                throw new BadRequestException("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+            }
+            extension = ".jpg";
         }
 
         User user = userRepository.findById(userId)
@@ -64,7 +76,10 @@ public class UserServiceImpl implements UserService {
             }
 
             String fileName = "avatar_" + userId + "_" + System.currentTimeMillis() + extension;
-            Path targetPath = uploadDir.resolve(fileName);
+            Path targetPath = uploadDir.resolve(fileName).normalize();
+            if (!targetPath.startsWith(uploadDir.normalize())) {
+                throw new BadRequestException("Tên file ảnh không hợp lệ");
+            }
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
             String savedPath = "/uploads/avatars/" + fileName;

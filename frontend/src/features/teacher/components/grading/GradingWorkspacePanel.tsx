@@ -17,6 +17,7 @@ import type {
   GradingSubmissionDetail,
 } from "./gradingTypes";
 import { AiEvaluationCard } from "./AiEvaluationCard";
+import { normalizeScoreTo10 } from "@/utils/scoreScale";
 
 interface GradingWorkspacePanelProps {
   selectedSub: GradingSubmission | null;
@@ -85,8 +86,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
             Chưa chọn bài nộp
           </h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
-            Chọn một học viên từ danh sách bên trái để xem nội dung bài Viết hoặc Luyện nói, kết quả
-            gợi ý từ AI và nhập điểm số.
+            Chọn học viên bên trái
           </p>
         </div>
       </div>
@@ -98,7 +98,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
       <div className="lg:col-span-7">
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-400 flex flex-col items-center justify-center min-h-[450px]">
           <Loader2 className="animate-spin h-8 w-8 text-blue-600 mb-3" />
-          <p className="text-xs">Đang tải chi tiết bài làm của học sinh...</p>
+          <p className="text-xs">Đang tải...</p>
         </div>
       </div>
     );
@@ -123,22 +123,21 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               </h2>
               <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                 {isExam
-                  ? "BÀI THI CHÍNH THỨC (LƯU TOÀN BỘ BÀI LÀM)"
+                  ? "BÀI THI"
                   : isWritingSkill
-                    ? "Viết đoạn văn (Writing)"
+                    ? "Writing"
                     : isSpeakingSkill
-                      ? "Luyện nói (Speaking)"
-                      : "Chấm Tự luận / Nói"}
+                      ? "Speaking"
+                      : "Tự luận / Nói"}
               </span>
               {submissionDetail.isCheatingFlagged && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/40">
                   <ShieldAlert className="h-3 w-3" />
-                  ĐÁNH DẤU GIAN LẬN ({submissionDetail.violationCount ?? 3} lần vi phạm)
+                  GIAN LẬN ({submissionDetail.violationCount ?? 3} lần)
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Học sinh:{" "}
               <strong className="text-slate-800 dark:text-slate-200">
                 {selectedSub.studentName}
               </strong>{" "}
@@ -151,10 +150,10 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               submissionDetail.score !== undefined && (
                 <div className="rounded-xl border border-blue-600/30 bg-blue-600/10 px-3 py-1.5 text-right">
                   <span className="block text-[10px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-bold">
-                    Điểm hiện tại
+                    Điểm
                   </span>
                   <span className="text-lg font-black text-blue-800 dark:text-blue-300">
-                    {submissionDetail.score} / 10
+                    {normalizeScoreTo10(submissionDetail.score)}/10
                   </span>
                 </div>
               )}
@@ -180,8 +179,8 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               >
                 <ShieldAlert className="mr-1.5 h-4 w-4 shrink-0" />
                 {submissionDetail.isCheatingFlagged
-                  ? `Cảnh báo gian lận: Vi phạm ${submissionDetail.violationCount ?? 3}/${submissionDetail.maxViolations ?? 3} lần`
-                  : `Nhắc nhở rời màn hình: ${submissionDetail.violationCount ?? 0}/${submissionDetail.maxViolations ?? 3} lần`}
+                  ? `Gian lận: ${submissionDetail.violationCount ?? 3}/${submissionDetail.maxViolations ?? 3} vi phạm`
+                  : `Rời màn hình: ${submissionDetail.violationCount ?? 0}/${submissionDetail.maxViolations ?? 3} lần`}
               </span>
             </div>
             {submissionDetail.cheatingReason && (
@@ -194,7 +193,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                 {parsedViolations.map((v: any, idx: number) => (
                   <li key={idx}>
                     • Lần {v.count ?? idx + 1} [{v.eventType || "FOCUS_LOST"}]:{" "}
-                    {v.reason || "Rời khỏi chế độ toàn màn hình"}
+                    {v.reason || "Rời toàn màn hình"}
                   </li>
                 ))}
               </ul>
@@ -207,8 +206,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2">
             <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
             <span>
-              Bài luyện tập thường (Đọc/Nghe/Ngữ pháp/Từ vựng) chỉ lưu trạng thái{" "}
-              <strong>Đã hoàn thành</strong> và điểm tổng, không lưu từng đáp án chi tiết.
+              Chỉ lưu điểm tổng, không lưu đáp án.
             </span>
           </div>
         )}
@@ -218,7 +216,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
           <div className="rounded-xl border border-blue-500/30 bg-blue-600/10 p-4 space-y-1.5">
             <div className="flex items-center text-xs font-bold text-blue-800 dark:text-blue-300">
               <Bot className="mr-1.5 h-4 w-4 text-blue-700 dark:text-blue-400" />
-              Đánh Giá Tổng Quan Từ AI (AI Evaluator)
+              Đánh giá AI
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
               {submissionDetail.aiFeedback}
@@ -269,12 +267,12 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                         {isEssay ? (
                           <>
                             <FileText className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            VIẾT ĐOẠN VĂN
+                            VIẾT
                           </>
                         ) : isAudio ? (
                           <>
                             <Mic className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                            LUYỆN NÓI
+                            NÓI
                           </>
                         ) : (
                           q.questionType || "CÂU HỎI"
@@ -288,7 +286,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                     <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200 dark:border-slate-800">
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center mb-1">
                         <Volume2 className="h-3.5 w-3.5 mr-1 text-emerald-500 dark:text-emerald-400" />
-                        Audio đề bài:
+                        Audio đề:
                       </span>
                       <audio src={q.mediaUrl} controls className="h-8 w-full" />
                     </div>
@@ -297,7 +295,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                   {/* Bài làm của học sinh */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                      <span>Bài làm của học viên:</span>
+                      <span>Bài làm:</span>
                       {isEssay && q.studentAnswer && (
                         <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-mono">
                           {wordCount} từ
@@ -330,7 +328,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                                 {opt.matchText ? ` → ${opt.matchText}` : ""}
                               </span>
                               <div className="flex items-center gap-1.5 shrink-0 text-[10px] font-bold">
-                                {opt.isCorrect && <span className="text-emerald-600">Đáp án đúng</span>}
+                                {opt.isCorrect && <span className="text-emerald-600">Đúng</span>}
                                 {isChosen && <span className="uppercase">• HV chọn</span>}
                               </div>
                             </div>
@@ -344,7 +342,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                         </div>
                         {q.correctAnswer && !isEssay && (
                           <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                            Đáp án tham khảo: <strong>{q.correctAnswer}</strong>
+                            Đáp án: <strong>{q.correctAnswer}</strong>
                           </p>
                         )}
                       </div>
@@ -352,13 +350,13 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 space-y-2 shadow-2xs">
                         <div className="flex items-center text-xs text-blue-700 dark:text-blue-400 font-semibold">
                           <Mic className="h-4 w-4 mr-1 text-blue-700 dark:text-blue-400" />
-                          File âm thanh bài nói của học viên:
+                          Audio bài nói:
                         </div>
                         <audio src={q.audioUrl} controls className="h-9 w-full" />
                         {q.transcript && (
                           <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg">
                             <strong className="text-slate-600 dark:text-slate-300 mr-1">
-                              Transcript / Gợi ý nói:
+                              Transcript:
                             </strong>
                             {q.transcript}
                           </div>
@@ -366,7 +364,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                       </div>
                     ) : (
                       <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-xs text-rose-600 dark:text-rose-400 italic">
-                        Học sinh bỏ trống hoặc chưa hoàn thành phần này.
+                        Chưa trả lời
                       </div>
                     )}
                   </div>
@@ -375,7 +373,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                   {isExam && qKey && onUpdateQuestionScore && (
                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
                       <span className="text-slate-500 dark:text-slate-400 font-medium">
-                        Chấm lại điểm câu này (tối đa {maxPts}):
+                        Điểm câu:
                       </span>
                       <div className="flex items-center gap-1.5">
                         <input
@@ -408,12 +406,12 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               );
             })
           ) : (
-            <div className="p-8 text-center text-slate-500 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+            <div className="p-8 text-center text-slate-500 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
               <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Không có câu hỏi Viết đoạn văn hoặc Luyện nói nào cần chấm điểm trong bài nộp này.
+                Không có câu Writing / Speaking
               </p>
               <p className="text-[11px] text-slate-500">
-                Khu vực này chỉ hiển thị bài làm của phần Viết đoạn văn (Essay) và Luyện nói (Speaking). Các câu hỏi trắc nghiệm hoặc điền từ đã được hệ thống chấm điểm tự động.
+                Trắc nghiệm/điền từ đã chấm tự động.
               </p>
             </div>
           )}
@@ -436,10 +434,10 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center">
                 <Award className="h-4 w-4 mr-1.5 text-amber-500 dark:text-amber-400" />
-                Điểm chính thức (Thang 10):
+                Điểm (thang 10):
               </label>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-400">Gợi ý nhanh:</span>
+                <span className="text-[10px] text-slate-400">Nhanh:</span>
                 {[10, 9, 8.5, 8, 7, 6].map((scorePreset) => (
                   <button
                     key={scorePreset}
@@ -458,7 +456,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               step="0.1"
               min="0"
               max="10"
-              placeholder="Nhập điểm từ 0.0 đến 10.0..."
+              placeholder="0.0 - 10.0"
               value={inputScore}
               onChange={(e) => setInputScore(e.target.value)}
               className="w-full max-w-xs rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#0b1120] px-3.5 py-2 text-sm text-slate-900 dark:text-white font-bold outline-none focus:border-blue-600 transition"
@@ -469,13 +467,13 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
-                Nhận xét & Hướng dẫn sửa bài cho học sinh:
+                Nhận xét:
               </label>
               <div className="flex items-center gap-1.5">
                 {[
-                  "Làm bài rất tốt!",
-                  "Cần chú ý thì động từ",
-                  "Phát âm rõ ràng hơn",
+                  "Làm tốt!",
+                  "Chú ý thì động từ",
+                  "Phát âm rõ hơn",
                 ].map((chip) => (
                   <button
                     key={chip}
@@ -493,7 +491,7 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
 
             <textarea
               rows={3}
-              placeholder="Ghi chú chi tiết cho học sinh về điểm mạnh, lỗi sai và cách khắc phục..."
+              placeholder="Nhập nhận xét..."
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               className="w-full rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#0b1120] p-3 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600 transition placeholder-slate-400 dark:placeholder-slate-500"
@@ -509,15 +507,15 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
               {savingGrade ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Đang lưu kết quả...</span>
+                  <span>Đang lưu...</span>
                 </>
               ) : (
                 <>
                   <Send className="h-3.5 w-3.5" />
                   <span>
                     {submissionDetail.status === "COMPLETED"
-                      ? "Cập Nhật Điểm & Nhận Xét (Chấm Lại)"
-                      : "Lưu Kết Quả & Gửi Nhận Xét"}
+                      ? "Cập nhật điểm"
+                      : "Lưu điểm"}
                   </span>
                 </>
               )}

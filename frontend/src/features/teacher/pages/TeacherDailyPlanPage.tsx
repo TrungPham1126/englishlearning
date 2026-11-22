@@ -92,7 +92,7 @@ export default function TeacherDailyPlanPage() {
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
-              <CheckSquare className="h-3.5 w-3.5 mr-1.5" /> Soạn Lộ Trình
+              <CheckSquare className="h-3.5 w-3.5 mr-1.5" /> Lộ trình
             </button>
             <button
               onClick={() => setActiveTab("ASSIGNMENTS")}
@@ -102,7 +102,7 @@ export default function TeacherDailyPlanPage() {
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
-              <Layers className="h-3.5 w-3.5 mr-1.5" /> Bài Đã Giao ({classAssignments.length})
+              <Layers className="h-3.5 w-3.5 mr-1.5" /> Bài đã giao ({classAssignments.length})
             </button>
             <button
               onClick={() => setActiveTab("TRACKER")}
@@ -112,7 +112,7 @@ export default function TeacherDailyPlanPage() {
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
-              <BarChart2 className="h-3.5 w-3.5 mr-1.5" /> Bảng Tiến Độ
+              <BarChart2 className="h-3.5 w-3.5 mr-1.5" /> Tiến độ
             </button>
           </div>
         }

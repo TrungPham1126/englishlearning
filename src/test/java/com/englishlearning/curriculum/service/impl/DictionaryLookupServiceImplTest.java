@@ -116,4 +116,174 @@ class DictionaryLookupServiceImplTest {
         assertThat(partial.getAudioUrl()).isEqualTo("https://dict.youdao.com/dictvoice?audio=brave&type=2");
         assertThat(partial.getMeaning()).isEqualTo("Nghĩa của từ: brave");
     }
+
+    @Test
+    @DisplayName("lookup_whenNetworkFailsThenRecovers_doesNotCacheTransientErrorAndSucceedsOnRetry")
+    void lookup_whenNetworkFailsThenRecovers_doesNotCacheTransientErrorAndSucceedsOnRetry() {
+        // Given
+        String url = "https://api.dictionaryapi.dev/api/v2/entries/en/fluent";
+        String validJson = """
+                [
+                  {
+                    "word": "fluent",
+                    "phonetic": "/ˈfluːənt/",
+                    "phonetics": [],
+                    "meanings": [
+                      {
+                        "partOfSpeech": "adjective",
+                        "definitions": [
+                          { "definition": "Able to speak easily.", "example": "He is fluent in English." }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+                """;
+        when(restTemplate.getForObject(url, String.class))
+                .thenThrow(new RestClientException("Read timed out"))
+                .thenReturn(validJson);
+
+        // When: Lần 1 lỗi mạng -> trả fallback nhưng KHÔNG cache
+        DictionaryLookupService.DictionaryEntryDto first = lookupService.lookup("fluent");
+        assertThat(first.getIpa()).isEqualTo("/fluent/");
+        assertThat(first.getMeaning()).isEqualTo("Nghĩa của từ: fluent");
+
+        // Lần 2 mạng hồi phục -> gọi lại API thành công và lưu cache
+        DictionaryLookupService.DictionaryEntryDto retried = lookupService.lookup("fluent");
+        assertThat(retried.getIpa()).isEqualTo("/ˈfluːənt/");
+        assertThat(retried.getPartOfSpeech()).isEqualTo("adjective");
+        assertThat(retried.getMeaning()).isEqualTo("Able to speak easily.");
+
+        // Lần 3 lấy từ cache
+        DictionaryLookupService.DictionaryEntryDto cached = lookupService.lookup("FLUENT");
+        assertThat(cached).isSameAs(retried);
+        verify(restTemplate, times(2)).getForObject(url, String.class);
+    }
+
+    @Test
+    @DisplayName("lookup_whenApiReturnsMalformedJson_usesFallbacksWithoutCaching")
+    void lookup_whenApiReturnsMalformedJson_usesFallbacksWithoutCaching() {
+        // Given
+        String url = "https://api.dictionaryapi.dev/api/v2/entries/en/clarity";
+        String recoveredJson = """
+                [
+                  {
+                    "word": "clarity",
+                    "phonetic": "ˈklærəti",
+                    "phonetics": [],
+                    "meanings": []
+                  }
+                ]
+                """;
+        when(restTemplate.getForObject(url, String.class))
+                .thenReturn("{invalid-json")
+                .thenReturn(recoveredJson);
+
+        // When
+        DictionaryLookupService.DictionaryEntryDto first = lookupService.lookup("clarity");
+        DictionaryLookupService.DictionaryEntryDto second = lookupService.lookup("clarity");
+
+        // Then
+        assertThat(first.getIpa()).isEqualTo("/clarity/");
+        assertThat(second.getIpa()).isEqualTo("/ˈklærəti/");
+        verify(restTemplate, times(2)).getForObject(url, String.class);
+    }
+
+    @Test
+    @DisplayName("lookup_whenApiReturnsBlankOrEmptyArray_usesFallbacksAndCachesValidEmptyResponse")
+    void lookup_whenApiReturnsBlankOrEmptyArray_usesFallbacksAndCachesValidEmptyResponse() {
+        // Given
+        when(restTemplate.getForObject("https://api.dictionaryapi.dev/api/v2/entries/en/blankword", String.class))
+                .thenReturn("   ");
+        when(restTemplate.getForObject("https://api.dictionaryapi.dev/api/v2/entries/en/emptyarray", String.class))
+                .thenReturn("[]");
+
+        // When
+        DictionaryLookupService.DictionaryEntryDto blankResp = lookupService.lookup("blankword");
+        DictionaryLookupService.DictionaryEntryDto emptyResp = lookupService.lookup("emptyarray");
+        DictionaryLookupService.DictionaryEntryDto emptyCached = lookupService.lookup("EMPTYARRAY");
+
+        // Then
+        assertThat(blankResp.getIpa()).isEqualTo("/blankword/");
+        assertThat(blankResp.getPartOfSpeech()).isEqualTo("noun");
+        assertThat(emptyResp.getIpa()).isEqualTo("/emptyarray/");
+        assertThat(emptyCached).isSameAs(emptyResp);
+        verify(restTemplate, times(1)).getForObject("https://api.dictionaryapi.dev/api/v2/entries/en/emptyarray", String.class);
+    }
+
+    @Test
+    @DisplayName("lookup_whenPhoneticIsSlashOnlyAndPartOfSpeechBlank_fallsBackToWordIpaAndNoun")
+    void lookup_whenPhoneticIsSlashOnlyAndPartOfSpeechBlank_fallsBackToWordIpaAndNoun() {
+        // Given
+        String json = """
+                [
+                  {
+                    "word": "focus",
+                    "phonetic": "///",
+                    "phonetics": [{ "text": "//", "audio": "" }],
+                    "meanings": [
+                      {
+                        "partOfSpeech": "   ",
+                        "definitions": []
+                      }
+                    ]
+                  }
+                ]
+                """;
+        when(restTemplate.getForObject("https://api.dictionaryapi.dev/api/v2/entries/en/focus", String.class))
+                .thenReturn(json);
+
+        // When
+        DictionaryLookupService.DictionaryEntryDto entry = lookupService.lookup("focus");
+
+        // Then
+        assertThat(entry.getIpa()).isEqualTo("/focus/");
+        assertThat(entry.getPartOfSpeech()).isEqualTo("noun");
+        assertThat(entry.getMeaning()).isEqualTo("Nghĩa của từ: focus");
+        assertThat(entry.getExampleSentence()).isEqualTo("Practice using \"focus\" in daily conversations.");
+    }
+
+    @Test
+    @DisplayName("lookup_whenAudioIsNonUsOrNonMp3_fallsBackToYoudaoAudio")
+    void lookup_whenAudioIsNonUsOrNonMp3_fallsBackToYoudaoAudio() {
+        // Given
+        String json = """
+                [
+                  {
+                    "word": "schedule",
+                    "phonetic": "ˈskedʒuːl",
+                    "phonetics": [
+                      { "audio": "https://cdn.example.com/schedule-uk.mp3" },
+                      { "audio": "https://cdn.example.com/schedule-us.ogg" }
+                    ],
+                    "meanings": []
+                  }
+                ]
+                """;
+        when(restTemplate.getForObject("https://api.dictionaryapi.dev/api/v2/entries/en/schedule", String.class))
+                .thenReturn(json);
+
+        // When
+        DictionaryLookupService.DictionaryEntryDto entry = lookupService.lookup("schedule");
+
+        // Then
+        assertThat(entry.getIpa()).isEqualTo("/ˈskedʒuːl/");
+        assertThat(entry.getAudioUrl()).isEqualTo("https://dict.youdao.com/dictvoice?audio=schedule&type=2");
+    }
+
+    @Test
+    @DisplayName("lookup_whenMultiWordPhrase_encodesUrlAndUsesFallbackAudio")
+    void lookup_whenMultiWordPhrase_encodesUrlAndUsesFallbackAudio() {
+        // Given
+        String expectedApiUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/ice+cream";
+        when(restTemplate.getForObject(expectedApiUrl, String.class)).thenReturn("[]");
+
+        // When
+        DictionaryLookupService.DictionaryEntryDto entry = lookupService.lookup("  Ice Cream! ");
+
+        // Then
+        assertThat(entry.getWord()).isEqualTo("ice cream");
+        assertThat(entry.getAudioUrl()).isEqualTo("https://dict.youdao.com/dictvoice?audio=ice+cream&type=2");
+        verify(restTemplate).getForObject(expectedApiUrl, String.class);
+    }
 }

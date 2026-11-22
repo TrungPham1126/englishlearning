@@ -54,7 +54,7 @@ export default function UserManagementPage() {
   const handleToggleStatus = async (id: string, currentActive: boolean) => {
     if (
       !window.confirm(
-        `Bạn muốn ${currentActive ? "KHÓA" : "MỞ KHÓA"} người dùng này?`,
+        `${currentActive ? "Khóa" : "Mở khóa"} tài khoản này?`,
       )
     )
       return;
@@ -62,17 +62,17 @@ export default function UserManagementPage() {
       await adminApi.toggleUserStatus(id, !currentActive);
       fetchUsers(data?.pageNumber || 0, roleFilter, searchKeyword);
     } catch (err) {
-      alert("Lỗi cập nhật trạng thái!");
+      alert("Cập nhật trạng thái thất bại.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("CẢNH BÁO: Xóa vĩnh viễn người dùng này?")) return;
+    if (!window.confirm("Xóa vĩnh viễn tài khoản này?")) return;
     try {
       await adminApi.deleteUser(id);
       fetchUsers(data?.pageNumber || 0, roleFilter, searchKeyword);
     } catch (err) {
-      alert("Lỗi khi xóa người dùng!");
+      alert("Xóa tài khoản thất bại.");
     }
   };
 
@@ -81,12 +81,12 @@ export default function UserManagementPage() {
     setIsSaving(true);
     try {
       await adminApi.createUser(formData);
-      alert("Tạo tài khoản thành công!");
+      alert("Đã tạo tài khoản.");
       setIsCreateModalOpen(false);
       setFormData(initialForm);
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi tạo user");
+      alert(err.response?.data?.message || "Tạo tài khoản thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -104,11 +104,11 @@ export default function UserManagementPage() {
         roles: formData.roles,
         isActive: selectedUser.isActive ?? true,
       });
-      alert("Cập nhật thành công!");
+      alert("Đã cập nhật.");
       setIsEditModalOpen(false);
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi cập nhật");
+      alert(err.response?.data?.message || "Cập nhật thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -149,10 +149,10 @@ export default function UserManagementPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Quản Lý Toàn Bộ Tài Khoản
+            Tài khoản
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tổng số: <span className="font-semibold text-slate-900 dark:text-white">{data?.totalElements || 0}</span> tài khoản trên toàn hệ thống
+            <span className="font-semibold text-slate-900 dark:text-white">{data?.totalElements || 0}</span> tài khoản
           </p>
         </div>
         <button
@@ -162,7 +162,7 @@ export default function UserManagementPage() {
           }}
           className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
         >
-          <Plus size={18} /> Tạo Mới
+          <Plus size={18} /> Tạo mới
         </button>
       </div>
 
@@ -170,10 +170,10 @@ export default function UserManagementPage() {
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-[#121a2d] p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-slate-900 dark:text-slate-100">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
           {[
-            { label: "Tất Cả", value: "ALL" },
-            { label: "Học Viên", value: "ROLE_STUDENT" },
-            { label: "Giảng Viên", value: "ROLE_TEACHER" },
-            { label: "Quản Trị Viên", value: "ROLE_ADMIN" },
+            { label: "Tất cả", value: "ALL" },
+            { label: "Học viên", value: "ROLE_STUDENT" },
+            { label: "Giảng viên", value: "ROLE_TEACHER" },
+            { label: "Quản trị", value: "ROLE_ADMIN" },
           ].map((tab) => (
             <button
               key={tab.value}
@@ -196,7 +196,7 @@ export default function UserManagementPage() {
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Tìm theo tên, email, SĐT..."
+              placeholder="Tìm tên, email, SĐT..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0d1322] text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-700"
             />
           </div>
@@ -214,11 +214,11 @@ export default function UserManagementPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-800">
-                <th className="p-4">Họ & Tên</th>
-                <th className="p-4">Liên hệ (Email & SĐT)</th>
-                <th className="p-4">Vai trò (Roles)</th>
+                <th className="p-4">Họ tên</th>
+                <th className="p-4">Liên hệ</th>
+                <th className="p-4">Vai trò</th>
                 <th className="p-4 text-center">Trạng thái</th>
-                <th className="p-4 text-right">Hành động</th>
+                <th className="p-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-sm">
@@ -297,7 +297,7 @@ export default function UserManagementPage() {
           <div className="bg-white dark:bg-[#121a2d] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-card w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/60">
               <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                {isCreateModalOpen ? "Tạo Tài Khoản Mới" : "Cập Nhật Tài Khoản"}
+                {isCreateModalOpen ? "Tạo tài khoản" : "Sửa tài khoản"}
               </h2>
               <button
                 onClick={() => {
@@ -367,20 +367,20 @@ export default function UserManagementPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-slate-700">
-                      Mật khẩu khởi tạo
+                      Mật khẩu
                     </label>
                     <button
                       type="button"
                       onClick={() => setFormData((prev) => ({ ...prev, password: "Password@123" }))}
                       className="text-[11px] font-bold text-blue-700 hover:text-blue-800 cursor-pointer"
                     >
-                      Dùng mặc định: Password@123
+                      Mặc định: Password@123
                     </button>
                   </div>
                   <input
                     required
                     type="text"
-                    placeholder="vd: Password@123"
+                    placeholder="Password@123"
                     value={formData.password}
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
@@ -388,7 +388,7 @@ export default function UserManagementPage() {
                     className="w-full border-2 border-slate-200 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold"
                   />
                   <p className="mt-1 text-[11px] text-slate-400">
-                    Tối thiểu 8 ký tự gồm chữ hoa, chữ thường, số hoặc ký tự đặc biệt.
+                    Tối thiểu 8 ký tự (hoa, thường, số, ký tự đặc biệt).
                   </p>
                 </div>
               )}
@@ -410,13 +410,13 @@ export default function UserManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Vai trò tài khoản (Chọn quyền cấp phát)
+                  Vai trò
                 </label>
                 <div className="grid grid-cols-3 gap-2.5">
                   {[
-                    { role: "ROLE_STUDENT", label: "Học Viên", icon: GraduationCap, desc: "Truy cập khóa học & làm bài" },
-                    { role: "ROLE_TEACHER", label: "Giảng Viên", icon: School, desc: "Quản lý lớp & tạo bài tập" },
-                    { role: "ROLE_ADMIN", label: "Quản Trị", icon: Shield, desc: "Toàn quyền quản trị hệ thống" },
+                    { role: "ROLE_STUDENT", label: "Học viên", icon: GraduationCap },
+                    { role: "ROLE_TEACHER", label: "Giảng viên", icon: School },
+                    { role: "ROLE_ADMIN", label: "Quản trị", icon: Shield },
                   ].map((item) => {
                     const isChecked = formData.roles.includes(item.role);
                     const Icon = item.icon;
@@ -432,7 +432,6 @@ export default function UserManagementPage() {
                       >
                         <Icon size={20} className={isChecked ? "text-blue-700 mb-1" : "text-slate-400 mb-1"} />
                         <span className="text-xs font-black">{item.label}</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5 leading-tight">{item.desc}</span>
                       </div>
                     );
                   })}
@@ -456,7 +455,7 @@ export default function UserManagementPage() {
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 transition shadow-sm"
                 >
                   {isSaving && <Loader2 size={16} className="animate-spin" />}{" "}
-                  Lưu Tài Khoản
+                  Lưu
                 </button>
               </div>
             </form>

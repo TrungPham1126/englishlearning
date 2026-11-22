@@ -46,14 +46,9 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div>
-          <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
-            Cấu trúc Giáo trình
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Tạo các bài giảng (Lesson) để giảng viên có thể tải lên Video và Từ vựng.
-          </p>
-        </div>
+        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
+          Giáo trình
+        </h2>
         <button
           onClick={() => {
             setLessonForm((prev) => ({ ...prev, orderIndex: lessons.length + 1 }));
@@ -61,14 +56,14 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
           }}
           className="flex items-center gap-2 bg-blue-800 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
         >
-          <Plus size={16} /> Thêm Bài Giảng
+          <Plus size={16} /> Thêm bài giảng
         </button>
       </div>
 
       <div className="grid gap-3">
         {lessons.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 p-12 rounded-xl border border-slate-200 dark:border-slate-800 text-center text-slate-500 dark:text-slate-400 text-sm font-semibold">
-            Lớp học này chưa có bài giảng nào. Hãy bấm "Thêm Bài Giảng" để bắt đầu.
+            Chưa có bài giảng.
           </div>
         ) : (
           lessons.map((lesson, idx) => (
@@ -86,7 +81,7 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
                     {lesson.title}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
-                    {lesson.objectives || "Chưa có mục tiêu bài học"}
+                    {lesson.objectives || "Chưa có mục tiêu"}
                   </p>
                 </div>
               </div>
@@ -113,7 +108,7 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
               <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
-                Tạo Bài Giảng Mới
+                Thêm bài giảng
               </h2>
               <button
                 onClick={() => setIsLessonModalOpen(false)}
@@ -143,7 +138,7 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
                 </div>
                 <div className="col-span-3">
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Tên Bài Giảng
+                    Tên bài
                   </label>
                   <input
                     required
@@ -153,13 +148,13 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
                       setLessonForm({ ...lessonForm, title: e.target.value })
                     }
                     className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                    placeholder="VD: Unit 1 - Introduction"
+                    placeholder="Unit 1 - Introduction"
                   />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Mục tiêu bài học (Objectives)
+                  Mục tiêu
                 </label>
                 <textarea
                   rows={2}
@@ -168,7 +163,7 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
                     setLessonForm({ ...lessonForm, objectives: e.target.value })
                   }
                   className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:border-blue-700 text-sm bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                  placeholder="VD: Học viên nắm được từ vựng chào hỏi cơ bản..."
+                  placeholder="Mục tiêu bài học..."
                 />
               </div>
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
@@ -185,7 +180,7 @@ export const ClassroomCurriculumTab: React.FC<ClassroomCurriculumTabProps> = ({
                   className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-700 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {isProcessing && <Loader2 size={16} className="animate-spin" />}
-                  <span>Lưu Bài Giảng</span>
+                  <span>Lưu</span>
                 </button>
               </div>
             </form>

@@ -180,4 +180,101 @@ class VocabularyControllerTest {
                         .with(csrf()))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("getVocabulariesByLesson_whenUnauthenticated_returns401")
+    void getVocabulariesByLesson_whenUnauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/curriculum/lessons/{lessonId}/vocabularies", lessonId))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(vocabularyService);
+    }
+
+    @Test
+    @DisplayName("getVocabulariesByLesson_whenEmpty_returns200WithEmptyArray")
+    void getVocabulariesByLesson_whenEmpty_returns200WithEmptyArray() throws Exception {
+        when(vocabularyService.getVocabulariesByLesson(lessonId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/curriculum/lessons/{lessonId}/vocabularies", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @DisplayName("addVocabulary_whenLessonNotFound_returns404")
+    void addVocabulary_whenLessonNotFound_returns404() throws Exception {
+        when(vocabularyService.addVocabulary(eq(lessonId), any(VocabularyRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy bài học"));
+
+        mockMvc.perform(post("/api/curriculum/lessons/{lessonId}/vocabularies", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "word": "resilient", "meaning": "kiên cường" }
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenStudentRole_returns403")
+    void updateVocabulary_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(put("/api/curriculum/vocabularies/{id}", vocabId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "word": "vivid", "meaning": "sinh động" }
+                                """))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(vocabularyService);
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenInvalidRequest_returns400")
+    void updateVocabulary_whenInvalidRequest_returns400() throws Exception {
+        mockMvc.perform(put("/api/curriculum/vocabularies/{id}", vocabId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "word": "  ", "meaning": "" }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.word").exists())
+                .andExpect(jsonPath("$.validationErrors.meaning").exists());
+
+        verifyNoInteractions(vocabularyService);
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenVocabularyNotFound_returns404")
+    void updateVocabulary_whenVocabularyNotFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        when(vocabularyService.updateVocabulary(eq(missingId), any(VocabularyRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy từ vựng"));
+
+        mockMvc.perform(put("/api/curriculum/vocabularies/{id}", missingId)
+                        .with(user(userWithRole(RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "word": "eloquent", "meaning": "hùng biện" }
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("deleteVocabulary_whenStudentRole_returns403")
+    void deleteVocabulary_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(delete("/api/curriculum/vocabularies/{id}", vocabId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(vocabularyService);
+    }
 }

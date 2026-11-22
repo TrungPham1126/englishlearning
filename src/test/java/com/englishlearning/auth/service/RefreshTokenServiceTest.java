@@ -13,8 +13,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -217,5 +220,110 @@ class RefreshTokenServiceTest {
         // When & Then
         assertThatCode(() -> refreshTokenService.cleanupExpiredTokens())
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("createRefreshToken: Thời hạn mặc định khi không inject qua Reflection phải là 7 ngày (604800s)")
+    void createRefreshToken_defaultDurationWithoutReflection_setsSevenDayExpiry() {
+        // Given
+        RefreshTokenServiceImpl defaultService = new RefreshTokenServiceImpl(refreshTokenRepository);
+        User user = User.builder().id(UUID.randomUUID()).email("default-ttl@elp.edu.vn").build();
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Instant beforeCall = Instant.now();
+
+        // When
+        RefreshToken created = defaultService.createRefreshToken(user);
+
+        // Then
+        Instant expectedMin = beforeCall.plus(7, ChronoUnit.DAYS).minusSeconds(5);
+        Instant expectedMax = Instant.now().plus(7, ChronoUnit.DAYS).plusSeconds(5);
+        assertThat(created.getExpiryDate()).isBetween(expectedMin, expectedMax);
+    }
+
+    @Test
+    @DisplayName("createRefreshToken: User null phải ném IllegalArgumentException trước khi gọi repository")
+    void createRefreshToken_nullUser_throwsIllegalArgumentException() {
+        // When & Then
+        assertThatThrownBy(() -> refreshTokenService.createRefreshToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(refreshTokenRepository);
+    }
+
+    @Test
+    @DisplayName("verifyExpiration: Token null hoặc rỗng ném UnauthorizedException mà không query DB")
+    void verifyExpiration_nullOrBlankToken_throwsUnauthorizedWithoutDbQuery() {
+        // When & Then
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration(null))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token không tồn tại trong hệ thống");
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration("   "))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token không tồn tại trong hệ thống");
+
+        verifyNoInteractions(refreshTokenRepository);
+    }
+
+    @Test
+    @DisplayName("verifyExpiration: Token có expiryDate = null phải bị xóa và ném UnauthorizedException")
+    void verifyExpiration_nullExpiryDate_deletesTokenAndThrowsUnauthorized() {
+        // Given
+        String tokenStr = "null-expiry-token";
+        RefreshToken token = RefreshToken.builder()
+                .token(tokenStr)
+                .expiryDate(null)
+                .revoked(false)
+                .build();
+        when(refreshTokenRepository.findByToken(tokenStr)).thenReturn(Optional.of(token));
+
+        // When & Then
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration(tokenStr))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token đã hết hạn. Vui lòng đăng nhập lại");
+
+        verify(refreshTokenRepository).delete(token);
+    }
+
+    @Test
+    @DisplayName("verifyExpiration: Token vừa bị thu hồi vừa hết hạn phải ưu tiên báo thu hồi và không xóa")
+    void verifyExpiration_revokedAndExpiredToken_prioritizesRevokedErrorWithoutDeleting() {
+        // Given
+        String tokenStr = "revoked-and-expired";
+        RefreshToken token = RefreshToken.builder()
+                .token(tokenStr)
+                .expiryDate(Instant.now().minusSeconds(60))
+                .revoked(true)
+                .build();
+        when(refreshTokenRepository.findByToken(tokenStr)).thenReturn(Optional.of(token));
+
+        // When & Then
+        assertThatThrownBy(() -> refreshTokenService.verifyExpiration(tokenStr))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Refresh token đã bị thu hồi");
+
+        verify(refreshTokenRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("verifyExpiration: Cấu hình @Transactional(noRollbackFor = UnauthorizedException.class) để không rollback thao tác xóa token hết hạn")
+    void verifyExpiration_hasNoRollbackForUnauthorizedExceptionAnnotation() throws NoSuchMethodException {
+        // Given
+        Method method = RefreshTokenServiceImpl.class.getMethod("verifyExpiration", String.class);
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        // Then
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.noRollbackFor()).contains(UnauthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("revokeToken: Token null hoặc rỗng không truy vấn repository")
+    void revokeToken_nullOrBlankToken_doesNotQueryRepository() {
+        // When
+        refreshTokenService.revokeToken(null);
+        refreshTokenService.revokeToken("   ");
+
+        // Then
+        verifyNoInteractions(refreshTokenRepository);
     }
 }

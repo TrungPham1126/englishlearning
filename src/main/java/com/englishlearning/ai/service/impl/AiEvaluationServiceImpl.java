@@ -185,7 +185,8 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                     .build());
         }
 
-        ShadowingEvaluationResponse.KpiMetrics kpi = calculateMetrics(tokens, wordRows, words.length, 110);
+        ShadowingEvaluationResponse.KpiMetrics kpi = calculateMetrics(
+                tokens, wordRows, tokens.isEmpty() ? words.length : tokens.size(), 110);
 
         return ShadowingEvaluationResponse.builder()
                 .overallScore(kpi.getPronunciation())
@@ -229,7 +230,8 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                 (int) Math.round(wordRows.stream().mapToInt(w -> w.getScore() != null ? w.getScore() : 0).average().orElse(0.0));
 
         // Fluency tính toán dựa trên độ bao phủ từ và tốc độ nói WPM
-        int fluency = (int) Math.round((avgPronunciation * 0.6) + (Math.min(130, wordsPerMinute) / 130.0 * 40));
+        int boundedWpm = Math.max(0, Math.min(130, wordsPerMinute));
+        int fluency = (int) Math.round((avgPronunciation * 0.6) + (boundedWpm / 130.0 * 40));
         fluency = Math.min(100, Math.max(0, fluency));
 
         int prosody = (int) Math.round((avgPronunciation * 0.7) + (completeness * 0.3));

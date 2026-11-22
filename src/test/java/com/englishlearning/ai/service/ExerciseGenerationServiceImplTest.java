@@ -9,6 +9,7 @@ import com.englishlearning.assignment.entity.QuestionType;
 import com.englishlearning.auth.entity.Teacher;
 import com.englishlearning.auth.repository.TeacherRepository;
 import com.englishlearning.curriculum.service.TtsAudioService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -230,5 +231,97 @@ class ExerciseGenerationServiceImplTest {
         AiGeneratedExercise mcRes = exerciseGenerationService.generateQuestionsFromPrompt(
                 "Listening unit 2", "B1", 1, teacherId, true, QuestionType.MULTIPLE_CHOICE);
         assertThat(mcRes.getStatus()).isEqualTo(GenerationStatus.READY_FOR_REVIEW);
+    }
+
+    @Test
+    @DisplayName("MATCHING: kẹp số cặp [5..8], mặc định CEFR='B1', chuẩn hóa explanation theo IPA & giữ audio cặp khác khi TTS lỗi một phần")
+    void generateQuestionsFromPrompt_matchingClampsCountDefaultsCefrFormatsExplanationAndToleratesPartialTtsError() throws Exception {
+        Teacher teacher = Teacher.builder().id(teacherId).build();
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.of(teacher));
+        when(aiGeneratedExerciseRepository.save(any(AiGeneratedExercise.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        // 1. questionCount=2 -> clamp lên 5, targetCefr=null -> mặc định B1, TTS pair 1 lỗi vẫn sinh TTS pair 2 & đủ 3 nhánh explanation
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("""
+                        {
+                          "pairs": [
+                            {"id": "1", "word": "focus", "ipa": "/ˈfəʊ.kəs/", "meaning": "tập trung", "explanation": ""},
+                            {"id": "2", "word": "effort", "ipa": "/ˈef.ət/", "meaning": "nỗ lực", "explanation": "Cố gắng hết sức"},
+                            {"id": "3", "word": "goal", "ipa": "/ɡəʊl/", "meaning": "mục tiêu", "explanation": "/ɡəʊl/ (n): Mục tiêu học tập"}
+                          ]
+                        }
+                        """);
+        when(ttsAudioService.synthesizeTtsAudio(eq("focus"), eq("af_heart")))
+                .thenThrow(new RuntimeException("TTS pair 1 failed"));
+        when(ttsAudioService.synthesizeTtsAudio(eq("effort"), eq("af_heart")))
+                .thenReturn("https://cdn.test/effort.wav");
+        when(ttsAudioService.synthesizeTtsAudio(eq("goal"), eq("af_heart")))
+                .thenReturn("https://cdn.test/goal.wav");
+
+        AiGeneratedExercise lowClamp = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Vocabulary pairs", null, 2, teacherId, true, QuestionType.MATCHING);
+
+        assertThat(lowClamp.getTargetCefr()).isEqualTo("B1");
+        assertThat(lowClamp.getQuestionCount()).isEqualTo(5);
+        assertThat(lowClamp.getExerciseType()).isEqualTo("MATCHING");
+
+        JsonNode questions = objectMapper.readTree(lowClamp.getRawResponseJson()).path("questions");
+        assertThat(questions).hasSize(3);
+        assertThat(questions.get(0).path("explanation").asText()).isEqualTo("/ˈfəʊ.kəs/ - tập trung");
+        assertThat(questions.get(0).has("mediaUrl")).isFalse();
+        assertThat(questions.get(1).path("explanation").asText()).isEqualTo("/ˈef.ət/ | Cố gắng hết sức");
+        assertThat(questions.get(1).path("mediaUrl").asText()).isEqualTo("https://cdn.test/effort.wav");
+        assertThat(questions.get(2).path("explanation").asText()).isEqualTo("/ɡəʊl/ (n): Mục tiêu học tập");
+
+        // 2. questionCount=12 -> clamp xuống 8
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("{\"pairs\":[{\"word\":\"study\",\"meaning\":\"học\"}]}");
+        AiGeneratedExercise highClamp = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Education", "C1", 12, teacherId, false, QuestionType.MATCHING);
+        assertThat(highClamp.getQuestionCount()).isEqualTo(8);
+        assertThat(highClamp.getTargetCefr()).isEqualTo("C1");
+    }
+
+    @Test
+    @DisplayName("MULTIPLE_CHOICE: bóc markdown code fence, vẫn gắn mediaUrl câu sau khi câu trước lỗi TTS & không gọi TTS khi generateAudio=false")
+    void generateQuestionsFromPrompt_multipleChoiceStripsMarkdownAndPreservesOtherAudioOnPartialTtsError() throws Exception {
+        Teacher teacher = Teacher.builder().id(teacherId).build();
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.of(teacher));
+        when(aiGeneratedExerciseRepository.save(any(AiGeneratedExercise.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        when(geminiClientService.generateWithSystemInstruction(anyString(), anyString()))
+                .thenReturn("""
+                        ```json
+                        {
+                          "questions": [
+                            {"promptText": "First sentence", "questionType": "MULTIPLE_CHOICE", "options": ["A", "B"], "correctAnswer": "A"},
+                            {"promptText": "Second sentence", "questionType": "MULTIPLE_CHOICE", "options": ["C", "D"], "correctAnswer": "D"}
+                          ]
+                        }
+                        ```
+                        """);
+        when(ttsAudioService.synthesizeTtsAudio(eq("First sentence"), eq("af_heart")))
+                .thenThrow(new RuntimeException("TTS timeout on Q1"));
+        when(ttsAudioService.synthesizeTtsAudio(eq("Second sentence"), eq("af_heart")))
+                .thenReturn("https://cdn.test/q2.wav");
+
+        AiGeneratedExercise partialTts = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Grammar practice", "B1", 2, teacherId, true, QuestionType.MULTIPLE_CHOICE);
+
+        assertThat(partialTts.getExerciseType()).isEqualTo("SMART_GENERATION");
+        JsonNode qArr = objectMapper.readTree(partialTts.getRawResponseJson()).path("questions");
+        assertThat(qArr).hasSize(2);
+        assertThat(qArr.get(0).has("mediaUrl")).isFalse();
+        assertThat(qArr.get(1).path("mediaUrl").asText()).isEqualTo("https://cdn.test/q2.wav");
+
+        // generateAudio=false -> không gọi TTS & giữ nguyên exerciseType=SMART_GENERATION
+        reset(ttsAudioService);
+        AiGeneratedExercise noAudio = exerciseGenerationService.generateQuestionsFromPrompt(
+                "Grammar practice", "A2", 1, teacherId, false, QuestionType.MULTIPLE_CHOICE);
+        assertThat(noAudio.getExerciseType()).isEqualTo("SMART_GENERATION");
+        assertThat(noAudio.getTargetCefr()).isEqualTo("A2");
+        verifyNoInteractions(ttsAudioService);
     }
 }

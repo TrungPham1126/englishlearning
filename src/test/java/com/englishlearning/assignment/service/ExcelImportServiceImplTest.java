@@ -421,4 +421,213 @@ class ExcelImportServiceImplTest {
                 .extracting(opt -> opt.getOptionText())
                 .containsExactly("FALSE");
     }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenWorkbookHasZeroSheets_throwsInvalidFileFormatException")
+    void importQuestionsFromExcel_whenWorkbookHasZeroSheets_throwsInvalidFileFormatException() throws IOException {
+        byte[] zeroSheetBytes;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            wb.write(out);
+            zeroSheetBytes = out.toByteArray();
+        }
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "no_sheets.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                zeroSheetBytes
+        );
+
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(file, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("không chứa sheet nào");
+        verify(assignmentQuestionRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenMatchingOrTrueFalseMissingAnswer_throwsInvalidFileFormatException")
+    void importQuestionsFromExcel_whenMatchingOrTrueFalseMissingAnswer_throwsInvalidFileFormatException() throws IOException {
+        byte[] missingMatchingAns = createValidExcelBytes("Resilient", "MATCHING", "", "", "", "", "", "IPA hint");
+        MockMultipartFile matchingFile = new MockMultipartFile(
+                "file", "missing_match.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                missingMatchingAns
+        );
+
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(matchingFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("Thiếu đáp án đúng cho câu hỏi MATCHING");
+
+        byte[] missingTfAns = createValidExcelBytes("Sky is blue", "TRUE_FALSE", "True", "False", "", "", "", "");
+        MockMultipartFile tfFile = new MockMultipartFile(
+                "file", "missing_tf.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                missingTfAns
+        );
+
+        assertThatThrownBy(() -> excelImportService.importQuestionsFromExcel(tfFile, assignmentId))
+                .isInstanceOf(InvalidFileFormatException.class)
+                .hasMessageContaining("Thiếu đáp án đúng cho câu hỏi TRUE_FALSE");
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenPointsIsNaNOrInvalidText_defaultsTo1_0")
+    void importQuestionsFromExcel_whenPointsIsNaNOrInvalidText_defaultsTo1_0() throws IOException {
+        byte[] bytes;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet s = wb.createSheet("Questions");
+            Row h = s.createRow(0);
+            h.createCell(0).setCellValue("Question");
+            h.createCell(1).setCellValue("Type");
+            h.createCell(2).setCellValue("Points");
+            h.createCell(3).setCellValue("Option A");
+            h.createCell(4).setCellValue("Option B");
+            h.createCell(5).setCellValue("Correct Answer");
+
+            Row r1 = s.createRow(1);
+            r1.createCell(0).setCellValue("Question NaN points");
+            r1.createCell(1).setCellValue("MULTIPLE_CHOICE");
+            r1.createCell(2).setCellValue("NaN");
+            r1.createCell(3).setCellValue("Alpha");
+            r1.createCell(4).setCellValue("Beta");
+            r1.createCell(5).setCellValue("A");
+
+            Row r2 = s.createRow(2);
+            r2.createCell(0).setCellValue("Question text points");
+            r2.createCell(1).setCellValue("MULTIPLE_CHOICE");
+            r2.createCell(2).setCellValue("abc");
+            r2.createCell(3).setCellValue("Gamma");
+            r2.createCell(4).setCellValue("Delta");
+            r2.createCell(5).setCellValue("B");
+
+            wb.write(out);
+            bytes = out.toByteArray();
+        }
+        MockMultipartFile file = new MockMultipartFile("file", "nan_points.xlsx", "application/octet-stream", bytes);
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> result = excelImportService.importQuestionsFromExcel(file, assignmentId);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getPoints()).isEqualTo(1.0);
+        assertThat(result.get(1).getPoints()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenVietnameseMatchingAliasAndNumericOptionAnswers_mapsCorrectly")
+    void importQuestionsFromExcel_whenVietnameseMatchingAliasAndNumericOptionAnswers_mapsCorrectly() throws IOException {
+        Assignment parentAssignment = Assignment.builder().id(assignmentId).skillType(SkillType.GRAMMAR).build();
+        when(assignmentRepository.findById(assignmentId)).thenReturn(Optional.of(parentAssignment));
+
+        byte[] bytes;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet s = wb.createSheet("Sheet1");
+            Row h = s.createRow(0);
+            h.createCell(0).setCellValue("Loại câu hỏi");
+            h.createCell(1).setCellValue("Kỹ năng");
+            h.createCell(2).setCellValue("Nội dung câu hỏi");
+            h.createCell(3).setCellValue("Lựa chọn A");
+            h.createCell(4).setCellValue("Lựa chọn B");
+            h.createCell(5).setCellValue("Lựa chọn C");
+            h.createCell(6).setCellValue("Lựa chọn D");
+            h.createCell(7).setCellValue("Đáp án đúng");
+
+            Row r1 = s.createRow(1);
+            r1.createCell(0).setCellValue("GHÉP CẶP");
+            r1.createCell(1).setCellValue("INVALID_SKILL");
+            r1.createCell(2).setCellValue("Eloquent");
+            r1.createCell(7).setCellValue("Hùng biện");
+
+            Row r2 = s.createRow(2);
+            r2.createCell(0).setCellValue("MCQ");
+            r2.createCell(2).setCellValue("Pick option A via numeric 1");
+            r2.createCell(3).setCellValue("First");
+            r2.createCell(4).setCellValue("Second");
+            r2.createCell(7).setCellValue("1");
+
+            Row r3 = s.createRow(3);
+            r3.createCell(0).setCellValue("MULTIPLE_CHOICE");
+            r3.createCell(2).setCellValue("Pick option B via numeric 2");
+            r3.createCell(3).setCellValue("First");
+            r3.createCell(4).setCellValue("Second");
+            r3.createCell(7).setCellValue("2");
+
+            Row r4 = s.createRow(4);
+            r4.createCell(0).setCellValue("MULTIPLE_CHOICE");
+            r4.createCell(2).setCellValue("Pick option D via numeric 4");
+            r4.createCell(3).setCellValue("First");
+            r4.createCell(4).setCellValue("Second");
+            r4.createCell(5).setCellValue("Third");
+            r4.createCell(6).setCellValue("Fourth");
+            r4.createCell(7).setCellValue("4");
+
+            wb.write(out);
+            bytes = out.toByteArray();
+        }
+        MockMultipartFile file = new MockMultipartFile("file", "aliases.xlsx", "application/octet-stream", bytes);
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> result = excelImportService.importQuestionsFromExcel(file, assignmentId);
+
+        assertThat(result).hasSize(4);
+        assertThat(result.get(0).getQuestionType()).isEqualTo(QuestionType.MATCHING);
+        assertThat(result.get(0).getSkillType()).isEqualTo(SkillType.GRAMMAR);
+        assertThat(result.get(0).getCorrectAnswer()).isEqualTo("Hùng biện");
+        assertThat(result.get(1).getOptions().get(0).getIsCorrect()).isTrue();
+        assertThat(result.get(2).getOptions().get(1).getIsCorrect()).isTrue();
+        assertThat(result.get(3).getOptions().get(3).getIsCorrect()).isTrue();
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenGuideSheetComesFirst_skipsGuideAndSelectsQuestionSheet")
+    void importQuestionsFromExcel_whenGuideSheetComesFirst_skipsGuideAndSelectsQuestionSheet() throws IOException {
+        byte[] bytes;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet guideSheet = wb.createSheet("Huong_Dan_Chi_Tiet");
+            Row gh = guideSheet.createRow(0);
+            gh.createCell(0).setCellValue("Nội dung câu hỏi");
+            gh.createCell(1).setCellValue("Loại câu hỏi");
+            gh.createCell(2).setCellValue("Đáp án đúng");
+
+            Sheet questionSheet = wb.createSheet("Bang_Nhap_Bai_Tap");
+            Row qh = questionSheet.createRow(0);
+            qh.createCell(0).setCellValue("Nội dung câu hỏi");
+            qh.createCell(1).setCellValue("Loại câu hỏi");
+            qh.createCell(2).setCellValue("Đáp án đúng");
+            Row qd = questionSheet.createRow(1);
+            qd.createCell(0).setCellValue("He ___ to school yesterday.");
+            qd.createCell(1).setCellValue("FILL_IN_BLANK");
+            qd.createCell(2).setCellValue("went");
+
+            wb.write(out);
+            bytes = out.toByteArray();
+        }
+        MockMultipartFile file = new MockMultipartFile("file", "guide_first.xlsx", "application/octet-stream", bytes);
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> result = excelImportService.importQuestionsFromExcel(file, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPromptText()).isEqualTo("He ___ to school yesterday.");
+        assertThat(result.get(0).getCorrectAnswer()).isEqualTo("went");
+    }
+
+    @Test
+    @DisplayName("importQuestionsFromExcel_whenBlankTypeColumn_defaultsToMultipleChoice")
+    void importQuestionsFromExcel_whenBlankTypeColumn_defaultsToMultipleChoice() throws IOException {
+        byte[] bytes = createValidExcelBytes(
+                "Choose the synonym of 'brave'",
+                "   ",
+                "courageous", "timid", "", "",
+                "A",
+                ""
+        );
+        MockMultipartFile file = new MockMultipartFile("file", "blank_type.xlsx", "application/octet-stream", bytes);
+        when(assignmentQuestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<AssignmentQuestion> result = excelImportService.importQuestionsFromExcel(file, assignmentId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getQuestionType()).isEqualTo(QuestionType.MULTIPLE_CHOICE);
+        assertThat(result.get(0).getOptions()).hasSize(2);
+        assertThat(result.get(0).getOptions().get(0).getIsCorrect()).isTrue();
+    }
 }

@@ -25,7 +25,8 @@ public class AdminResourceController {
     private final GlobalResourceService resourceService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<GlobalResourceResponse>>> getResources(@RequestParam String type) {
+    public ResponseEntity<ApiResponse<List<GlobalResourceResponse>>> getResources(
+            @RequestParam(required = false) String type) {
         return ResponseEntity.ok(ApiResponse.success(resourceService.getResourcesByType(type)));
     }
 

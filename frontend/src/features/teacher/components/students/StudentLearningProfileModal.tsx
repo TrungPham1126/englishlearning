@@ -22,6 +22,11 @@ import {
 import { teacherApi, type StudentSubmissionItem } from "../../api/teacherApi";
 import { AiEvaluationCard } from "../grading/AiEvaluationCard";
 import type { GradingSubmissionDetail } from "../grading/gradingTypes";
+import {
+  formatScore10,
+  normalizeAiScoreTo10,
+  normalizeScoreTo10,
+} from "@/utils/scoreScale";
 
 export interface StudentProfileData {
   studentId: string;
@@ -68,6 +73,17 @@ interface DayGroup {
   items: StudentSubmissionItem[];
 }
 
+function resolveAiApplyScore(
+  aiScore?: number | null,
+  aiEvalType?: string | null,
+): number | null {
+  const isIeltsBand =
+    aiEvalType === "WRITING" ||
+    aiEvalType === "WRITING_ESSAY" ||
+    aiEvalType === "SPEAKING_TOPIC";
+  return normalizeAiScoreTo10(aiScore, aiEvalType, isIeltsBand);
+}
+
 function formatDateVi(isoOrDate?: string | null): string {
   if (!isoOrDate) return "";
   const d = new Date(isoOrDate.length === 10 ? `${isoOrDate}T00:00:00` : isoOrDate);
@@ -80,7 +96,7 @@ function formatDateVi(isoOrDate?: string | null): string {
 }
 
 function formatTimeDateVi(iso?: string | null): string {
-  if (!iso) return "Chưa rõ thời gian";
+  if (!iso) return "Chưa rõ";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("vi-VN", {
@@ -182,7 +198,7 @@ export const StudentLearningProfileModal: React.FC<
         console.error("Lỗi tải danh sách bài nộp của học viên:", err);
         setSubmissionsError(
           err?.response?.data?.message ||
-            "Không thể tải danh sách bài nộp của học viên.",
+            "Tải bài nộp thất bại.",
         );
         setSubmissions([]);
       })
@@ -268,7 +284,7 @@ export const StudentLearningProfileModal: React.FC<
           groups.set(key, {
             key,
             title: `Ngày ${formatDateVi(item.submittedAt)}`,
-            subtitle: "Bài tập trong lớp",
+            subtitle: "Trong lớp",
             sortOrder: 1,
             sortValue: Number.isNaN(ts) ? 0 : -ts,
             items: [],
@@ -281,7 +297,7 @@ export const StudentLearningProfileModal: React.FC<
           groups.set(key, {
             key,
             title: "Bài tập khác",
-            subtitle: "Chưa xếp lịch ngày",
+            subtitle: "Chưa xếp lịch",
             sortOrder: 2,
             sortValue: 0,
             items: [],
@@ -314,12 +330,17 @@ export const StudentLearningProfileModal: React.FC<
           }
         });
         setAnswerScores(initScores);
+        const normalizedItemScore = normalizeScoreTo10(item.score);
+        const normalizedDetailScore = normalizeScoreTo10(detail.score);
+        const appliedAi = resolveAiApplyScore(item.aiScore, item.aiEvalType);
         setInputScore(
-          detail.score !== null && detail.score !== undefined
-            ? String(detail.score)
-            : item.aiScore != null
-              ? String(Math.min(10, Math.round(item.aiScore * 10) / 10))
-              : "",
+          normalizedDetailScore !== null
+            ? String(normalizedDetailScore)
+            : normalizedItemScore !== null
+              ? String(normalizedItemScore)
+              : appliedAi !== null
+                ? String(appliedAi)
+                : "",
         );
         setFeedback(detail.teacherFeedback || "");
       } else {
@@ -332,7 +353,7 @@ export const StudentLearningProfileModal: React.FC<
         type: "error",
         text:
           err?.response?.data?.message ||
-          "Không thể tải chi tiết bài nộp này.",
+          "Tải chi tiết thất bại.",
       });
     } finally {
       setLoadingDetail(false);
@@ -387,7 +408,7 @@ export const StudentLearningProfileModal: React.FC<
     if (Number.isNaN(parsedScore) || parsedScore < 0 || parsedScore > 10) {
       setGradeNotice({
         type: "error",
-        text: "Vui lòng nhập điểm số hợp lệ từ 0.0 đến 10.0.",
+        text: "Nhập điểm từ 0 đến 10.",
       });
       return;
     }
@@ -408,8 +429,8 @@ export const StudentLearningProfileModal: React.FC<
       setGradeNotice({
         type: "success",
         text: wasCompleted
-          ? `Đã chấm lại thành công: ${parsedScore}/10 và cập nhật nhận xét cho học viên.`
-          : `Đã lưu điểm ${parsedScore}/10 và gửi nhận xét cho học viên.`,
+          ? `Đã cập nhật điểm: ${parsedScore}/10.`
+          : `Đã lưu điểm: ${parsedScore}/10.`,
       });
 
       setSubmissions((prev) =>
@@ -452,7 +473,7 @@ export const StudentLearningProfileModal: React.FC<
         type: "error",
         text:
           err?.response?.data?.message ||
-          "Không thể lưu kết quả chấm điểm. Vui lòng thử lại.",
+          "Lưu điểm thất bại.",
       });
     } finally {
       setSavingGrade(false);
@@ -470,10 +491,10 @@ export const StudentLearningProfileModal: React.FC<
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-extrabold text-slate-900 dark:text-white truncate">
-                Hồ Sơ Học Tập — {student.fullName}
+                Hồ sơ — {student.fullName}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {student.email} • {student.phone} • Nhập học: {student.enrolledAt}
+                {student.email} • {student.phone} • Vào lớp: {student.enrolledAt}
               </p>
             </div>
           </div>
@@ -481,7 +502,7 @@ export const StudentLearningProfileModal: React.FC<
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng hồ sơ học tập"
+            aria-label="Đóng"
             className="rounded-xl p-2 text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white transition cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
@@ -497,12 +518,12 @@ export const StudentLearningProfileModal: React.FC<
                 Điểm TB
               </span>
               <span className="text-lg font-black text-blue-700 dark:text-blue-400">
-                {student.averageScore} / 10
+                {formatScore10(student.averageScore)} / 10
               </span>
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-center">
               <span className="text-[11px] font-semibold text-slate-500 block mb-0.5">
-                Đã Nộp
+                Đã nộp
               </span>
               <span className="text-lg font-black text-slate-900 dark:text-white">
                 {student.completedTasks} / {student.totalTasks}
@@ -510,11 +531,11 @@ export const StudentLearningProfileModal: React.FC<
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-center">
               <span className="text-[11px] font-semibold text-slate-500 block mb-0.5">
-                AI Limit (Hôm nay)
+                Quota AI
               </span>
               {student.aiQuota?.isBlocked ? (
                 <span className="text-sm font-black text-rose-500 uppercase mt-1 block">
-                  Bị Chặn
+                  Bị chặn
                 </span>
               ) : (
                 <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
@@ -524,7 +545,7 @@ export const StudentLearningProfileModal: React.FC<
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-center">
               <span className="text-[11px] font-semibold text-slate-500 block mb-0.5">
-                Chuyên Cần
+                Chuyên cần
               </span>
               <span className="text-lg font-black text-amber-500 dark:text-amber-400">
                 {student.attendanceScore || 0}%
@@ -532,7 +553,7 @@ export const StudentLearningProfileModal: React.FC<
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-center col-span-2 sm:col-span-1">
               <span className="text-[11px] font-semibold text-slate-500 block mb-0.5">
-                Tổng T.Gian
+                Thời gian
               </span>
               <span className="text-lg font-black text-sky-600 dark:text-cyan-400">
                 {Math.floor((student.totalStudyMinutes || 0) / 60)}h{" "}
@@ -553,7 +574,7 @@ export const StudentLearningProfileModal: React.FC<
               }`}
             >
               <Mic className="h-3.5 w-3.5" />
-              <span>Bài Nộp Speaking &amp; Viết Luận</span>
+              <span>Bài nộp</span>
               <span
                 className={`rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${
                   activeTab === "submissions"
@@ -575,7 +596,7 @@ export const StudentLearningProfileModal: React.FC<
               }`}
             >
               <Calendar className="h-3.5 w-3.5" />
-              <span>Tiến Độ &amp; Điểm Yếu</span>
+              <span>Tiến độ &amp; Điểm yếu</span>
             </button>
           </div>
 
@@ -586,11 +607,11 @@ export const StudentLearningProfileModal: React.FC<
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(
                     [
-                      { id: "SPEAKING_WRITING", label: "Speaking, Viết & Bài thi" },
-                      { id: "EXAMS", label: "Chỉ Bài thi" },
-                      { id: "SPEAKING", label: "Chỉ Luyện nói" },
-                      { id: "WRITING", label: "Chỉ Viết luận" },
-                      { id: "ALL", label: "Tất cả bài nộp" },
+                      { id: "SPEAKING_WRITING", label: "Speaking, Viết & Thi" },
+                      { id: "EXAMS", label: "Bài thi" },
+                      { id: "SPEAKING", label: "Speaking" },
+                      { id: "WRITING", label: "Viết luận" },
+                      { id: "ALL", label: "Tất cả" },
                     ] as const
                   ).map((opt) => (
                     <button
@@ -611,10 +632,10 @@ export const StudentLearningProfileModal: React.FC<
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(
                     [
-                      { id: "ALL", label: "Mọi trạng thái" },
-                      { id: "PENDING", label: "Chờ GV chấm" },
+                      { id: "ALL", label: "Tất cả" },
+                      { id: "PENDING", label: "Chờ chấm" },
                       { id: "AI_GRADED", label: "AI đã chấm" },
-                      { id: "COMPLETED", label: "GV đã chấm" },
+                      { id: "COMPLETED", label: "Đã chấm" },
                     ] as const
                   ).map((st) => (
                     <button
@@ -637,7 +658,7 @@ export const StudentLearningProfileModal: React.FC<
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 p-12 text-center">
                   <Loader2 className="h-7 w-7 animate-spin text-blue-600 mx-auto mb-2" />
                   <p className="text-xs text-slate-500">
-                    Đang tải bài nộp Speaking &amp; Viết luận theo từng ngày...
+                    Đang tải...
                   </p>
                 </div>
               ) : submissionsError ? (
@@ -648,10 +669,7 @@ export const StudentLearningProfileModal: React.FC<
                 <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 p-10 text-center space-y-2">
                   <BookOpen className="h-10 w-10 text-slate-300 dark:text-slate-700 mx-auto" />
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Chưa có bài nộp phù hợp bộ lọc
-                  </p>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Học viên chưa nộp bài Speaking/Viết luận nào hoặc chưa có bài khớp bộ lọc trạng thái hiện tại.
+                    Không có bài nộp
                   </p>
                 </div>
               ) : (
@@ -748,8 +766,8 @@ export const StudentLearningProfileModal: React.FC<
                                     }`}
                                   >
                                     {isCompleted
-                                      ? `GV: ${item.score ?? 0}/10`
-                                      : "Chờ GV chấm"}
+                                      ? `GV: ${formatScore10(item.score)}/10`
+                                      : "Chờ chấm"}
                                   </span>
                                 </div>
 
@@ -769,7 +787,7 @@ export const StudentLearningProfileModal: React.FC<
                                       <Bot className="h-3 w-3" />
                                       AI:{" "}
                                       {item.aiScore != null
-                                        ? item.aiScore
+                                        ? (normalizeScoreTo10(item.aiScore) ?? "Đã chấm")
                                         : "Đã chấm"}
                                       {item.aiCefr ? ` • ${item.aiCefr}` : ""}
                                     </span>
@@ -787,18 +805,18 @@ export const StudentLearningProfileModal: React.FC<
                   <div className="lg:col-span-7">
                     {!selectedItem ? (
                       <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-10 text-center text-xs text-slate-500">
-                        Chọn một bài nộp bên trái để xem nội dung, điểm AI và chấm điểm.
+                        Chọn bài nộp để xem và chấm điểm.
                       </div>
                     ) : loadingDetail ? (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center">
                         <Loader2 className="h-7 w-7 animate-spin text-blue-600 mx-auto mb-2" />
                         <p className="text-xs text-slate-500">
-                          Đang tải nội dung bài nộp và đánh giá AI...
+                          Đang tải...
                         </p>
                       </div>
                     ) : !submissionDetail ? (
                       <div className="rounded-xl border border-rose-200 dark:border-rose-800/40 p-6 text-center text-xs text-rose-500">
-                        Không thể tải dữ liệu chi tiết cho bài nộp này.
+                        Tải chi tiết thất bại.
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/60 p-4 sm:p-5 space-y-4">
@@ -816,7 +834,7 @@ export const StudentLearningProfileModal: React.FC<
                               )}
                             </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              Lần nộp #{selectedItem.attemptNumber || 1} •{" "}
+                              Lần #{selectedItem.attemptNumber || 1} •{" "}
                               {formatTimeDateVi(selectedItem.submittedAt)}
                             </p>
                           </div>
@@ -827,11 +845,11 @@ export const StudentLearningProfileModal: React.FC<
                                 <div className="rounded-lg border border-blue-500/30 bg-blue-600/10 px-2.5 py-1 text-right">
                                   <span className="block text-[9px] uppercase font-bold text-blue-700 dark:text-blue-400">
                                     {submissionDetail.status === "COMPLETED"
-                                      ? "Điểm GV hiện tại"
-                                      : "Điểm tạm tính"}
+                                      ? "Điểm GV"
+                                      : "Tạm tính"}
                                   </span>
                                   <span className="text-sm font-black text-blue-800 dark:text-blue-300">
-                                    {submissionDetail.score} / 10
+                                    {formatScore10(submissionDetail.score)} / 10
                                   </span>
                                 </div>
                               )}
@@ -856,8 +874,8 @@ export const StudentLearningProfileModal: React.FC<
                             >
                               <ShieldAlert className="h-4 w-4 shrink-0" />
                               {submissionDetail.isCheatingFlagged
-                                ? `Đánh dấu GIAN LẬN (${submissionDetail.violationCount ?? 3}/${submissionDetail.maxViolations ?? 3} lần vi phạm)`
-                                : `Cảnh báo rời màn hình (${submissionDetail.violationCount ?? 0}/${submissionDetail.maxViolations ?? 3})`}
+                                ? `GIAN LẬN (${submissionDetail.violationCount ?? 3}/${submissionDetail.maxViolations ?? 3} vi phạm)`
+                                : `Rời màn hình (${submissionDetail.violationCount ?? 0}/${submissionDetail.maxViolations ?? 3})`}
                             </div>
                             {submissionDetail.cheatingReason && (
                               <p className="text-[11px] text-rose-700 dark:text-rose-200 font-medium">
@@ -882,8 +900,7 @@ export const StudentLearningProfileModal: React.FC<
                           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2">
                             <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                             <span>
-                              Bài luyện tập này chỉ lưu trạng thái{" "}
-                              <strong>Đã hoàn thành</strong> và điểm tổng, không lưu chi tiết câu trả lời (chỉ lưu bài luận, Speaking và Bài thi).
+                              Chỉ lưu <strong>Đã hoàn thành</strong> &amp; điểm tổng, không lưu đáp án.
                             </span>
                           </div>
                         )}
@@ -941,7 +958,7 @@ export const StudentLearningProfileModal: React.FC<
                                   <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2">
                                     <span className="text-[10px] font-semibold text-slate-500 flex items-center mb-1">
                                       <Volume2 className="h-3 w-3 mr-1 text-emerald-500" />
-                                      Audio đề bài:
+                                      Audio đề:
                                     </span>
                                     <audio
                                       src={q.mediaUrl}
@@ -954,7 +971,7 @@ export const StudentLearningProfileModal: React.FC<
                                 {/* Student submission body */}
                                 <div className="space-y-1.5">
                                   <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-                                    <span>Bài làm của học sinh:</span>
+                                    <span>Bài làm:</span>
                                     {isEssay && q.studentAnswer && (
                                       <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
                                         {wordCount} từ
@@ -966,7 +983,7 @@ export const StudentLearningProfileModal: React.FC<
                                     <div className="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-2.5 space-y-2">
                                       <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                                         <Mic className="h-3.5 w-3.5" />
-                                        Bản ghi âm bài nói của học sinh:
+                                        Audio bài nói:
                                       </div>
                                       <audio
                                         src={q.audioUrl}
@@ -975,7 +992,7 @@ export const StudentLearningProfileModal: React.FC<
                                       />
                                       {fallbackTranscript && !q.aiEvaluation?.sttTranscript && (
                                         <div className="text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800">
-                                          <strong className="mr-1">Gợi ý/Transcript:</strong>
+                                          <strong className="mr-1">Transcript:</strong>
                                           {fallbackTranscript}
                                         </div>
                                       )}
@@ -1007,7 +1024,7 @@ export const StudentLearningProfileModal: React.FC<
                                             </span>
                                             {isChosen && (
                                               <span className="text-[10px] font-bold uppercase shrink-0">
-                                                Học sinh chọn
+                                                Đã chọn
                                               </span>
                                             )}
                                           </div>
@@ -1021,7 +1038,7 @@ export const StudentLearningProfileModal: React.FC<
                                   ) : (
                                     !q.audioUrl && (
                                       <div className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50/50 dark:bg-rose-950/20 p-2 text-xs italic text-rose-500">
-                                        Học sinh chưa nhập nội dung câu trả lời cho phần này.
+                                        Chưa trả lời.
                                       </div>
                                     )
                                   )}
@@ -1096,29 +1113,27 @@ export const StudentLearningProfileModal: React.FC<
                                 <Award className="h-4 w-4 text-amber-500" />
                               )}
                               {submissionDetail.status === "COMPLETED"
-                                ? "Chấm Lại & Cập Nhật Nhận Xét Của Giáo Viên"
-                                : "Chấm Điểm & Gửi Nhận Xét"}
+                                ? "Chấm lại"
+                                : "Chấm điểm"}
                             </span>
 
-                            {selectedItem.aiScore != null && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setInputScore(
-                                    String(
-                                      Math.min(
-                                        10,
-                                        Math.round(selectedItem.aiScore! * 10) / 10,
-                                      ),
-                                    ),
-                                  )
-                                }
-                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 px-2 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white transition cursor-pointer"
-                              >
-                                <Sparkles className="h-3 w-3" />
-                                Lấy điểm AI ({selectedItem.aiScore})
-                              </button>
-                            )}
+                            {(() => {
+                              const appliedAi = resolveAiApplyScore(
+                                selectedItem.aiScore,
+                                selectedItem.aiEvalType,
+                              );
+                              if (appliedAi === null) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setInputScore(String(appliedAi))}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 px-2 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white transition cursor-pointer"
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                  Dùng điểm AI ({appliedAi}/10)
+                                </button>
+                              );
+                            })()}
                           </div>
 
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
@@ -1156,14 +1171,14 @@ export const StudentLearningProfileModal: React.FC<
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center justify-between gap-1.5">
                               <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                                Nhận xét của giáo viên:
+                                Nhận xét:
                               </label>
                               <div className="flex flex-wrap items-center gap-1">
                                 {[
-                                  "Làm bài rất tốt!",
-                                  "Cần chú ý ngữ pháp & chia thì",
-                                  "Phát âm rõ ràng, cải thiện ngữ điệu",
-                                  "Ý tốt, nên dùng thêm từ vựng nâng cao",
+                                  "Làm tốt!",
+                                  "Chú ý ngữ pháp & thì",
+                                  "Cải thiện phát âm, ngữ điệu",
+                                  "Tăng từ vựng nâng cao",
                                 ].map((chip) => (
                                   <button
                                     key={chip}
@@ -1185,7 +1200,7 @@ export const StudentLearningProfileModal: React.FC<
                               rows={3}
                               value={feedback}
                               onChange={(e) => setFeedback(e.target.value)}
-                              placeholder="Nhập nhận xét hoặc góp ý sửa bài cho học viên..."
+                              placeholder="Nhập nhận xét..."
                               className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600 placeholder-slate-400"
                             />
                           </div>
@@ -1206,8 +1221,8 @@ export const StudentLearningProfileModal: React.FC<
                                   <Send className="h-3.5 w-3.5" />
                                   <span>
                                     {submissionDetail.status === "COMPLETED"
-                                      ? "Cập Nhật Điểm (Chấm Lại)"
-                                      : "Lưu Điểm & Gửi Nhận Xét"}
+                                      ? "Cập nhật điểm"
+                                      : "Lưu điểm"}
                                   </span>
                                 </>
                               )}
@@ -1227,10 +1242,7 @@ export const StudentLearningProfileModal: React.FC<
               student.dailyProgressDetails.length > 0 ? (
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 p-5 space-y-4">
                   <div className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                    <span>Chi Tiết Tiến Độ Từng Ngày</span>
-                    <span className="text-[11px] font-semibold normal-case text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2.5 py-1 rounded-lg">
-                      Theo lộ trình lớp học
-                    </span>
+                    <span>Tiến độ theo ngày</span>
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -1239,13 +1251,13 @@ export const StudentLearningProfileModal: React.FC<
                         <tr>
                           <th className="px-4 py-3">Ngày</th>
                           <th className="px-4 py-3 text-center">
-                            Bài tập hoàn thành
+                            Hoàn thành
                           </th>
                           <th className="px-4 py-3 text-center">
-                            Thời gian học
+                            Thời gian
                           </th>
                           <th className="px-4 py-3 text-center">
-                            Điểm số trung bình
+                            Điểm TB
                           </th>
                           <th className="px-4 py-3 text-right">Trạng thái</th>
                         </tr>
@@ -1268,7 +1280,7 @@ export const StudentLearningProfileModal: React.FC<
                               {detail.studyMinutes} phút
                             </td>
                             <td className="px-4 py-3 text-center text-emerald-600 dark:text-emerald-400 font-bold">
-                              {detail.score}
+                              {formatScore10(detail.score)}
                             </td>
                             <td className="px-4 py-3 text-right">
                               {detail.completedTasks > 0 ? (
@@ -1277,7 +1289,7 @@ export const StudentLearningProfileModal: React.FC<
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-600 text-xs font-semibold">
-                                  Vắng mặt
+                                  Vắng
                                 </span>
                               )}
                             </td>
@@ -1289,18 +1301,18 @@ export const StudentLearningProfileModal: React.FC<
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-8 text-center text-xs text-slate-500">
-                  Lớp học chưa có dữ liệu tiến độ theo lộ trình ngày.
+                  Chưa có dữ liệu tiến độ.
                 </div>
               )}
 
               <div className="rounded-xl border border-blue-200 dark:border-blue-600/20 bg-blue-50/50 dark:bg-blue-600/5 p-4 space-y-3">
                 <div className="flex items-center text-xs font-bold text-blue-800 dark:text-blue-300">
                   <Bot className="h-4 w-4 mr-1.5 text-blue-700 dark:text-blue-400" />
-                  Điểm Yếu Cần Cải Thiện (AI Phân Tích)
+                  Điểm yếu (AI)
                 </div>
                 {student.weaknesses.length === 0 ? (
                   <div className="text-xs text-slate-500 dark:text-slate-400 italic">
-                    Học viên chưa có đủ dữ liệu để AI đánh giá.
+                    Chưa đủ dữ liệu đánh giá.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1327,7 +1339,7 @@ export const StudentLearningProfileModal: React.FC<
             onClick={onClose}
             className="rounded-xl bg-slate-200/70 dark:bg-slate-800 px-5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-300/70 dark:hover:bg-slate-700 transition cursor-pointer"
           >
-            Đóng cửa sổ
+            Đóng
           </button>
         </div>
       </div>

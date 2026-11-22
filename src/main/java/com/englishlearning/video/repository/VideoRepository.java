@@ -17,9 +17,16 @@ import java.util.UUID;
 public interface VideoRepository extends JpaRepository<Video, UUID> {
     List<Video> findByStatus(VideoStatus status);
 
+    List<Video> findByUploadedByIdOrderByCreatedAtDesc(UUID uploadedById);
+
+    List<Video> findByUploadedByIdAndStatusOrderByCreatedAtDesc(UUID uploadedById, VideoStatus status);
+
     Optional<Video> findByLessonId(UUID lessonId);
 
     List<Video> findByLessonIdIn(Collection<UUID> lessonIds);
+
+    @Query("SELECT v.uploadedBy.id FROM Video v WHERE v.id = :id")
+    Optional<UUID> findUploadedById(@Param("id") UUID id);
 
     @Modifying
     @Query("DELETE FROM Video v WHERE v.id IN :ids")

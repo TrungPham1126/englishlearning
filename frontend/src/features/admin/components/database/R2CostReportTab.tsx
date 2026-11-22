@@ -77,7 +77,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
                     : "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300"
                 }`}
               >
-                {report.liveConnected ? "Đồng bộ Live Cloudflare R2" : "Chế độ ước tính Database"}
+                {report.liveConnected ? "Live R2" : "Ước tính DB"}
               </span>
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
@@ -87,8 +87,8 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         </div>
 
         <div className="text-xs text-slate-500 dark:text-slate-400 shrink-0 text-right">
-          <div>Egress Bandwidth: <strong className="text-emerald-600 dark:text-emerald-400">$0.00 (Miễn phí 100%)</strong></div>
-          <div>Tỷ giá quy đổi: <strong>1 USD = {report.usdToVndRate.toLocaleString("vi-VN")} ₫</strong></div>
+          <div>Egress: <strong className="text-emerald-600 dark:text-emerald-400">$0.00 (Free)</strong></div>
+          <div>Tỷ giá: <strong>1 USD = {report.usdToVndRate.toLocaleString("vi-VN")} ₫</strong></div>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Chi Phí R2 Thực Trả (Tháng)
+              Chi phí R2 (tháng)
             </span>
             <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <DollarSign size={20} />
@@ -120,7 +120,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             />
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Giá trị gốc (chưa Free Tier):</span>
+            <span>Chưa trừ Free Tier:</span>
             <strong>${report.grossEquivalentUsd.toFixed(4)}</strong>
           </div>
         </div>
@@ -129,7 +129,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Dung Lượng Lưu Trữ
+              Dung lượng R2
             </span>
             <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 flex items-center justify-center">
               <HardDrive size={20} />
@@ -157,7 +157,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             />
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Đã dùng Free Tier:</span>
+            <span>Free Tier:</span>
             <strong>{report.freeTierUsagePercent.toFixed(1)}%</strong>
           </div>
         </div>
@@ -176,7 +176,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             {report.classAOps.toLocaleString()}
           </div>
           <div className="text-xs font-semibold text-slate-500 mt-1">
-            Miễn phí 1,000,000 ops/tháng
+            Free 1M ops/tháng
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
             <div
@@ -185,7 +185,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             />
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Phí phát sinh ($4.50/1M):</span>
+            <span>Phí ($4.50/1M):</span>
             <strong>${report.classACostUsd.toFixed(4)}</strong>
           </div>
         </div>
@@ -204,7 +204,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             {report.classBOps.toLocaleString()}
           </div>
           <div className="text-xs font-semibold text-slate-500 mt-1">
-            Đã xóa/dọn: <strong>{report.deleteOps.toLocaleString()}</strong> objects ($0 phí)
+            Delete: <strong>{report.deleteOps.toLocaleString()}</strong> ($0)
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
             <div
@@ -213,7 +213,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
             />
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Phí phát sinh ($0.36/1M):</span>
+            <span>Phí ($0.36/1M):</span>
             <strong>${report.classBCostUsd.toFixed(4)}</strong>
           </div>
         </div>
@@ -224,15 +224,10 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         {/* Category Breakdown */}
         <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <FileArchive size={18} className="text-blue-700 dark:text-blue-400" />
-                Phân Bổ Dung Lượng Theo Loại Học Liệu &amp; Bài Nộp
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Theo dõi nhóm dữ liệu nào chiếm dung lượng lưu trữ lớn nhất trên Cloudflare R2
-              </p>
-            </div>
+            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <FileArchive size={18} className="text-blue-700 dark:text-blue-400" />
+              Dung lượng theo loại
+            </h3>
           </div>
 
           <div className="space-y-4">
@@ -267,35 +262,34 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <ShieldCheck size={18} className="text-emerald-600" /> Bảng Định Giá Chuẩn Cloudflare R2
+              <ShieldCheck size={18} className="text-emerald-600" /> Định giá Cloudflare R2
             </h3>
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-600 dark:text-slate-400">Lưu trữ Standard (sau 10 GB Free)</span>
+                <span className="text-slate-600 dark:text-slate-400">Standard (sau 10 GB Free)</span>
                 <span className="font-bold text-slate-900 dark:text-white">$0.015 / GB-tháng</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-600 dark:text-slate-400">Class A: Ghi / Liệt kê (sau 1M/tháng)</span>
-                <span className="font-bold text-slate-900 dark:text-white">$4.50 / 1M requests</span>
+                <span className="text-slate-600 dark:text-slate-400">Class A (sau 1M/tháng)</span>
+                <span className="font-bold text-slate-900 dark:text-white">$4.50 / 1M req</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-600 dark:text-slate-400">Class B: Đọc / Phát (sau 10M/tháng)</span>
-                <span className="font-bold text-slate-900 dark:text-white">$0.36 / 1M requests</span>
+                <span className="text-slate-600 dark:text-slate-400">Class B (sau 10M/tháng)</span>
+                <span className="font-bold text-slate-900 dark:text-white">$0.36 / 1M req</span>
               </div>
               <div className="flex justify-between py-1.5">
-                <span className="text-slate-600 dark:text-slate-400">Egress (Băng thông tải ra) &amp; Delete</span>
-                <span className="font-black text-emerald-600 dark:text-emerald-400">$0.00 (Miễn phí)</span>
+                <span className="text-slate-600 dark:text-slate-400">Egress &amp; Delete</span>
+                <span className="font-black text-emerald-600 dark:text-emerald-400">$0.00 (Free)</span>
               </div>
             </div>
           </div>
 
           <div className="bg-gradient-to-br from-blue-900 to-slate-900 text-white p-6 rounded-xl shadow-sm space-y-3">
             <div className="flex items-center gap-2 font-black text-sm">
-              <Sparkles size={18} className="text-amber-300" /> Gợi Ý Tối Ưu Dung Lượng R2 &amp; DB
+              <Sparkles size={18} className="text-amber-300" /> Tối ưu R2 &amp; DB
             </div>
             <p className="text-xs text-slate-200 leading-relaxed">
-              Hiện hệ thống có <strong>{completedClassesCount}</strong> lớp học đã kết thúc và{" "}
-              <strong>{submissionAudioCount}</strong> file audio Speaking học viên. Dọn sạch dữ liệu bài làm ở các lớp đã hoàn thành giúp giải phóng cả Database lẫn Cloudflare R2 hoàn toàn miễn phí ($0 phí DeleteObject).
+              <strong>{completedClassesCount}</strong> lớp đã kết thúc • <strong>{submissionAudioCount}</strong> audio Speaking. Dọn bài làm để giải phóng DB &amp; R2 miễn phí ($0 Delete).
             </p>
             {onSwitchToDatabaseTab && (
               <button
@@ -303,7 +297,7 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
                 onClick={onSwitchToDatabaseTab}
                 className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/15 hover:bg-white/25 text-white px-4 py-2 rounded-lg cursor-pointer transition"
               >
-                Mở Quản Lý Lớp &amp; Dọn Dữ Liệu <ArrowRight size={14} />
+                Dọn dữ liệu lớp <ArrowRight size={14} />
               </button>
             )}
           </div>
@@ -315,16 +309,16 @@ export const R2CostReportTab: React.FC<R2CostReportTabProps> = ({
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
             <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              Top Tệp Tin Chiếm Dung Lượng Lớn Nhất
+              Tệp dung lượng lớn nhất
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/80 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="p-3 pl-6">Object Key / Tên Tệp</th>
-                  <th className="p-3">Phân Loại</th>
-                  <th className="p-3 text-right pr-6">Dung Lượng</th>
+                  <th className="p-3 pl-6">Object Key</th>
+                  <th className="p-3">Loại</th>
+                  <th className="p-3 text-right pr-6">Dung lượng</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

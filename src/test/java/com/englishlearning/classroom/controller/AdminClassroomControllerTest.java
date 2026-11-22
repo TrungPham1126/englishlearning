@@ -383,4 +383,182 @@ class AdminClassroomControllerTest {
                 .andExpect(jsonPath("$.message").value("Đã xóa hoàn toàn lớp học"))
                 .andExpect(jsonPath("$.data.entireClassroomDeleted").value(true));
     }
+
+    @Test
+    @DisplayName("POST /api/admin/classrooms - Tên lớp trùng trả 400 Bad Request")
+    void createClassroom_duplicateName_returns400() throws Exception {
+        when(classroomService.createClassroom(any(CreateClassroomRequest.class)))
+                .thenThrow(new BadRequestException("Tên lớp học đã tồn tại"));
+
+        String body = """
+                {
+                  "name": "IELTS Mastery",
+                  "level": "B2"
+                }
+                """;
+
+        mockMvc.perform(post("/api/admin/classrooms")
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Tên lớp học đã tồn tại"));
+    }
+
+    @Test
+    @DisplayName("POST /api/admin/classrooms - teacherId không tồn tại trả 404 Not Found")
+    void createClassroom_teacherNotFound_returns404() throws Exception {
+        when(classroomService.createClassroom(any(CreateClassroomRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy thông tin giảng viên"));
+
+        String body = """
+                {
+                  "name": "IELTS Mastery",
+                  "level": "B2",
+                  "teacherId": "cccccccc-1111-2222-3333-444444444444"
+                }
+                """;
+
+        mockMvc.perform(post("/api/admin/classrooms")
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy thông tin giảng viên"));
+    }
+
+    @Test
+    @DisplayName("GET /api/admin/classrooms - Không truyền status sẽ truyền null xuống service")
+    void getAllClassrooms_withoutStatusFilter_passesNullStatus() throws Exception {
+        PageResponse<ClassroomResponse> page = PageResponse.<ClassroomResponse>builder()
+                .content(List.of(sampleClassroom()))
+                .pageNumber(0)
+                .pageSize(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+        when(classroomService.getAllClassrooms(eq(null), any(Pageable.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/admin/classrooms")
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        verify(classroomService).getAllClassrooms(eq(null), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/admin/classrooms/{id}/students/{studentId} - Không tìm thấy ghi danh trả 404")
+    void removeStudentFromClass_enrollmentNotFound_returns404() throws Exception {
+        doThrow(new ResourceNotFoundException("Không tìm thấy thông tin ghi danh"))
+                .when(classroomService).leaveClass(classId, studentId);
+
+        mockMvc.perform(delete("/api/admin/classrooms/{id}/students/{studentId}", classId, studentId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy thông tin ghi danh"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/admin/classrooms/{id}/status - Lớp học không tồn tại trả 404")
+    void updateStatus_classroomNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(classroomService.updateClassStatus(eq(missingId), any(UpdateClassStatusRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy lớp học"));
+
+        mockMvc.perform(put("/api/admin/classrooms/{id}/status", missingId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "status": "OPEN" }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("PUT /api/admin/classrooms/{id}/assign-teacher - Không tìm thấy lớp hoặc giảng viên trả 404")
+    void assignTeacher_notFound_returns404() throws Exception {
+        when(classroomService.assignTeacher(eq(classId), any(AssignTeacherRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy giảng viên"));
+
+        mockMvc.perform(put("/api/admin/classrooms/{id}/assign-teacher", classId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "teacherId": "cccccccc-1111-2222-3333-444444444444" }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy giảng viên"));
+    }
+
+    @Test
+    @DisplayName("POST /api/admin/classrooms/{id}/enroll - Thiếu studentIdentifier trả 400 Validation failed")
+    void enrollStudent_blankIdentifier_returns400() throws Exception {
+        mockMvc.perform(post("/api/admin/classrooms/{id}/enroll", classId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "studentIdentifier": "   " }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.studentIdentifier").exists());
+
+        verifyNoInteractions(classroomService);
+    }
+
+    @Test
+    @DisplayName("POST /api/admin/classrooms/{id}/enroll - Không tìm thấy tài khoản học viên trả 404")
+    void enrollStudent_studentNotFound_returns404() throws Exception {
+        doThrow(new ResourceNotFoundException("Không tìm thấy tài khoản học viên với email/SĐT: missing@test.com"))
+                .when(classroomService).enrollStudent(eq(classId), any(EnrollStudentRequest.class));
+
+        mockMvc.perform(post("/api/admin/classrooms/{id}/enroll", classId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "studentIdentifier": "missing@test.com" }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/admin/classrooms/{id} - Lớp học không tồn tại trả 404")
+    void deleteClassroom_classroomNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(adminDatabaseService.deleteClassroom(eq(missingId), eq(adminId), any()))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy lớp học"));
+
+        mockMvc.perform(delete("/api/admin/classrooms/{id}", missingId)
+                        .with(user(userWithRole(adminId, "admin@test.com", RoleName.ROLE_ADMIN)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/admin/classrooms/{id} - TEACHER gọi API xóa lớp bị chặn 403 Forbidden")
+    void deleteClassroom_asTeacher_returns403() throws Exception {
+        mockMvc.perform(delete("/api/admin/classrooms/{id}", classId)
+                        .with(user(userWithRole(teacherId, "teacher@test.com", RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminDatabaseService);
+    }
 }

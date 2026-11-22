@@ -99,7 +99,8 @@ class G2PConverter:
         "huy", "hoang", "khoa", "long", "son", "tai", "thao", "trang", "yen",
         "ngan", "vy", "phuc", "thanh", "dat", "bac", "bao", "chau", "cuong",
         "diep", "giang", "hai", "hieu", "kien", "loan", "nga", "ngoc", "nhung",
-        "oanh", "quan", "quynh", "tan", "tien", "van", "vu"
+        "oanh", "quan", "quynh", "tan", "tien", "van", "vu", "nguyen", "tran",
+        "pham", "huynh", "truong", "thuong", "khuong", "tuan", "hung", "huong", "thuy"
     }
 
     def __init__(self):
@@ -258,9 +259,10 @@ def validate_script(text: str) -> List[str]:
         raise InvalidTranscriptError("Script không chứa từ tiếng Anh hợp lệ.")
 
     if len(words) >= 1 and valid_cmu_count == 0:
-        w0 = re.sub(r'[^a-zA-Z]', '', words[0]).lower()
-        if not g2p_converter.is_in_cmu(w0) and not g2p_converter.is_oov_word(words[0]) and len(w0) > 6:
-            raise InvalidTranscriptError(f"Từ '{words[0]}' không được nhận diện trong từ điển tiếng Anh tham chiếu.")
+        first_alpha = next((w for w in words if re.sub(r'[^a-zA-Z]', '', w)), words[0])
+        w0 = re.sub(r'[^a-zA-Z]', '', first_alpha).lower()
+        if not g2p_converter.is_in_cmu(w0) and not g2p_converter.is_oov_word(first_alpha) and len(w0) > 6:
+            raise InvalidTranscriptError(f"Từ '{first_alpha}' không được nhận diện trong từ điển tiếng Anh tham chiếu.")
 
     return words
 
@@ -315,7 +317,12 @@ class ModelManager:
                 from huggingface_hub import hf_hub_download
                 from transformers import Wav2Vec2ForCTC
 
-                cache_dir = str(settings.MODEL_CACHE_DIR)
+                raw_cache_path = Path(settings.MODEL_CACHE_DIR)
+                if not raw_cache_path.is_absolute() and not raw_cache_path.exists():
+                    pkg_cache = Path(__file__).resolve().parents[2] / raw_cache_path
+                    if pkg_cache.exists():
+                        raw_cache_path = pkg_cache
+                cache_dir = str(raw_cache_path)
                 os.makedirs(cache_dir, exist_ok=True)
 
                 class TokenizerWrapper:

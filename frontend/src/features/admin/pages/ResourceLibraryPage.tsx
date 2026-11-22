@@ -43,10 +43,10 @@ export default function ResourceLibraryPage() {
 
     try {
       await adminApi.uploadGlobalResource(formData);
-      alert("Tải lên Kho học liệu thành công!");
+      alert("Đã tải lên học liệu.");
       fetchResources();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi tải lên tài liệu");
+      alert(err.response?.data?.message || "Tải lên thất bại.");
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -54,35 +54,30 @@ export default function ResourceLibraryPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Xác nhận xóa tài liệu này khỏi kho chung?")) return;
+    if (!window.confirm("Xóa tài liệu này?")) return;
     try {
       await adminApi.deleteGlobalResource(id);
-      alert("Đã xóa tài liệu!");
+      alert("Đã xóa tài liệu.");
       fetchResources();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi xóa tài liệu");
+      alert(err.response?.data?.message || "Xóa thất bại.");
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Clean Open Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Kho Học Liệu Tập Trung (Global Bank)
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Tải tài liệu, video và đề thi gốc lên đây 1 lần để giáo viên toàn trung tâm tái sử dụng.
-          </p>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Kho học liệu
+        </h1>
         <label className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer disabled:opacity-50 text-sm">
           {isUploading ? (
             <Loader2 size={18} className="animate-spin" />
           ) : (
             <UploadCloud size={18} />
           )}
-          Tải Tệp Lên Kho
+          {isUploading ? "Đang tải..." : "Tải lên"}
           <input
             type="file"
             className="hidden"
@@ -97,19 +92,19 @@ export default function ResourceLibraryPage() {
           onClick={() => setActiveTab("DOC")}
           className={`px-6 py-3 text-sm font-black uppercase tracking-wider border-b-2 transition flex items-center gap-2 ${activeTab === "DOC" ? "border-blue-700 dark:border-blue-400 text-blue-800 dark:text-blue-400" : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"}`}
         >
-          <FileText size={18} /> Tài Liệu (PDF/Word)
+          <FileText size={18} /> Tài liệu (PDF/Word)
         </button>
         <button
           onClick={() => setActiveTab("VIDEO")}
           className={`px-6 py-3 text-sm font-black uppercase tracking-wider border-b-2 transition flex items-center gap-2 ${activeTab === "VIDEO" ? "border-blue-700 dark:border-blue-400 text-blue-800 dark:text-blue-400" : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"}`}
         >
-          <Video size={18} /> Video Tiêu Chuẩn
+          <Video size={18} /> Video
         </button>
         <button
           onClick={() => setActiveTab("EXAM")}
           className={`px-6 py-3 text-sm font-black uppercase tracking-wider border-b-2 transition flex items-center gap-2 ${activeTab === "EXAM" ? "border-blue-700 dark:border-blue-400 text-blue-800 dark:text-blue-400" : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"}`}
         >
-          <FileQuestion size={18} /> Bộ Đề Thi (Test Bank)
+          <FileQuestion size={18} /> Đề thi
         </button>
       </div>
 
@@ -125,10 +120,10 @@ export default function ResourceLibraryPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#162033] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-800">
-                <th className="p-4">Tên Tệp (File Name)</th>
+                <th className="p-4">Tên tệp</th>
                 <th className="p-4">Kích thước</th>
-                <th className="p-4">Đã được gán (Tái sử dụng)</th>
-                <th className="p-4">Ngày tải lên</th>
+                <th className="p-4">Đã gán</th>
+                <th className="p-4">Ngày tải</th>
                 <th className="p-4 text-right">Hành động</th>
               </tr>
             </thead>
@@ -139,7 +134,7 @@ export default function ResourceLibraryPage() {
                     colSpan={5}
                     className="p-12 text-center text-slate-400 font-semibold"
                   >
-                    Kho lưu trữ trống.
+                    Chưa có dữ liệu
                   </td>
                 </tr>
               ) : (
@@ -162,7 +157,7 @@ export default function ResourceLibraryPage() {
                     </td>
                     <td className="p-4">
                       <span className="bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border border-blue-200 dark:border-blue-600/30">
-                        {item.usedCount} Lớp học
+                        {item.usedCount} lớp
                       </span>
                     </td>
                     <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
@@ -171,6 +166,7 @@ export default function ResourceLibraryPage() {
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleDelete(item.id)}
+                        title="Xóa"
                         className="p-2 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition cursor-pointer"
                       >
                         <Trash2 size={18} />

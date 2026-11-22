@@ -80,6 +80,21 @@ public class AdminDatabaseController {
                 .body(workbookBytes);
     }
 
+    @GetMapping("/export-center-report")
+    public ResponseEntity<byte[]> exportCenterOverviewExcel() {
+        byte[] workbookBytes = adminDatabaseService.exportCenterOverviewExcel();
+        String filename = "Bao_cao_tong_hop_trung_tam_ELP.xlsx";
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encoded)
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentLength(workbookBytes.length)
+                .body(workbookBytes);
+    }
+
     @GetMapping("/r2-report")
     public ResponseEntity<ApiResponse<R2CostReportDto>> getR2CostReport() {
         return ResponseEntity.ok(ApiResponse.success(adminDatabaseService.getR2CostReport()));

@@ -25,6 +25,7 @@ import com.englishlearning.classroom.repository.ClassroomRepository;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.englishlearning.curriculum.entity.DailyStudyPlan;
 import com.englishlearning.curriculum.entity.GlobalResource;
 import com.englishlearning.curriculum.entity.Lesson;
@@ -270,9 +271,10 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
                 + (stats.deletedAiEvals * 6L)
                 + (totalR2Deleted * 512L);
 
+        String safeClassroomName = classroomName != null ? classroomName.replace("\"", "'") : "";
         String metadata = String.format(
                 "{\"classroomName\":\"%s\",\"deletedAttempts\":%d,\"deletedLessons\":%d,\"deletedAssignments\":%d,\"deletedR2Files\":%d}",
-                classroomName.replace("\"", "'"), stats.deletedAttempts, lessonIds.size(), assignmentIds.size(), totalR2Deleted);
+                safeClassroomName, stats.deletedAttempts, lessonIds.size(), assignmentIds.size(), totalR2Deleted);
         recordSafeAudit(actorUserId, "DELETE_CLASSROOM", "Classroom", classroomId.toString(), ipAddress, metadata);
 
         return ClassroomPurgeResultDto.builder()
@@ -323,7 +325,7 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
                     .filter(a -> Boolean.TRUE.equals(a.getIsCheatingFlagged()))
                     .count();
 
-            double avgScore = sp.getAverageScore() != null ? sp.getAverageScore() : 0.0;
+            double avgScore = ScoreScaleUtils.normalizeToScale10OrZero(sp.getAverageScore());
             int completionRate = sp.getCompletionRate() != null ? sp.getCompletionRate() : 0;
             sumCompletion += completionRate;
             if (!studentAttempts.isEmpty() && avgScore > 0) {
@@ -380,7 +382,7 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
                     .status(att.getStatus() != null ? att.getStatus().name() : "-")
                     .submittedAt(att.getSubmittedAt() != null ? VN_TIME_FMT.format(att.getSubmittedAt()) : "-")
                     .durationSeconds(att.getDurationSeconds())
-                    .totalScore(att.getTotalScore())
+                    .totalScore(ScoreScaleUtils.normalizeToScale10(att.getTotalScore()))
                     .violationCount(att.getViolationCount() != null ? att.getViolationCount() : 0)
                     .cheatingFlagged(Boolean.TRUE.equals(att.getIsCheatingFlagged()))
                     .cheatingReason(att.getCheatingReason())
@@ -430,6 +432,19 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
     @Override
     public byte[] exportClassroomReportExcel(ClassroomDetailedReportDto report) {
         return excelExporter.export(report);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] exportCenterOverviewExcel() {
+        AdminDatabaseOverviewDto overview = getDatabaseOverview();
+        R2CostReportDto r2Report = null;
+        try {
+            r2Report = getR2CostReport();
+        } catch (Exception ex) {
+            log.warn("Không thể tải thống kê R2 khi xuất báo cáo Excel tổng hợp, tiếp tục xuất với dữ liệu R2 trống: {}", ex.getMessage());
+        }
+        return excelExporter.exportCenterReport(overview, r2Report);
     }
 
     @Override
@@ -551,6 +566,7 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
         UUID classroomId = classroom.getId();
         List<ClassStudent> enrollments = classStudentRepository.findByClassroomId(classroomId);
         List<UUID> studentIds = enrollments.stream()
+                .filter(cs -> cs != null && cs.getStudent() != null && cs.getStudent().getId() != null)
                 .map(cs -> cs.getStudent().getId())
                 .distinct()
                 .toList();
@@ -579,9 +595,9 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
         long cheatingFlags = attempts.stream().filter(a -> Boolean.TRUE.equals(a.getIsCheatingFlagged())).count();
         OptionalDouble avgOpt = attempts.stream()
                 .filter(a -> a.getTotalScore() != null && a.getStatus() == AttemptStatus.COMPLETED)
-                .mapToDouble(AssignmentAttempt::getTotalScore)
+                .mapToDouble(a -> ScoreScaleUtils.normalizeToScale10OrZero(a.getTotalScore()))
                 .average();
-        double avgScore = avgOpt.isPresent() ? Math.round(avgOpt.getAsDouble() * 10.0) / 10.0 : 0.0;
+        double avgScore = avgOpt.isPresent() ? ScoreScaleUtils.clampScale10(avgOpt.getAsDouble()) : 0.0;
 
         long estKb = (attempts.size() * 4L)
                 + (answerCount * 2L)
@@ -644,6 +660,7 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
         }
 
         List<UUID> studentIds = classStudentRepository.findByClassroomId(classroomId).stream()
+                .filter(cs -> cs != null && cs.getStudent() != null && cs.getStudent().getId() != null)
                 .map(cs -> cs.getStudent().getId())
                 .distinct()
                 .toList();
@@ -715,7 +732,7 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
                     }
                 }
                 if (v.getHlsPlaylistUrl() != null && !protectedUrls.contains(v.getHlsPlaylistUrl())) {
-                    String hlsPrefix = extractHlsPrefix(v.getHlsPlaylistUrl());
+                    String hlsPrefix = extractHlsPrefix(v.getHlsPlaylistUrl(), v.getId());
                     if (hlsPrefix != null) {
                         deletedFiles += r2StorageService.deleteObjectsByPrefix(hlsPrefix);
                     }
@@ -857,16 +874,38 @@ public class AdminDatabaseServiceImpl implements AdminDatabaseService {
         return new ArrayList<>(ids);
     }
 
-    private String extractHlsPrefix(String hlsPlaylistUrl) {
-        int idx = hlsPlaylistUrl.indexOf("hls/");
+    private String extractHlsPrefix(String hlsPlaylistUrl, UUID videoId) {
+        if (hlsPlaylistUrl == null || hlsPlaylistUrl.isBlank()) {
+            return null;
+        }
+        String sanitized = hlsPlaylistUrl.trim();
+        int queryIdx = sanitized.indexOf('?');
+        if (queryIdx >= 0) {
+            sanitized = sanitized.substring(0, queryIdx);
+        }
+        int apiVideosIdx = sanitized.indexOf("/api/v1/videos/");
+        if (apiVideosIdx >= 0 && sanitized.contains("/hls/")) {
+            int idStart = apiVideosIdx + "/api/v1/videos/".length();
+            int hlsMarkerIdx = sanitized.indexOf("/hls/", idStart);
+            if (hlsMarkerIdx > idStart) {
+                String pathVideoId = sanitized.substring(idStart, hlsMarkerIdx);
+                if (!pathVideoId.isBlank() && !pathVideoId.contains("/")) {
+                    return "hls/" + pathVideoId + "/";
+                }
+            }
+            return videoId != null ? "hls/" + videoId + "/" : null;
+        }
+
+        int idx = sanitized.indexOf("hls/");
         if (idx < 0) {
             return null;
         }
-        int lastSlash = hlsPlaylistUrl.lastIndexOf('/');
-        if (lastSlash <= idx) {
+        int afterHls = idx + "hls/".length();
+        int lastSlash = sanitized.lastIndexOf('/');
+        if (lastSlash <= afterHls) {
             return null;
         }
-        return hlsPlaylistUrl.substring(idx, lastSlash + 1);
+        return sanitized.substring(idx, lastSlash + 1);
     }
 
     private String classifyScore(double averageScore, long totalAttempts) {

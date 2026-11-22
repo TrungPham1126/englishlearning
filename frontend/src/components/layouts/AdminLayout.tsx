@@ -57,7 +57,7 @@ export default function AdminLayout() {
         setImgError(false);
       }
     } catch {
-      alert("Không thể cập nhật ảnh đại diện!");
+      alert("Cập nhật ảnh thất bại.");
     } finally {
       e.target.value = "";
     }
@@ -120,24 +120,19 @@ export default function AdminLayout() {
             <div className="w-9 h-9 rounded-lg bg-blue-800 flex items-center justify-center text-white shadow-xs shrink-0">
               <GraduationCap size={18} />
             </div>
-            <div className="truncate">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-tight">
-                  ELP CENTER
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
-                  <ShieldCheck size={9} /> Admin
-                </span>
-              </div>
-              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 block truncate">
-                Cổng Quản Trị &amp; Giám Sát Hệ Thống
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                ELP CENTER
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
+                <ShieldCheck size={9} /> Admin
               </span>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
-            aria-label="Đóng thanh bên"
+            aria-label="Đóng menu"
             className="lg:hidden rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X size={18} />
@@ -146,38 +141,38 @@ export default function AdminLayout() {
 
         {/* Navigation Menu */}
         <nav
-          aria-label="Điều hướng quản trị viên"
+          aria-label="Điều hướng"
           className="flex-1 p-4 space-y-6 overflow-y-auto custom-scrollbar"
         >
           {/* Group 1: Đào tạo & Học vụ */}
           <div>
             <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Hoạt động Đào tạo
+              Đào tạo
             </p>
             <div className="space-y-1">
               <NavLink to="/admin/dashboard" className={navLinkClass}>
                 <LayoutDashboard size={18} />
-                <span>Tổng Quan</span>
+                <span>Tổng quan</span>
               </NavLink>
 
               <NavLink to="/admin/teachers" className={navLinkClass}>
                 <GraduationCap size={18} />
-                <span>Đội ngũ Giảng viên</span>
+                <span>Giảng viên</span>
               </NavLink>
 
               <NavLink to="/admin/students" className={navLinkClass}>
                 <Users size={18} />
-                <span>Quản lý Học viên</span>
+                <span>Học viên</span>
               </NavLink>
 
               <NavLink to="/admin/classrooms" className={navLinkClass}>
                 <School size={18} />
-                <span>Lớp Học &amp; Khóa Đào Tạo</span>
+                <span>Lớp học</span>
               </NavLink>
 
               <NavLink to="/admin/reports" className={navLinkClass}>
                 <BarChart3 size={18} />
-                <span>Báo Cáo &amp; Thống Kê</span>
+                <span>Báo cáo</span>
               </NavLink>
             </div>
           </div>
@@ -185,7 +180,7 @@ export default function AdminLayout() {
           {/* Group 2: Học liệu & Kiểm duyệt */}
           <div>
             <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Học Liệu &amp; Kiểm Duyệt
+              Học liệu
             </p>
             <div className="space-y-1">
               <NavLink
@@ -200,7 +195,7 @@ export default function AdminLayout() {
               >
                 <span className="flex items-center gap-3">
                   <Video size={18} />
-                  <span>Duyệt Video Bài Giảng</span>
+                  <span>Duyệt video</span>
                 </span>
                 {pendingVideoCount > 0 && (
                   <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs animate-pulse">
@@ -211,12 +206,12 @@ export default function AdminLayout() {
 
               <NavLink to="/admin/resource-library" className={navLinkClass}>
                 <Database size={18} />
-                <span>Kho Học Liệu Chung</span>
+                <span>Kho học liệu</span>
               </NavLink>
 
               <NavLink to="/admin/broadcast" className={navLinkClass}>
                 <Radio size={18} />
-                <span>Phát Thông Báo</span>
+                <span>Thông báo</span>
               </NavLink>
             </div>
           </div>
@@ -224,17 +219,17 @@ export default function AdminLayout() {
           {/* Group 3: Quản trị Tài khoản & Hệ thống */}
           <div>
             <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Quản Trị Người Dùng
+              Quản trị
             </p>
             <div className="space-y-1">
               <NavLink to="/admin/users" className={navLinkClass}>
                 <UserCog size={18} />
-                <span>Tất Cả Tài Khoản</span>
+                <span>Tài khoản</span>
               </NavLink>
 
               <NavLink to="/admin/audit-logs" className={navLinkClass}>
                 <Activity size={18} />
-                <span>Nhật Ký Thao Tác</span>
+                <span>Nhật ký</span>
               </NavLink>
             </div>
           </div>
@@ -242,17 +237,17 @@ export default function AdminLayout() {
           {/* Group 4: Hệ thống & Trí tuệ nhân tạo (AI) */}
           <div>
             <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Hệ Thống &amp; Trí Tuệ Nhân Tạo
+              Hệ thống &amp; AI
             </p>
             <div className="space-y-1">
               <NavLink to="/admin/ai-monitoring" className={navLinkClass}>
                 <Cpu size={18} />
-                <span>Giám Sát Token &amp; AI</span>
+                <span>Giám sát AI</span>
               </NavLink>
 
               <NavLink to="/admin/database" className={navLinkClass}>
                 <HardDrive size={18} />
-                <span>Quản Lý CSDL &amp; Cloud R2</span>
+                <span>CSDL &amp; R2</span>
               </NavLink>
             </div>
           </div>
@@ -263,7 +258,7 @@ export default function AdminLayout() {
           <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 shadow-2xs">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <label
-                title="Nhấp để đổi ảnh đại diện"
+                title="Đổi ảnh đại diện"
                 className="relative w-10 h-10 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm"
               >
                 {user?.avatarUrl && !imgError ? (
@@ -320,7 +315,7 @@ export default function AdminLayout() {
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              aria-label="Mở thanh điều hướng"
+              aria-label="Mở menu"
               className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300"
             >
               <Menu size={18} />
@@ -331,7 +326,7 @@ export default function AdminLayout() {
                 className="text-blue-700 dark:text-blue-400"
               />
               <span className="text-xs font-bold text-blue-950 dark:text-blue-300">
-                Hệ Thống Quản Trị Trung Tâm
+                Cổng quản trị
               </span>
             </div>
           </div>

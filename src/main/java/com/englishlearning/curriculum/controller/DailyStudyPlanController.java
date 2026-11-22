@@ -4,10 +4,12 @@ import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.curriculum.dto.CreateDailyPlanRequest;
 import com.englishlearning.curriculum.dto.CreatePlanItemRequest;
 import com.englishlearning.curriculum.dto.DailyHomeworkOverviewResponse;
+import com.englishlearning.curriculum.dto.StudentStreakResponse;
 import com.englishlearning.curriculum.dto.UpdateDailyPlanRequest;
 import com.englishlearning.curriculum.entity.DailyPlanItem;
 import com.englishlearning.curriculum.entity.DailyStudyPlan;
 import com.englishlearning.curriculum.service.DailyStudyPlanService;
+import com.englishlearning.curriculum.service.UserStreakService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -29,8 +31,35 @@ import java.util.UUID;
 public class DailyStudyPlanController {
 
     private final DailyStudyPlanService dailyStudyPlanService;
+    private final UserStreakService userStreakService;
 
     // ==================== API DÀNH CHO STUDENT ====================
+
+    @GetMapping("/my-streak")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
+    @Operation(summary = "Lấy thông tin chuỗi làm bài tập ngày hiện tại của học viên")
+    public ResponseEntity<ApiResponse<StudentStreakResponse>> getMyStreak(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse<>(401, "Phiên đăng nhập không hợp lệ", null));
+        }
+
+        UUID studentId = extractUserId(authentication);
+        if (studentId == null) {
+            StudentStreakResponse empty = StudentStreakResponse.builder()
+                    .currentStreak(0)
+                    .hasHomeworkToday(false)
+                    .completedToday(false)
+                    .todayCompletedTasks(0)
+                    .todayTotalTasks(0)
+                    .build();
+            return ResponseEntity.ok(ApiResponse.success("Lấy chuỗi bài tập ngày thành công", empty));
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy chuỗi bài tập ngày thành công",
+                userStreakService.getStreakSummary(studentId)));
+    }
 
     @GetMapping("/classrooms/{classroomId}/student-overview")
     @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
@@ -45,17 +74,24 @@ public class DailyStudyPlanController {
                     .body(new ApiResponse<>(401, "Phiên đăng nhập không hợp lệ", null));
         }
 
-        UUID studentId = null;
-        Object principal = authentication.getPrincipal();
-        try {
-            java.lang.reflect.Method getIdMethod = principal.getClass().getMethod("getId");
-            studentId = (UUID) getIdMethod.invoke(principal);
-        } catch (Exception ignored) {
-        }
+        UUID studentId = extractUserId(authentication);
 
         DailyHomeworkOverviewResponse response = dailyStudyPlanService.getStudentDailyOverview(
                 classroomId, studentId, selectedDayId);
         return ResponseEntity.ok(ApiResponse.success("Lấy thông tin lộ trình thành công", response));
+    }
+
+    private UUID extractUserId(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        if (principal == null) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Method getIdMethod = principal.getClass().getMethod("getId");
+            return (UUID) getIdMethod.invoke(principal);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     // ==================== API DÀNH CHO TEACHER / ADMIN ====================

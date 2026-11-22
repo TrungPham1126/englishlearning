@@ -84,7 +84,7 @@ export default function TeacherManagementPage() {
     const nextStatus = !user.isActive;
     if (
       !window.confirm(
-        `Bạn có chắc chắn muốn ${nextStatus ? "MỞ KHÓA" : "TẠM KHÓA"} tài khoản giảng viên "${user.lastName} ${user.firstName}"?`,
+        `${nextStatus ? "Mở khóa" : "Khóa"} giảng viên "${user.lastName} ${user.firstName}"?`,
       )
     )
       return;
@@ -92,14 +92,14 @@ export default function TeacherManagementPage() {
       await adminApi.toggleUserStatus(user.id, nextStatus);
       fetchTeachers(data.pageNumber, searchKeyword);
     } catch (err) {
-      alert("Lỗi khi cập nhật trạng thái giảng viên!");
+      alert("Cập nhật trạng thái thất bại.");
     }
   };
 
   const handleDelete = async (user: UserSummaryDto) => {
     if (
       !window.confirm(
-        `CẢNH BÁO: Xóa vĩnh viễn tài khoản giảng viên "${user.lastName} ${user.firstName}"?`,
+        `Xóa vĩnh viễn giảng viên "${user.lastName} ${user.firstName}"?`,
       )
     )
       return;
@@ -107,7 +107,7 @@ export default function TeacherManagementPage() {
       await adminApi.deleteUser(user.id);
       fetchTeachers(data.pageNumber, searchKeyword);
     } catch (err) {
-      alert("Không thể xóa giảng viên đang phụ trách lớp học hoặc có dữ liệu liên kết!");
+      alert("Không thể xóa giảng viên đang có lớp hoặc dữ liệu liên kết.");
     }
   };
 
@@ -119,12 +119,12 @@ export default function TeacherManagementPage() {
         ...formData,
         roles: ["ROLE_TEACHER"],
       });
-      alert("Tạo tài khoản giảng viên thành công!");
+      alert("Đã tạo giảng viên.");
       setIsCreateModalOpen(false);
       setFormData(initialForm);
       fetchTeachers(0, "");
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi tạo tài khoản");
+      alert(err.response?.data?.message || "Tạo tài khoản thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -142,11 +142,11 @@ export default function TeacherManagementPage() {
         roles: ["ROLE_TEACHER"],
         isActive: selectedTeacher.isActive ?? true,
       });
-      alert("Cập nhật thông tin giảng viên thành công!");
+      alert("Đã cập nhật giảng viên.");
       setIsEditModalOpen(false);
       fetchTeachers(data.pageNumber, searchKeyword);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi cập nhật giảng viên");
+      alert(err.response?.data?.message || "Cập nhật thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -158,12 +158,12 @@ export default function TeacherManagementPage() {
     setIsSaving(true);
     try {
       await adminApi.assignTeacher(selectedClassId, selectedTeacher.id);
-      alert("Phân công giảng viên cho lớp học thành công!");
+      alert("Đã phân công giảng viên.");
       setIsAssignModalOpen(false);
       setSelectedClassId("");
       fetchTeachers(data.pageNumber, searchKeyword);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi phân công giảng viên");
+      alert(err.response?.data?.message || "Phân công thất bại.");
     } finally {
       setIsSaving(false);
     }
@@ -202,11 +202,8 @@ export default function TeacherManagementPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Quản Lý Đội Ngũ Giảng Viên
+            Giảng viên
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Hồ sơ giảng viên, lớp đang phụ trách và phân công giảng dạy cho trung tâm.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -217,7 +214,7 @@ export default function TeacherManagementPage() {
             }}
             className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-sm cursor-pointer text-sm"
           >
-            <Plus size={18} /> Thêm Giảng Viên Mới
+            <Plus size={18} /> Thêm giảng viên
           </button>
         </div>
       </div>
@@ -229,7 +226,7 @@ export default function TeacherManagementPage() {
             <GraduationCap size={20} />
           </div>
           <div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Tổng giảng viên</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Tổng số</span>
             <span className="text-xl font-black text-slate-900 dark:text-white">{data.totalElements}</span>
           </div>
         </div>
@@ -239,7 +236,7 @@ export default function TeacherManagementPage() {
             <UserCheck size={20} />
           </div>
           <div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Đang hoạt động</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Hoạt động</span>
             <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{activeCount}</span>
           </div>
         </div>
@@ -249,7 +246,7 @@ export default function TeacherManagementPage() {
             <UserX size={20} />
           </div>
           <div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Tạm khóa</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold block">Đã khóa</span>
             <span className="text-xl font-black text-rose-600 dark:text-rose-400">{lockedCount}</span>
           </div>
         </div>
@@ -262,7 +259,7 @@ export default function TeacherManagementPage() {
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Tìm theo tên, email, SĐT..."
+              placeholder="Tìm tên, email, SĐT..."
               className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-blue-700 shadow-sm"
             />
           </div>
@@ -270,7 +267,7 @@ export default function TeacherManagementPage() {
             type="submit"
             className="px-4 bg-blue-800 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
           >
-            Lọc
+            Tìm
           </button>
         </form>
       </div>
@@ -280,26 +277,23 @@ export default function TeacherManagementPage() {
         {loading ? (
           <div className="p-16 flex flex-col items-center justify-center text-slate-400">
             <Loader2 className="animate-spin text-blue-700 mb-2" size={32} />
-            <p className="text-xs font-semibold">Đang tải danh sách giảng viên...</p>
+            <p className="text-xs font-semibold">Đang tải...</p>
           </div>
         ) : data.content.length === 0 ? (
           <div className="p-16 text-center text-slate-500 dark:text-slate-400">
             <GraduationCap size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-            <h4 className="text-base font-bold text-slate-800 dark:text-white">Không tìm thấy giảng viên</h4>
-            <p className="text-xs text-slate-400 mt-1">
-              Thử tìm kiếm với từ khóa khác hoặc bấm "Thêm Giảng Viên Mới".
-            </p>
+            <h4 className="text-base font-bold text-slate-800 dark:text-white">Chưa có dữ liệu</h4>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-[#162033] text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-800">
-                  <th className="p-4 pl-6">Giảng Viên</th>
-                  <th className="p-4">Liên Hệ</th>
-                  <th className="p-4">Lớp Học Phụ Trách</th>
-                  <th className="p-4 text-center">Trạng Thái</th>
-                  <th className="p-4 pr-6 text-right">Thao Tác</th>
+                  <th className="p-4 pl-6">Giảng viên</th>
+                  <th className="p-4">Liên hệ</th>
+                  <th className="p-4">Lớp phụ trách</th>
+                  <th className="p-4 text-center">Trạng thái</th>
+                  <th className="p-4 pr-6 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
@@ -317,9 +311,6 @@ export default function TeacherManagementPage() {
                             <p className="font-bold text-slate-900 dark:text-white">
                               {teacher.lastName} {teacher.firstName}
                             </p>
-                            <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-600/15 px-2 py-0.5 rounded-md inline-block mt-0.5">
-                              Giảng Viên ELP
-                            </span>
                           </div>
                         </div>
                       </td>
@@ -329,14 +320,14 @@ export default function TeacherManagementPage() {
                           <Mail size={13} className="text-slate-400" /> {teacher.email}
                         </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          <Phone size={13} className="text-slate-400" /> {teacher.phone || "Chưa cập nhật"}
+                          <Phone size={13} className="text-slate-400" /> {teacher.phone || "Chưa có SĐT"}
                         </div>
                       </td>
 
                       <td className="p-4">
                         {teacherClasses.length === 0 ? (
                           <span className="text-xs text-slate-400 italic">
-                            Chưa phân công lớp
+                            Chưa có lớp
                           </span>
                         ) : (
                           <div className="flex flex-wrap gap-1.5 max-w-xs">
@@ -364,11 +355,11 @@ export default function TeacherManagementPage() {
                         >
                           {isActive ? (
                             <>
-                              <UserCheck size={14} /> Hoạt Động
+                              <UserCheck size={14} /> Hoạt động
                             </>
                           ) : (
                             <>
-                              <UserX size={14} /> Đã Khóa
+                              <UserX size={14} /> Đã khóa
                             </>
                           )}
                         </button>
@@ -377,21 +368,21 @@ export default function TeacherManagementPage() {
                       <td className="p-4 pr-6 text-right space-x-2">
                         <button
                           onClick={() => openAssignModal(teacher)}
-                          title="Phân công lớp học"
+                          title="Gán lớp"
                           className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 hover:bg-blue-800 hover:text-white rounded-lg text-xs font-bold transition cursor-pointer"
                         >
-                          Gán Lớp
+                          Gán lớp
                         </button>
                         <button
                           onClick={() => openEditModal(teacher)}
-                          title="Chỉnh sửa thông tin"
+                          title="Sửa"
                           className="p-2 bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition cursor-pointer"
                         >
                           <Edit size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(teacher)}
-                          title="Xóa tài khoản"
+                          title="Xóa"
                           className="p-2 bg-slate-100 dark:bg-[#162033] text-slate-600 dark:text-slate-300 hover:bg-rose-100 hover:text-rose-600 rounded-lg transition cursor-pointer"
                         >
                           <Trash2 size={15} />
@@ -412,7 +403,7 @@ export default function TeacherManagementPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
               <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <GraduationCap className="text-blue-700" /> Thêm Giảng Viên Mới
+                <GraduationCap className="text-blue-700" /> Thêm giảng viên
               </h2>
               <button
                 onClick={() => setIsCreateModalOpen(false)}
@@ -426,7 +417,7 @@ export default function TeacherManagementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Họ & Đệm
+                    Họ
                   </label>
                   <input
                     required
@@ -441,7 +432,7 @@ export default function TeacherManagementPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Tên Giảng Viên
+                    Tên
                   </label>
                   <input
                     required
@@ -458,7 +449,7 @@ export default function TeacherManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Đăng Nhập
+                  Email
                 </label>
                 <input
                   required
@@ -474,7 +465,7 @@ export default function TeacherManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Mật Khẩu Ban Đầu (Tối thiểu 8 ký tự, có hoa/thường/số)
+                  Mật khẩu
                 </label>
                 <input
                   required
@@ -486,11 +477,14 @@ export default function TeacherManagementPage() {
                   className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 outline-none focus:border-blue-700 text-sm font-semibold placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="Teacher@123"
                 />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Tối thiểu 8 ký tự (hoa, thường, số).
+                </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Số Điện Thoại
+                  Số điện thoại
                 </label>
                 <input
                   type="text"
@@ -516,7 +510,7 @@ export default function TeacherManagementPage() {
                   disabled={isSaving}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
                 >
-                  {isSaving && <Loader2 size={16} className="animate-spin" />} Lưu Giảng Viên
+                  {isSaving && <Loader2 size={16} className="animate-spin" />} Lưu
                 </button>
               </div>
             </form>
@@ -530,7 +524,7 @@ export default function TeacherManagementPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
               <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <Edit className="text-blue-700" /> Cập Nhật Hồ Sơ Giảng Viên
+                <Edit className="text-blue-700" /> Sửa giảng viên
               </h2>
               <button
                 onClick={() => setIsEditModalOpen(false)}
@@ -544,7 +538,7 @@ export default function TeacherManagementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Họ & Đệm
+                    Họ
                   </label>
                   <input
                     required
@@ -574,7 +568,7 @@ export default function TeacherManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email (Không đổi)
+                  Email
                 </label>
                 <input
                   disabled
@@ -586,7 +580,7 @@ export default function TeacherManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Số Điện Thoại
+                  Số điện thoại
                 </label>
                 <input
                   type="text"
@@ -611,7 +605,7 @@ export default function TeacherManagementPage() {
                   disabled={isSaving}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
                 >
-                  {isSaving && <Loader2 size={16} className="animate-spin" />} Cập Nhật
+                  {isSaving && <Loader2 size={16} className="animate-spin" />} Lưu
                 </button>
               </div>
             </form>
@@ -625,7 +619,7 @@ export default function TeacherManagementPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-xl shadow-elevated w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60">
               <h2 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <School className="text-blue-700" /> Phân Công Giảng Dạy
+                <School className="text-blue-700" /> Gán lớp giảng dạy
               </h2>
               <button
                 onClick={() => setIsAssignModalOpen(false)}
@@ -637,7 +631,7 @@ export default function TeacherManagementPage() {
 
             <form onSubmit={handleAssignSubmit} className="p-6 space-y-4">
               <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-100">
-                <span className="text-xs font-semibold text-slate-500 block">Giảng viên được chọn:</span>
+                <span className="text-xs font-semibold text-slate-500 block">Giảng viên</span>
                 <span className="text-sm font-bold text-blue-900 block mt-0.5">
                   {selectedTeacher.lastName} {selectedTeacher.firstName} ({selectedTeacher.email})
                 </span>
@@ -645,7 +639,7 @@ export default function TeacherManagementPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Chọn Lớp Học Phụ Trách
+                  Lớp học
                 </label>
                 <select
                   required
@@ -653,10 +647,10 @@ export default function TeacherManagementPage() {
                   onChange={(e) => setSelectedClassId(e.target.value)}
                   className="w-full border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold"
                 >
-                  <option value="" disabled>-- Vui lòng chọn lớp học --</option>
+                  <option value="" disabled>-- Chọn lớp --</option>
                   {classes.map((cls) => (
                     <option key={cls.id} value={cls.id}>
-                      {cls.name} (Level: {cls.level}) - {cls.teacherName ? `Hiện tại: ${cls.teacherName}` : "Chưa có GV"}
+                      {cls.name} ({cls.level}) - {cls.teacherName || "Chưa có GV"}
                     </option>
                   ))}
                 </select>
@@ -675,7 +669,7 @@ export default function TeacherManagementPage() {
                   disabled={isSaving || !selectedClassId}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-white bg-blue-800 hover:bg-blue-800 cursor-pointer disabled:opacity-50 text-xs shadow-sm"
                 >
-                  {isSaving && <Loader2 size={16} className="animate-spin" />} Xác Nhận Phân Công
+                  {isSaving && <Loader2 size={16} className="animate-spin" />} Xác nhận
                 </button>
               </div>
             </form>

@@ -11,6 +11,7 @@ import com.englishlearning.auth.service.UserService;
 import com.englishlearning.common.config.SecurityConfig;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -137,5 +139,64 @@ class UserControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Dung lượng file ảnh tối đa là 5MB"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/users/avatar khi không tìm thấy user -> Trả về 404 Not Found")
+    void updateAvatar_userNotFound_returns404() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg", "image/jpeg", new byte[]{1, 2});
+        when(userService.uploadAndSaveAvatar(eq(userId), any()))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy người dùng"));
+
+        mockMvc.perform(multipart("/api/v1/users/avatar")
+                        .file(file)
+                        .with(user(customUserDetails))
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy người dùng"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/users/avatar với tài khoản ROLE_STUDENT -> Trả về 200 OK")
+    void updateAvatar_asStudentRole_returns200() throws Exception {
+        UUID studentId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        User student = User.builder()
+                .id(studentId)
+                .email("student@englishlearning.com")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(Role.builder().name(RoleName.ROLE_STUDENT).build()))
+                .build();
+        CustomUserDetails studentDetails = new CustomUserDetails(student);
+        MockMultipartFile file = new MockMultipartFile("file", "student.png", "image/png", new byte[]{1, 2, 3});
+
+        when(userService.uploadAndSaveAvatar(eq(studentId), any()))
+                .thenReturn("/uploads/avatars/avatar_" + studentId + "_456.png");
+
+        mockMvc.perform(multipart("/api/v1/users/avatar")
+                        .file(file)
+                        .with(user(studentDetails))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data").value("/uploads/avatars/avatar_" + studentId + "_456.png"));
+
+        verify(userService).uploadAndSaveAvatar(eq(studentId), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/users/avatar khi lưu file gặp lỗi hệ thống -> Trả về 500 Internal Server Error")
+    void updateAvatar_unexpectedStorageError_returns500() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg", "image/jpeg", new byte[]{1, 2});
+        when(userService.uploadAndSaveAvatar(eq(userId), any()))
+                .thenThrow(new RuntimeException("Lỗi lưu trữ file ảnh đại diện: Disk full"));
+
+        mockMvc.perform(multipart("/api/v1/users/avatar")
+                        .file(file)
+                        .with(user(customUserDetails))
+                        .with(csrf()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500));
     }
 }

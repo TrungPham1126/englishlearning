@@ -32,6 +32,8 @@ import com.englishlearning.common.exception.BadRequestException;
 
 import com.englishlearning.common.exception.ResourceNotFoundException;
 
+import com.englishlearning.common.util.ScoreScaleUtils;
+
 import com.englishlearning.curriculum.entity.Lesson;
 
 import com.englishlearning.notification.dto.NotificationDto;
@@ -46,6 +48,10 @@ import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 
 
 import java.util.ArrayList;
@@ -53,6 +59,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import java.util.UUID;
+
+import java.util.concurrent.CompletableFuture;
 
 
 
@@ -83,6 +91,19 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Transactional
 
     public Assignment createAssignment(AssignmentRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Assignment request must not be null");
+        }
+        if (request.getTimeLimitMinutes() != null && request.getTimeLimitMinutes() <= 0) {
+            throw new BadRequestException("Thời gian làm bài phải lớn hơn 0");
+        }
+        if (request.getMaxAttempts() != null && request.getMaxAttempts() <= 0) {
+            throw new BadRequestException("Số lượt làm bài tối đa phải lớn hơn 0");
+        }
+        if (request.getMaxAllowedErrorPercent() != null
+                && (request.getMaxAllowedErrorPercent() < 0 || request.getMaxAllowedErrorPercent() > 100)) {
+            throw new BadRequestException("Tỷ lệ sai tối đa phải trong khoảng 0 đến 100");
+        }
 
         log.info("Creating a new assignment: {}", request.getTitle());
 
@@ -120,13 +141,13 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
 
-            assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
+            assignment.setPassScore(ScoreScaleUtils.clampScale10((100.0 - request.getMaxAllowedErrorPercent()) / 10.0));
 
         } else if (request.getPassScore() != null) {
 
-            assignment.setPassScore(request.getPassScore());
+            assignment.setPassScore(ScoreScaleUtils.normalizeToScale10(request.getPassScore()));
 
-            double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
+            double score100 = ScoreScaleUtils.normalizeToScale100(request.getPassScore());
 
             assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
 
@@ -298,48 +319,40 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         Assignment saved = assignmentRepository.save(assignment);
 
-        try {
+        final UUID savedId = saved.getId();
+        final boolean needAsyncAudio = requiresAsyncAudioGeneration(saved);
 
-            if (request.getClassroomId() != null) {
+        if (request.getClassroomId() != null) {
+            boolean createdExam = Boolean.TRUE.equals(saved.getIsExam());
+            NotificationDto notifDto = NotificationDto.builder()
+                    .classroomId(request.getClassroomId())
+                    .title((createdExam ? "Bài thi mới: " : "Bài tập mới: ") + saved.getTitle())
+                    .message(createdExam
+                            ? "Giáo viên đã giao bài thi mới \"" + saved.getTitle() + "\" (yêu cầu chế độ toàn màn hình). Hãy chuẩn bị kỹ trước khi làm bài!"
+                            : "Giáo viên đã giao bài tập mới \"" + saved.getTitle() + "\". Hãy hoàn thành trước hạn nộp!")
+                    .notificationType("NEW_ASSIGNMENT")
+                    .actionType(createdExam ? "NEW_EXAM" : "NEW_ASSIGNMENT")
+                    .referenceId(savedId != null ? savedId.toString() : null)
+                    .targetUrl((createdExam ? "/student/exams/" : "/student/assignments/") + savedId + "/take")
+                    .build();
 
-                boolean createdExam = Boolean.TRUE.equals(saved.getIsExam());
-
-                NotificationDto notifDto = NotificationDto.builder()
-
-                        .classroomId(request.getClassroomId())
-
-                        .title((createdExam ? "Bài thi mới: " : "Bài tập mới: ") + saved.getTitle())
-
-                        .message(createdExam
-
-                                ? "Giáo viên đã giao bài thi mới \"" + saved.getTitle() + "\" (yêu cầu chế độ toàn màn hình). Hãy chuẩn bị kỹ trước khi làm bài!"
-
-                                : "Giáo viên đã giao bài tập mới \"" + saved.getTitle() + "\". Hãy hoàn thành trước hạn nộp!")
-
-                        .notificationType("NEW_ASSIGNMENT")
-
-                        .actionType(createdExam ? "NEW_EXAM" : "NEW_ASSIGNMENT")
-
-                        .referenceId(saved.getId().toString())
-
-                        .targetUrl((createdExam ? "/student/exams/" : "/student/assignments/") + saved.getId() + "/take")
-
-                        .build();
-
-                notificationService.dispatchNotification(notifDto);
-
-            }
-
-        } catch (Exception ex) {
-
-            log.warn("Không thể gửi thông báo giao bài tập mới: {}", ex.getMessage());
-
+            runAfterCommitOrImmediately(() -> {
+                try {
+                    notificationService.dispatchNotification(notifDto);
+                } catch (Exception ex) {
+                    log.warn("Không thể gửi thông báo giao bài tập mới: {}", ex.getMessage());
+                }
+            }, true);
         }
 
-        if (requiresAsyncAudioGeneration(saved)) {
-
-            exerciseAudioService.generateAudiosForAssignmentAsync(saved.getId(), AudioGeneratedBy.TEACHER);
-
+        if (needAsyncAudio) {
+            runAfterCommitOrImmediately(() -> {
+                try {
+                    exerciseAudioService.generateAudiosForAssignmentAsync(savedId, AudioGeneratedBy.TEACHER);
+                } catch (Exception ex) {
+                    log.warn("Không thể kích hoạt sinh audio chạy ngầm cho bài tập {}: {}", savedId, ex.getMessage());
+                }
+            }, false);
         }
 
         return saved;
@@ -364,7 +377,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         if (assignment.getQuestions() != null) {
-            assignment.getQuestions().sort(java.util.Comparator.comparing(q -> q.getOrderIndex() != null ? q.getOrderIndex() : 0));
+            try {
+                assignment.getQuestions().sort(java.util.Comparator.comparing(q -> q.getOrderIndex() != null ? q.getOrderIndex() : 0));
+            } catch (UnsupportedOperationException ex) {
+                List<AssignmentQuestion> sorted = new ArrayList<>(assignment.getQuestions());
+                sorted.sort(java.util.Comparator.comparing(q -> q.getOrderIndex() != null ? q.getOrderIndex() : 0));
+                assignment.setQuestions(sorted);
+            }
             for (com.englishlearning.assignment.entity.AssignmentQuestion q : assignment.getQuestions()) {
                 if (q.getOptions() != null) {
                     q.getOptions().size();
@@ -381,6 +400,19 @@ public class AssignmentServiceImpl implements AssignmentService {
     @Transactional
 
     public Assignment updateAssignment(UUID id, AssignmentRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Assignment request must not be null");
+        }
+        if (request.getTimeLimitMinutes() != null && request.getTimeLimitMinutes() <= 0) {
+            throw new BadRequestException("Thời gian làm bài phải lớn hơn 0");
+        }
+        if (request.getMaxAttempts() != null && request.getMaxAttempts() <= 0) {
+            throw new BadRequestException("Số lượt làm bài tối đa phải lớn hơn 0");
+        }
+        if (request.getMaxAllowedErrorPercent() != null
+                && (request.getMaxAllowedErrorPercent() < 0 || request.getMaxAllowedErrorPercent() > 100)) {
+            throw new BadRequestException("Tỷ lệ sai tối đa phải trong khoảng 0 đến 100");
+        }
 
         Assignment assignment = getAssignmentById(id);
 
@@ -432,13 +464,13 @@ public class AssignmentServiceImpl implements AssignmentService {
 
             assignment.setMaxAllowedErrorPercent(request.getMaxAllowedErrorPercent());
 
-            assignment.setPassScore((100.0 - request.getMaxAllowedErrorPercent()) / 10.0);
+            assignment.setPassScore(ScoreScaleUtils.clampScale10((100.0 - request.getMaxAllowedErrorPercent()) / 10.0));
 
         } else if (request.getPassScore() != null) {
 
-            assignment.setPassScore(request.getPassScore());
+            assignment.setPassScore(ScoreScaleUtils.normalizeToScale10(request.getPassScore()));
 
-            double score100 = request.getPassScore() <= 10.0 ? request.getPassScore() * 10.0 : request.getPassScore();
+            double score100 = ScoreScaleUtils.normalizeToScale100(request.getPassScore());
 
             assignment.setMaxAllowedErrorPercent(Math.max(0.0, 100.0 - score100));
 
@@ -549,15 +581,19 @@ public class AssignmentServiceImpl implements AssignmentService {
                 question.setOrderIndex(orderIndex++);
 
                 if (qReq.getQuestionType() != null && !qReq.getQuestionType().isBlank()) {
-
-                    question.setQuestionType(QuestionType.valueOf(qReq.getQuestionType().toUpperCase()));
-
+                    try {
+                        question.setQuestionType(QuestionType.valueOf(qReq.getQuestionType().trim().toUpperCase()));
+                    } catch (IllegalArgumentException ex) {
+                        throw new BadRequestException("Invalid questionType: " + qReq.getQuestionType());
+                    }
                 }
 
                 if (qReq.getSkillType() != null && !qReq.getSkillType().isBlank()) {
-
-                    question.setSkillType(SkillType.valueOf(qReq.getSkillType().trim().toUpperCase()));
-
+                    try {
+                        question.setSkillType(SkillType.valueOf(qReq.getSkillType().trim().toUpperCase()));
+                    } catch (IllegalArgumentException ex) {
+                        throw new BadRequestException("Invalid question skillType: " + qReq.getSkillType());
+                    }
                 }
 
                 question.setPromptText(qReq.getPromptText());
@@ -625,9 +661,14 @@ public class AssignmentServiceImpl implements AssignmentService {
         Assignment saved = assignmentRepository.save(assignment);
 
         if (requiresAsyncAudioGeneration(saved)) {
-
-            exerciseAudioService.generateAudiosForAssignmentAsync(saved.getId(), AudioGeneratedBy.TEACHER);
-
+            final UUID savedId = saved.getId();
+            runAfterCommitOrImmediately(() -> {
+                try {
+                    exerciseAudioService.generateAudiosForAssignmentAsync(savedId, AudioGeneratedBy.TEACHER);
+                } catch (Exception ex) {
+                    log.warn("Không thể kích hoạt sinh audio chạy ngầm sau khi cập nhật bài tập {}: {}", savedId, ex.getMessage());
+                }
+            }, false);
         }
 
         return saved;
@@ -673,30 +714,40 @@ public class AssignmentServiceImpl implements AssignmentService {
         log.info("Xóa thành công bài tập ID: {}", id);
     }
 
+    private void runAfterCommitOrImmediately(Runnable action, boolean detachToBackgroundThread) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    if (detachToBackgroundThread) {
+                        CompletableFuture.runAsync(action);
+                    } else {
+                        action.run();
+                    }
+                }
+            });
+        } else {
+            action.run();
+        }
+    }
+
 
 
     private boolean requiresAsyncAudioGeneration(Assignment assignment) {
-
         if (assignment == null) {
-
             return false;
-
         }
-
-        if (assignment.getSkillType() == SkillType.SPEAKING || assignment.getSkillType() == SkillType.LISTENING) {
-
+        if (assignment.getSkillType() == SkillType.LISTENING) {
             return true;
-
         }
-
+        if (assignment.getSkillType() == SkillType.SPEAKING) {
+            // Chỉ sinh audio mẫu cho bài Shadowing; Speaking Q&A / Part 2 / Part 3 không dùng audio mẫu
+            return !ExerciseAudioService.isNonShadowingSpeakingAssignment(assignment);
+        }
         return assignment.getQuestions() != null && assignment.getQuestions().stream().anyMatch(q ->
-
-                q.getQuestionType() == QuestionType.AUDIO_RESPONSE
-
-                        || q.getSkillType() == SkillType.SPEAKING
-
-                        || q.getSkillType() == SkillType.LISTENING);
-
+                q.getSkillType() == SkillType.LISTENING
+                        || ((q.getQuestionType() == QuestionType.AUDIO_RESPONSE || q.getSkillType() == SkillType.SPEAKING)
+                        && !ExerciseAudioService.isNonShadowingSpeakingQuestion(assignment, q)));
     }
 
     @Override
@@ -713,9 +764,14 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     public List<Assignment> getExamsByClassroom(UUID classroomId) {
 
-        List<Assignment> exams = assignmentRepository.findByClassroomId(classroomId).stream()
+        List<Assignment> classroomAssignments = assignmentRepository.findByClassroomId(classroomId);
+        if (classroomAssignments == null) {
+            return java.util.Collections.emptyList();
+        }
 
-                .filter(a -> Boolean.TRUE.equals(a.getIsExam()))
+        List<Assignment> exams = classroomAssignments.stream()
+
+                .filter(a -> a != null && Boolean.TRUE.equals(a.getIsExam()))
 
                 .collect(java.util.stream.Collectors.toList());
 
@@ -750,12 +806,16 @@ public class AssignmentServiceImpl implements AssignmentService {
     public List<QuestionBankItemDto> getClassroomQuestionBank(UUID classroomId) {
 
         List<Assignment> classroomAssignments = assignmentRepository.findByClassroomId(classroomId);
+        if (classroomAssignments == null) {
+            return java.util.Collections.emptyList();
+        }
 
         List<QuestionBankItemDto> items = new ArrayList<>();
 
         java.util.Set<String> seenKeys = new java.util.HashSet<>();
 
         for (Assignment a : classroomAssignments) {
+            if (a == null) continue;
 
             List<AssignmentQuestion> qs = a.getQuestions();
 
@@ -836,29 +896,20 @@ public class AssignmentServiceImpl implements AssignmentService {
 
 
     @Override
-
     public void backfillAllAudios() {
-
-        log.info("Bắt đầu backfill audio cho tất cả các bài tập Speaking & Listening đã tồn tại...");
-
+        log.info("Bắt đầu backfill audio cho tất cả các bài tập Shadowing & Listening đã tồn tại...");
         List<Assignment> all = assignmentRepository.findAll();
-
-        int count = 0;
-
-        for (Assignment a : all) {
-
-            if (a.getSkillType() == SkillType.SPEAKING || a.getSkillType() == SkillType.LISTENING) {
-
-                exerciseAudioService.generateAudiosForAssignmentAsync(a.getId(), AudioGeneratedBy.SYSTEM);
-
-                count++;
-
-            }
-
+        if (all == null) {
+            return;
         }
-
+        int count = 0;
+        for (Assignment a : all) {
+            if (requiresAsyncAudioGeneration(a)) {
+                exerciseAudioService.generateAudiosForAssignmentAsync(a.getId(), AudioGeneratedBy.SYSTEM);
+                count++;
+            }
+        }
         log.info("Đã kích hoạt backfill audio chạy ngầm cho {} bài tập.", count);
-
     }
 
 }

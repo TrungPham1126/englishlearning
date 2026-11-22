@@ -14,7 +14,9 @@ import type {
   SpeakingAiEvaluationResult,
   ShadowingEvaluationResponse,
   WritingAiEvaluationResult,
+  WritingTaskType,
   DailyHomeworkOverviewResponse,
+  StudentStreakResponse,
   ReadingShortAnswerEvaluationResult,
   TtsRequest,
   TtsResponse,
@@ -255,11 +257,21 @@ export const studentApi = {
     topic: string,
     audioBlob: Blob,
     studentAnswerId: string,
+    options?: {
+      speakingMode?: string;
+      keyPoints?: string;
+    },
   ): Promise<SpeakingAiEvaluationResult> => {
     const formData = new FormData();
     formData.append("topic", topic);
     formData.append("audio", audioBlob, "speaking.webm");
     formData.append("studentAnswerId", studentAnswerId);
+    if (options?.speakingMode) {
+      formData.append("speakingMode", options.speakingMode);
+    }
+    if (options?.keyPoints && options.keyPoints.trim().length > 0) {
+      formData.append("keyPoints", options.keyPoints.trim());
+    }
 
     const res = await axiosClient.post<ApiResponse<SpeakingAiEvaluationResult>>(
       "/api/v1/ai/speaking/evaluate",
@@ -300,9 +312,13 @@ export const studentApi = {
     topic: string,
     essayText: string,
     studentAnswerId: string,
+    options?: { writingTask?: WritingTaskType },
   ): Promise<WritingAiEvaluationResult> => {
+    const writingTaskQuery = options?.writingTask
+      ? `&writingTask=${encodeURIComponent(options.writingTask)}`
+      : "";
     const res = await axiosClient.post<ApiResponse<WritingAiEvaluationResult>>(
-      `/api/v1/ai/writing/evaluate?topic=${encodeURIComponent(topic)}&studentAnswerId=${encodeURIComponent(studentAnswerId)}`,
+      `/api/v1/ai/writing/evaluate?topic=${encodeURIComponent(topic)}&studentAnswerId=${encodeURIComponent(studentAnswerId)}${writingTaskQuery}`,
       essayText,
       { headers: { "Content-Type": "text/plain" } },
     );
@@ -378,6 +394,28 @@ export const studentApi = {
       `/api/v1/curriculum/daily-plans/classrooms/${classroomId}`,
     );
     return res.data.data || [];
+  },
+
+  getMyStreak: async (): Promise<StudentStreakResponse> => {
+    const res = await axiosClient.get<ApiResponse<StudentStreakResponse>>(
+      "/api/v1/curriculum/daily-plans/my-streak",
+    );
+    const d = res.data?.data;
+    const rawStreak = typeof d?.currentStreak === "number" ? d.currentStreak : 0;
+    return {
+      currentStreak: Number.isFinite(rawStreak) && rawStreak >= 0 ? Math.floor(rawStreak) : 0,
+      lastActiveDate: d?.lastActiveDate ?? null,
+      hasHomeworkToday: Boolean(d?.hasHomeworkToday),
+      completedToday: Boolean(d?.completedToday),
+      todayCompletedTasks:
+        typeof d?.todayCompletedTasks === "number" && d.todayCompletedTasks >= 0
+          ? d.todayCompletedTasks
+          : 0,
+      todayTotalTasks:
+        typeof d?.todayTotalTasks === "number" && d.todayTotalTasks >= 0
+          ? d.todayTotalTasks
+          : 0,
+    };
   },
 
   

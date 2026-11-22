@@ -123,38 +123,38 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
         return {
           bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
           icon: Headphones,
-          label: "Nghe Hiểu (Listening)",
+          label: "Listening",
         };
       case "SPEAKING":
         return {
           bg: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800",
           icon: Mic,
-          label: "Luyện Nói (Speaking)",
+          label: "Speaking",
         };
       case "WRITING":
         return {
           bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
           icon: Edit3,
-          label: "Luyện Viết (Writing)",
+          label: "Writing",
         };
       case "VOCABULARY":
       case "VOCAB":
         return {
           bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800",
           icon: BookOpen,
-          label: "Từ Vựng (Vocabulary)",
+          label: "Vocabulary",
         };
       case "GRAMMAR":
         return {
           bg: "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
           icon: FileText,
-          label: "Ngữ Pháp (Grammar)",
+          label: "Grammar",
         };
       default:
         return {
           bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
           icon: FileText,
-          label: "Đọc Hiểu (Reading)",
+          label: "Reading",
         };
     }
   };
@@ -185,7 +185,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                   {badge.label}
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
-                  {questions.length} câu hỏi
+                  {questions.length} câu
                 </span>
               </div>
               <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
@@ -204,7 +204,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
             >
               <Edit3 size={14} />
-              <span>Chỉnh Sửa</span>
+              <span>Sửa</span>
             </button>
             <button
               type="button"
@@ -234,7 +234,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             <div className="space-y-0.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Clock size={13} className="text-blue-500" />
-                Thời Gian Làm Bài
+                Thời gian
               </span>
               <p className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
                 {timeLimit} phút
@@ -244,34 +244,34 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             <div className="space-y-0.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Percent size={13} className="text-amber-500" />
-                Phạm Vi Sai Cho Phép
+                Sai tối đa
               </span>
               <p className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
-                Sai tối đa ≤ {maxErr}%
+                ≤ {maxErr}%
               </p>
             </div>
 
             <div className="space-y-0.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Award size={13} className="text-emerald-500" />
-                Điểm Đạt Chuẩn (PASS)
+                Điểm đạt (PASS)
               </span>
               <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                 ≥{" "}
                 {passScoreVal <= 10
                   ? (passScoreVal * 10).toFixed(0)
                   : passScoreVal.toFixed(0)}
-                /100 pts
+                /100
               </p>
             </div>
 
             <div className="space-y-0.5">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <RotateCcw size={13} className="text-blue-600 dark:text-blue-400" />
-                Số Lần Làm Tối Đa
+                Số lần làm
               </span>
               <p className="text-sm font-extrabold text-blue-800 dark:text-blue-300">
-                {maxAttempts} lần làm bài
+                {maxAttempts} lần
               </p>
             </div>
           </div>
@@ -281,7 +281,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-2">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <Volume2 size={15} className="text-emerald-500" />
-                File Âm Thanh Bài Nghe / Mẫu:
+                Audio bài nghe:
               </span>
               <audio controls src={activeAssignment.audioUrl} className="w-full h-10" />
             </div>
@@ -291,7 +291,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
           {activeAssignment.listeningScript && (
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Listening Transcript:
+                Transcript:
               </span>
               <div className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto p-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-800 font-mono">
                 {activeAssignment.listeningScript}
@@ -304,12 +304,12 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
                 <FileText size={16} className="text-blue-600" />
-                <span>Nội Dung Câu Hỏi &amp; Đáp Án ({questions.length} câu)</span>
+                <span>Câu hỏi &amp; Đáp án ({questions.length})</span>
               </h3>
               {loading && (
                 <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
                   <RefreshCw size={13} className="animate-spin" />
-                  Đang tải từ DB...
+                  Đang tải...
                 </span>
               )}
             </div>
@@ -317,11 +317,11 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             {loading && questions.length === 0 ? (
               <div className="p-8 text-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
                 <RefreshCw size={24} className="mx-auto mb-2 animate-spin text-blue-500" />
-                <p className="text-xs text-slate-500">Đang truy vấn nội dung câu hỏi từ cơ sở dữ liệu...</p>
+                <p className="text-xs text-slate-500">Đang tải câu hỏi...</p>
               </div>
             ) : questions.length === 0 ? (
               <p className="text-xs text-slate-500 italic">
-                Chưa có câu hỏi nào trong bài tập này.
+                Chưa có câu hỏi.
               </p>
             ) : (
               <div className="space-y-3">
@@ -344,7 +344,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
-                                {q.promptText || q.prompt || "(Không có nội dung câu hỏi)"}
+                                {q.promptText || q.prompt || "(Trống)"}
                               </p>
                               {q.mediaUrl && (
                                 <button
@@ -355,7 +355,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                                       ? "bg-emerald-600 text-white animate-pulse"
                                       : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
                                   }`}
-                                  title="Nghe phát âm từ vựng"
+                                  title="Nghe phát âm"
                                 >
                                   <Volume2 size={12} />
                                   <span>{isPlayingThis ? "Đang phát" : "Phát âm"}</span>
@@ -363,7 +363,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                               )}
                             </div>
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                              {q.questionType} • {q.points || 1} điểm
+                              {q.questionType} • {q.points || 1}đ
                             </span>
                           </div>
                         </div>
@@ -386,7 +386,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                           </div>
                           {q.explanation && (
                             <p className="text-[11px] text-slate-600 dark:text-slate-400 italic">
-                              Phiên âm & Gợi ý: {q.explanation}
+                              IPA / Gợi ý: {q.explanation}
                             </p>
                           )}
                         </div>
@@ -439,7 +439,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                           <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-1 text-xs">
                             <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold">
                               <CheckCircle2 size={13} />
-                              <span>Đáp án đúng:</span>
+                              <span>Đáp án:</span>
                               <span className="font-mono bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
                                 {q.correctAnswer}
                               </span>

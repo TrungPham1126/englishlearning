@@ -30,8 +30,8 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Value("${jwt.refresh-token-expiration-ms:60480000000}")
-    private long refreshTokenDurationMs;
+    @Value("${app.secrets.jwt.refresh-token-expiration-ms:${jwt.refresh-token-expiration-ms:604800000}}")
+    private long refreshTokenDurationMs = 604800000L;
 
     @PostMapping("/register")
     @Operation(summary = "Đăng ký tài khoản mới (Đã vô hiệu hóa)")

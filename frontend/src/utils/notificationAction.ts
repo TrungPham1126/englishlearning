@@ -40,6 +40,8 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
     effectiveAction = "AI_EVALUATION";
   } else if (/chấm\s*điểm|đã\s*chấm|kết\s*quả\s*chấm/i.test(fullText)) {
     effectiveAction = "GRADED";
+  } else if (/Lỗi gán bài tập|Cần gán lại|Gán bài tập vào lộ trình thành công|Đã gán bài tập vào lộ trình/i.test(fullText)) {
+    effectiveAction = "TEXT_ANNOUNCEMENT";
   } else if (/Bài tập mới|giao bài|lộ trình học mới|bài tập đã mở khóa/i.test(fullText)) {
     effectiveAction = "NEW_ASSIGNMENT";
   } else if (/Bài học mới|tài liệu mới|video bài học/i.test(fullText)) {
@@ -184,6 +186,37 @@ export function resolveNotificationAction(notification: NotificationItem): Resol
   }
 
   // 7. Mặc định: TEXT_ANNOUNCEMENT (Thông báo văn bản / Broadcast hệ thống)
+  const isAssignError = /Lỗi gán bài tập|Cần gán lại/i.test(fullText);
+  const isAssignSuccess = /Gán bài tập vào lộ trình thành công|Đã gán bài tập vào lộ trình/i.test(fullText);
+
+  if (isAssignError) {
+    return {
+      actionType: "TEXT_ANNOUNCEMENT",
+      targetUrl: notification.targetUrl || null,
+      referenceId: notification.referenceId,
+      badgeText: "LỖI GÁN BÀI - CẦN GÁN LẠI",
+      badgeClass:
+        "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+      isModalAction: true,
+      buttonLabel: notification.targetUrl ? "Mở lộ trình để gán lại" : undefined,
+      fullMessage: rawMessage,
+    };
+  }
+
+  if (isAssignSuccess) {
+    return {
+      actionType: "TEXT_ANNOUNCEMENT",
+      targetUrl: notification.targetUrl || null,
+      referenceId: notification.referenceId,
+      badgeText: "ĐÃ GÁN LỘ TRÌNH",
+      badgeClass:
+        "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+      isModalAction: true,
+      buttonLabel: notification.targetUrl ? "Xem lộ trình ngay" : undefined,
+      fullMessage: rawMessage,
+    };
+  }
+
   return {
     actionType: "TEXT_ANNOUNCEMENT",
     targetUrl: notification.targetUrl || null,

@@ -41,6 +41,9 @@ public class TtsServiceImpl implements TtsService {
         String clean = speedStr.replace("x", "").replace("X", "").trim();
         try {
             double s = Double.parseDouble(clean);
+            if (!Double.isFinite(s)) {
+                return 1.0;
+            }
             return Math.max(0.5, Math.min(2.0, s));
         } catch (Exception e) {
             return 1.0;

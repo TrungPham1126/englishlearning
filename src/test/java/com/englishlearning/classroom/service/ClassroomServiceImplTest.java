@@ -717,4 +717,390 @@ class ClassroomServiceImplTest {
         assertThat(sp.getDailyProgressDetails()).hasSize(1);
         assertThat(sp.getDailyProgressDetails().get(0).getDate()).isEqualTo("Day 1");
     }
+
+    @Test
+    @DisplayName("getClassStudentsProgress chuẩn hóa điểm legacy (> 10.0) về thang 10")
+    @SuppressWarnings("unchecked")
+    void getClassStudentsProgress_normalizesLegacyScoresToScale10() {
+        TypedQuery<Object[]> rosterQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM ClassStudent cs"), eq(Object[].class))).thenReturn(rosterQuery);
+        when(rosterQuery.setParameter("classId", classId)).thenReturn(rosterQuery);
+        Object[] studentRow = new Object[]{studentId, "Minh", "Nguyen", "st@test.com", "0909", Instant.parse("2026-10-01T00:00:00Z")};
+        when(rosterQuery.getResultList()).thenReturn(Collections.singletonList(studentRow));
+
+        UUID aId1 = UUID.randomUUID();
+        UUID aId2 = UUID.randomUUID();
+        Assignment assign1 = Assignment.builder().id(aId1).build();
+        Assignment assign2 = Assignment.builder().id(aId2).build();
+        DailyPlanItem planItem = DailyPlanItem.builder().id(UUID.randomUUID()).assignment(assign1).build();
+        DailyStudyPlan day1 = DailyStudyPlan.builder()
+                .id(UUID.randomUUID())
+                .dayNumber(1)
+                .estimatedMinutes(20)
+                .items(List.of(planItem))
+                .build();
+
+        when(dailyStudyPlanRepository.findByClassroomIdWithItems(classId)).thenReturn(List.of(day1));
+        when(assignmentRepository.findByClassroomId(classId)).thenReturn(List.of(assign1, assign2));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(Collections.emptyList());
+
+        Student student = Student.builder().id(studentId).build();
+        StudentDailyProgress progress = StudentDailyProgress.builder()
+                .student(student).dailyPlan(day1).isCompleted(true).completedItemsCount(1).build();
+        when(studentDailyProgressRepository.findByStudentIdIn(List.of(studentId))).thenReturn(List.of(progress));
+
+        TypedQuery<AssignmentAttempt> attemptQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM AssignmentAttempt a"), eq(AssignmentAttempt.class))).thenReturn(attemptQuery);
+        when(attemptQuery.setParameter("studentIds", List.of(studentId))).thenReturn(attemptQuery);
+
+        AssignmentAttempt legacy1 = AssignmentAttempt.builder()
+                .student(student).assignment(assign1).status(AttemptStatus.COMPLETED).totalScore(76.0).durationSeconds(300).build();
+        AssignmentAttempt legacy2 = AssignmentAttempt.builder()
+                .student(student).assignment(assign2).status(AttemptStatus.COMPLETED).totalScore(36.5).durationSeconds(300).build();
+        when(attemptQuery.getResultList()).thenReturn(List.of(legacy1, legacy2));
+
+        List<StudentProgressResponse> result = classroomService.getClassStudentsProgress(classId);
+
+        assertThat(result).hasSize(1);
+        StudentProgressResponse sp = result.get(0);
+        // 76.0 -> 7.6, 36.5 -> 3.7 => average = 5.65 -> 5.7
+        assertThat(sp.getAverageScore()).isEqualTo(5.7);
+        assertThat(sp.getDailyProgressDetails()).hasSize(1);
+        assertThat(sp.getDailyProgressDetails().get(0).getScore()).isEqualTo(7.6);
+    }
+
+    @Test
+    @DisplayName("createClassroom - Tên lớp null hoặc toàn khoảng trắng ném BadRequestException")
+    void createClassroom_blankName_throwsBadRequestException() {
+        CreateClassroomRequest blankReq = CreateClassroomRequest.builder()
+                .name("   ")
+                .level(ClassLevel.A1)
+                .build();
+
+        assertThatThrownBy(() -> classroomService.createClassroom(null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên lớp học không được để trống");
+        assertThatThrownBy(() -> classroomService.createClassroom(blankReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên lớp học không được để trống");
+
+        verifyNoInteractions(classroomRepository);
+    }
+
+    @Test
+    @DisplayName("createClassroom - Trim khoảng trắng tên lớp trước khi kiểm tra trùng và lưu")
+    void createClassroom_nameWithSurroundingSpaces_trimsBeforeDuplicateCheckAndSave() {
+        CreateClassroomRequest req = CreateClassroomRequest.builder()
+                .name("  IELTS Speaking B2  ")
+                .level(ClassLevel.B2)
+                .build();
+
+        when(classroomRepository.existsByNameIgnoreCase("IELTS Speaking B2")).thenReturn(false);
+        when(classroomRepository.existsByJoinCode(anyString())).thenReturn(false);
+        when(classroomRepository.save(any(Classroom.class))).thenAnswer(inv -> {
+            Classroom c = inv.getArgument(0);
+            c.setId(classId);
+            return c;
+        });
+
+        ClassroomResponse resp = classroomService.createClassroom(req);
+
+        assertThat(resp.getName()).isEqualTo("IELTS Speaking B2");
+        ArgumentCaptor<Classroom> captor = ArgumentCaptor.forClass(Classroom.class);
+        verify(classroomRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("IELTS Speaking B2");
+    }
+
+    @Test
+    @DisplayName("enrollStudentByJoinCode - Join code null ném BadRequestException")
+    void enrollStudentByJoinCode_nullJoinCode_throwsBadRequestException() {
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(null, studentId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Mã tham gia lớp học không được để trống");
+
+        verifyNoInteractions(classroomRepository);
+    }
+
+    @Test
+    @DisplayName("enrollStudentByJoinCode - Không tìm thấy hồ sơ Student ném ResourceNotFoundException")
+    void enrollStudentByJoinCode_studentNotFound_throwsResourceNotFoundException() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .maxStudents(30)
+                .joinCode(joinCode)
+                .build();
+
+        when(classroomRepository.findByJoinCode(joinCode)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(0L);
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> classroomService.enrollStudentByJoinCode(joinCode, studentId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Không tìm thấy thông tin học viên");
+
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("enrollStudentByJoinCode - Học viên từng rời lớp (isActive=false) được kích hoạt lại khi dùng mã tham gia")
+    void enrollStudentByJoinCode_previouslyLeftStudent_reactivatesEnrollment() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .level(ClassLevel.C1)
+                .maxStudents(30)
+                .joinCode(joinCode)
+                .build();
+        Student student = Student.builder().id(studentId).currentLevel("B1").build();
+        ClassStudent inactiveEnrollment = ClassStudent.builder()
+                .classroom(classroom)
+                .student(student)
+                .isActive(false)
+                .build();
+
+        when(classroomRepository.findByJoinCode(joinCode)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(true);
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId))
+                .thenReturn(Optional.of(inactiveEnrollment));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(5L);
+
+        classroomService.enrollStudentByJoinCode(joinCode, studentId);
+
+        ArgumentCaptor<ClassStudent> enrollmentCaptor = ArgumentCaptor.forClass(ClassStudent.class);
+        verify(classStudentRepository).save(enrollmentCaptor.capture());
+        assertThat(enrollmentCaptor.getValue().getIsActive()).isTrue();
+        assertThat(enrollmentCaptor.getValue().getEnrolledAt()).isNotNull();
+
+        ArgumentCaptor<Student> studentCaptor = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(studentCaptor.capture());
+        assertThat(studentCaptor.getValue().getCurrentLevel()).isEqualTo("C1");
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Không tìm thấy lớp học ném ResourceNotFoundException")
+    void enrollStudent_classroomNotFound_throwsResourceNotFoundException() {
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("st@test.com");
+        when(classroomRepository.findById(classId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Không tìm thấy lớp học");
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Lớp đã đủ sĩ số ném BadRequestException")
+    void enrollStudent_classroomFull_throwsBadRequestException() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .maxStudents(2)
+                .build();
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("st@test.com");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(2L);
+
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Lớp học đã đạt tối đa (2 học viên)");
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Học viên đang active trong lớp rồi ném BadRequestException")
+    void enrollStudent_alreadyEnrolledActiveStudent_throwsBadRequestException() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .maxStudents(30)
+                .build();
+        User user = User.builder().id(studentId).email("st@test.com").build();
+        Student student = Student.builder().id(studentId).user(user).build();
+        ClassStudent activeEnrollment = ClassStudent.builder()
+                .classroom(classroom)
+                .student(student)
+                .isActive(true)
+                .build();
+
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("st@test.com");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(1L);
+        when(userRepository.findByEmail("st@test.com")).thenReturn(Optional.of(user));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(true);
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId))
+                .thenReturn(Optional.of(activeEnrollment));
+
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Học viên đã tham gia lớp học này rồi");
+
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Học viên từng rời lớp (isActive=false) được kích hoạt lại khi Admin thêm lại")
+    void enrollStudent_previouslyLeftStudent_reactivatesEnrollment() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .level(ClassLevel.B2)
+                .maxStudents(30)
+                .build();
+        User user = User.builder().id(studentId).email("st@test.com").build();
+        Student student = Student.builder().id(studentId).user(user).currentLevel("A1").build();
+        ClassStudent inactiveEnrollment = ClassStudent.builder()
+                .classroom(classroom)
+                .student(student)
+                .isActive(false)
+                .build();
+
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("st@test.com");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(1L);
+        when(userRepository.findByEmail("st@test.com")).thenReturn(Optional.of(user));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(true);
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId))
+                .thenReturn(Optional.of(inactiveEnrollment));
+
+        classroomService.enrollStudent(classId, req);
+
+        ArgumentCaptor<ClassStudent> enrollmentCaptor = ArgumentCaptor.forClass(ClassStudent.class);
+        verify(classStudentRepository).save(enrollmentCaptor.capture());
+        assertThat(enrollmentCaptor.getValue().getIsActive()).isTrue();
+
+        ArgumentCaptor<Student> studentCaptor = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(studentCaptor.capture());
+        assertThat(studentCaptor.getValue().getCurrentLevel()).isEqualTo("B2");
+    }
+
+    @Test
+    @DisplayName("enrollStudent - Chuẩn hóa email viết hoa và khoảng trắng trước khi tra cứu")
+    void enrollStudent_uppercaseEmailWithSpaces_normalizesBeforeLookup() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .level(null)
+                .maxStudents(30)
+                .build();
+        User user = User.builder().id(studentId).email("student@test.com").build();
+        Student student = Student.builder().id(studentId).user(user).build();
+
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("  STUDENT@TEST.COM  ");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(0L);
+        when(userRepository.findByEmail("student@test.com")).thenReturn(Optional.of(user));
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(false);
+
+        classroomService.enrollStudent(classId, req);
+
+        verify(userRepository).findByEmail("student@test.com");
+        verify(classStudentRepository).save(any(ClassStudent.class));
+    }
+
+    @Test
+    @DisplayName("enrollStudent - studentIdentifier rỗng ném BadRequestException")
+    void enrollStudent_blankIdentifier_throwsBadRequestException() {
+        Classroom classroom = Classroom.builder()
+                .id(classId)
+                .status(ClassStatus.OPEN)
+                .maxStudents(30)
+                .build();
+        EnrollStudentRequest req = new EnrollStudentRequest();
+        req.setStudentIdentifier("   ");
+
+        when(classroomRepository.findById(classId)).thenReturn(Optional.of(classroom));
+        when(classStudentRepository.countByClassroomIdAndIsActiveTrue(classId)).thenReturn(0L);
+
+        assertThatThrownBy(() -> classroomService.enrollStudent(classId, req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Email hoặc số điện thoại học viên không được để trống");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("getClassroomById - Không tìm thấy lớp ném ResourceNotFoundException")
+    void getClassroomById_notFound_throwsResourceNotFoundException() {
+        UUID missingId = UUID.randomUUID();
+        when(classroomRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> classroomService.getClassroomById(missingId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Không tìm thấy lớp học");
+    }
+
+    @Test
+    @DisplayName("leaveClass - Học viên đã rời lớp trước đó (isActive=false) ném BadRequestException")
+    void leaveClass_alreadyInactiveEnrollment_throwsBadRequestException() {
+        ClassStudent inactive = ClassStudent.builder()
+                .classroom(Classroom.builder().id(classId).build())
+                .student(Student.builder().id(studentId).build())
+                .isActive(false)
+                .build();
+
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId))
+                .thenReturn(Optional.of(inactive));
+
+        assertThatThrownBy(() -> classroomService.leaveClass(classId, studentId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Học viên đã rời khỏi lớp học này rồi");
+
+        verify(classStudentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("leaveClass - Không còn lớp active nào sau khi rời lớp thì cập nhật currentLevel về null")
+    void leaveClass_noRemainingActiveEnrollments_clearsStudentCurrentLevelToNull() {
+        ClassStudent active = ClassStudent.builder()
+                .classroom(Classroom.builder().id(classId).build())
+                .student(Student.builder().id(studentId).build())
+                .isActive(true)
+                .build();
+        Student student = Student.builder().id(studentId).currentLevel("B2").build();
+
+        when(classStudentRepository.findByClassroomIdAndStudentId(classId, studentId))
+                .thenReturn(Optional.of(active));
+        when(classStudentRepository.findActiveEnrollmentsWithClassroom(studentId))
+                .thenReturn(Collections.emptyList());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+
+        classroomService.leaveClass(classId, studentId);
+
+        assertThat(active.getIsActive()).isFalse();
+        ArgumentCaptor<Student> studentCaptor = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(studentCaptor.capture());
+        assertThat(studentCaptor.getValue().getCurrentLevel()).isNull();
+    }
+
+    @Test
+    @DisplayName("getClassStudentsProgress - Lớp chưa có học viên nào trả về danh sách rỗng và không query bài nộp")
+    @SuppressWarnings("unchecked")
+    void getClassStudentsProgress_emptyRoster_returnsEmptyListWithoutQueryingAttempts() {
+        TypedQuery<Object[]> rosterQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM ClassStudent cs"), eq(Object[].class))).thenReturn(rosterQuery);
+        when(rosterQuery.setParameter("classId", classId)).thenReturn(rosterQuery);
+        when(rosterQuery.getResultList()).thenReturn(Collections.emptyList());
+
+        when(dailyStudyPlanRepository.findByClassroomIdWithItems(classId)).thenReturn(Collections.emptyList());
+        when(assignmentRepository.findByClassroomId(classId)).thenReturn(Collections.emptyList());
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(Collections.emptyList());
+
+        List<StudentProgressResponse> result = classroomService.getClassStudentsProgress(classId);
+
+        assertThat(result).isEmpty();
+        verifyNoInteractions(studentDailyProgressRepository);
+        verify(entityManager, never()).createQuery(contains("FROM AssignmentAttempt a"), eq(AssignmentAttempt.class));
+    }
 }

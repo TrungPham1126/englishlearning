@@ -18,12 +18,16 @@ import type {
   WritingAiEvaluationResult,
 } from '@/features/student/types';
 import WordUnscrambleInteractive from './WordUnscrambleInteractive';
-import WritingScaffoldingStudio from './WritingScaffoldingStudio';
+import WritingScaffoldingStudio, {
+  classifyWritingQuestion,
+  detectChartMediaUrl,
+} from './WritingScaffoldingStudio';
 import ParagraphWritingStudio from './ParagraphWritingStudio';
 import SpeakingShadowingStudio, { cleanShadowingSentence } from '@/features/student/components/SpeakingShadowingStudio';
 import SpeakingQAStudio from '@/features/student/components/SpeakingQAStudio';
 import AssignmentExplanationSection from './AssignmentExplanationSection';
 import { getFirstLetterHint } from '@/features/student/utils/hintHelper';
+import { isGradingRubricOrMetaText } from '@/utils/sampleAudioPlayer';
 import {
   isQuestionPassed,
   getQuestionBestScoreAcrossAttempts,
@@ -125,9 +129,77 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
     .replace(/\[LISTEN_SPELL\]\s*/gi, '')
     .trim();
 
-  // Phân loại dạng bài
-  const isSpeakingQA = rawType === 'SPEAKING' || (rawType === 'AUDIO_RESPONSE' && promptLower.includes('q&a'));
-  const isSpeakingShadowing = (rawType === 'AUDIO_RESPONSE' || rawType === 'SPEAKING') && !isSpeakingQA;
+  // Phân loại dạng bài Speaking chính xác (tránh đẩy nhầm Q&A / Part 2 / Part 3 sang Shadowing)
+  const attemptTitleLower = String(attempt?.assignmentTitle || '').toLowerCase();
+  const attemptDescLower = String(
+    (attempt as any)?.assignmentDescription ||
+      (attempt as any)?.description ||
+      attempt?.passage ||
+      '',
+  ).toLowerCase();
+  const combinedMeta = `${rawType} ${attemptTitleLower} ${attemptDescLower}`;
+
+  const isPart2Speaking =
+    rawType.includes('PART_2') ||
+    combinedMeta.includes('part 2') ||
+    combinedMeta.includes('part_2') ||
+    combinedMeta.includes('cue card') ||
+    combinedMeta.includes('độc thoại') ||
+    promptLower.includes('you should say:') ||
+    /^\s*describe\b/i.test(cleanPrompt);
+
+  const isPart3Speaking =
+    !isPart2Speaking &&
+    (rawType.includes('PART_3') ||
+      combinedMeta.includes('part 3') ||
+      combinedMeta.includes('part_3') ||
+      combinedMeta.includes('thảo luận chuyên sâu') ||
+      combinedMeta.includes('two-way discussion'));
+
+  const speakingMode: 'QA' | 'PART_2' | 'PART_3' = isPart2Speaking
+    ? 'PART_2'
+    : isPart3Speaking
+    ? 'PART_3'
+    : 'QA';
+
+  const hasExplicitQaSignal =
+    isPart2Speaking ||
+    isPart3Speaking ||
+    rawType === 'SPEAKING' ||
+    rawType === 'SPEAKING_QA' ||
+    rawType.includes('QA') ||
+    combinedMeta.includes('q&a') ||
+    combinedMeta.includes('hỏi - đáp') ||
+    combinedMeta.includes('hỏi đáp') ||
+    combinedMeta.includes('phỏng vấn') ||
+    combinedMeta.includes('speaking_qa') ||
+    cleanPrompt.endsWith('?') ||
+    isGradingRubricOrMetaText(question.promptText) ||
+    ((!question.transcript || isGradingRubricOrMetaText(question.transcript)) &&
+      isGradingRubricOrMetaText(question.correctAnswer));
+
+  const hasExplicitShadowingSignal =
+    combinedMeta.includes('shadow') ||
+    combinedMeta.includes('nhại') ||
+    combinedMeta.includes('đọc đuổi') ||
+    promptLower.includes('shadow') ||
+    promptLower.includes('repeat after') ||
+    promptLower.includes('nhại lại') ||
+    promptLower.includes('read aloud') ||
+    (rawType === 'AUDIO_RESPONSE' &&
+      !cleanPrompt.endsWith('?') &&
+      !isPart2Speaking &&
+      !isPart3Speaking &&
+      (!isGradingRubricOrMetaText(question.transcript) ||
+        !isGradingRubricOrMetaText(question.correctAnswer)));
+
+  const isSpeakingShadowing =
+    (rawType === 'AUDIO_RESPONSE' || rawType === 'SPEAKING' || rawType.includes('SPEAKING')) &&
+    hasExplicitShadowingSignal &&
+    !hasExplicitQaSignal;
+  const isSpeakingQA =
+    (rawType === 'AUDIO_RESPONSE' || rawType === 'SPEAKING' || rawType.includes('SPEAKING')) &&
+    !isSpeakingShadowing;
   const isSpeaking = isSpeakingQA || isSpeakingShadowing;
 
   const isWordUnscramble =
@@ -136,17 +208,46 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
     promptLower.includes('sắp xếp') ||
     promptLower.includes('unscramble');
 
-  const isIeltsEssay =
-    rawType === 'ESSAY' ||
-    rawType.includes('IELTS_TASK') ||
-    promptLower.includes('bài luận') ||
-    promptLower.includes('ielts task');
+  const writingClassification = React.useMemo(
+    () =>
+      classifyWritingQuestion({
+        questionType: rawType,
+        assignmentTitle: attempt?.assignmentTitle,
+        assignmentDescription:
+          (attempt as any)?.assignmentDescription ||
+          (attempt as any)?.description ||
+          attempt?.passage,
+        promptText: prompt,
+        explanation: question.explanation,
+        mediaUrl: question.mediaUrl,
+        hasOptions: Array.isArray(question.options) && question.options.length > 0,
+        isSpeaking,
+        isWordUnscramble,
+      }),
+    [
+      rawType,
+      attempt,
+      prompt,
+      question.explanation,
+      question.mediaUrl,
+      question.options,
+      isSpeaking,
+      isWordUnscramble,
+    ],
+  );
 
-  const isParagraphWriting =
-    !isIeltsEssay &&
-    (rawType.includes('PARAGRAPH') ||
-      promptLower.includes('đoạn văn') ||
-      promptLower.includes('opinion paragraph'));
+  const isParagraphWriting = writingClassification.kind === 'PARAGRAPH';
+  const isIeltsEssay = writingClassification.kind === 'ESSAY';
+  const isTask1Writing =
+    writingClassification.kind === 'ESSAY' &&
+    writingClassification.writingTask === 'TASK_1';
+  const isTask2Writing =
+    writingClassification.kind === 'ESSAY' &&
+    writingClassification.writingTask === 'TASK_2';
+  const writingTaskMode: 'TASK_1' | 'TASK_2' = isTask1Writing ? 'TASK_1' : 'TASK_2';
+
+  const questionMediaUrl = String(question.mediaUrl || '').trim();
+  const hasTask1ChartImage = isTask1Writing && detectChartMediaUrl(questionMediaUrl);
 
   const isTrueFalse =
     rawType === 'TRUE_FALSE' ||
@@ -170,9 +271,11 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
     isListening || (attempt?.skillType || '').toUpperCase() === 'LISTENING',
   );
 
-  // Nhận diện bài tập nghe từ vựng riêng biệt (Chỉ dành cho Vocabulary / Chọn từ, KHÔNG áp dụng cho bài thi Listening)
+  // Nhận diện bài tập nghe từ vựng riêng biệt (Chỉ dành cho Vocabulary / Chọn từ, KHÔNG áp dụng cho bài thi Listening hoặc Writing chart mediaUrl)
   const isListeningWord =
     !isListeningAssignment &&
+    !isIeltsEssay &&
+    !isParagraphWriting &&
     (Boolean(isVocab) ||
       Boolean(question.mediaUrl || (question as any).audioUrl) ||
       prompt.includes('[LISTEN_WORD]') ||
@@ -302,7 +405,11 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
           <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
             {isSpeakingQA
-              ? 'Nói Q&A'
+              ? speakingMode === 'PART_2'
+                ? 'IELTS Part 2'
+                : speakingMode === 'PART_3'
+                ? 'IELTS Part 3'
+                : 'Nói Q&A'
               : isSpeakingShadowing
               ? 'Shadowing'
               : isWordUnscramble
@@ -311,8 +418,10 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
               ? 'Điền từ'
               : isParagraphWriting
               ? 'Viết đoạn'
-              : isIeltsEssay
-              ? 'Viết luận'
+              : isTask1Writing
+              ? 'IELTS Writing Task 1'
+              : isTask2Writing
+              ? 'IELTS Writing Task 2'
               : isTrueFalse
               ? 'Đúng / Sai'
               : 'Trắc nghiệm'}
@@ -364,6 +473,16 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
               </div>
             )}
           </div>
+
+          {hasTask1ChartImage && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-2.5 flex justify-center">
+              <img
+                src={resolveAudioUrl(questionMediaUrl)}
+                alt="IELTS Task 1 visual"
+                className="max-h-80 w-auto rounded-lg object-contain"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -562,6 +681,9 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
             <SpeakingQAStudio
               questionId={question.questionId}
               studentAnswerId={question.studentAnswerId || question.id}
+              currentStep={index + 1}
+              totalSteps={totalQuestions}
+              speakingMode={speakingMode}
               promptQuestion={cleanPrompt || 'Please answer the interview question.'}
               guidelines={question.explanation}
               keyPoints={question.correctAnswer}
@@ -577,6 +699,7 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
       {/* 3F. Writing Studios */}
       {isParagraphWriting && (
         <ParagraphWritingStudio
+          key={question.questionId}
           promptText={prompt}
           explanation={question.explanation || ''}
           currentParagraph={studentAns?.textAnswer || ''}
@@ -592,11 +715,13 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
       )}
       {isIeltsEssay && (
         <WritingScaffoldingStudio
+          key={question.questionId}
           promptText={prompt}
           explanation={question.explanation || ''}
           currentEssay={studentAns?.textAnswer || ''}
           onEssayChange={(text) => onUpdateAnswer(question.questionId, { textAnswer: text })}
           studentAnswerId={question.studentAnswerId || question.id || question.questionId}
+          writingTask={writingTaskMode}
           passBand={passBand}
           failCount={failCount}
           onWritingEvaluated={(res, text, isPassed) =>

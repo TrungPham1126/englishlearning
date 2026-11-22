@@ -78,7 +78,7 @@ def test_quality_gate_duration_boundaries_and_too_long():
     max_sig = np.tile(one_sec, 45)
     assert quality_gate.evaluate(max_sig, strict=True).duration == 45.0
 
-    over_max = np.ones(int(45.5 * sr), dtype=np.float32) * 0.2
+    over_max = np.ones(int((quality_gate.max_duration + 0.5) * sr), dtype=np.float32) * 0.2
     with pytest.raises(AudioTooLongError):
         quality_gate.evaluate(over_max, strict=True)
 
@@ -146,3 +146,39 @@ def test_check_consonant_acoustic_evidence_all_phoneme_classes():
     assert check_consonant_acoustic_evidence_detailed(zeros, "ɹ", sr)[0] is False
     assert check_consonant_acoustic_evidence(low_tone, "j") is True
     assert check_consonant_acoustic_evidence(zeros, "w") is False
+
+
+def test_quality_gate_mild_clipping_moderate_snr_warning_and_plosive_closure():
+    sr = 16000
+    t = np.linspace(0, 1.5, int(1.5 * sr), endpoint=False)
+
+    # 1. Clipping vừa phải (0.03 < clipping_ratio <= 0.10): cảnh báo nhưng vẫn is_acceptable=True kể cả khi strict=True
+    mild_clip = (0.4 * np.sin(2 * np.pi * 300 * t)).astype(np.float32)
+    mild_clip[: int(0.06 * len(mild_clip))] = 0.995  # 6% clipped
+    m_clip = quality_gate.evaluate(mild_clip, strict=True)
+    assert m_clip.is_acceptable is True
+    assert 0.03 < m_clip.clipping_ratio <= 0.10
+    assert any("clipping" in w.lower() for w in m_clip.warnings)
+
+    # 2. SNR trung bình thấp (4.0 <= estimated_snr < 7.0 và duration > 1.2): cảnh báo noise nhưng vẫn is_acceptable=True
+    mod_snr = np.ones(int(1.5 * sr), dtype=np.float32) * 0.10
+    mod_snr[: int(0.3 * sr)] = 0.18  # 20*log10(0.18/0.10) ~= 5.1 dB SNR
+    m_snr = quality_gate.evaluate(mod_snr, strict=True)
+    assert m_snr.is_acceptable is True
+    assert 4.0 <= m_snr.estimated_snr < 7.0
+    assert any("noise" in w.lower() for w in m_snr.warnings)
+
+    # 3. Audio ngắn hơn 1 frame (25ms) với custom gate min_duration=0.01
+    micro_gate = AudioQualityGate(min_duration=0.01, max_duration=10.0, sample_rate=sr)
+    micro_sig = np.ones(int(0.015 * sr), dtype=np.float32) * 0.2
+    m_micro = micro_gate.evaluate(micro_sig, strict=True)
+    assert m_micro.estimated_snr == 25.0
+
+    # 4. Plosive trong pha ngậm (rms < 0.002) vs plosive năng lượng phẳng không có burst (0.002 <= rms < 0.003)
+    closure_ok, closure_mult, _ = check_consonant_acoustic_evidence_detailed(np.zeros(400, dtype=np.float32), "p", sr)
+    assert closure_ok is True and closure_mult == 0.85
+
+    flat_weak_plosive = np.ones(400, dtype=np.float32) * 0.0022
+    weak_ok, weak_mult, _ = check_consonant_acoustic_evidence_detailed(flat_weak_plosive, "p", sr)
+    assert weak_ok is False and weak_mult == 0.0
+

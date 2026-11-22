@@ -46,38 +46,38 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1">
-            Chủ đề bài tập (Topic):
+            Chủ đề:
           </label>
           <input
             type="text"
             value={aiTopic}
             onChange={(e) => setAiTopic(e.target.value)}
-            placeholder="Vd: IELTS Speaking Part 2 - Environment"
+            placeholder="Vd: Environment / IELTS Part 2"
             className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           />
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1">
-            Mức độ khó (Trình độ CEFR / IELTS):
+            Trình độ:
           </label>
           <select
             value={aiLevel}
             onChange={(e) => handleSelectLevel(e.target.value)}
             className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           >
-            <option value="A1">A1 - Sơ cấp (Beginner)</option>
-            <option value="A2">A2 - Cơ bản (Elementary)</option>
-            <option value="B1">B1 - Trung cấp (Intermediate)</option>
-            <option value="B2">B2 - Trung cao (Upper-Intermediate)</option>
-            <option value="C1">C1 - Cao cấp (Advanced)</option>
-            <option value="IELTS">IELTS - Luyện thi IELTS Chuyên sâu</option>
+            <option value="A1">A1 - Sơ cấp</option>
+            <option value="A2">A2 - Cơ bản</option>
+            <option value="B1">B1 - Trung cấp</option>
+            <option value="B2">B2 - Trung cao</option>
+            <option value="C1">C1 - Cao cấp</option>
+            <option value="IELTS">IELTS</option>
           </select>
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1">
-            Số lượng câu hỏi:
+            Số câu:
           </label>
           <select
             value={aiQuestionCount}
@@ -100,24 +100,24 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
               {aiLevel}
             </span>
             <span className="font-bold text-xs text-blue-800 dark:text-blue-200">
-              Định Dạng Câu Hỏi Phù Hợp Trình Độ: {assignmentType} ({aiLevel})
+              Định dạng ({assignmentType} • {aiLevel})
             </span>
           </div>
           <span className="text-[11px] text-slate-500 dark:text-slate-400">
             {aiLevel === "A1" || aiLevel === "A2"
-              ? "Trình độ nền tảng • Dữ kiện trực quan"
+              ? "Nền tảng"
               : aiLevel === "B1" || aiLevel === "B2"
-              ? "Trình độ trung cấp • Paraphrasing & Phân tích"
-              : "Trình độ học thuật • Mô phỏng chuẩn đề thi"}
+              ? "Trung cấp • Paraphrasing"
+              : "Học thuật • Chuẩn thi"}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="text-slate-700 dark:text-slate-300 font-semibold">
-            Danh sách định dạng câu hỏi cho {aiLevel}:
+            Chọn định dạng:
           </span>
           <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 font-medium">
-            Đang chọn: {currentLevelFormats.find((f) => f.code === selectedSubFormat)?.label || "Mặc định"}
+            {currentLevelFormats.find((f) => f.code === selectedSubFormat)?.label || "Mặc định"}
           </span>
         </div>
 
@@ -161,7 +161,7 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
         {/* ĐỐI VỚI READING IELTS: HỖ TRỢ CHỌN PASSAGE 1 / 2 / 3 */}
         {assignmentType === "READING" && aiLevel === "IELTS" && (
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-blue-100 dark:border-blue-600/20 text-xs">
-            <span className="text-slate-700 dark:text-slate-300 font-bold">Chọn Passage Đọc Hiểu IELTS:</span>
+            <span className="text-slate-700 dark:text-slate-300 font-bold">Reading Passage IELTS:</span>
             <div className="flex items-center gap-1.5">
               {([1, 2, 3] as const).map((pNum) => (
                 <button
@@ -184,7 +184,7 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
 
       <div>
         <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1 flex items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Gán vào Ngày Học (Daily Study Plan):
+          <Calendar className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Ngày học:
         </label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <select
@@ -201,10 +201,10 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
           >
             {dailyPlans.map((p: any) => (
               <option key={p.id} value={p.id}>
-                Day {p.dayNumber} ({p.scheduledDate}): {p.title || "Lộ trình ngày"}
+                Day {p.dayNumber} ({p.scheduledDate}) - {p.title || "Ngày học"}
               </option>
             ))}
-            <option value="NEW_DAY">+ Tạo ngày học mới (Thêm Day tiếp theo)</option>
+            <option value="NEW_DAY">+ Tạo ngày mới</option>
           </select>
 
           {selectedPlanId === "NEW_DAY" && (

@@ -53,6 +53,9 @@ class AuditLogAspectTest {
     private static class ClassroomService {
     }
 
+    private static class CourseServiceImpl {
+    }
+
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
@@ -214,6 +217,26 @@ class AuditLogAspectTest {
         // When & Then
         assertThatCode(() -> auditLogAspect.logAuditActivity(mockJoinPoint("deleteRecord", new ClassroomService()), null))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("X-Forwarded-For chỉ chứa khoảng trắng -> Fallback về remoteAddr và chuẩn hóa tên lớp *ServiceImpl")
+    void logAuditActivity_whenBlankXForwardedForAndServiceImplTarget_fallsBackToRemoteAddrAndStripsServiceImpl() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Forwarded-For", "   ");
+        request.setRemoteAddr("172.16.0.9");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin", null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")))
+        );
+
+        auditLogAspect.logAuditActivity(mockJoinPoint("createCourse", new CourseServiceImpl()), null);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getIpAddress()).isEqualTo("172.16.0.9");
+        assertThat(captor.getValue().getEntityName()).isEqualTo("Course");
     }
 
     private JoinPoint mockJoinPoint(String methodName, Object target) {

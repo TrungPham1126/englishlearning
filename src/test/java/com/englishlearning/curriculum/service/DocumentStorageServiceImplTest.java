@@ -213,4 +213,74 @@ class DocumentStorageServiceImplTest {
         storageService.deleteFileByUrl(localUrl);
         assertThat(Files.exists(tempLocal)).isFalse();
     }
+
+    @Test
+    @DisplayName("uploadFile - Chế độ dummy_bucket lưu tài liệu cục bộ vào uploads/documents và trả về đường dẫn /uploads/documents/")
+    void uploadFile_dummyStorageMode_savesLocallyAndReturnsUploadsUrl() {
+        ReflectionTestUtils.setField(storageService, "bucketName", "dummy_bucket");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "syllabus.pdf", "application/pdf", "pdf-content".getBytes(StandardCharsets.UTF_8));
+
+        String localUrl = storageService.uploadFile(file);
+
+        assertThat(localUrl).startsWith("/uploads/documents/").endsWith(".pdf");
+        Path localPath = Paths.get("." + localUrl);
+        createdLocalFiles.add(localPath);
+        assertThat(Files.exists(localPath)).isTrue();
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("uploadFile - Tên file chứa path traversal được chuẩn hóa an toàn chỉ giữ phần mở rộng hợp lệ")
+    void uploadFile_pathTraversalFilename_sanitizesExtensionAndStaysInUploadsDir() {
+        ReflectionTestUtils.setField(storageService, "bucketName", "dummy_bucket");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "../../etc/passwd.txt", "text/plain", "safe".getBytes(StandardCharsets.UTF_8));
+
+        String localUrl = storageService.uploadFile(file);
+
+        assertThat(localUrl).startsWith("/uploads/documents/").endsWith(".txt");
+        assertThat(localUrl).doesNotContain("..");
+        Path localPath = Paths.get("." + localUrl).toAbsolutePath().normalize();
+        createdLocalFiles.add(localPath);
+        assertThat(localPath.startsWith(Paths.get("uploads", "documents").toAbsolutePath().normalize())).isTrue();
+    }
+
+    @Test
+    @DisplayName("uploadFile - publicUrl có dấu '/' ở cuối không tạo ra double slash trong URL trả về")
+    void uploadFile_publicUrlWithTrailingSlash_buildsCleanSingleSlashUrl() {
+        ReflectionTestUtils.setField(storageService, "publicUrl", "https://cdn.english.test///");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "doc.pdf", "application/pdf", "pdf".getBytes(StandardCharsets.UTF_8));
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+
+        String url = storageService.uploadFile(file);
+
+        assertThat(url).startsWith("https://cdn.english.test/documents/").endsWith(".pdf");
+        assertThat(url.replace("https://", "")).doesNotContain("//");
+    }
+
+    @Test
+    @DisplayName("deleteFileByUrl - Chặn path traversal (/uploads/../pom.xml) không cho xóa file bên ngoài thư mục uploads")
+    void deleteFileByUrl_pathTraversalOutsideUploads_doesNotDeleteTargetFile() {
+        Path pomPath = Paths.get("pom.xml").toAbsolutePath().normalize();
+        assertThat(Files.exists(pomPath)).isTrue();
+
+        storageService.deleteFileByUrl("/uploads/../pom.xml");
+
+        assertThat(Files.exists(pomPath)).isTrue();
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("deleteFileByUrl - Lỗi khi S3 deleteObject ném ngoại lệ được bắt an toàn không làm sập luồng")
+    void deleteFileByUrl_s3ThrowsException_catchesWithoutPropagating() {
+        doThrow(new RuntimeException("S3 delete error"))
+                .when(s3Client).deleteObject(any(DeleteObjectRequest.class));
+
+        storageService.deleteFileByUrl("https://cdn.english.test/documents/broken.pdf");
+
+        verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+    }
 }

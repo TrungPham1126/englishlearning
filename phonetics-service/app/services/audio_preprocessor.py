@@ -95,15 +95,24 @@ def convert_to_praat_sound(audio_bytes: bytes) -> "parselmouth.Sound":
             except Exception:
                 pass
         if HAS_PYDUB:
-            audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-            audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-            wav_io = io.BytesIO()
-            audio.export(wav_io, format="wav")
-            wav_io.seek(0)
-            return parselmouth.Sound(wav_io.read())
+            try:
+                audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+                audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+                raw_samples = audio.get_array_of_samples()
+                if len(raw_samples) > 0:
+                    samples = np.array(raw_samples, dtype=np.float64) / 32768.0
+                    return parselmouth.Sound(samples, sampling_frequency=16000.0)
+            except Exception as pydub_err:
+                logger.debug("pydub convert_to_praat_sound error, falling back to ffmpeg: %s", pydub_err)
+
+        decoded_data, decoded_sr = preprocessor._decode_via_ffmpeg(audio_bytes, "audio.webm")
+        if decoded_data is not None and len(decoded_data) > 0:
+            return parselmouth.Sound(decoded_data.astype(np.float64), sampling_frequency=float(decoded_sr))
         return parselmouth.Sound(audio_bytes)
+    except UnsupportedAudioError:
+        raise
     except Exception as conv_err:
-        logger.warning("Lỗi chuyển đổi âm thanh qua pydub sang WAV: %s. Thử nạp trực tiếp...", conv_err)
+        logger.warning("Lỗi chuyển đổi âm thanh sang WAV: %s. Thử nạp trực tiếp...", conv_err)
         try:
             return parselmouth.Sound(audio_bytes)
         except Exception as direct_err:

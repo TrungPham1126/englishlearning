@@ -18,6 +18,7 @@ import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.dto.PageResponse;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.englishlearning.curriculum.entity.DailyStudyPlan;
 import com.englishlearning.curriculum.entity.Lesson;
 import com.englishlearning.curriculum.entity.StudentDailyProgress;
@@ -63,7 +64,11 @@ public class ClassroomServiceImpl implements ClassroomService {
     @Override
     @Transactional
     public ClassroomResponse createClassroom(CreateClassroomRequest req) {
-        if (classroomRepository.existsByNameIgnoreCase(req.getName())) {
+        if (req == null || req.getName() == null || req.getName().isBlank()) {
+            throw new BadRequestException("Tên lớp học không được để trống");
+        }
+        String normalizedName = req.getName().trim();
+        if (classroomRepository.existsByNameIgnoreCase(normalizedName)) {
             throw new BadRequestException("Tên lớp học đã tồn tại");
         }
         if (req.getMaxStudents() != null && req.getMaxStudents() <= 0) {
@@ -82,7 +87,7 @@ public class ClassroomServiceImpl implements ClassroomService {
         String joinCode = generateUniqueJoinCode();
 
         Classroom classroom = Classroom.builder()
-                .name(req.getName())
+                .name(normalizedName)
                 .description(req.getDescription())
                 .level(req.getLevel())
                 .status(ClassStatus.PLANNING)
@@ -113,6 +118,29 @@ public class ClassroomServiceImpl implements ClassroomService {
         }
 
         if (classStudentRepository.existsByClassroomIdAndStudentId(classroom.getId(), studentId)) {
+            Optional<ClassStudent> existingOpt =
+                    classStudentRepository.findByClassroomIdAndStudentId(classroom.getId(), studentId);
+            if (existingOpt.isPresent() && Boolean.FALSE.equals(existingOpt.get().getIsActive())) {
+                long currentCount = classStudentRepository.countByClassroomIdAndIsActiveTrue(classroom.getId());
+                if (classroom.getMaxStudents() != null && currentCount >= classroom.getMaxStudents()) {
+                    throw new BadRequestException("Lớp học đã đạt tối đa (" + classroom.getMaxStudents() + " học viên)");
+                }
+                ClassStudent existing = existingOpt.get();
+                existing.setIsActive(true);
+                existing.setEnrolledAt(Instant.now());
+                classStudentRepository.save(existing);
+
+                Student student = existing.getStudent() != null
+                        ? existing.getStudent()
+                        : studentRepository.findById(studentId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin học viên"));
+                if (classroom.getLevel() != null) {
+                    student.setCurrentLevel(classroom.getLevel().name());
+                    studentRepository.save(student);
+                }
+                log.info("Học sinh {} tham gia lại lớp {} qua mã {} thành công", studentId, classroom.getId(), joinCode);
+                return;
+            }
             throw new BadRequestException("Học viên đã tham gia lớp học này rồi");
         }
 
@@ -188,8 +216,11 @@ public class ClassroomServiceImpl implements ClassroomService {
         if (classroom.getMaxStudents() != null && currentCount >= classroom.getMaxStudents()) {
             throw new BadRequestException("Lớp học đã đạt tối đa (" + classroom.getMaxStudents() + " học viên)");
         }
-        String identifier = req.getStudentIdentifier() != null ? req.getStudentIdentifier().trim() : "";
-        User user = userRepository.findByEmail(identifier)
+        String identifier = req != null && req.getStudentIdentifier() != null ? req.getStudentIdentifier().trim() : "";
+        if (identifier.isEmpty()) {
+            throw new BadRequestException("Email hoặc số điện thoại học viên không được để trống");
+        }
+        User user = userRepository.findByEmail(identifier.toLowerCase())
                 .or(() -> userRepository.findByPhone(identifier))
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy tài khoản học viên với email/SĐT: " + identifier));
@@ -197,6 +228,19 @@ public class ClassroomServiceImpl implements ClassroomService {
         Student student = studentRepository.findById(user.getId())
                 .orElseGet(() -> studentRepository.save(Student.builder().user(user).build()));
         if (classStudentRepository.existsByClassroomIdAndStudentId(classId, student.getId())) {
+            Optional<ClassStudent> existingOpt =
+                    classStudentRepository.findByClassroomIdAndStudentId(classId, student.getId());
+            if (existingOpt.isPresent() && Boolean.FALSE.equals(existingOpt.get().getIsActive())) {
+                ClassStudent existing = existingOpt.get();
+                existing.setIsActive(true);
+                existing.setEnrolledAt(Instant.now());
+                classStudentRepository.save(existing);
+                if (classroom.getLevel() != null) {
+                    student.setCurrentLevel(classroom.getLevel().name());
+                    studentRepository.save(student);
+                }
+                return;
+            }
             throw new BadRequestException("Học viên đã tham gia lớp học này rồi");
         }
         ClassStudent classStudent = ClassStudent.builder()
@@ -388,6 +432,9 @@ public class ClassroomServiceImpl implements ClassroomService {
         ClassStudent enrollment = classStudentRepository
                 .findByClassroomIdAndStudentId(classId, studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin ghi danh"));
+        if (Boolean.FALSE.equals(enrollment.getIsActive())) {
+            throw new BadRequestException("Học viên đã rời khỏi lớp học này rồi");
+        }
         enrollment.setIsActive(false);
         classStudentRepository.save(enrollment);
 
@@ -507,7 +554,7 @@ public class ClassroomServiceImpl implements ClassroomService {
                                 boolean hasOfficialScore = attempt.getStatus() == com.englishlearning.submission.entity.AttemptStatus.COMPLETED
                                         || (attempt.getTotalScore() != null && attempt.getTotalScore() > 0);
                                 if (attempt.getTotalScore() != null && hasOfficialScore) {
-                                    planScoreSum += attempt.getTotalScore();
+                                    planScoreSum += ScoreScaleUtils.normalizeToScale10OrZero(attempt.getTotalScore());
                                     planScoredCount++;
                                     scoredAssignmentIds.add(assignId);
                                 }
@@ -530,8 +577,7 @@ public class ClassroomServiceImpl implements ClassroomService {
                 totalScoreSum += planScoreSum;
                 scoredAttemptsCount += planScoredCount;
 
-                double planAvgScore = planScoredCount > 0 ? (planScoreSum / planScoredCount) : 0.0;
-                planAvgScore = Math.round(planAvgScore * 10.0) / 10.0;
+                double planAvgScore = planScoredCount > 0 ? ScoreScaleUtils.clampScale10(planScoreSum / planScoredCount) : 0.0;
 
                 dailyProgressDetails.add(StudentProgressResponse.DailyProgressDetail.builder()
                         .date("Day " + plan.getDayNumber())
@@ -549,7 +595,7 @@ public class ClassroomServiceImpl implements ClassroomService {
                         boolean hasOfficialScore = attempt.getStatus() == com.englishlearning.submission.entity.AttemptStatus.COMPLETED
                                 || attempt.getTotalScore() > 0;
                         if (hasOfficialScore) {
-                            totalScoreSum += attempt.getTotalScore();
+                            totalScoreSum += ScoreScaleUtils.normalizeToScale10OrZero(attempt.getTotalScore());
                             scoredAttemptsCount++;
                             scoredAssignmentIds.add(clsAss.getId());
                         }
@@ -590,8 +636,7 @@ public class ClassroomServiceImpl implements ClassroomService {
                     ? (int) Math.min(100, Math.round(((double) studentTotalCompletedTasks / totalClassTasks) * 100))
                     : 0;
 
-            double averageScore = scoredAttemptsCount > 0 ? (totalScoreSum / scoredAttemptsCount) : 0.0;
-            averageScore = Math.round(averageScore * 10.0) / 10.0;
+            double averageScore = scoredAttemptsCount > 0 ? ScoreScaleUtils.clampScale10(totalScoreSum / scoredAttemptsCount) : 0.0;
 
             responseList.add(StudentProgressResponse.builder()
                     .studentId(studentId)

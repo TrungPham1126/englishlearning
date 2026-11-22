@@ -10,7 +10,7 @@ export type SkillKey =
   | "WRITING"
   | "GRAMMAR";
 
-export type SpeakingModeKey = "QA" | "SHADOWING";
+export type SpeakingModeKey = "QA" | "PART_2" | "PART_3" | "SHADOWING";
 
 export interface ImportGroup {
   key: string;
@@ -719,7 +719,7 @@ export function parseExcelRows(
       if (!optA && !optB && !rawAnswer) {
         return;
       }
-      errors.push(`${rowLoc}: Thiếu nội dung đề bài / câu hỏi.`);
+      errors.push(`${rowLoc}: Thiếu nội dung câu hỏi.`);
       return;
     }
 
@@ -743,7 +743,7 @@ export function parseExcelRows(
 
     if (questionType === "MULTIPLE_CHOICE") {
       if (optionsRaw.length < 2) {
-        errors.push(`${rowLoc}: Câu trắc nghiệm cần ít nhất 2 phương án (Lựa chọn A, B).`);
+        errors.push(`${rowLoc}: Trắc nghiệm cần >= 2 phương án (A, B).`);
         return;
       }
       finalOptions = [optA, optB, optC, optD].filter((o) => o !== "");
@@ -765,11 +765,11 @@ export function parseExcelRows(
         if (matched) {
           finalAnswer = matched;
         } else if (!finalAnswer) {
-          errors.push(`${rowLoc}: Chưa chọn đáp án đúng cho câu trắc nghiệm.`);
+          errors.push(`${rowLoc}: Thiếu đáp án đúng.`);
           return;
         } else {
           warnings.push(
-            `${rowLoc}: Đáp án "${finalAnswer}" không khớp chính xác với lựa chọn A, B, C, D nào. Đã tạm thời gán vào lựa chọn A.`
+            `${rowLoc}: Đáp án "${finalAnswer}" không khớp A-D; tạm gán vào A.`
           );
           if (!finalOptions.includes(finalAnswer)) {
             finalAnswer = finalOptions[0] || optA;
@@ -779,7 +779,7 @@ export function parseExcelRows(
     } else if (questionType === "MATCHING") {
       finalOptions = [];
       if (!finalAnswer) {
-        errors.push(`${rowLoc}: Dạng ghép cặp (MATCHING) yêu cầu phải có nghĩa hoặc cặp ghép ở cột 'Đáp án đúng'.`);
+        errors.push(`${rowLoc}: MATCHING thiếu đáp án đúng (nghĩa/cặp ghép).`);
         return;
       }
     } else if (questionType === "TRUE_FALSE") {
@@ -788,12 +788,12 @@ export function parseExcelRows(
       if (normTf) {
         finalAnswer = normTf;
       } else {
-        warnings.push(`${rowLoc}: Đáp án True/False "${finalAnswer}" chưa chuẩn. Tự động chuẩn hóa về "TRUE".`);
+        warnings.push(`${rowLoc}: Đáp án "${finalAnswer}" chưa chuẩn True/False; tạm gán "TRUE".`);
         finalAnswer = "TRUE";
       }
     } else if (questionType === "FILL_IN_BLANK") {
       if (!finalAnswer) {
-        errors.push(`${rowLoc}: Dạng câu hỏi điền từ yêu cầu phải có "Đáp án đúng".`);
+        errors.push(`${rowLoc}: Điền từ thiếu "Đáp án đúng".`);
         return;
       }
       finalOptions = [];
@@ -812,19 +812,41 @@ export function parseExcelRows(
     // 5. Xác định chế độ Speaking (QA vs SHADOWING)
     let speakingMode: SpeakingModeKey = defaultSpeakingMode;
     if (skill === "SPEAKING") {
+      const rawTypeUpper = (rawType || "").toUpperCase();
+      const rawPromptLower = rawPrompt.toLowerCase();
+      const isPart2 =
+        rawTypeUpper.includes("PART_2") ||
+        rawTypeUpper.includes("PART 2") ||
+        rawPromptLower.includes("cue card") ||
+        rawPromptLower.includes("you should say:");
+      const isPart3 =
+        rawTypeUpper.includes("PART_3") ||
+        rawTypeUpper.includes("PART 3") ||
+        rawPromptLower.includes("part 3");
       const isShadowingPrompt =
-        rawPrompt.toLowerCase().includes("shadow") ||
-        rawPrompt.toLowerCase().includes("nhại") ||
-        rawPrompt.toLowerCase().includes("repeat") ||
-        rawPrompt.toLowerCase().includes("lặp lại") ||
-        rawPrompt.toLowerCase().includes("đọc to") ||
-        (rawType && (rawType.toLowerCase().includes("shadow") || rawType.toUpperCase() === "SPEAKING"));
+        !isPart2 &&
+        !isPart3 &&
+        (rawPromptLower.includes("shadow") ||
+          rawPromptLower.includes("nhại") ||
+          rawPromptLower.includes("repeat") ||
+          rawPromptLower.includes("lặp lại") ||
+          rawPromptLower.includes("đọc to") ||
+          rawTypeUpper.includes("SHADOW"));
       const isQA =
-        (rawType && rawType.toUpperCase().includes("QA")) ||
-        rawPrompt.toLowerCase().includes("describe") ||
-        rawPrompt.toLowerCase().includes("tell me") ||
-        rawPrompt.toLowerCase().includes("what do you think");
-      speakingMode = isQA ? "QA" : isShadowingPrompt ? "SHADOWING" : "QA";
+        rawTypeUpper.includes("QA") ||
+        rawTypeUpper.includes("PART_1") ||
+        rawPromptLower.includes("describe") ||
+        rawPromptLower.includes("tell me") ||
+        rawPromptLower.includes("what do you think");
+      speakingMode = isPart2
+        ? "PART_2"
+        : isPart3
+        ? "PART_3"
+        : isShadowingPrompt
+        ? "SHADOWING"
+        : isQA
+        ? "QA"
+        : "QA";
     }
 
     // 6. Điểm số
@@ -908,7 +930,7 @@ export function parseRawText(
         source: "TEXT",
         totalRows: 0,
         imported: 0,
-        errors: ["Nội dung văn bản thô đang để trống."],
+        errors: ["Nội dung văn bản trống."],
         warnings: [],
       },
     };
@@ -949,7 +971,7 @@ export function parseRawText(
     }
 
     if (!prompt) {
-      errors.push(`Khối câu hỏi ${idx + 1}: Không tìm thấy đề bài hợp lệ.`);
+      errors.push(`Khối ${idx + 1}: Thiếu đề bài.`);
       return;
     }
 

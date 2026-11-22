@@ -53,8 +53,10 @@ public class AuditLogAspect {
             if (attributes != null) {
                 HttpServletRequest request = attributes.getRequest();
                 ipAddress = request.getHeader("X-Forwarded-For");
-                if (ipAddress == null) {
+                if (ipAddress == null || ipAddress.isBlank()) {
                     ipAddress = request.getRemoteAddr();
+                } else {
+                    ipAddress = ipAddress.trim();
                 }
             }
 
@@ -66,7 +68,7 @@ public class AuditLogAspect {
             AuditLog auditLog = AuditLog.builder()
                     .user(user)
                     .action(action)
-                    .entityName(className.replace("Service", ""))
+                    .entityName(className.replace("ServiceImpl", "").replace("Service", ""))
                     .ipAddress(ipAddress)
                     .metadataJson("{\"method\": \"" + methodName + "\"}")
                     .build();

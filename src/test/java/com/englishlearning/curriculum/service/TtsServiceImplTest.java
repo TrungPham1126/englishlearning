@@ -62,4 +62,52 @@ class TtsServiceImplTest {
 
         verifyNoInteractions(exerciseAudioService);
     }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenSpeedIsNaNOrInfinity_fallsBackToDefaultSpeed")
+    void synthesizeAudio_whenSpeedIsNaNOrInfinity_fallsBackToDefaultSpeed() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Line", "af_heart", 1.0))
+                .thenReturn("/line.wav");
+
+        assertThat(ttsService.synthesizeAudio("Line", "af_heart", "NaN")).isEqualTo("/line.wav");
+        assertThat(ttsService.synthesizeAudio("Line", "af_heart", "Infinity")).isEqualTo("/line.wav");
+        assertThat(ttsService.synthesizeAudio("Line", "af_heart", "-Infinity")).isEqualTo("/line.wav");
+
+        verify(exerciseAudioService, times(3)).synthesizeRawScriptToUrl("Line", "af_heart", 1.0);
+    }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenSpeedIsNull_usesDefaultSpeed1_0")
+    void synthesizeAudio_whenSpeedIsNull_usesDefaultSpeed1_0() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Null speed", "af_heart", 1.0))
+                .thenReturn("/default.wav");
+
+        String url = ttsService.synthesizeAudio("Null speed", "af_heart", null);
+
+        assertThat(url).isEqualTo("/default.wav");
+        verify(exerciseAudioService).synthesizeRawScriptToUrl("Null speed", "af_heart", 1.0);
+    }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenSpeedIsExactBoundsAndNegative_clampsCorrectly")
+    void synthesizeAudio_whenSpeedIsExactBoundsAndNegative_clampsCorrectly() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Slow", "af_heart", 0.5)).thenReturn("/slow.wav");
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Fast", "af_heart", 2.0)).thenReturn("/fast.wav");
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Negative", "af_heart", 0.5)).thenReturn("/neg.wav");
+
+        assertThat(ttsService.synthesizeAudio("Slow", "af_heart", "0.5")).isEqualTo("/slow.wav");
+        assertThat(ttsService.synthesizeAudio("Fast", "af_heart", "2.0")).isEqualTo("/fast.wav");
+        assertThat(ttsService.synthesizeAudio("Negative", "af_heart", "-1.5x")).isEqualTo("/neg.wav");
+    }
+
+    @Test
+    @DisplayName("synthesizeAudio_whenExerciseAudioServiceThrows_propagatesException")
+    void synthesizeAudio_whenExerciseAudioServiceThrows_propagatesException() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Boom", "af_heart", 1.0))
+                .thenThrow(new RuntimeException("Kokoro timeout"));
+
+        assertThatThrownBy(() -> ttsService.synthesizeAudio("Boom", "af_heart", "1.0x"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Kokoro timeout");
+    }
 }

@@ -8,6 +8,7 @@ import {
   Volume2,
 } from "lucide-react";
 import type { GradingQuestion, AiFeedbackParsed } from "./gradingTypes";
+import { normalizeScoreTo10 } from "@/utils/scoreScale";
 
 interface AiEvaluationCardProps {
   question: GradingQuestion;
@@ -148,11 +149,19 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
     return null;
   }
 
-  const maxScale =
-    aiDetail?.evalType === "SHADOWING" ? 10 : overallScore != null && overallScore > 9 ? 10 : 9;
+  const isLegacy100 = overallScore != null && overallScore > 10;
+  const maxScale = isLegacy100
+    ? 100
+    : aiDetail?.evalType === "SHADOWING"
+      ? 10
+      : overallScore != null && overallScore > 9
+        ? 10
+        : 9;
   const normalizedApplyScore =
     overallScore != null && !Number.isNaN(overallScore)
-      ? Math.min(10, Math.round(overallScore * 10) / 10)
+      ? maxScale === 9
+        ? Math.min(10, Math.round(((overallScore / 9.0) * 10) * 10) / 10)
+        : normalizeScoreTo10(overallScore)
       : null;
 
   return (
@@ -162,7 +171,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 font-bold text-blue-800 dark:text-blue-300">
             <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            AI Đã Chấm & Phân Tích
+            Đánh giá AI
           </span>
           {aiDetail?.evalType && (
             <span className="rounded-md bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
@@ -178,8 +187,12 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
 
         <div className="flex items-center gap-2">
           {overallScore != null && !Number.isNaN(overallScore) && (
-            <span className="rounded-lg bg-blue-700 px-2.5 py-1 text-xs font-extrabold text-white shadow-2xs">
-              Điểm AI: {overallScore} / {maxScale}
+            <span className="rounded-lg bg-blue-700 px-2.5 py-1 text-xs font-extrabold text-white shadow-2xs tabular-nums">
+              {maxScale === 9 && normalizedApplyScore !== null
+                ? `Điểm AI: Band ${overallScore}/${maxScale} (~${normalizedApplyScore}/10)`
+                : maxScale === 100 && normalizedApplyScore !== null
+                  ? `Điểm AI: ${overallScore}/100 (~${normalizedApplyScore}/10)`
+                  : `Điểm AI: ${overallScore}/${maxScale}`}
             </span>
           )}
           {onApplyAiScore && normalizedApplyScore !== null && (
@@ -187,7 +200,13 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
               type="button"
               onClick={() => onApplyAiScore(normalizedApplyScore)}
               className="inline-flex items-center gap-1 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white transition cursor-pointer"
-              title="Điền điểm AI vào ô chấm điểm chính thức"
+              title={
+                maxScale === 9
+                  ? "Quy đổi IELTS Band (thang 9.0) sang thang 10 và áp dụng"
+                  : maxScale === 100
+                    ? "Chuẩn hóa từ thang 100 sang thang 10 và áp dụng"
+                    : "Áp dụng điểm AI"
+              }
             >
               <Sparkles className="h-3 w-3" />
               Dùng điểm AI ({normalizedApplyScore})
@@ -220,7 +239,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
         <div className="rounded-lg border border-cyan-200 dark:border-cyan-800/60 bg-white dark:bg-slate-900/80 p-2.5 space-y-1">
           <div className="flex items-center gap-1 text-[11px] font-bold text-cyan-700 dark:text-cyan-400">
             <Volume2 className="h-3.5 w-3.5" />
-            AI nghe &amp; bóc băng bài nói (Transcript):
+            Transcript AI:
           </div>
           <p className="text-slate-700 dark:text-slate-300 leading-relaxed italic">
             "{sttTranscript}"
@@ -232,7 +251,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
       {generalFeedback && (
         <div className="rounded-lg bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-2.5 space-y-1">
           <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 block">
-            Nhận xét tổng quan từ AI:
+            Nhận xét AI:
           </span>
           <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
             {generalFeedback}
@@ -245,7 +264,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
         <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 p-2.5 space-y-1.5">
           <div className="flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300">
             <AlertCircle className="h-3.5 w-3.5" />
-            Lỗi cần lưu ý ({mistakes.length}):
+            Lỗi ({mistakes.length}):
           </div>
           <div className="space-y-1.5">
             {mistakes.map((m, idx) => (
@@ -279,7 +298,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
         <div className="rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-950/20 p-2.5 space-y-1">
           <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Phiên bản nâng cấp AI gợi ý:
+            Gợi ý sửa AI:
           </div>
           <p className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
             {correctedText}
@@ -292,7 +311,7 @@ export const AiEvaluationCard: React.FC<AiEvaluationCardProps> = ({
         <div className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900/80 p-2.5 space-y-1">
           <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
             <Lightbulb className="h-3.5 w-3.5" />
-            Gợi ý cải thiện từ AI:
+            Gợi ý cải thiện:
           </div>
           <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
             {suggestions.map((s, idx) => (

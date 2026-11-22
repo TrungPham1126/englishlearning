@@ -28,14 +28,129 @@ export interface StudentProgressItem {
   dailyProgress?: Record<string, number>;
 }
 
+export type DocumentFileType = "PDF" | "DOCX" | "PPTX" | "IMAGE" | "AUDIO";
+
+export interface LessonDocumentItem {
+  id: string;
+  lessonId: string;
+  fileName: string;
+  fileUrl: string;
+  fileSizeBytes?: number | null;
+  fileType: DocumentFileType | string;
+  createdAt?: string | null;
+}
+
+export interface LessonVocabularyItem {
+  id: string;
+  lessonId?: string;
+  word: string;
+  meaning: string;
+  ipa?: string;
+  audioUrl?: string | null;
+  exampleSentence?: string;
+  partOfSpeech?: string;
+}
+
+export interface LessonGrammarItem {
+  id: string;
+  lessonId?: string;
+  title: string;
+  ruleSummary: string;
+  formula?: string | null;
+  examples?: string | null;
+}
+
+export interface LessonDetailItem {
+  id: string;
+  classId: string;
+  title: string;
+  objectives?: string | null;
+  content?: string | null;
+  orderIndex: number;
+  updatedAt?: string | null;
+  documents: LessonDocumentItem[];
+  vocabularies: LessonVocabularyItem[];
+  grammarTopics: LessonGrammarItem[];
+}
+
+export interface LessonVideoItem {
+  id: string;
+  originalFileName?: string | null;
+  rawStorageUrl?: string | null;
+  hlsPlaylistUrl?: string | null;
+  videoUrl?: string | null;
+  thumbnailUrl?: string | null;
+  durationSeconds?: number | null;
+  sizeBytes?: number | null;
+  status: string;
+  rejectionReason?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lesson?: {
+    id: string;
+    title: string;
+    orderIndex?: number;
+    classroom?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+}
+
 export interface LessonItem {
   id: string;
+  classId?: string;
   orderIndex: number;
   title: string;
   objectives?: string;
+  content?: string;
   videoUrl?: string;
   hasVideo?: boolean;
+  videoId?: string | null;
+  videoStatus?: string | null;
+  videoRejectionReason?: string | null;
   documentsCount?: number;
+  vocabulariesCount?: number;
+  grammarTopicsCount?: number;
+}
+
+export function detectDocumentFileType(file: File): DocumentFileType {
+  const name = (file.name || "").trim().toLowerCase();
+  const mime = (file.type || "").trim().toLowerCase();
+
+  if (name.endsWith(".pdf") || mime === "application/pdf") {
+    return "PDF";
+  }
+  if (
+    name.endsWith(".doc") ||
+    name.endsWith(".docx") ||
+    name.endsWith(".txt") ||
+    mime.includes("word") ||
+    mime === "text/plain"
+  ) {
+    return "DOCX";
+  }
+  if (
+    name.endsWith(".ppt") ||
+    name.endsWith(".pptx") ||
+    mime.includes("presentation") ||
+    mime.includes("powerpoint")
+  ) {
+    return "PPTX";
+  }
+  if (
+    mime.startsWith("image/") ||
+    /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name)
+  ) {
+    return "IMAGE";
+  }
+  if (
+    mime.startsWith("audio/") ||
+    /\.(mp3|wav|m4a|ogg|aac)$/i.test(name)
+  ) {
+    return "AUDIO";
+  }
+  return "PDF";
 }
 
 export interface StudentSubmissionItem {
@@ -148,14 +263,29 @@ export const teacherApi = {
     data: { title: string; objectives: string; orderIndex?: number; content?: string },
   ) => axiosClient.post(`/api/curriculum/lessons`, { ...data, classId }),
 
+  getLessonDetail: (lessonId: string) =>
+    axiosClient.get<{ data: LessonDetailItem }>(
+      `/api/curriculum/lessons/${lessonId}`,
+    ),
+
+  updateLesson: (
+    lessonId: string,
+    data: { title: string; objectives?: string; content?: string; orderIndex?: number },
+  ) => axiosClient.put(`/api/curriculum/lessons/${lessonId}`, data),
+
   deleteLesson: (lessonId: string) =>
     axiosClient.delete(`/api/curriculum/lessons/${lessonId}`),
 
-  uploadLessonDocument: (lessonId: string, file: File) => {
+  uploadLessonDocument: (
+    lessonId: string,
+    file: File,
+    fileType?: DocumentFileType,
+  ) => {
+    const resolvedType = fileType || detectDocumentFileType(file);
     const formData = new FormData();
     formData.append("file", file);
     return axiosClient.post(
-      `/api/curriculum/lessons/${lessonId}/documents?fileType=PDF`,
+      `/api/curriculum/lessons/${lessonId}/documents?fileType=${resolvedType}`,
       formData,
       {
         headers: { "Content-Type": "multipart/form-data" },
@@ -163,11 +293,155 @@ export const teacherApi = {
     );
   },
 
-  uploadLessonVideo: (lessonId: string, videoFile: File) => {
+  getLessonDocuments: (lessonId: string) =>
+    axiosClient.get<{ data: LessonDocumentItem[] }>(
+      `/api/curriculum/lessons/${lessonId}/documents`,
+    ),
+
+  updateDocument: (
+    documentId: string,
+    data: { fileName: string; fileType?: DocumentFileType },
+  ) =>
+    axiosClient.put<{ data: LessonDocumentItem }>(
+      `/api/curriculum/documents/${documentId}`,
+      data,
+    ),
+
+  replaceDocumentFile: (
+    documentId: string,
+    file: File,
+    options?: { fileName?: string; fileType?: DocumentFileType },
+  ) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (options?.fileName && options.fileName.trim()) {
+      formData.append("fileName", options.fileName.trim());
+    }
+    const resolvedType = options?.fileType || detectDocumentFileType(file);
+    formData.append("fileType", resolvedType);
+    return axiosClient.put<{ data: LessonDocumentItem }>(
+      `/api/curriculum/documents/${documentId}/file`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
+  },
+
+  deleteDocument: (documentId: string) =>
+    axiosClient.delete(`/api/curriculum/documents/${documentId}`),
+
+  getLessonVocabularies: (lessonId: string) =>
+    axiosClient.get<{ data: LessonVocabularyItem[] }>(
+      `/api/curriculum/lessons/${lessonId}/vocabularies`,
+    ),
+
+  addVocabulary: (
+    lessonId: string,
+    data: {
+      word: string;
+      meaning: string;
+      ipa?: string;
+      exampleSentence?: string;
+      partOfSpeech?: string;
+    },
+  ) =>
+    axiosClient.post<{ data: LessonVocabularyItem }>(
+      `/api/curriculum/lessons/${lessonId}/vocabularies`,
+      data,
+    ),
+
+  updateVocabulary: (
+    vocabId: string,
+    data: {
+      word: string;
+      meaning: string;
+      ipa?: string;
+      exampleSentence?: string;
+      partOfSpeech?: string;
+    },
+  ) =>
+    axiosClient.put<{ data: LessonVocabularyItem }>(
+      `/api/curriculum/vocabularies/${vocabId}`,
+      data,
+    ),
+
+  deleteVocabulary: (vocabId: string) =>
+    axiosClient.delete(`/api/curriculum/vocabularies/${vocabId}`),
+
+  getLessonGrammarTopics: (lessonId: string) =>
+    axiosClient.get<{ data: LessonGrammarItem[] }>(
+      `/api/curriculum/lessons/${lessonId}/grammar`,
+    ),
+
+  addGrammarTopic: (
+    lessonId: string,
+    data: {
+      title: string;
+      ruleSummary: string;
+      formula?: string;
+      examples?: string;
+    },
+  ) =>
+    axiosClient.post<{ data: LessonGrammarItem }>(
+      `/api/curriculum/lessons/${lessonId}/grammar`,
+      data,
+    ),
+
+  updateGrammarTopic: (
+    topicId: string,
+    data: {
+      title: string;
+      ruleSummary: string;
+      formula?: string;
+      examples?: string;
+    },
+  ) =>
+    axiosClient.put<{ data: LessonGrammarItem }>(
+      `/api/curriculum/grammar/${topicId}`,
+      data,
+    ),
+
+  deleteGrammarTopic: (topicId: string) =>
+    axiosClient.delete(`/api/curriculum/grammar/${topicId}`),
+
+  getLessonVideo: (lessonId: string) =>
+    axiosClient.get<{ data: LessonVideoItem | null }>(
+      `/api/v1/videos/lesson/${lessonId}`,
+    ),
+
+  getMyUploadedVideos: (status?: string) => {
+    const url =
+      status && status !== "ALL"
+        ? `/api/v1/videos/my-uploads?status=${encodeURIComponent(status)}`
+        : "/api/v1/videos/my-uploads";
+    return axiosClient.get<{ data: LessonVideoItem[] }>(url);
+  },
+
+  deleteVideo: (videoId: string) =>
+    axiosClient.delete(`/api/v1/videos/${videoId}`),
+
+  uploadLessonVideo: (
+    lessonId: string,
+    videoFile: File,
+    onUploadProgress?: (percent: number) => void,
+  ) => {
     const formData = new FormData();
     formData.append("file", videoFile);
+    if (!onUploadProgress) {
+      return axiosClient.post(`/api/v1/videos?lessonId=${lessonId}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    }
     return axiosClient.post(`/api/v1/videos?lessonId=${lessonId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && progressEvent.total > 0) {
+          onUploadProgress(
+            Math.min(100, Math.round((progressEvent.loaded * 100) / progressEvent.total)),
+          );
+        }
+      },
     });
   },
 

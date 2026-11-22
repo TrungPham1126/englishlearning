@@ -140,4 +140,72 @@ class GlobalResourceServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(repository, never()).deleteById(any());
     }
+
+    @Test
+    @DisplayName("uploadResource - File null hoặc rỗng ném BadRequestException mà không upload")
+    void uploadResource_nullOrEmptyFile_throwsBadRequestWithoutUploading() {
+        MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
+
+        assertThatThrownBy(() -> service.uploadResource(null, "DOC", UUID.randomUUID()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("File tài nguyên không được để trống");
+        assertThatThrownBy(() -> service.uploadResource(emptyFile, "DOC", UUID.randomUUID()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("File tài nguyên không được để trống");
+
+        verifyNoInteractions(storageService, repository);
+    }
+
+    @Test
+    @DisplayName("deleteResource - Xóa cả bản ghi DB và file tương ứng trên Storage")
+    void deleteResource_withStorageUrl_deletesDatabaseRecordAndStorageFile() {
+        UUID id = UUID.randomUUID();
+        GlobalResource resource = GlobalResource.builder()
+                .id(id)
+                .storageUrl("https://cdn.test/documents/book.pdf")
+                .build();
+        when(repository.findById(id)).thenReturn(Optional.of(resource));
+
+        service.deleteResource(id);
+
+        verify(repository).delete(resource);
+        verify(storageService).deleteFileByUrl("https://cdn.test/documents/book.pdf");
+    }
+
+    @Test
+    @DisplayName("deleteResource - Lỗi khi xóa file trên Storage vẫn xóa thành công bản ghi trong DB")
+    void deleteResource_storageDeleteFails_stillDeletesDatabaseRecord() {
+        UUID id = UUID.randomUUID();
+        GlobalResource resource = GlobalResource.builder()
+                .id(id)
+                .storageUrl("https://cdn.test/documents/book.pdf")
+                .build();
+        when(repository.findById(id)).thenReturn(Optional.of(resource));
+        doThrow(new RuntimeException("S3 timeout")).when(storageService).deleteFileByUrl("https://cdn.test/documents/book.pdf");
+
+        service.deleteResource(id);
+
+        verify(repository).delete(resource);
+    }
+
+    @Test
+    @DisplayName("getResourcesByType - Chuỗi rỗng mặc định trả về DOC và format kích thước theo dấu chấm Locale.US")
+    void getResourcesByType_blankString_defaultsToDocAndFormatsWithUsLocale() {
+        GlobalResource res = GlobalResource.builder()
+                .id(UUID.randomUUID())
+                .name("guide.pdf")
+                .storageUrl("https://cdn.test/guide.pdf")
+                .resourceType(GlobalResource.ResourceType.DOC)
+                .sizeBytes(2L * 1024L * 1024L)
+                .usedCount(1)
+                .createdAt(Instant.parse("2026-10-01T08:30:00Z"))
+                .build();
+        when(repository.findByResourceTypeOrderByCreatedAtDesc(GlobalResource.ResourceType.DOC))
+                .thenReturn(List.of(res));
+
+        List<GlobalResourceResponse> list = service.getResourcesByType("   ");
+
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getSize()).isEqualTo("2.00 MB");
+    }
 }

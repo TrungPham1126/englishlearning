@@ -71,13 +71,13 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            Tiêu Đề Bài Tập:
+            Tiêu đề:
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Nhập tiêu đề bài tập..."
+            placeholder="Nhập tiêu đề..."
             className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
             required
           />
@@ -85,16 +85,16 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            Mức Độ Khó:
+            Độ khó:
           </label>
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as any)}
             className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           >
-            <option value="EASY">Dễ (Easy)</option>
-            <option value="MEDIUM">Trung bình (Medium)</option>
-            <option value="HARD">Khó (Hard)</option>
+            <option value="EASY">Dễ</option>
+            <option value="MEDIUM">Trung bình</option>
+            <option value="HARD">Khó</option>
           </select>
         </div>
       </div>
@@ -102,13 +102,13 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
       {/* 2. Mô tả / Hướng dẫn */}
       <div>
         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-          Mô Tả / Hướng Dẫn Học Sinh:
+          Hướng dẫn học sinh:
         </label>
         <textarea
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Nhập hướng dẫn làm bài cho học viên..."
+          placeholder="Nhập hướng dẫn (tùy chọn)..."
           className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
         />
       </div>
@@ -118,10 +118,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
         <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/50 pb-2">
           <span className="text-xs font-black text-indigo-950 dark:text-indigo-300 uppercase tracking-wide flex items-center gap-1.5">
             <Sliders className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            Cấu Hình Khảo Thí &amp; Tiêu Chuẩn Đạt Chuẩn
-          </span>
-          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
-            Áp dụng cho mọi dạng bài
+            Thời gian &amp; Tiêu chuẩn đạt
           </span>
         </div>
 
@@ -130,10 +127,10 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Thời Gian Làm Bài (Time Limit):</span>
+              <span>Thời gian làm bài:</span>
             </label>
             <span className="text-xs font-mono font-black text-blue-700 dark:text-blue-300">
-              {timeLimitMinutes > 0 ? `${timeLimitMinutes} phút` : "Không giới hạn (Làm tự do)"}
+              {timeLimitMinutes > 0 ? `${timeLimitMinutes} phút` : "Không giới hạn"}
             </span>
           </div>
 
@@ -158,7 +155,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           </div>
 
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Tùy chỉnh số phút:</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">Tùy chỉnh:</span>
             <input
               type="number"
               min={0}
@@ -169,10 +166,10 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
                 setTimeLimitMinutes(val);
                 if (val > 0) setEstimatedMinutes(val);
               }}
-              placeholder="0 = không giới hạn..."
+              placeholder="0 = không giới hạn"
               className="w-28 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
             />
-            <span className="text-[11px] text-slate-400">phút (Học sinh sẽ có đồng hồ đếm ngược khi làm bài)</span>
+            <span className="text-[11px] text-slate-400">phút</span>
           </div>
         </div>
 
@@ -181,21 +178,21 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <Percent className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-              <span>Phạm Vi Được Sai Cho Phép (Max Error Margin):</span>
+              <span>Tỷ lệ sai tối đa:</span>
             </label>
             <span className="text-xs font-mono font-black text-amber-600 dark:text-amber-400">
-              Sai tối đa ≤ {maxAllowedErrorPercent}% (Cần đạt ≥ {100 - maxAllowedErrorPercent}%)
+              Sai ≤ {maxAllowedErrorPercent}% (Đạt ≥ {100 - maxAllowedErrorPercent}%)
             </span>
           </div>
 
           <div className="flex flex-wrap gap-1.5">
             {[
-              { pct: 0, label: "0% (Tuyệt đối 10/10)" },
-              { pct: 10, label: "10% (Rất cao ≥ 9.0)" },
-              { pct: 20, label: "20% (Chuẩn đạt ≥ 8.0)" },
-              { pct: 30, label: "30% (Khá ≥ 7.0)" },
-              { pct: 40, label: "40% (Trung bình ≥ 6.0)" },
-              { pct: 50, label: "50% (Cơ bản ≥ 5.0)" },
+              { pct: 0, label: "0% (10/10)" },
+              { pct: 10, label: "10% (≥ 9.0)" },
+              { pct: 20, label: "20% (≥ 8.0)" },
+              { pct: 30, label: "30% (≥ 7.0)" },
+              { pct: 40, label: "40% (≥ 6.0)" },
+              { pct: 50, label: "50% (≥ 5.0)" },
             ].map((preset) => (
               <button
                 key={preset.pct}
@@ -213,7 +210,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           </div>
 
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">Tùy chỉnh tỷ lệ sai:</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">Tùy chỉnh:</span>
             <input
               type="number"
               min={0}
@@ -229,15 +226,13 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           <div className="rounded-lg bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-2.5 text-xs text-slate-700 dark:text-slate-300 space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400 text-[11px]">
               <CheckCircle2 size={13} />
-              <span>Quy tắc đạt chuẩn (PASS Criteria):</span>
+              <span>Chuẩn đạt (PASS):</span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-              Học sinh được phép sai tối đa <strong className="text-amber-600 dark:text-amber-400">{maxAllowedErrorPercent}%</strong>.
-              Để đạt chuẩn (PASS), học sinh phải đạt tối thiểu{" "}
+              Sai tối đa <strong className="text-amber-600 dark:text-amber-400">{maxAllowedErrorPercent}%</strong> • Đạt tối thiểu{" "}
               <strong className="text-emerald-600 dark:text-emerald-400">
-                {100 - maxAllowedErrorPercent}% ({((100 - maxAllowedErrorPercent) / 10).toFixed(1)}/10 điểm)
+                {100 - maxAllowedErrorPercent}% ({((100 - maxAllowedErrorPercent) / 10).toFixed(1)}/10)
               </strong>.
-              Nếu tỷ lệ sai vượt quá {maxAllowedErrorPercent}%, bài làm sẽ tính là chưa đạt và học sinh cần làm lại.
             </p>
           </div>
 
@@ -246,10 +241,10 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
                 <Award className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Chuẩn điểm Đạt IELTS Writing (IELTS Pass Band):</span>
+                <span>Chuẩn Band IELTS Writing:</span>
               </span>
               <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 font-mono">
-                Band {((100 - maxAllowedErrorPercent) / 10).toFixed(1)} / 9.0
+                Band {((100 - maxAllowedErrorPercent) / 10).toFixed(1)}/9.0
               </span>
             </div>
 
@@ -257,7 +252,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
               {[
                 { band: 5.0, label: "Band 5.0" },
                 { band: 5.5, label: "Band 5.5" },
-                { band: 6.0, label: "Band 6.0 (Chuẩn Đạt)" },
+                { band: 6.0, label: "Band 6.0 (Chuẩn)" },
                 { band: 6.5, label: "Band 6.5" },
                 { band: 7.0, label: "Band 7.0" },
                 { band: 7.5, label: "Band 7.5" },
@@ -282,7 +277,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
               })}
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              * Dành riêng cho phần viết bài Writing. AI sẽ chấm điểm theo thang IELTS và so sánh với mức Band này để xác định Đạt (PASS) hay Chưa Đạt.
+              * Áp dụng cho Writing AI theo thang IELTS.
             </p>
           </div>
         </div>
@@ -292,7 +287,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <RotateCcw className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Số Lần Làm Bài Tối Đa (Max Attempts):</span>
+              <span>Số lần làm tối đa:</span>
             </label>
             <span className="text-xs font-mono font-black text-emerald-700 dark:text-emerald-300">
               {maxAttempts > 0 ? `${maxAttempts} lần` : "Không giới hạn"}
@@ -316,7 +311,13 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
             ))}
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Nếu học sinh làm hết số lần này mà điểm số vẫn chưa đạt (tỷ lệ sai &gt; {maxAllowedErrorPercent}%), hệ thống sẽ khóa bài và chốt kết quả là <strong className="text-rose-600 font-bold">NOT PASS</strong>.
+            {maxAttempts > 0 ? (
+              <>
+                Quá {maxAttempts} lần chưa đạt (sai &gt; {maxAllowedErrorPercent}%) → <strong className="text-rose-600 font-bold">NOT PASS</strong>.
+              </>
+            ) : (
+              <>Không giới hạn số lần làm lại.</>
+            )}
           </p>
         </div>
       </div>
@@ -325,7 +326,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
       <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-600/30 bg-blue-50/50 dark:bg-slate-900/20 space-y-3">
         <div>
           <label className="block text-xs font-bold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-blue-700 dark:text-blue-400" /> Gán vào Ngày Học (Daily Study Plan trong Lộ Trình Lớp):
+            <Calendar className="h-4 w-4 text-blue-700 dark:text-blue-400" /> Ngày học (Daily Plan):
           </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <select
@@ -342,16 +343,25 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
             >
               {dailyPlans.map((p: any) => (
                 <option key={p.id} value={p.id}>
-                  Day {p.dayNumber} ({p.scheduledDate}): {p.title || "Lộ trình ngày"}
+                  Day {p.dayNumber} ({p.scheduledDate}) - {p.title || "Ngày học"}
                 </option>
               ))}
-              <option value="NEW_DAY">+ Tạo ngày học mới (Thêm Day tiếp theo)</option>
+              <option value="NEW_DAY">+ Tạo ngày mới</option>
             </select>
 
             <input
               type="date"
               value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                setScheduledDate(newDate);
+                const matched = dailyPlans.find((p: any) => p.scheduledDate === newDate);
+                if (matched) {
+                  setSelectedPlanId(matched.id);
+                } else {
+                  setSelectedPlanId("NEW_DAY");
+                }
+              }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
               required
             />
@@ -361,7 +371,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
           <div>
             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Hạn Nộp (Deadline):
+              <Clock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Hạn nộp:
             </label>
             <input
               type="date"
@@ -374,7 +384,7 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
 
           <div>
             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-              Thời Lượng Dự Kiến (Phút):
+              Thời lượng dự kiến (phút):
             </label>
             <input
               type="number"
@@ -391,29 +401,29 @@ export const AssignmentBasicInfoForm: React.FC<AssignmentBasicInfoFormProps> = (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-            <Users className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" /> Giao Cho Đối Tượng:
+            <Users className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" /> Đối tượng:
           </label>
           <select
             value={targetStudents}
             onChange={(e) => setTargetStudents(e.target.value as any)}
             className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           >
-            <option value="ALL">Tất cả học sinh trong lớp</option>
-            <option value="WEAK_STUDENTS">Chỉ học sinh cần cải thiện (Cảnh báo AI)</option>
+            <option value="ALL">Tất cả học sinh</option>
+            <option value="WEAK_STUDENTS">Học sinh cần cải thiện (AI)</option>
           </select>
         </div>
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            Trạng Thái Bài Tập:
+            Trạng thái:
           </label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as any)}
             className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           >
-            <option value="PUBLISHED">Công khai &amp; Mở bài đúng hạn (PUBLISHED)</option>
-            <option value="DRAFT">Lưu nháp (DRAFT)</option>
+            <option value="PUBLISHED">Công khai (PUBLISHED)</option>
+            <option value="DRAFT">Nháp (DRAFT)</option>
           </select>
         </div>
       </div>

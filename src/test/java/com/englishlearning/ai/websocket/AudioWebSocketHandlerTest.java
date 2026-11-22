@@ -19,6 +19,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -163,5 +164,57 @@ class AudioWebSocketHandlerTest {
         verify(shadowingPracticeService).processAudioChunk(eq(sessionId), any(byte[].class), eq("Hello world"));
 
         audioWebSocketHandler.handleTransportError(session, new RuntimeException("Transport reset"));
+    }
+
+    @Test
+    @DisplayName("TextMessage có referenceText=null/rỗng và setReferenceTextForSession(null) không ghi đè giá trị hiện tại")
+    void handleTextMessage_nullOrBlankReferenceText_keepsExistingReferenceAndGuardsDirectSetter() throws Exception {
+        audioWebSocketHandler.afterConnectionEstablished(session);
+        when(session.isOpen()).thenReturn(true);
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{\"referenceText\":\"  Keep this sentence  \"}"));
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{\"referenceText\":null}"));
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{\"referenceText\":\"   \"}"));
+
+        assertThatCode(() -> {
+            audioWebSocketHandler.setReferenceTextForSession(null, "ignored");
+            audioWebSocketHandler.setReferenceTextForSession(sessionId, null);
+            audioWebSocketHandler.setReferenceTextForSession(sessionId, "   ");
+        }).doesNotThrowAnyException();
+
+        when(shadowingPracticeService.processAudioChunk(eq(sessionId), any(byte[].class), eq("Keep this sentence")))
+                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(86).build());
+
+        audioWebSocketHandler.handleBinaryMessage(session, new BinaryMessage(ByteBuffer.wrap(new byte[]{4, 5})));
+        verify(shadowingPracticeService).processAudioChunk(eq(sessionId), any(byte[].class), eq("Keep this sentence"));
+    }
+
+    @Test
+    @DisplayName("Cô lập referenceText độc lập giữa nhiều WebSocket session đồng thời")
+    void handleBinaryMessage_multipleSessions_isolateReferenceTextsIndependently() throws Exception {
+        WebSocketSession session2 = mock(WebSocketSession.class);
+        when(session2.getId()).thenReturn("ws-session-99");
+        when(session2.isOpen()).thenReturn(true);
+        when(session.isOpen()).thenReturn(true);
+
+        audioWebSocketHandler.afterConnectionEstablished(session);
+        audioWebSocketHandler.afterConnectionEstablished(session2);
+        audioWebSocketHandler.handleTextMessage(session, new TextMessage("{\"referenceText\":\"First session sentence\"}"));
+        audioWebSocketHandler.handleTextMessage(session2, new TextMessage("{\"referenceText\":\"Second session sentence\"}"));
+
+        when(shadowingPracticeService.processAudioChunk(eq(sessionId), any(byte[].class), eq("First session sentence")))
+                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(80).build());
+        when(shadowingPracticeService.processAudioChunk(eq("ws-session-99"), any(byte[].class), eq("Second session sentence")))
+                .thenReturn(ShadowingEvaluationResponse.builder().overallScore(95).build());
+
+        audioWebSocketHandler.handleBinaryMessage(session, new BinaryMessage(ByteBuffer.wrap(new byte[]{1, 2})));
+        audioWebSocketHandler.handleBinaryMessage(session2, new BinaryMessage(ByteBuffer.wrap(new byte[]{3, 4})));
+
+        verify(shadowingPracticeService).processAudioChunk(eq(sessionId), any(byte[].class), eq("First session sentence"));
+        verify(shadowingPracticeService).processAudioChunk(eq("ws-session-99"), any(byte[].class), eq("Second session sentence"));
+
+        audioWebSocketHandler.afterConnectionClosed(session, CloseStatus.NORMAL);
+        audioWebSocketHandler.handleBinaryMessage(session2, new BinaryMessage(ByteBuffer.wrap(new byte[]{5})));
+        verify(shadowingPracticeService, times(2))
+                .processAudioChunk(eq("ws-session-99"), any(byte[].class), eq("Second session sentence"));
     }
 }

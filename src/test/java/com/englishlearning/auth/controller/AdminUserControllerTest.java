@@ -336,4 +336,296 @@ class AdminUserControllerTest {
 
         verify(adminUserService).deleteUser(id);
     }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("GET /api/v1/admin/users không truyền tham số -> Mặc định page=0, size=10, sort createdAt DESC")
+    void getAllUsers_defaultParams_usesPage0Size10CreatedAtDesc() throws Exception {
+        PageResponse<UserSummaryDto> emptyPage = PageResponse.<UserSummaryDto>builder()
+                .content(List.of())
+                .pageNumber(0)
+                .pageSize(10)
+                .totalElements(0)
+                .totalPages(0)
+                .last(true)
+                .build();
+        when(adminUserService.getAllUsers(eq(null), eq(null), any(Pageable.class))).thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/v1/admin/users"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200));
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(adminUserService).getAllUsers(eq(null), eq(null), pageableCaptor.capture());
+        Pageable captured = pageableCaptor.getValue();
+        assertThat(captured.getPageNumber()).isEqualTo(0);
+        assertThat(captured.getPageSize()).isEqualTo(10);
+        assertThat(captured.getSort().getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("GET /api/v1/admin/users truyền page âm và size quá lớn -> Tự động giới hạn an toàn page=0, size=100")
+    void getAllUsers_negativePageAndOversizedLimit_clampsPaginationSafely() throws Exception {
+        PageResponse<UserSummaryDto> emptyPage = PageResponse.<UserSummaryDto>builder()
+                .content(List.of())
+                .pageNumber(0)
+                .pageSize(100)
+                .totalElements(0)
+                .totalPages(0)
+                .last(true)
+                .build();
+        when(adminUserService.getAllUsers(eq(null), eq(null), any(Pageable.class))).thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .param("page", "-2")
+                        .param("size", "500"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200));
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(adminUserService).getAllUsers(eq(null), eq(null), pageableCaptor.capture());
+        Pageable captured = pageableCaptor.getValue();
+        assertThat(captured.getPageNumber()).isEqualTo(0);
+        assertThat(captured.getPageSize()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/users chưa đăng nhập -> Trả về 401 Unauthorized")
+    void createUser_unauthenticated_returns401() throws Exception {
+        String validJson = """
+                {
+                  "email": "s@elp.edu.vn",
+                  "password": "Password123!",
+                  "firstName": "A",
+                  "lastName": "B",
+                  "roles": ["ROLE_STUDENT"]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validJson))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("POST /api/v1/admin/users email đã tồn tại -> Trả về 400 Bad Request")
+    void createUser_duplicateEmail_returns400() throws Exception {
+        when(adminUserService.createUser(any(UserCreateByAdminRequest.class)))
+                .thenThrow(new BadRequestException("Email đã tồn tại: dup@elp.edu.vn"));
+
+        String json = """
+                {
+                  "email": "dup@elp.edu.vn",
+                  "password": "Password123!",
+                  "firstName": "Dup",
+                  "lastName": "User",
+                  "roles": ["ROLE_STUDENT"]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Email đã tồn tại: dup@elp.edu.vn"));
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("POST /api/v1/admin/users password 7 ký tự (biên dưới min=8) -> Trả về 400 và lỗi @Size của password")
+    void createUser_passwordTooShortBoundary7Chars_returns400() throws Exception {
+        String json = """
+                {
+                  "email": "valid@elp.edu.vn",
+                  "password": "1234567",
+                  "firstName": "Valid",
+                  "lastName": "User",
+                  "roles": ["ROLE_STUDENT"]
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.password").value("Mật khẩu tối thiểu 8 ký tự"));
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("POST /api/v1/admin/users roles rỗng khi các trường khác hợp lệ -> Trả về 400 và lỗi @NotEmpty")
+    void createUser_emptyRolesWithOtherFieldsValid_returns400() throws Exception {
+        String json = """
+                {
+                  "email": "valid@elp.edu.vn",
+                  "password": "Password123!",
+                  "firstName": "Valid",
+                  "lastName": "User",
+                  "roles": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.roles").value("Phải phân bổ ít nhất 1 quyền"));
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("PUT /api/v1/admin/users/{id} thiếu firstName/lastName -> Trả về 400 Validation failed")
+    void updateUser_blankNames_returns400() throws Exception {
+        UUID id = UUID.fromString("77777777-7777-7777-7777-777777777777");
+        String invalidJson = """
+                {
+                  "firstName": "",
+                  "lastName": "   "
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/admin/users/{id}", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.firstName").exists())
+                .andExpect(jsonPath("$.validationErrors.lastName").exists());
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("PUT /api/v1/admin/users/{id} user không tồn tại -> Trả về 404 Not Found")
+    void updateUser_userNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(adminUserService.updateUser(eq(missingId), any(UserUpdateRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy người dùng: " + missingId));
+
+        String json = """
+                {
+                  "firstName": "Huy",
+                  "lastName": "Hoang"
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/admin/users/{id}", missingId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @WithMockUser(roles = {"STUDENT"})
+    @DisplayName("PUT /api/v1/admin/users/{id} với quyền STUDENT -> Trả về 403 Forbidden")
+    void updateUser_asStudent_returns403() throws Exception {
+        UUID id = UUID.fromString("77777777-7777-7777-7777-777777777777");
+        String json = """
+                {
+                  "firstName": "Huy",
+                  "lastName": "Hoang"
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/admin/users/{id}", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"STUDENT"})
+    @DisplayName("PATCH /api/v1/admin/users/{id}/status với quyền STUDENT -> Trả về 403 Forbidden")
+    void toggleStatus_asStudent_returns403() throws Exception {
+        UUID id = UUID.fromString("88888888-8888-8888-8888-888888888888");
+
+        mockMvc.perform(patch("/api/v1/admin/users/{id}/status", id)
+                        .param("active", "false")
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("PATCH /api/v1/admin/users/{id}/status user không tồn tại -> Trả về 404 Not Found")
+    void toggleStatus_userNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        doThrow(new ResourceNotFoundException("Không tìm thấy người dùng: " + missingId))
+                .when(adminUserService).toggleUserStatus(missingId, false);
+
+        mockMvc.perform(patch("/api/v1/admin/users/{id}/status", missingId)
+                        .param("active", "false")
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @WithMockUser(roles = {"TEACHER"})
+    @DisplayName("DELETE /api/v1/admin/users/{id} với quyền TEACHER -> Trả về 403 Forbidden")
+    void deleteUser_asTeacher_returns403() throws Exception {
+        UUID id = UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444");
+
+        mockMvc.perform(delete("/api/v1/admin/users/{id}", id)
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(adminUserService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("DELETE /api/v1/admin/users/{id} user không tồn tại -> Trả về 404 Not Found")
+    void deleteUser_userNotFound_returns404() throws Exception {
+        UUID missingId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        doThrow(new ResourceNotFoundException("Không tìm thấy người dùng: " + missingId))
+                .when(adminUserService).deleteUser(missingId);
+
+        mockMvc.perform(delete("/api/v1/admin/users/{id}", missingId)
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @WithMockUser(roles = {"ADMIN"})
+    @DisplayName("DELETE /api/v1/admin/users/{id} giảng viên đang phụ trách lớp -> Trả về 400 Bad Request")
+    void deleteUser_teacherAssignedToClassrooms_returns400() throws Exception {
+        UUID teacherId = UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444");
+        doThrow(new BadRequestException("Không thể xóa giảng viên đang phụ trách 2 lớp học."))
+                .when(adminUserService).deleteUser(teacherId);
+
+        mockMvc.perform(delete("/api/v1/admin/users/{id}", teacherId)
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Không thể xóa giảng viên đang phụ trách 2 lớp học."));
+    }
 }

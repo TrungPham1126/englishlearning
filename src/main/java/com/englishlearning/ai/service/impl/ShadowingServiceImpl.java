@@ -14,6 +14,7 @@ import com.englishlearning.analytics.service.AnalyticsService;
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 import com.englishlearning.submission.entity.StudentAnswer;
 import com.englishlearning.common.exception.BadRequestException;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -157,8 +158,9 @@ public class ShadowingServiceImpl implements ShadowingService {
             if (audioBytes != null && audioBytes.length > 0) {
                 try {
                     log.info("Gọi Python acoustic microservice để phân tích Formant F1/F2 & alignment cho script: '{}'...", cleanRef);
-                    response = pythonIntegrationService.evaluatePhonetics(audioBytes, audioFilename, cleanRef);
-                    if (response != null && response.getOverallScore() != null) {
+                    ShadowingEvaluationResponse pyResp = pythonIntegrationService.evaluatePhonetics(audioBytes, audioFilename, cleanRef);
+                    if (pyResp != null && pyResp.getOverallScore() != null) {
+                        response = pyResp;
                         if (response.getEvaluatedBy() == null || response.getEvaluatedBy().isBlank()) {
                             response.setEvaluatedBy("PYTHON_ACOUSTIC_ENGINE");
                         }
@@ -204,7 +206,9 @@ public class ShadowingServiceImpl implements ShadowingService {
                                 .evalType(AiEvaluationType.SPEAKING)
                                 .build());
 
-                double overallScaled = response.getOverallScore() != null ? response.getOverallScore() / 10.0 : 0.0;
+                double overallScaled = response.getOverallScore() != null
+                        ? ScoreScaleUtils.clampScale10(response.getOverallScore() / 10.0)
+                        : 0.0;
                 evaluation.setOverallScore(overallScaled);
                 evaluation.setSttTranscript(transcript);
                 evaluation.setSuggestionsJson(rawJson);

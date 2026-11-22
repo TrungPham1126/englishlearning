@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { UserPlus, Users, Loader2, UserX } from "lucide-react";
 import type { StudentEnrollmentItem, ClassroomResponse } from "@/features/admin/types";
+import { formatScore10 } from "@/utils/scoreScale";
 
 interface ClassroomStudentsTabProps {
   classroom: ClassroomResponse;
@@ -35,11 +36,8 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
           <div className="mb-4">
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <UserPlus className="text-blue-700 dark:text-blue-400" size={18} /> Ghi Danh Học Viên Mới
+              <UserPlus className="text-blue-700 dark:text-blue-400" size={18} /> Ghi danh học viên
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Nhập Email hoặc Số điện thoại của tài khoản học viên để thêm vào lớp học này.
-            </p>
           </div>
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
             <input
@@ -48,7 +46,7 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
               value={enrollIdentifier}
               onChange={(e) => setEnrollIdentifier(e.target.value)}
               className="flex-1 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:border-blue-700 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-950"
-              placeholder="VD: student@example.com hoặc 0912345678"
+              placeholder="Email hoặc SĐT học viên..."
             />
             <button
               type="submit"
@@ -56,7 +54,7 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
               className="flex justify-center items-center gap-2 px-6 py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer disabled:opacity-50 transition shadow-sm text-xs whitespace-nowrap"
             >
               {isProcessing && <Loader2 size={16} className="animate-spin" />}
-              <span>Ghi Danh Vào Lớp</span>
+              <span>Ghi danh</span>
             </button>
           </form>
         </div>
@@ -64,12 +62,12 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-              Sức Chứa Lớp Hiện Tại
+              Sĩ số
             </span>
             <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
               {enrolledStudents.length}{" "}
               <span className="text-sm font-semibold text-slate-500">
-                / {classroom.maxStudents || "∞"} học viên
+                / {classroom.maxStudents || "∞"}
               </span>
             </div>
           </div>
@@ -98,33 +96,27 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div>
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <Users className="text-blue-700 dark:text-blue-400" size={18} /> Danh Sách Học Viên Đang Theo Học ({enrolledStudents.length})
+              <Users className="text-blue-700 dark:text-blue-400" size={18} /> Học viên ({enrolledStudents.length})
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Theo dõi tiến độ hoàn thành bài tập, điểm số trung bình và quản lý danh sách lớp.
-            </p>
           </div>
         </div>
 
         {enrolledStudents.length === 0 ? (
           <div className="p-16 text-center text-slate-500">
             <Users size={48} className="mx-auto text-slate-300 dark:text-slate-700 mb-3" />
-            <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">Lớp học chưa có học viên</h4>
-            <p className="text-xs text-slate-400 mt-1">
-              Sử dụng ô tìm kiếm phía trên để ghi danh học viên đầu tiên vào lớp.
-            </p>
+            <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">Chưa có học viên</h4>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/80 text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-700">
-                  <th className="p-4 pl-6">Học Viên</th>
-                  <th className="p-4">Liên Hệ</th>
-                  <th className="p-4">Ngày Ghi Danh</th>
-                  <th className="p-4 text-center">Tiến Độ Bài Tập</th>
-                  <th className="p-4 text-center">Điểm Trung Bình</th>
-                  <th className="p-4 pr-6 text-right">Thao Tác</th>
+                  <th className="p-4 pl-6">Học viên</th>
+                  <th className="p-4">Liên hệ</th>
+                  <th className="p-4">Ngày ghi danh</th>
+                  <th className="p-4 text-center">Tiến độ</th>
+                  <th className="p-4 text-center">Điểm TB</th>
+                  <th className="p-4 pr-6 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
@@ -173,9 +165,7 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
 
                       <td className="p-4 text-center">
                         <span className="font-black text-slate-900 dark:text-white text-sm">
-                          {st.averageScore !== undefined && st.averageScore !== null
-                            ? Number(st.averageScore).toFixed(1)
-                            : "—"}
+                          {formatScore10(st.averageScore, "—")}
                         </span>
                       </td>
 
@@ -183,7 +173,7 @@ export const ClassroomStudentsTab: React.FC<ClassroomStudentsTabProps> = ({
                         <button
                           onClick={() => onRemoveStudent(st.studentId, studentName)}
                           disabled={isProcessing}
-                          title="Xóa học viên khỏi lớp"
+                          title="Xóa khỏi lớp"
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
                         >
                           <UserX size={16} />

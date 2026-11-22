@@ -20,14 +20,17 @@ import java.util.UUID;
 @Slf4j
 public class RefreshTokenServiceImpl implements RefreshTokenService {
 
-    @Value("${jwt.refresh-token-expiration-ms:60480000000}")
-    private long refreshTokenDurationMs;
+    @Value("${app.secrets.jwt.refresh-token-expiration-ms:${jwt.refresh-token-expiration-ms:604800000}}")
+    private long refreshTokenDurationMs = 604800000L;
 
     private final RefreshTokenRepository refreshTokenRepository;
 
     @Override
     @Transactional
     public RefreshToken createRefreshToken(User user) {
+        if (user == null) {
+            throw new IllegalArgumentException("User không được để trống");
+        }
         // Thu hồi toàn bộ refresh token cũ của user để chỉ cho phép 1 session chủ động (hoặc luân phiên)
         refreshTokenRepository.deleteByUser(user);
 
@@ -42,8 +45,12 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = UnauthorizedException.class)
     public RefreshToken verifyExpiration(String tokenString) {
+        if (tokenString == null || tokenString.isBlank()) {
+            throw new UnauthorizedException("Refresh token không tồn tại trong hệ thống");
+        }
+
         RefreshToken token = refreshTokenRepository.findByToken(tokenString)
                 .orElseThrow(() -> new UnauthorizedException("Refresh token không tồn tại trong hệ thống"));
 
@@ -51,7 +58,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             throw new UnauthorizedException("Refresh token đã bị thu hồi");
         }
 
-        if (token.getExpiryDate().isBefore(Instant.now())) {
+        if (token.getExpiryDate() == null || !token.getExpiryDate().isAfter(Instant.now())) {
             refreshTokenRepository.delete(token);
             throw new UnauthorizedException("Refresh token đã hết hạn. Vui lòng đăng nhập lại");
         }
@@ -62,6 +69,9 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public void revokeToken(String tokenString) {
+        if (tokenString == null || tokenString.isBlank()) {
+            return;
+        }
         refreshTokenRepository.findByToken(tokenString).ifPresent(token -> {
             token.setRevoked(true);
             refreshTokenRepository.save(token);

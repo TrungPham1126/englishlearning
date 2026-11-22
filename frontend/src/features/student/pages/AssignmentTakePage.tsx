@@ -18,6 +18,7 @@ import type {
   WritingAiEvaluationResult,
 } from '@/features/student/types';
 import { isQuestionPassed } from '@/features/student/utils/speakingScoring';
+import { isGradingRubricOrMetaText } from '@/utils/sampleAudioPlayer';
 import useAssignmentTakeSession from '@/features/student/hooks/useAssignmentTakeSession';
 import AssignmentTopBar from '@/features/student/components/assignment/AssignmentTopBar';
 import QuestionContextView from '@/features/student/components/assignment/QuestionContextView';
@@ -110,6 +111,10 @@ export default function AssignmentTakePage() {
 
   const isWritingQuestion = useCallback((q: QuestionResultDetail) => {
     const t = String(q.questionType || '').toUpperCase();
+    const skill = String(q.skillType || '').toUpperCase();
+    if (skill === 'SPEAKING' || t === 'AUDIO_RESPONSE' || t.includes('SPEAKING')) {
+      return false;
+    }
     const promptLower = (q.promptText || '').toLowerCase();
     return (
       t === 'ESSAY' ||
@@ -120,6 +125,36 @@ export default function AssignmentTakePage() {
       promptLower.includes('ielts')
     );
   }, []);
+
+  const isSpeakingNonShadowingQuestion = useCallback(
+    (q: QuestionResultDetail) => {
+      const t = String(q.questionType || '').toUpperCase();
+      const skill = String(q.skillType || '').toUpperCase();
+      if (skill !== 'SPEAKING' && t !== 'AUDIO_RESPONSE' && !t.includes('SPEAKING')) {
+        return false;
+      }
+      const meta = `${t} ${attempt?.assignmentTitle || ''} ${(attempt as any)?.assignmentDescription || ''} ${(attempt as any)?.description || ''} ${attempt?.passage || ''}`.toLowerCase();
+      const hasQaSignal =
+        t.includes('QA') ||
+        t.includes('PART_2') ||
+        t.includes('PART_3') ||
+        meta.includes('q&a') ||
+        meta.includes('hỏi - đáp') ||
+        meta.includes('hỏi đáp') ||
+        meta.includes('part 2') ||
+        meta.includes('part_2') ||
+        meta.includes('part 3') ||
+        meta.includes('part_3') ||
+        meta.includes('cue card') ||
+        isGradingRubricOrMetaText(q.correctAnswer) ||
+        isGradingRubricOrMetaText(q.promptText);
+      if (hasQaSignal) return true;
+      const hasShadowSignal =
+        meta.includes('shadow') || meta.includes('nhại') || meta.includes('đọc đuổi');
+      return !hasShadowSignal;
+    },
+    [attempt],
+  );
 
   const isSpeakingShadowingSession = useMemo(() => {
     return (
@@ -156,11 +191,13 @@ export default function AssignmentTakePage() {
     ) => {
       void handleUploadSpeaking(questionId, blob, result);
       if (result) {
-        const score = Number(
-          (result as any).overallScore ?? (result as any).score ?? 0,
-        );
-        const passScore = Number((result as any).passScore ?? 80);
-        const isPassed = (result as any).isPassed === true || score >= passScore;
+        const isPassed =
+          typeof (result as any).isPassed === 'boolean'
+            ? (result as any).isPassed
+            : typeof (result as any).overallBand === 'number'
+            ? Number((result as any).overallBand) >= 5.0
+            : Number((result as any).overallScore ?? (result as any).score ?? 0) >=
+              Number((result as any).passScore ?? 80);
         if (isPassed) {
           setPassedQuestionIds((prev) => ({ ...prev, [questionId]: true }));
         } else {
@@ -501,6 +538,7 @@ export default function AssignmentTakePage() {
               const failCount = questionFailCounts[currentQ.questionId] || 0;
               const canSkip = failCount >= 3;
               const isWritingCurrent = isWritingQuestion(currentQ);
+              const isSpeakingBandCurrent = isSpeakingNonShadowingQuestion(currentQ);
               const isMarkedNotPassed = markedNotPassedQuestionIds[currentQ.questionId];
 
               return (
@@ -543,6 +581,8 @@ export default function AssignmentTakePage() {
                               ? 'Đã bỏ qua.'
                               : isWritingCurrent
                               ? `Đạt Band ${targetPassBand.toFixed(1)}.`
+                              : isSpeakingBandCurrent
+                              ? 'Đạt Band 5.0.'
                               : 'Hoàn thành.'}
                           </span>
                         </div>
@@ -616,6 +656,8 @@ export default function AssignmentTakePage() {
                               <span>
                                 {isWritingCurrent
                                   ? `Cần đạt Band ${targetPassBand.toFixed(1)} để qua câu`
+                                  : isSpeakingBandCurrent
+                                  ? 'Cần đạt Band 5.0 để qua câu'
                                   : 'Cần đạt ≥ 80 điểm để qua câu'}
                               </span>
                             </span>

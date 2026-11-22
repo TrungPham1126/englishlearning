@@ -26,7 +26,8 @@ public interface AiEvaluationRepository extends JpaRepository<AiEvaluation, UUID
     @Query("SELECT e FROM AiEvaluation e WHERE e.studentAnswer.attempt.student.id = :studentId AND e.evalType = :evalType")
     List<AiEvaluation> findByStudentIdAndEvalType(@Param("studentId") UUID studentId, @Param("evalType") AiEvaluationType evalType);
 
-    @Query("SELECT AVG(e.overallScore) FROM AiEvaluation e WHERE e.evalType = :evalType AND e.overallScore IS NOT NULL")
+    @Query("SELECT AVG(CASE WHEN e.overallScore > 10.0 THEN (CASE WHEN e.overallScore > 100.0 THEN 10.0 ELSE e.overallScore / 10.0 END) ELSE (CASE WHEN e.overallScore < 0.0 THEN 0.0 ELSE e.overallScore END) END) " +
+           "FROM AiEvaluation e WHERE e.evalType = :evalType AND e.overallScore IS NOT NULL")
     Double findAverageScoreByEvalType(@Param("evalType") AiEvaluationType evalType);
 
     @Query("SELECT COUNT(e) FROM AiEvaluation e WHERE e.studentAnswer.attempt.assignment.classroom.id = :classroomId")

@@ -91,7 +91,7 @@ class SpeechDetector:
                         )
                     )
 
-        if in_speech:
+        if in_speech and (num_frames - start_frame) >= min_speech_frames:
             segments.append(
                 SpeechSegment(
                     start=round(start_frame * hop_ms / 1000.0, 3),

@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { ClassroomDetailedReport } from "@/features/admin/types";
+import { formatScore10 } from "@/utils/scoreScale";
 
 interface ClassroomReportPreviewModalProps {
   report: ClassroomDetailedReport | null;
@@ -36,11 +37,11 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
           <div>
             <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
               <FileSpreadsheet size={20} className="text-emerald-600" />
-              {report ? `Báo Cáo Chi Tiết: ${report.classroomName}` : "Đang tổng hợp báo cáo lớp..."}
+              {report ? `Báo cáo: ${report.classroomName}` : "Đang tải..."}
             </h2>
             {report && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Trình độ {report.level} • Trạng thái {report.status} • GV: {report.teacherName} ({report.teacherEmail})
+                {report.level} • {report.status} • GV: {report.teacherName} ({report.teacherEmail})
               </p>
             )}
           </div>
@@ -53,7 +54,7 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm cursor-pointer transition disabled:opacity-50"
               >
                 {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
-                Tải Excel (.xlsx)
+                Xuất Excel (.xlsx)
               </button>
             )}
             <button
@@ -72,7 +73,7 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="animate-spin text-blue-700" size={32} />
-              <span className="text-xs font-semibold text-slate-500">Đang truy vấn dữ liệu học tập và bài nộp...</span>
+              <span className="text-xs font-semibold text-slate-500">Đang tải...</span>
             </div>
           ) : report ? (
             <>
@@ -80,53 +81,53 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span>Sĩ Số &amp; Giáo Trình</span>
+                    <span>Sĩ số &amp; Giáo trình</span>
                     <Users size={15} className="text-blue-600" />
                   </div>
                   <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
-                    {report.totalStudents} <span className="text-xs font-semibold text-slate-500">học viên</span>
+                    {report.totalStudents} <span className="text-xs font-semibold text-slate-500">HV</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {report.totalLessons} bài giảng • {report.totalDailyPlans} ngày lộ trình
+                    {report.totalLessons} bài • {report.totalDailyPlans} ngày
                   </p>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span>Bài Tập &amp; Đề Thi</span>
+                    <span>Bài tập &amp; Thi</span>
                     <BookOpen size={15} className="text-indigo-600" />
                   </div>
                   <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
-                    {report.totalAttempts} <span className="text-xs font-semibold text-slate-500">lượt nộp</span>
+                    {report.totalAttempts} <span className="text-xs font-semibold text-slate-500">lượt</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {report.totalAssignments} bài tập • {report.totalExams} bài thi
+                    {report.totalAssignments} BT • {report.totalExams} thi
                   </p>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span>Điểm TB &amp; Hoàn Thành</span>
+                    <span>Điểm TB</span>
                     <Award size={15} className="text-emerald-600" />
                   </div>
                   <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
-                    {report.classAverageScore.toFixed(1)} <span className="text-xs font-semibold text-slate-500">/ 10</span>
+                    {formatScore10(report.classAverageScore)} <span className="text-xs font-semibold text-slate-500">/ 10</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Hoàn thành TB: {report.averageCompletionRate.toFixed(1)}%
+                    Hoàn thành: {report.averageCompletionRate.toFixed(1)}%
                   </p>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span>Giám Sát Gian Lận</span>
+                    <span>Gian lận</span>
                     <AlertTriangle size={15} className={report.flaggedCheatingAttempts > 0 ? "text-rose-500" : "text-emerald-500"} />
                   </div>
                   <div className={`text-2xl font-black mt-2 ${report.flaggedCheatingAttempts > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-white"}`}>
                     {report.flaggedCheatingAttempts}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {report.completedAttempts} bài đã hoàn tất chấm
+                    {report.completedAttempts} bài đã chấm
                   </p>
                 </div>
               </div>
@@ -134,25 +135,25 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
               {/* Danh sách học viên */}
               <div>
                 <h3 className="text-sm font-black text-slate-900 dark:text-white mb-3">
-                  Bảng Tổng Hợp Kết Quả Học Viên ({report.students.length})
+                  Kết quả học viên ({report.students.length})
                 </h3>
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/80 text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                        <th className="p-3">Học Viên</th>
-                        <th className="p-3 text-center">Hoàn Thành</th>
-                        <th className="p-3 text-center">Bài Nộp / Thi</th>
+                        <th className="p-3">Học viên</th>
+                        <th className="p-3 text-center">Hoàn thành</th>
+                        <th className="p-3 text-center">Nộp / Thi</th>
                         <th className="p-3 text-center">Điểm TB</th>
-                        <th className="p-3 text-center">Cảnh Báo Thi</th>
-                        <th className="p-3 text-center">Xếp Loại</th>
+                        <th className="p-3 text-center">Gian lận</th>
+                        <th className="p-3 text-center">Xếp loại</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {(report.students ?? []).length === 0 ? (
                         <tr>
                           <td colSpan={6} className="p-6 text-center text-slate-400 italic">
-                            Chưa có học viên ghi danh trong lớp này.
+                            Chưa có học viên.
                           </td>
                         </tr>
                       ) : (
@@ -169,7 +170,7 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
                               {st.totalAttempts} nộp ({st.examAttempts} thi)
                             </td>
                             <td className="p-3 text-center font-black text-blue-700 dark:text-blue-400">
-                              {st.averageScore.toFixed(1)}
+                              {formatScore10(st.averageScore)}
                             </td>
                             <td className="p-3 text-center">
                               {st.cheatingFlags > 0 ? (
@@ -194,25 +195,25 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
               {/* Chi tiết lượt nộp gần nhất */}
               <div>
                 <h3 className="text-sm font-black text-slate-900 dark:text-white mb-3">
-                  Chi Tiết Bài Nộp &amp; Kết Quả Bài Thi ({(report.submissions ?? []).length} bản ghi)
+                  Chi tiết bài nộp ({(report.submissions ?? []).length})
                 </h3>
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl max-h-64">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                       <tr className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                        <th className="p-3">Học Viên</th>
-                        <th className="p-3">Bài Tập / Đề Thi</th>
-                        <th className="p-3 text-center">Kỹ Năng</th>
+                        <th className="p-3">Học viên</th>
+                        <th className="p-3">Bài tập / Thi</th>
+                        <th className="p-3 text-center">Kỹ năng</th>
                         <th className="p-3 text-center">Điểm</th>
-                        <th className="p-3 text-center">Gian Lận</th>
-                        <th className="p-3">Thời Gian Nộp</th>
+                        <th className="p-3 text-center">Gian lận</th>
+                        <th className="p-3">Thời gian</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {(report.submissions ?? []).length === 0 ? (
                         <tr>
                           <td colSpan={6} className="p-6 text-center text-slate-400 italic">
-                            Chưa có dữ liệu làm bài hoặc đã được dọn dẹp khỏi hệ thống.
+                            Chưa có dữ liệu bài nộp.
                           </td>
                         </tr>
                       ) : (
@@ -231,12 +232,12 @@ export const ClassroomReportPreviewModal: React.FC<ClassroomReportPreviewModalPr
                             </td>
                             <td className="p-3 text-center">{sub.skillType}</td>
                             <td className="p-3 text-center font-black text-blue-700 dark:text-blue-400">
-                              {sub.totalScore != null ? sub.totalScore.toFixed(1) : "Chờ chấm"}
+                              {sub.totalScore != null ? formatScore10(sub.totalScore) : "Chờ chấm"}
                             </td>
                             <td className="p-3 text-center">
                               {sub.cheatingFlagged ? (
                                 <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold" title={sub.cheatingReason || ""}>
-                                  Gian lận ({sub.violationCount})
+                                  Có ({sub.violationCount})
                                 </span>
                               ) : (
                                 <span className="text-slate-500">Không ({sub.violationCount})</span>

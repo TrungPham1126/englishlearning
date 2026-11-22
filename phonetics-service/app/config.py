@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         description="Minimum allowed audio recording length in seconds."
     )
     MAX_AUDIO_DURATION: float = Field(
-        default=45.0,
+        default=180.0,
         description="Maximum allowed audio recording length in seconds."
     )
     MAX_UPLOAD_SIZE_MB: int = Field(
@@ -151,7 +151,7 @@ class Settings(BaseSettings):
         description="Path to SpeechOcean762/LibriSpeech empirically fitted calibration weights."
     )
     INFERENCE_TIMEOUT_SEC: float = Field(
-        default=15.0,
+        default=60.0,
         description="Timeout limit (seconds) for running alignment and formant analysis."
     )
 

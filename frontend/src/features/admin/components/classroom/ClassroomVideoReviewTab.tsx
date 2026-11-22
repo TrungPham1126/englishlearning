@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { CheckCircle, PlayCircle, FileVideo, XCircle } from "lucide-react";
-import VideoPlayer from "@/features/student/components/VideoPlayer";
+import { CheckCircle, PlayCircle, FileVideo, XCircle, Clock } from "lucide-react";
+import VideoPlayer, { resolveVideoSources } from "@/features/student/components/VideoPlayer";
 
 interface ClassroomVideoReviewTabProps {
   pendingVideos: any[];
@@ -34,30 +34,41 @@ export const ClassroomVideoReviewTab: React.FC<ClassroomVideoReviewTabProps> = (
         <div className="bg-white dark:bg-slate-900 p-16 rounded-xl border border-slate-200 dark:border-slate-800 text-center shadow-sm">
           <CheckCircle size={56} className="text-emerald-400 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-            Không có video nào cần duyệt.
+            Không có video chờ duyệt
           </h3>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {pendingVideos.map((vid) => (
-            <div
-              key={vid.id}
-              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col"
-            >
-              <div className="bg-black aspect-video relative flex items-center justify-center">
-                {vid.hlsPlaylistUrl ? (
-                  <VideoPlayer
-                    videoId={vid.id}
-                    streamUrl={vid.hlsPlaylistUrl}
-                    enableProgressSync={false}
-                  />
-                ) : (
-                  <div className="text-white/50 flex flex-col items-center">
-                    <PlayCircle size={40} />
-                    <span className="mt-2 text-xs">Video lỗi</span>
-                  </div>
-                )}
-              </div>
+          {pendingVideos.map((vid) => {
+            const { isProcessing: isTranscoding, streamUrl, rawUrl } =
+              resolveVideoSources(vid);
+
+            return (
+              <div
+                key={vid.id}
+                className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col"
+              >
+                <div className="bg-black aspect-video relative flex items-center justify-center">
+                  {isTranscoding ? (
+                    <div className="text-slate-300 flex flex-col items-center gap-2">
+                      <Clock size={36} className="text-sky-400" />
+                      <span className="text-xs">Đang xử lý HLS</span>
+                    </div>
+                  ) : streamUrl ? (
+                    <VideoPlayer
+                      videoId={vid.id}
+                      streamUrl={streamUrl}
+                      rawUrl={rawUrl}
+                      enableProgressSync={false}
+                      lazyLoad
+                    />
+                  ) : (
+                    <div className="text-white/50 flex flex-col items-center">
+                      <PlayCircle size={40} />
+                      <span className="mt-2 text-xs">Video lỗi</span>
+                    </div>
+                  )}
+                </div>
               <div className="p-5 flex-1 flex flex-col">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate">
                   <FileVideo className="text-rose-500 shrink-0" size={18} />
@@ -69,14 +80,14 @@ export const ClassroomVideoReviewTab: React.FC<ClassroomVideoReviewTabProps> = (
                     disabled={isProcessing}
                     className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold cursor-pointer disabled:opacity-50 transition"
                   >
-                    <CheckCircle size={16} /> Phê Duyệt
+                    <CheckCircle size={16} /> Duyệt
                   </button>
                   <button
                     onClick={() => setRejectingVideoId(vid.id)}
                     disabled={isProcessing}
                     className="flex-1 flex items-center justify-center gap-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 px-4 py-2.5 rounded-xl font-bold cursor-pointer border border-rose-200 dark:border-rose-800 disabled:opacity-50 transition"
                   >
-                    <XCircle size={16} /> Từ Chối
+                    <XCircle size={16} /> Từ chối
                   </button>
                 </div>
                 {rejectingVideoId === vid.id && (
@@ -112,7 +123,8 @@ export const ClassroomVideoReviewTab: React.FC<ClassroomVideoReviewTabProps> = (
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

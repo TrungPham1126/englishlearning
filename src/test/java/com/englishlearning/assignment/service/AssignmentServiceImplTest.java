@@ -434,4 +434,332 @@ class AssignmentServiceImplTest {
         verify(exerciseAudioService).generateAudiosForAssignmentAsync(emptyAss.getId(), AudioGeneratedBy.SYSTEM);
         verify(exerciseAudioService, never()).generateAudiosForAssignmentAsync(practice.getId(), AudioGeneratedBy.SYSTEM);
     }
+
+    @Test
+    @DisplayName("createAssignment & backfillAllAudios: Không kích hoạt sinh TTS cho Speaking Q&A, Part 2, Part 3")
+    void speakingQaPart2Part3_doNotTriggerAsyncAudioGeneration() {
+        AssignmentRequest.QuestionRequest qaQ = new AssignmentRequest.QuestionRequest();
+        qaQ.setQuestionType("AUDIO_RESPONSE");
+        qaQ.setSkillType("SPEAKING");
+        qaQ.setPromptText("What do you usually do on weekends?");
+        qaQ.setCorrectAnswer("Gợi ý: nêu hoạt động và lý do.");
+
+        AssignmentRequest qaReq = new AssignmentRequest();
+        qaReq.setTitle("Hỏi - Đáp Q&A (B1)");
+        qaReq.setDescription("[SPEAKING_QA] Phỏng vấn hàng ngày");
+        qaReq.setClassroomId(classroomId);
+        qaReq.setSkillType("SPEAKING");
+        qaReq.setQuestions(List.of(qaQ));
+
+        UUID qaId = UUID.randomUUID();
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> {
+            Assignment a = inv.getArgument(0);
+            a.setId(qaId);
+            return a;
+        });
+
+        assignmentService.createAssignment(qaReq);
+        verify(exerciseAudioService, never()).generateAudiosForAssignmentAsync(eq(qaId), any());
+
+        Assignment part2Ass = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("IELTS Part 2 Cue Card")
+                .description("[SPEAKING_PART_2]")
+                .skillType(SkillType.SPEAKING)
+                .build();
+        Assignment part3Ass = Assignment.builder()
+                .id(UUID.randomUUID())
+                .title("IELTS Part 3 Discussion")
+                .description("[SPEAKING_PART_3]")
+                .skillType(SkillType.SPEAKING)
+                .build();
+        when(assignmentRepository.findAll()).thenReturn(List.of(part2Ass, part3Ass));
+
+        assignmentService.backfillAllAudios();
+        verify(exerciseAudioService, never()).generateAudiosForAssignmentAsync(eq(part2Ass.getId()), any());
+        verify(exerciseAudioService, never()).generateAudiosForAssignmentAsync(eq(part3Ass.getId()), any());
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenRequestNullOrInvalidNumericConfig_throwsBadRequestException")
+    void createAssignment_whenRequestNullOrInvalidNumericConfig_throwsBadRequestException() {
+        assertThatThrownBy(() -> assignmentService.createAssignment(null))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badMaxAttempts = new AssignmentRequest();
+        badMaxAttempts.setTitle("Quiz");
+        badMaxAttempts.setClassroomId(classroomId);
+        badMaxAttempts.setSkillType("READING");
+        badMaxAttempts.setMaxAttempts(0);
+        assertThatThrownBy(() -> assignmentService.createAssignment(badMaxAttempts))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badTimeLimit = new AssignmentRequest();
+        badTimeLimit.setTitle("Quiz");
+        badTimeLimit.setClassroomId(classroomId);
+        badTimeLimit.setSkillType("READING");
+        badTimeLimit.setTimeLimitMinutes(0);
+        assertThatThrownBy(() -> assignmentService.createAssignment(badTimeLimit))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badErrorNeg = new AssignmentRequest();
+        badErrorNeg.setTitle("Quiz");
+        badErrorNeg.setClassroomId(classroomId);
+        badErrorNeg.setSkillType("READING");
+        badErrorNeg.setMaxAllowedErrorPercent(-5.0);
+        assertThatThrownBy(() -> assignmentService.createAssignment(badErrorNeg))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badErrorHigh = new AssignmentRequest();
+        badErrorHigh.setTitle("Quiz");
+        badErrorHigh.setClassroomId(classroomId);
+        badErrorHigh.setSkillType("READING");
+        badErrorHigh.setMaxAllowedErrorPercent(120.0);
+        assertThatThrownBy(() -> assignmentService.createAssignment(badErrorHigh))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badQuestionSkill = new AssignmentRequest();
+        badQuestionSkill.setTitle("Quiz");
+        badQuestionSkill.setClassroomId(classroomId);
+        badQuestionSkill.setSkillType("READING");
+        AssignmentRequest.QuestionRequest badQ = new AssignmentRequest.QuestionRequest();
+        badQ.setPromptText("Question 1");
+        badQ.setQuestionType("MULTIPLE_CHOICE");
+        badQ.setSkillType("NOT_A_SKILL");
+        badQuestionSkill.setQuestions(List.of(badQ));
+        assertThatThrownBy(() -> assignmentService.createAssignment(badQuestionSkill))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid question skillType");
+
+        verifyNoInteractions(assignmentRepository);
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenRegularPracticeWithDeadlineAndPassScoreScale10_setsPracticeNotificationAndDefaults")
+    void createAssignment_whenRegularPracticeWithDeadlineAndPassScoreScale10_setsPracticeNotificationAndDefaults() {
+        Instant deadline = Instant.parse("2026-12-15T23:59:59Z");
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Daily Reading Drill");
+        req.setClassroomId(classroomId);
+        req.setSkillType("READING");
+        req.setDueDate(deadline);
+        req.setPassScore(8.0);
+        req.setIsExam(null);
+
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> {
+            Assignment a = inv.getArgument(0);
+            a.setId(assignmentId);
+            return a;
+        });
+
+        Assignment saved = assignmentService.createAssignment(req);
+
+        assertThat(saved.getIsExam()).isFalse();
+        assertThat(saved.getStrictFullscreen()).isFalse();
+        assertThat(saved.getMaxViolations()).isEqualTo(3);
+        assertThat(saved.getDueDate()).isEqualTo(deadline);
+        assertThat(saved.getPassScore()).isEqualTo(8.0);
+        assertThat(saved.getMaxAllowedErrorPercent()).isEqualTo(20.0);
+
+        ArgumentCaptor<NotificationDto> notifCaptor = ArgumentCaptor.forClass(NotificationDto.class);
+        verify(notificationService).dispatchNotification(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().getActionType()).isEqualTo("NEW_ASSIGNMENT");
+        assertThat(notifCaptor.getValue().getTitle()).contains("Bài tập mới:");
+        assertThat(notifCaptor.getValue().getTargetUrl()).isEqualTo("/student/assignments/" + assignmentId + "/take");
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenClassroomIdNull_skipsNotificationDispatch")
+    void createAssignment_whenClassroomIdNull_skipsNotificationDispatch() {
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Standalone Grammar");
+        req.setClassroomId(null);
+        req.setSkillType("GRAMMAR");
+
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> {
+            Assignment a = inv.getArgument(0);
+            a.setId(assignmentId);
+            return a;
+        });
+
+        Assignment saved = assignmentService.createAssignment(req);
+
+        assertThat(saved.getId()).isEqualTo(assignmentId);
+        verifyNoInteractions(notificationService, exerciseAudioService);
+    }
+
+    @Test
+    @DisplayName("createAssignment_whenAsyncAudioTriggerThrows_stillReturnsSavedAssignment")
+    void createAssignment_whenAsyncAudioTriggerThrows_stillReturnsSavedAssignment() {
+        AssignmentRequest req = new AssignmentRequest();
+        req.setTitle("Listening Audio Failure Resilience");
+        req.setClassroomId(classroomId);
+        req.setSkillType("LISTENING");
+
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> {
+            Assignment a = inv.getArgument(0);
+            a.setId(assignmentId);
+            return a;
+        });
+        doThrow(new RuntimeException("Audio queue down"))
+                .when(exerciseAudioService).generateAudiosForAssignmentAsync(assignmentId, AudioGeneratedBy.TEACHER);
+
+        Assignment saved = assignmentService.createAssignment(req);
+
+        assertThat(saved.getId()).isEqualTo(assignmentId);
+        verify(notificationService).dispatchNotification(any(NotificationDto.class));
+        verify(exerciseAudioService).generateAudiosForAssignmentAsync(assignmentId, AudioGeneratedBy.TEACHER);
+    }
+
+    @Test
+    @DisplayName("getAssignmentById_whenQuestionsListImmutable_sortsSafelyByOrderIndex")
+    void getAssignmentById_whenQuestionsListImmutable_sortsSafelyByOrderIndex() {
+        AssignmentQuestion q3 = AssignmentQuestion.builder().id(UUID.randomUUID()).orderIndex(3).options(List.of()).build();
+        AssignmentQuestion qNull = AssignmentQuestion.builder().id(UUID.randomUUID()).orderIndex(null).options(null).build();
+        AssignmentQuestion q1 = AssignmentQuestion.builder().id(UUID.randomUUID()).orderIndex(1).options(List.of()).build();
+
+        Assignment existing = Assignment.builder()
+                .id(assignmentId)
+                .questions(List.of(q3, qNull, q1))
+                .build();
+        when(assignmentRepository.findByIdWithQuestions(assignmentId)).thenReturn(Optional.of(existing));
+
+        Assignment found = assignmentService.getAssignmentById(assignmentId);
+
+        assertThat(found.getQuestions()).containsExactly(qNull, q1, q3);
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenInvalidQuestionTypeOrQuestionSkillTypeOrSkillType_throwsBadRequestException")
+    void updateAssignment_whenInvalidQuestionTypeOrQuestionSkillTypeOrSkillType_throwsBadRequestException() {
+        Assignment existing = Assignment.builder()
+                .id(assignmentId)
+                .skillType(SkillType.READING)
+                .questions(new ArrayList<>())
+                .build();
+        when(assignmentRepository.findByIdWithQuestions(assignmentId)).thenReturn(Optional.of(existing));
+
+        AssignmentRequest badSkillReq = new AssignmentRequest();
+        badSkillReq.setSkillType("BAD_SKILL");
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badSkillReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid skillType");
+
+        AssignmentRequest badQTypeReq = new AssignmentRequest();
+        AssignmentRequest.QuestionRequest qBadType = new AssignmentRequest.QuestionRequest();
+        qBadType.setPromptText("Prompt");
+        qBadType.setQuestionType("BAD_QTYPE");
+        badQTypeReq.setQuestions(List.of(qBadType));
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badQTypeReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid questionType");
+
+        AssignmentRequest badQSkillReq = new AssignmentRequest();
+        AssignmentRequest.QuestionRequest qBadSkill = new AssignmentRequest.QuestionRequest();
+        qBadSkill.setPromptText("Prompt");
+        qBadSkill.setQuestionType("MULTIPLE_CHOICE");
+        qBadSkill.setSkillType("BAD_Q_SKILL");
+        badQSkillReq.setQuestions(List.of(qBadSkill));
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badQSkillReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Invalid question skillType");
+
+        verify(assignmentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenInvalidNumericConfig_throwsBadRequestException")
+    void updateAssignment_whenInvalidNumericConfig_throwsBadRequestException() {
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, null))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badAttempts = new AssignmentRequest();
+        badAttempts.setMaxAttempts(0);
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badAttempts))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badTime = new AssignmentRequest();
+        badTime.setTimeLimitMinutes(-10);
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badTime))
+                .isInstanceOf(BadRequestException.class);
+
+        AssignmentRequest badError = new AssignmentRequest();
+        badError.setMaxAllowedErrorPercent(105.0);
+        assertThatThrownBy(() -> assignmentService.updateAssignment(assignmentId, badError))
+                .isInstanceOf(BadRequestException.class);
+
+        verifyNoInteractions(assignmentRepository);
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenMaxAllowedErrorPercentProvided_recalculatesPassScoreOnScale10")
+    void updateAssignment_whenMaxAllowedErrorPercentProvided_recalculatesPassScoreOnScale10() {
+        Assignment existing = Assignment.builder()
+                .id(assignmentId)
+                .title("Reading Task")
+                .skillType(SkillType.READING)
+                .questions(new ArrayList<>())
+                .build();
+        when(assignmentRepository.findByIdWithQuestions(assignmentId)).thenReturn(Optional.of(existing));
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AssignmentRequest req = new AssignmentRequest();
+        req.setMaxAllowedErrorPercent(30.0);
+
+        Assignment updated = assignmentService.updateAssignment(assignmentId, req);
+
+        assertThat(updated.getMaxAllowedErrorPercent()).isEqualTo(30.0);
+        assertThat(updated.getPassScore()).isEqualTo(7.0);
+        verify(exerciseAudioService, never()).generateAudiosForAssignmentAsync(any(), any());
+    }
+
+    @Test
+    @DisplayName("updateAssignment_whenDueDateUpdated_updatesDueDateAndClearsBlankExamSkills")
+    void updateAssignment_whenDueDateUpdated_updatesDueDateAndClearsBlankExamSkills() {
+        Instant newDeadline = Instant.parse("2026-12-31T23:59:59Z");
+        Assignment existing = Assignment.builder()
+                .id(assignmentId)
+                .title("Midterm")
+                .skillType(SkillType.GRAMMAR)
+                .examSkills("READING,WRITING")
+                .questions(new ArrayList<>())
+                .build();
+        when(assignmentRepository.findByIdWithQuestions(assignmentId)).thenReturn(Optional.of(existing));
+        when(assignmentRepository.save(any(Assignment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AssignmentRequest req = new AssignmentRequest();
+        req.setDueDate(newDeadline);
+        req.setExamSkills(List.of("   "));
+
+        Assignment updated = assignmentService.updateAssignment(assignmentId, req);
+
+        assertThat(updated.getDueDate()).isEqualTo(newDeadline);
+        assertThat(updated.getExamSkills()).isNull();
+    }
+
+    @Test
+    @DisplayName("getExamsByClassroom_whenRepositoryReturnsNull_returnsEmptyList")
+    void getExamsByClassroom_whenRepositoryReturnsNull_returnsEmptyList() {
+        when(assignmentRepository.findByClassroomId(classroomId)).thenReturn(null);
+
+        assertThat(assignmentService.getExamsByClassroom(classroomId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getClassroomQuestionBank_whenRepositoryReturnsNull_returnsEmptyList")
+    void getClassroomQuestionBank_whenRepositoryReturnsNull_returnsEmptyList() {
+        when(assignmentRepository.findByClassroomId(classroomId)).thenReturn(null);
+
+        assertThat(assignmentService.getClassroomQuestionBank(classroomId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("backfillAllAudios_whenRepositoryReturnsNull_exitsSafely")
+    void backfillAllAudios_whenRepositoryReturnsNull_exitsSafely() {
+        when(assignmentRepository.findAll()).thenReturn(null);
+
+        assignmentService.backfillAllAudios();
+
+        verifyNoInteractions(exerciseAudioService);
+    }
 }

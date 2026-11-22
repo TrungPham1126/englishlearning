@@ -557,6 +557,256 @@ class AdminUserServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    @Test
+    @DisplayName("createUser: Request null hoặc email rỗng -> Ném BadRequestException")
+    void createUser_nullOrBlankEmail_throwsBadRequestException() {
+        UserCreateByAdminRequest blankEmail = UserCreateByAdminRequest.builder()
+                .email("   ")
+                .password("Password123!")
+                .firstName("A")
+                .lastName("B")
+                .roles(Set.of(RoleName.ROLE_STUDENT))
+                .build();
+
+        assertThatThrownBy(() -> adminUserService.createUser(null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Email không được để trống");
+        assertThatThrownBy(() -> adminUserService.createUser(blankEmail))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Email không được để trống");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("createUser: Roles null hoặc rỗng -> Ném BadRequestException")
+    void createUser_nullOrEmptyRoles_throwsBadRequestException() {
+        UserCreateByAdminRequest nullRoles = UserCreateByAdminRequest.builder()
+                .email("u@elp.edu.vn")
+                .password("Password123!")
+                .firstName("A")
+                .lastName("B")
+                .roles(null)
+                .build();
+        UserCreateByAdminRequest emptyRoles = UserCreateByAdminRequest.builder()
+                .email("u@elp.edu.vn")
+                .password("Password123!")
+                .firstName("A")
+                .lastName("B")
+                .roles(Collections.emptySet())
+                .build();
+
+        assertThatThrownBy(() -> adminUserService.createUser(nullRoles))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Phải phân bổ ít nhất 1 quyền");
+        assertThatThrownBy(() -> adminUserService.createUser(emptyRoles))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Phải phân bổ ít nhất 1 quyền");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("updateUser: Chặn Admin tự khóa chính mình qua isActive = false")
+    void updateUser_adminLocksSelfViaUpdate_throwsBadRequestException() {
+        UUID adminId = UUID.randomUUID();
+        authenticateAsAdmin(adminId);
+
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("Root")
+                .lastName("Admin")
+                .isActive(false)
+                .build();
+
+        assertThatThrownBy(() -> adminUserService.updateUser(adminId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Không thể tự khóa tài khoản của chính mình");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("updateUser: Chặn Admin tự thu hồi quyền ROLE_ADMIN của chính mình")
+    void updateUser_adminRemovesOwnAdminRole_throwsBadRequestException() {
+        UUID adminId = UUID.randomUUID();
+        authenticateAsAdmin(adminId);
+
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("Root")
+                .lastName("Admin")
+                .roles(Set.of(RoleName.ROLE_STUDENT))
+                .build();
+
+        assertThatThrownBy(() -> adminUserService.updateUser(adminId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Không thể tự thu hồi quyền quản trị của chính mình");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("updateUser: Chặn hạ quyền giảng viên đang phụ trách lớp học")
+    void updateUser_demoteTeacherAssignedToClassrooms_throwsBadRequestException() {
+        UUID teacherId = UUID.randomUUID();
+        User existing = User.builder()
+                .id(teacherId)
+                .email("teacher@elp.edu.vn")
+                .firstName("Lan")
+                .lastName("Pham")
+                .isActive(true)
+                .roles(new HashSet<>(Set.of(Role.builder().name(RoleName.ROLE_TEACHER).build())))
+                .build();
+        Role studentRole = Role.builder().id(1).name(RoleName.ROLE_STUDENT).build();
+        Teacher existingTeacher = Teacher.builder().id(teacherId).user(existing).build();
+
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("Lan")
+                .lastName("Pham")
+                .roles(Set.of(RoleName.ROLE_STUDENT))
+                .build();
+
+        when(userRepository.findById(teacherId)).thenReturn(Optional.of(existing));
+        when(roleRepository.findByName(RoleName.ROLE_STUDENT)).thenReturn(Optional.of(studentRole));
+        when(studentRepository.existsById(teacherId)).thenReturn(false);
+        when(teacherRepository.findById(teacherId)).thenReturn(Optional.of(existingTeacher));
+        when(classroomRepository.findByTeacherId(teacherId))
+                .thenReturn(List.of(Classroom.builder().id(UUID.randomUUID()).name("IELTS A").build()));
+
+        assertThatThrownBy(() -> adminUserService.updateUser(teacherId, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Không thể hạ quyền giảng viên đang phụ trách 1 lớp học");
+
+        verify(teacherRepository, never()).delete(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateUser: Hạ quyền Student phải dọn sạch ghi danh lớp học trước khi xóa hồ sơ Student")
+    void updateUser_demoteStudent_cleansUpClassEnrollmentsBeforeDeletingStudent() {
+        UUID userId = UUID.randomUUID();
+        User existing = User.builder()
+                .id(userId)
+                .email("student@elp.edu.vn")
+                .firstName("An")
+                .lastName("Le")
+                .isActive(true)
+                .roles(new HashSet<>(Set.of(Role.builder().name(RoleName.ROLE_STUDENT).build())))
+                .build();
+        Role adminRole = Role.builder().id(3).name(RoleName.ROLE_ADMIN).build();
+        Student existingStudent = Student.builder().id(userId).user(existing).build();
+
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("An")
+                .lastName("Le")
+                .roles(Set.of(RoleName.ROLE_ADMIN))
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existing));
+        when(roleRepository.findByName(RoleName.ROLE_ADMIN)).thenReturn(Optional.of(adminRole));
+        when(studentRepository.findById(userId)).thenReturn(Optional.of(existingStudent));
+        when(teacherRepository.findById(userId)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserSummaryDto updated = adminUserService.updateUser(userId, request);
+
+        assertThat(updated.getRoles()).containsExactly("ROLE_ADMIN");
+        verify(classStudentRepository).deleteByStudentId(userId);
+        verify(studentRepository).delete(existingStudent);
+    }
+
+    @Test
+    @DisplayName("updateUser: Cập nhật khi profile Student/Teacher đã tồn tại -> Không tạo trùng bản ghi mới")
+    void updateUser_rolesWithExistingProfiles_doesNotDuplicateProfiles() {
+        UUID userId = UUID.randomUUID();
+        User existing = User.builder()
+                .id(userId)
+                .email("dual@elp.edu.vn")
+                .firstName("Dual")
+                .lastName("User")
+                .isActive(true)
+                .roles(new HashSet<>())
+                .build();
+        Role studentRole = Role.builder().id(1).name(RoleName.ROLE_STUDENT).build();
+        Role teacherRole = Role.builder().id(2).name(RoleName.ROLE_TEACHER).build();
+
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("Dual")
+                .lastName("Updated")
+                .roles(Set.of(RoleName.ROLE_STUDENT, RoleName.ROLE_TEACHER))
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existing));
+        when(roleRepository.findByName(RoleName.ROLE_STUDENT)).thenReturn(Optional.of(studentRole));
+        when(roleRepository.findByName(RoleName.ROLE_TEACHER)).thenReturn(Optional.of(teacherRole));
+        when(studentRepository.existsById(userId)).thenReturn(true);
+        when(teacherRepository.existsById(userId)).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserSummaryDto updated = adminUserService.updateUser(userId, request);
+
+        assertThat(updated.getRoles()).containsExactlyInAnyOrder("ROLE_STUDENT", "ROLE_TEACHER");
+        verify(studentRepository, never()).save(any());
+        verify(teacherRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateUser: Ném ResourceNotFoundException khi role mới không tồn tại trong DB")
+    void updateUser_roleNotFoundInDb_throwsResourceNotFoundException() {
+        UUID userId = UUID.randomUUID();
+        User existing = User.builder()
+                .id(userId)
+                .email("u@elp.edu.vn")
+                .roles(new HashSet<>())
+                .build();
+        UserUpdateRequest request = UserUpdateRequest.builder()
+                .firstName("U")
+                .lastName("Test")
+                .roles(Set.of(RoleName.ROLE_TEACHER))
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existing));
+        when(roleRepository.findByName(RoleName.ROLE_TEACHER)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminUserService.updateUser(userId, request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Role không tồn tại: ROLE_TEACHER");
+    }
+
+    @Test
+    @DisplayName("toggleUserStatus: Khi SecurityContext chứa principal không phải CustomUserDetails -> Vẫn cập nhật bình thường")
+    void toggleUserStatus_nonCustomUserDetailsPrincipal_updatesSuccessfully() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin-principal-string", null)
+        );
+        UUID targetUserId = UUID.randomUUID();
+        User target = User.builder().id(targetUserId).email("u@elp.edu.vn").isActive(true).build();
+        when(userRepository.findById(targetUserId)).thenReturn(Optional.of(target));
+
+        adminUserService.toggleUserStatus(targetUserId, false);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getIsActive()).isFalse();
+    }
+
+    @Test
+    @DisplayName("deleteUser: Xóa tài khoản không có profile Student/Teacher -> Xóa trực tiếp User")
+    void deleteUser_adminWithoutStudentOrTeacherProfile_deletesUserDirectly() {
+        UUID targetId = UUID.randomUUID();
+        User adminTarget = User.builder().id(targetId).email("subadmin@elp.edu.vn").build();
+
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(adminTarget));
+        when(teacherRepository.existsById(targetId)).thenReturn(false);
+        when(studentRepository.existsById(targetId)).thenReturn(false);
+        when(teacherRepository.findById(targetId)).thenReturn(Optional.empty());
+
+        adminUserService.deleteUser(targetId);
+
+        verifyNoInteractions(classroomRepository, classStudentRepository);
+        verify(studentRepository, never()).deleteById(any());
+        verify(userRepository).delete(adminTarget);
+    }
+
     private void authenticateAsAdmin(UUID adminId) {
         User admin = User.builder()
                 .id(adminId)

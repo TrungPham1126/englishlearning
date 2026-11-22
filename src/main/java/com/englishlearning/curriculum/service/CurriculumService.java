@@ -22,11 +22,17 @@ public interface CurriculumService {
 
     List<DocumentResponse> getDocumentsByLesson(UUID lessonId);
 
+    DocumentResponse updateDocument(UUID documentId, DocumentUpdateRequest request);
+
+    DocumentResponse replaceDocumentFile(UUID documentId, MultipartFile file, String fileName, String fileTypeStr);
+
     void deleteDocument(UUID documentId);
 
     List<GrammarTopicResponse> getGrammarTopicsByLesson(UUID lessonId);
 
     GrammarTopicResponse addGrammarTopic(UUID lessonId, GrammarTopicRequest request);
+
+    GrammarTopicResponse updateGrammarTopic(UUID topicId, GrammarTopicRequest request);
 
     void deleteGrammarTopic(UUID topicId);
 }

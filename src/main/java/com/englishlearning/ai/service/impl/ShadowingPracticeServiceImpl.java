@@ -7,6 +7,7 @@ import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.entity.AiEvaluationType;
 import com.englishlearning.ai.repository.AiEvaluationRepository;
 import com.englishlearning.analytics.service.AnalyticsService;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.englishlearning.submission.entity.StudentAnswer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -66,7 +67,9 @@ public class ShadowingPracticeServiceImpl implements ShadowingPracticeService {
     private void persistEvaluation(StudentAnswer studentAnswer, ShadowingEvaluationResponse response) {
         try {
             String rawJson = objectMapper.writeValueAsString(response);
-            double scaledScore = response.getOverallScore() != null ? response.getOverallScore() / 10.0 : 0.0;
+            double scaledScore = response.getOverallScore() != null
+                    ? ScoreScaleUtils.clampScale10(response.getOverallScore() / 10.0)
+                    : 0.0;
 
             AiEvaluation evaluation = aiEvaluationRepository.findByStudentAnswerId(studentAnswer.getId())
                     .orElseGet(() -> AiEvaluation.builder()
@@ -76,9 +79,9 @@ public class ShadowingPracticeServiceImpl implements ShadowingPracticeService {
 
             evaluation.setOverallScore(scaledScore);
             evaluation.setPronunciationScore(response.getKpi() != null && response.getKpi().getPronunciation() != null
-                    ? response.getKpi().getPronunciation() / 10.0 : 0.0);
+                    ? ScoreScaleUtils.clampScale10(response.getKpi().getPronunciation() / 10.0) : 0.0);
             evaluation.setFluencyScore(response.getKpi() != null && response.getKpi().getFluency() != null
-                    ? response.getKpi().getFluency() / 10.0 : 0.0);
+                    ? ScoreScaleUtils.clampScale10(response.getKpi().getFluency() / 10.0) : 0.0);
             evaluation.setSuggestionsJson(rawJson);
             evaluation.setEvaluationEngine(response.getEvaluatedBy());
 

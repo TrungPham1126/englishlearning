@@ -23,6 +23,8 @@ import ResourceLibraryPage from "../pages/ResourceLibraryPage";
 import AuditLogPage from "../pages/AuditLogPage";
 import AdminLessonDetailPage from "../pages/AdminLessonDetailPage";
 import SystemBroadcastPage from "../pages/SystemBroadcastPage";
+import ClassroomDetailPage from "../pages/ClassroomDetailPage";
+import { studentApi } from "@/features/student/api/studentApi";
 
 vi.mock("@/lib/axiosClient", () => {
   const mockClient = {
@@ -127,6 +129,55 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
       expect(clickSpy).toHaveBeenCalledTimes(1);
       expect(revokeObjUrlSpy).toHaveBeenCalledWith("blob:http://localhost/report-123");
     });
+
+    it("downloads center-wide Excel report as Blob with expected filename and revokes object URL", async () => {
+      const dummyBytes = new Uint8Array([80, 75, 3, 4]);
+      (axiosClient.get as any).mockResolvedValue({ data: dummyBytes });
+
+      const fakeAnchor = {
+        href: "",
+        download: "",
+        style: {},
+        click: vi.fn(),
+        remove: vi.fn(),
+      } as unknown as HTMLAnchorElement;
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi
+        .spyOn(document, "createElement")
+        .mockImplementation((tagName: string) =>
+          tagName.toLowerCase() === "a" ? fakeAnchor : origCreateElement(tagName),
+        );
+      const appendSpy = vi
+        .spyOn(document.body, "appendChild")
+        .mockImplementation(() => fakeAnchor);
+      const createObjUrlSpy = vi
+        .spyOn(URL, "createObjectURL")
+        .mockReturnValue("blob:http://localhost/center-report-123");
+      const revokeObjUrlSpy = vi
+        .spyOn(URL, "revokeObjectURL")
+        .mockImplementation(() => {});
+
+      try {
+        await adminApi.downloadCenterReportExcel();
+
+        expect(axiosClient.get).toHaveBeenCalledWith(
+          "/api/v1/admin/database/export-center-report",
+          { responseType: "blob" },
+        );
+        expect(fakeAnchor.download).toBe("Bao_cao_tong_hop_trung_tam_ELP.xlsx");
+        expect(createObjUrlSpy).toHaveBeenCalledTimes(1);
+        expect(fakeAnchor.click).toHaveBeenCalledTimes(1);
+        expect(revokeObjUrlSpy).toHaveBeenCalledWith(
+          "blob:http://localhost/center-report-123",
+        );
+      } finally {
+        createElementSpy.mockRestore();
+        appendSpy.mockRestore();
+        createObjUrlSpy.mockRestore();
+        revokeObjUrlSpy.mockRestore();
+      }
+    });
   });
 
   // =========================================================================
@@ -182,7 +233,7 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
 
     it("renders AiTierOverviewCards, AiUsageCharts, StudentQuotaTable, and UpdateQuotaModal", async () => {
       render(<AiTierOverviewCards stats={mockAiStats as any} />);
-      expect(screen.getByText(/Hạn Ngạch Chi Phí \(Tháng\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/Chi phí tháng/i)).toBeInTheDocument();
 
       render(<AiUsageCharts stats={mockAiStats as any} />);
 
@@ -248,6 +299,39 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
 
       await waitFor(() => {
         expect(toggleSpy).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("cập nhật định mức Quota AI và chặn/mở khóa AI cho người dùng trực tiếp trên AiMonitoringPage", async () => {
+      vi.spyOn(adminApi, "getAiUsageStats").mockResolvedValue(mockAiStats as any);
+      vi.spyOn(adminApi, "getAiUserQuotas").mockResolvedValue(mockQuotas as any);
+      const updateQuotaSpy = vi
+        .spyOn(adminApi, "updateUserAiQuota")
+        .mockResolvedValue();
+
+      render(<AiMonitoringPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Nguyen An")).toBeInTheDocument();
+      });
+
+      // 1. Mở modal Đổi Quota cho Nguyen An (currentLimit = 20, isBlocked = false) -> đổi lên 40
+      const editQuotaBtns = screen.getAllByRole("button", { name: "Đổi Quota" });
+      fireEvent.click(editQuotaBtns[0]);
+
+      const limitInput = await screen.findByDisplayValue("20");
+      fireEvent.change(limitInput, { target: { value: "40" } });
+      fireEvent.submit(limitInput.closest("form")!);
+
+      await waitFor(() => {
+        expect(updateQuotaSpy).toHaveBeenCalledWith("s-1", 40, false);
+      });
+
+      // 2. Bấm nút Chặn AI cho Nguyen An -> gọi updateUserAiQuota("s-1", 20, true)
+      const blockBtn = screen.getByRole("button", { name: /Chặn AI/i });
+      fireEvent.click(blockBtn);
+      await waitFor(() => {
+        expect(updateQuotaSpy).toHaveBeenCalledWith("s-1", 20, true);
       });
     });
   });
@@ -482,7 +566,7 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
         />
       );
       expect(
-        screen.getByText(/Báo Cáo Chi Tiết: IELTS Completed Class/i)
+        screen.getByText(/Báo cáo: IELTS Completed Class/i)
       ).toBeInTheDocument();
     });
 
@@ -504,7 +588,7 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
       );
 
       const purgeBtn = screen.getByRole("button", {
-        name: /Xác Nhận Dọn Dữ Liệu/i,
+        name: /Xác nhận dọn/i,
       });
       // Disabled initially because class is IN_PROGRESS (requires forceOverride checkbox)
       expect(purgeBtn).toBeDisabled();
@@ -534,7 +618,7 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
       );
 
       const deleteBtn = screen.getByRole("button", {
-        name: /Xóa Vĩnh Viễn Lớp/i,
+        name: /Xóa vĩnh viễn/i,
       });
       expect(deleteBtn).toBeDisabled();
 
@@ -717,6 +801,464 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
       render(<SystemBroadcastPage />);
       await waitFor(() => {
         expect(adminApi.getBroadcastHistory).toHaveBeenCalled();
+      });
+    });
+
+    it("renders detailed AdminDashboardPage with KPIs, 4 chart panels, classroom table, and Excel export", async () => {
+      const { MemoryRouter } = await import("react-router-dom");
+      const { fireEvent } = await import("@testing-library/react");
+      const { default: AdminDashboardPage } = await import(
+        "../pages/AdminDashboardPage"
+      );
+
+      vi.spyOn(adminApi, "getDashboardStats").mockResolvedValue({
+        totalUsers: 180,
+        totalTeachers: 12,
+        totalStudents: 165,
+        totalClasses: 9,
+        openClasses: 2,
+        inProgressClasses: 5,
+        planningClasses: 1,
+        completedClasses: 1,
+        totalLessons: 48,
+        totalVideos: 36,
+        pendingVideos: 3,
+        totalAssignments: 24,
+        totalSubmissions: 420,
+        pendingGrading: 14,
+        completionRate: 84.5,
+        weeklySubmissionsTrend: [
+          { date: "2026-11-08", submissions: 30, graded: 28 },
+          { date: "2026-11-09", submissions: 42, graded: 40 },
+        ],
+        averageSkillScores: {
+          Listening: 7.8,
+          Speaking: 7.1,
+          Reading: 8.2,
+          Writing: 6.9,
+        },
+        completionDistribution: { high: 95, medium: 45, low: 25 },
+      });
+
+      vi.spyOn(adminApi, "getClassrooms").mockResolvedValue({
+        content: [
+          {
+            id: "cls-1",
+            name: "IELTS Intensive 7.5",
+            level: "IELTS_PREP",
+            status: "IN_PROGRESS",
+            maxStudents: 25,
+            currentStudentsCount: 22,
+            teacherName: "Cô Lan Anh",
+          },
+          {
+            id: "cls-2",
+            name: "Giao Tiếp B1 Sáng",
+            level: "B1",
+            status: "OPEN",
+            maxStudents: 20,
+            currentStudentsCount: 15,
+            teacherName: "Thầy Minh Tuấn",
+          },
+        ],
+        totalElements: 2,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+
+      vi.spyOn(adminApi, "getAiUsageStats").mockResolvedValue({
+        totalTokens: 1250000,
+        estimatedCostUsd: 1.45,
+        monthlyCostUsd: 24.8,
+        activeUsers: 74,
+        blockedUsers: 0,
+        systemQuotaRemainingPercent: 86,
+        systemKillSwitchActive: false,
+        dailyUsage: [],
+      } as any);
+
+      vi.spyOn(adminApi, "getDatabaseOverview").mockResolvedValue({
+        totalClassrooms: 9,
+        completedClassrooms: 1,
+        totalEnrolledStudents: 165,
+        totalAssignments: 24,
+        totalExams: 12,
+        totalAttempts: 380,
+        totalStudentAnswers: 1900,
+        totalAiEvaluations: 145,
+        totalDailyProgressRecords: 610,
+        totalSubmissionAudioFiles: 88,
+        estimatedSubmissionDataKb: 24576,
+        classrooms: [
+          {
+            id: "cls-1",
+            name: "IELTS Intensive 7.5",
+            level: "IELTS_PREP",
+            status: "IN_PROGRESS",
+            teacherName: "Cô Lan Anh",
+            startDate: "2026-09-01",
+            endDate: "2026-12-30",
+            studentCount: 22,
+            lessonCount: 18,
+            dailyPlanCount: 30,
+            assignmentCount: 8,
+            examCount: 3,
+            attemptCount: 120,
+            answerCount: 600,
+            aiEvaluationCount: 54,
+            dailyProgressCount: 210,
+            videoWatchCount: 180,
+            submissionAudioCount: 40,
+            cheatingFlagCount: 1,
+            averageScore: 8.1,
+            estimatedSubmissionKb: 10240,
+            eligibleForCleanPurge: false,
+          },
+        ],
+      });
+
+      vi.spyOn(adminApi, "getAuditLogs").mockResolvedValue({
+        content: [
+          {
+            id: "audit-1",
+            userId: "admin-1",
+            userName: "admin@elp.edu.vn",
+            action: "EXPORT_CENTER_REPORT",
+            entityName: "CenterReport",
+            entityId: "center-2026",
+            metadataJson: JSON.stringify({ message: "Xuất báo cáo tổng hợp Excel" }),
+            createdAt: "2026-11-14T10:00:00Z",
+          },
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        number: 0,
+        size: 8,
+      } as any);
+
+      const exportCenterSpy = vi
+        .spyOn(adminApi, "downloadCenterReportExcel")
+        .mockResolvedValue();
+
+      render(
+        <MemoryRouter>
+          <AdminDashboardPage />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Tổng quan"),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("AI 3-Tier")).toBeInTheDocument();
+      expect(screen.getByText("Lưu trữ & Audio R2")).toBeInTheDocument();
+      expect(
+        screen.getByText("Nộp & chấm bài (7 ngày)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Điểm TB 4 kỹ năng" }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("IELTS Intensive 7.5").length).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: /Xuất Excel \(\.xlsx\)/i }));
+      await waitFor(() => {
+        expect(exportCenterSpy).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("renders AdminReportsPage with center Excel export, class filter, and per-class export action", async () => {
+      const { MemoryRouter } = await import("react-router-dom");
+      const { fireEvent } = await import("@testing-library/react");
+      const { default: AdminReportsPage } = await import(
+        "../pages/AdminReportsPage"
+      );
+
+      vi.spyOn(adminApi, "getDashboardStats").mockResolvedValue({
+        totalUsers: 100,
+        totalTeachers: 8,
+        totalStudents: 90,
+        totalClasses: 4,
+        totalLessons: 20,
+        totalVideos: 15,
+        pendingVideos: 1,
+        totalAssignments: 12,
+        completionRate: 78.2,
+        averageSkillScores: {
+          Listening: 7.4,
+          Speaking: 7.0,
+          Reading: 7.9,
+          Writing: 6.8,
+        },
+        completionDistribution: { high: 50, medium: 28, low: 12 },
+      });
+
+      vi.spyOn(adminApi, "getClassrooms").mockResolvedValue({
+        content: [
+          {
+            id: "cls-10",
+            name: "B2 Giao Tiếp Tối",
+            level: "B2",
+            status: "IN_PROGRESS",
+            maxStudents: 20,
+            currentStudentsCount: 18,
+            teacherName: "Cô Hương",
+          },
+          {
+            id: "cls-11",
+            name: "A2 Nền Tảng",
+            level: "A2",
+            status: "OPEN",
+            maxStudents: 15,
+            currentStudentsCount: 10,
+            teacherName: "Thầy Nam",
+          },
+        ],
+        totalElements: 2,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+
+      vi.spyOn(adminApi, "getUsers").mockResolvedValue({
+        content: [
+          {
+            id: "t-1",
+            fullName: "Cô Hương",
+            email: "huong@elp.edu.vn",
+            role: "ROLE_TEACHER",
+            active: true,
+          } as any,
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+
+      vi.spyOn(adminApi, "getDatabaseOverview").mockResolvedValue({
+        totalClassrooms: 4,
+        completedClassrooms: 1,
+        totalEnrolledStudents: 90,
+        totalAssignments: 12,
+        totalExams: 6,
+        totalAttempts: 140,
+        totalStudentAnswers: 700,
+        totalAiEvaluations: 60,
+        totalDailyProgressRecords: 220,
+        totalSubmissionAudioFiles: 35,
+        estimatedSubmissionDataKb: 10240,
+        classrooms: [
+          {
+            id: "cls-10",
+            name: "B2 Giao Tiếp Tối",
+            level: "B2",
+            status: "IN_PROGRESS",
+            teacherName: "Cô Hương",
+            startDate: "2026-08-01",
+            endDate: "2026-12-01",
+            studentCount: 18,
+            lessonCount: 10,
+            dailyPlanCount: 20,
+            assignmentCount: 6,
+            examCount: 2,
+            attemptCount: 90,
+            answerCount: 450,
+            aiEvaluationCount: 30,
+            dailyProgressCount: 120,
+            videoWatchCount: 95,
+            submissionAudioCount: 20,
+            cheatingFlagCount: 0,
+            averageScore: 7.7,
+            estimatedSubmissionKb: 5120,
+            eligibleForCleanPurge: false,
+          },
+        ],
+      });
+
+      vi.spyOn(adminApi, "getR2CostReport").mockResolvedValue({
+        bucketName: "elp-media-prod",
+        liveConnected: false,
+        totalObjects: 240,
+        totalBytes: 52428800,
+        totalPayableUsd: 0.01,
+        totalPayableVnd: 250,
+        freeTierUsagePercent: 0.5,
+        freeTierRemainingGb: 9.95,
+        breakdownByCategory: {
+          audioSubmissions: { count: 120, sizeBytes: 20971520, sizeMb: 20 },
+          lessonVideos: { count: 80, sizeBytes: 26214400, sizeMb: 25 },
+          avatarsAndDocs: { count: 40, sizeBytes: 5242880, sizeMb: 5 },
+          otherFiles: { count: 0, sizeBytes: 0, sizeMb: 0 },
+        },
+        pricingNote: "Cloudflare R2 Free Tier 10 GB",
+      } as any);
+
+      const exportCenterSpy = vi
+        .spyOn(adminApi, "downloadCenterReportExcel")
+        .mockResolvedValue();
+      const exportClassSpy = vi
+        .spyOn(adminApi, "downloadClassroomReportExcel")
+        .mockResolvedValue();
+
+      render(
+        <MemoryRouter>
+          <AdminReportsPage />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("B2 Giao Tiếp Tối").length).toBeGreaterThan(0);
+      });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /Xuất Excel \(\.xlsx\)/i }),
+      );
+      await waitFor(() => {
+        expect(exportCenterSpy).toHaveBeenCalledTimes(1);
+      });
+
+      const classExcelButtons = screen.getAllByRole("button", {
+        name: /Xuất Excel/i,
+      });
+      const tableExportBtn = classExcelButtons.find(
+        (btn) => btn.textContent?.trim() === "Xuất Excel",
+      );
+      expect(tableExportBtn).toBeTruthy();
+      if (tableExportBtn) {
+        fireEvent.click(tableExportBtn);
+        await waitFor(() => {
+          expect(exportClassSpy).toHaveBeenCalled();
+        });
+      }
+    });
+
+    it("renders ClassroomDetailPage, switches tabs, assigns teacher, approves video, and exports Excel report", async () => {
+      vi.spyOn(adminApi, "getClassrooms").mockResolvedValue({
+        content: [
+          {
+            id: "cls-detail-1",
+            name: "IELTS Master 7.5",
+            description: "Advanced IELTS",
+            level: "C1",
+            status: "IN_PROGRESS",
+            teacherId: "t-10",
+            teacherName: "Mr. David",
+            currentStudentsCount: 12,
+            maxStudents: 20,
+            startDate: "2026-04-01",
+            endDate: "2026-08-01",
+          },
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+      vi.spyOn(adminApi, "getUsers").mockResolvedValue({
+        content: [
+          {
+            id: "t-10",
+            email: "david@elp.edu.vn",
+            firstName: "David",
+            lastName: "Nguyen",
+            roles: ["ROLE_TEACHER"],
+            isActive: true,
+          } as any,
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+      vi.spyOn(adminApi, "getPendingVideos").mockResolvedValue([
+        {
+          id: "vid-pend-1",
+          originalFileName: "Speaking_Part2_Demo.mp4",
+          lessonTitle: "Unit 1",
+          teacherName: "Mr. David",
+          status: "PENDING_REVIEW",
+          createdAt: "2026-05-01T10:00:00Z",
+        },
+      ]);
+      vi.spyOn(adminApi, "getClassStudents").mockResolvedValue([
+        {
+          studentId: "stu-10",
+          fullName: "Lê Hoàng Nam",
+          email: "nam@student.edu",
+          phone: "0901234567",
+          enrolledAt: "2026-04-02",
+        },
+      ]);
+      vi.spyOn(studentApi, "getClassLessons").mockResolvedValue([
+        {
+          id: "les-10",
+          orderIndex: 1,
+          title: "Unit 1: Academic Writing",
+        } as any,
+      ]);
+      const assignTeacherSpy = vi
+        .spyOn(adminApi, "assignTeacher")
+        .mockResolvedValue();
+      const reviewVideoSpy = vi
+        .spyOn(adminApi, "reviewVideo")
+        .mockResolvedValue();
+      const exportClassExcelSpy = vi
+        .spyOn(adminApi, "downloadClassroomReportExcel")
+        .mockResolvedValue();
+
+      render(
+        <MemoryRouter initialEntries={["/admin/classrooms/cls-detail-1"]}>
+          <Routes>
+            <Route
+              path="/admin/classrooms/:classId"
+              element={<ClassroomDetailPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("IELTS Master 7.5")).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(/Unit 1: Academic Writing/i),
+      ).toBeInTheDocument();
+
+      // Xuất báo cáo Excel lớp từ header
+      fireEvent.click(screen.getByRole("button", { name: /Xuất Excel/i }));
+      await waitFor(() => {
+        expect(exportClassExcelSpy).toHaveBeenCalledWith(
+          "cls-detail-1",
+          "IELTS Master 7.5",
+        );
+      });
+
+      // Chuyển sang tab Học viên
+      fireEvent.click(screen.getByRole("button", { name: /Học viên/i }));
+      expect(screen.getByText("Lê Hoàng Nam")).toBeInTheDocument();
+
+      // Chuyển sang tab Duyệt Video và duyệt video chờ
+      fireEvent.click(screen.getByRole("button", { name: /Duyệt Video/i }));
+      expect(screen.getByText("Speaking_Part2_Demo.mp4")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /^Duyệt$/i }));
+      await waitFor(() => {
+        expect(reviewVideoSpy).toHaveBeenCalledWith("vid-pend-1", true);
+      });
+
+      // Chuyển sang tab Cấu hình & Phân công giảng viên
+      fireEvent.click(screen.getByRole("button", { name: /Cấu hình/i }));
+      const saveBtns = screen.getAllByRole("button", { name: /^Lưu$/i });
+      fireEvent.click(saveBtns[0]);
+      await waitFor(() => {
+        expect(assignTeacherSpy).toHaveBeenCalledWith("cls-detail-1", "t-10");
       });
     });
   });

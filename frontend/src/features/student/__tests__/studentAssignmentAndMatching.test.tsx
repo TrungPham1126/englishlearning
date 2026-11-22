@@ -14,6 +14,13 @@ import { AssignmentTopBar } from "@/features/student/components/assignment/Assig
 import { QuestionContextView } from "@/features/student/components/assignment/QuestionContextView";
 import { QuestionPalette } from "@/features/student/components/assignment/QuestionPalette";
 import { QuestionRendererPolymorphic } from "@/features/student/components/assignment/QuestionRendererPolymorphic";
+import {
+  WritingScaffoldingStudio,
+  classifyWritingQuestion,
+  detectIeltsWritingTask,
+  detectWritingSubType,
+} from "@/features/student/components/assignment/WritingScaffoldingStudio";
+import { ParagraphWritingStudio } from "@/features/student/components/assignment/ParagraphWritingStudio";
 import { SubmitConfirmModal } from "@/features/student/components/assignment/SubmitConfirmModal";
 import { WordUnscrambleInteractive } from "@/features/student/components/assignment/WordUnscrambleInteractive";
 import type { AttemptResponse, QuestionResultDetail } from "@/features/student/types";
@@ -232,6 +239,7 @@ describe("features/student CBT Assignment Components", () => {
         essayQ.promptText,
         longEssay,
         "sa-essay",
+        { writingTask: "TASK_2" },
       );
     });
     expect(onWritingEvaluated).toHaveBeenCalledWith(
@@ -274,6 +282,408 @@ describe("features/student CBT Assignment Components", () => {
       />,
     );
     expect(screen.getByText(/Đã đạt \(92\.0\/100\)/i)).toBeInTheDocument();
+  });
+
+  it("Phân tách IELTS Writing Task 1 (150 từ), Task 2 (250 từ) và Paragraph Writing gửi đúng writingTask tới AI", async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(studentApi.evaluateWritingAI).mockResolvedValue({
+      wordCount: 160,
+      writingTask: "TASK_1",
+      overallBand: 7.0,
+      estimatedCefr: "C1",
+      grammarScore: 7.0,
+      vocabularyScore: 7.0,
+      coherenceScore: 7.0,
+      taskAchievement: { score: 7.0 },
+      generalFeedback: "Clear overview and accurate data comparisons.",
+      correctedText: "Improved writing sample.",
+      mistakes: [],
+      suggestions: [],
+    });
+
+    const sampleText =
+      "The chart clearly compares energy consumption across five regions over a ten year period with notable growth in solar power.";
+
+    // 1. Task 1 qua QuestionRendererPolymorphic (kèm mediaUrl biểu đồ + explanation có từ 'overview paragraph')
+    const task1Question = makeQuestion({
+      questionId: "q-task1",
+      studentAnswerId: "sa-task1",
+      questionType: "ESSAY",
+      promptText: "Summarize the information in the bar chart below (at least 150 words).",
+      explanation: "Write a clear overview paragraph and compare key figures.",
+      mediaUrl: "https://example.com/charts/energy-bar.png",
+    });
+
+    const task1Attempt: AttemptResponse = {
+      attemptId: "att-w1",
+      assignmentId: "asg-w1",
+      assignmentTitle: "IELTS Task 1: Bar Chart",
+      attemptNumber: 1,
+      status: "IN_PROGRESS",
+      questions: [task1Question],
+    };
+
+    const { unmount: unmountTask1 } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        attempt={task1Attempt}
+        question={task1Question}
+        index={0}
+        totalQuestions={1}
+        answers={{ "q-task1": { textAnswer: sampleText } }}
+      />,
+    );
+
+    expect(screen.getAllByText("IELTS Writing Task 1").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/tối thiểu 150 từ/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/2\. Overview/i)).toBeInTheDocument();
+    expect(screen.getByText(/4\. Data Comparison/i)).toBeInTheDocument();
+    expect(screen.getByAltText("IELTS Task 1 visual")).toHaveAttribute(
+      "src",
+      "https://example.com/charts/energy-bar.png",
+    );
+    expect(screen.queryByRole("button", { name: /Nghe/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+    await waitFor(() => {
+      expect(studentApi.evaluateWritingAI).toHaveBeenCalledWith(
+        task1Question.promptText,
+        sampleText,
+        "sa-task1",
+        { writingTask: "TASK_1" },
+      );
+    });
+    expect(screen.getByText("TA")).toBeInTheDocument();
+    unmountTask1();
+
+    // 2. Task 2 qua QuestionRendererPolymorphic (kiểm tra 'sustainable' không bị nhận nhầm 'table' -> Task 1)
+    const task2Question = makeQuestion({
+      questionId: "q-task2",
+      studentAnswerId: "sa-task2",
+      questionType: "ESSAY",
+      promptText:
+        "Sustainable urban planning requires prioritizing public transit over private cars. To what extent do you agree or disagree?",
+      explanation: "Write at least 250 words with clear topic sentences.",
+    });
+
+    const { unmount: unmountTask2 } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={task2Question}
+        index={0}
+        totalQuestions={1}
+        answers={{ "q-task2": { textAnswer: sampleText } }}
+      />,
+    );
+
+    expect(screen.getAllByText("IELTS Writing Task 2").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/tối thiểu 250 từ/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/2\. Body Paragraph 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/4\. Conclusion/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+    await waitFor(() => {
+      expect(studentApi.evaluateWritingAI).toHaveBeenCalledWith(
+        task2Question.promptText,
+        sampleText,
+        "sa-task2",
+        { writingTask: "TASK_2" },
+      );
+    });
+    expect(screen.getByText("TR")).toBeInTheDocument();
+    unmountTask2();
+
+    // 3. Paragraph Writing dù DB lưu questionType="ESSAY" (giống luồng teacher create) vẫn phải mở ParagraphWritingStudio và gửi PARAGRAPH
+    const paragraphQuestion = makeQuestion({
+      questionId: "q-para",
+      studentAnswerId: "sa-para",
+      questionType: "ESSAY",
+      promptText: "Viết đoạn văn (40–80 từ) mô tả thói quen đọc sách mỗi ngày.",
+    });
+
+    const { unmount: unmountPara } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={paragraphQuestion}
+        index={0}
+        totalQuestions={1}
+        answers={{ "q-para": { textAnswer: sampleText } }}
+      />,
+    );
+
+    expect(screen.getByText("Viết đoạn")).toBeInTheDocument();
+    expect(screen.getAllByText(/40–80 từ/i).length).toBeGreaterThanOrEqual(1);
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+    await waitFor(() => {
+      expect(studentApi.evaluateWritingAI).toHaveBeenCalledWith(
+        paragraphQuestion.promptText,
+        sampleText,
+        "sa-para",
+        { writingTask: "PARAGRAPH" },
+      );
+    });
+    unmountPara();
+
+    // 4. Kiểm tra trực tiếp WritingScaffoldingStudio fallback auto-detect + ParagraphWritingStudio
+    const { rerender, unmount: unmountStudio } = render(
+      <WritingScaffoldingStudio
+        promptText="The process diagram illustrates glass recycling. Write at least 150 words."
+        currentEssay={sampleText}
+        onEssayChange={vi.fn()}
+        studentAnswerId="sa-direct-1"
+      />,
+    );
+    expect(screen.getByText("IELTS Writing Task 1")).toBeInTheDocument();
+    expect(screen.getAllByText(/tối thiểu 150 từ/i).length).toBeGreaterThanOrEqual(1);
+
+    rerender(
+      <WritingScaffoldingStudio
+        promptText="Discuss both views and give your opinion on remote education."
+        currentEssay={sampleText}
+        onEssayChange={vi.fn()}
+        studentAnswerId="sa-direct-2"
+      />,
+    );
+    expect(screen.getByText("IELTS Writing Task 2")).toBeInTheDocument();
+    expect(screen.getAllByText(/tối thiểu 250 từ/i).length).toBeGreaterThanOrEqual(1);
+    unmountStudio();
+
+    render(
+      <ParagraphWritingStudio
+        promptText="Opinion (B1): Should students have part-time jobs? (100–150 words)"
+        currentParagraph={sampleText}
+        onParagraphChange={vi.fn()}
+        studentAnswerId="sa-direct-para"
+      />,
+    );
+    expect(screen.getAllByText(/100–150 từ/i).length).toBeGreaterThanOrEqual(1);
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+    await waitFor(() => {
+      expect(studentApi.evaluateWritingAI).toHaveBeenCalledWith(
+        "Opinion (B1): Should students have part-time jobs? (100–150 words)",
+        sampleText,
+        "sa-direct-para",
+        { writingTask: "PARAGRAPH" },
+      );
+    });
+  });
+
+  it("Khớp chặt phân loại TASK_1 / TASK_2 / PARAGRAPH với backend (tránh bare 'process'/'100-150', giữ single/short paragraph & topic sentence)", () => {
+    // 1. Bare "process" trong chủ đề xã hội phải giữ nguyên TASK_2 (không rơi vào TASK_1)
+    expect(
+      classifyWritingQuestion({
+        questionType: "ESSAY",
+        promptText: "Education is a lifelong process that benefits society.",
+      }),
+    ).toEqual({ kind: "ESSAY", writingTask: "TASK_2" });
+
+    // 2. "table below" / "process diagram" / "the map" là ngữ cảnh biểu đồ -> TASK_1
+    expect(
+      classifyWritingQuestion({
+        questionType: "ESSAY",
+        promptText: "The table below shows tourism revenue across four countries.",
+      }),
+    ).toEqual({ kind: "ESSAY", writingTask: "TASK_1" });
+
+    // 3. Range "100-150 words" không được match nhầm standalone "150 words" trong detectIeltsWritingTask
+    expect(
+      detectIeltsWritingTask({
+        promptText: "Opinion (B1): Should students have part-time jobs? (100-150 words)",
+      }),
+    ).toBe("TASK_2");
+    expect(
+      detectIeltsWritingTask({
+        promptText: "Summarize the chart in at least 150 words.",
+      }),
+    ).toBe("TASK_1");
+
+    // 4. Paragraph cues ("single paragraph", "one paragraph", "short paragraph", "topic sentence") trên ESSAY -> PARAGRAPH,
+    //    trong khi "4-paragraph" vẫn giữ là TASK_2
+    for (const paraPrompt of [
+      "Write a single paragraph about your daily routine.",
+      "Write one paragraph explaining why exercise matters.",
+      "Write a short paragraph describing your favorite place.",
+      "Write a cohesive text with a clear topic sentence and supporting examples.",
+    ]) {
+      expect(
+        classifyWritingQuestion({
+          questionType: "ESSAY",
+          promptText: paraPrompt,
+        }),
+      ).toEqual({ kind: "PARAGRAPH" });
+    }
+
+    expect(
+      classifyWritingQuestion({
+        questionType: "ESSAY",
+        promptText: "Write a 4-paragraph essay about renewable energy.",
+      }),
+    ).toEqual({ kind: "ESSAY", writingTask: "TASK_2" });
+
+    // 5. Subtype detection: C1 Discursive -> TASK_2; Email / Descriptive -> PARAGRAPH; Task 1 Process/Map/Data & Task 2 sub-genres
+    expect(
+      classifyWritingQuestion({
+        questionType: "WRITING_DISCURSIVE_ESSAY",
+        promptText: "Artificial intelligence and ethics in education.",
+      }),
+    ).toEqual({ kind: "ESSAY", writingTask: "TASK_2" });
+    expect(
+      classifyWritingQuestion({
+        questionType: "WRITING_SHORT_EMAIL",
+        promptText: "Invite your friend to a study session.",
+      }),
+    ).toEqual({ kind: "PARAGRAPH" });
+    expect(
+      classifyWritingQuestion({
+        questionType: "WRITING_DESCRIPTIVE_PARAGRAPH",
+        promptText: "Describe your favorite weekend routine.",
+      }),
+    ).toEqual({ kind: "PARAGRAPH" });
+
+    expect(detectWritingSubType("TASK_1", "The flow chart illustrates how glass is recycled.")).toBe("TASK1_PROCESS");
+    expect(detectWritingSubType("TASK_1", "The two maps show campus redevelopment from 2005 to 2025.")).toBe("TASK1_MAP");
+    expect(detectWritingSubType("TASK_1", "The bar chart compares electricity usage.")).toBe("TASK1_DATA");
+    expect(detectWritingSubType("TASK_2", "Discuss both views and give your opinion.")).toBe("TASK2_DISCUSSION");
+    expect(detectWritingSubType("TASK_2", "Discursive Academic Essay (C1): Automation in society.")).toBe("TASK2_DISCURSIVE_C1");
+  });
+
+  it("ParagraphWritingStudio hiển thị badge Email & gửi writingTask=WRITING_SHORT_EMAIL khi gặp đề Email", async () => {
+    const user = userEvent.setup();
+    vi.mocked(studentApi.evaluateWritingAI).mockResolvedValue({
+      wordCount: 48,
+      overallBand: 6.5,
+      estimatedCefr: "B1",
+      grammarScore: 6.5,
+      vocabularyScore: 6.5,
+      coherenceScore: 6.5,
+      correctedText: "Hi Nam, Let's meet at the library.",
+      mistakes: [],
+      suggestions: [],
+      generalFeedback: "Email rõ ràng.",
+    });
+
+    const emailText = "Hi Nam, Are you free this Saturday morning? Let's meet at the city library to practice English writing together. Best regards, Minh";
+    render(
+      <ParagraphWritingStudio
+        promptText="Write a short email (40-80 words) inviting a friend to a study club."
+        currentParagraph={emailText}
+        onParagraphChange={vi.fn()}
+        studentAnswerId="sa-email-1"
+      />,
+    );
+
+    expect(screen.getByText("Email / Tin nhắn ngắn")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+    await waitFor(() => {
+      expect(studentApi.evaluateWritingAI).toHaveBeenCalledWith(
+        "Write a short email (40-80 words) inviting a friend to a study club.",
+        emailText,
+        "sa-email-1",
+        { writingTask: "WRITING_SHORT_EMAIL" },
+      );
+    });
+  });
+
+  it("WritingScaffoldingStudio hiển thị chi tiết 4 tiêu chí, Trong bài / Cách sửa, Từ vựng gợi ý và Bài viết lại theo chuẩn IELTS", async () => {
+    const user = userEvent.setup();
+    vi.mocked(studentApi.evaluateWritingAI).mockResolvedValue({
+      wordCount: 297,
+      correctedWordCount: 293,
+      writingTask: "TASK_2",
+      writingSubType: "TASK2_DISCUSSION",
+      overallBand: 7.5,
+      estimatedCefr: "C1",
+      taskResponseScore: 7,
+      coherenceScore: 8,
+      vocabularyScore: 8,
+      grammarScore: 8,
+      taskAchievement: { score: 7, addressedPoints: [], missingPoints: [] },
+      generalFeedback: "Bài viết thể hiện tư duy logic rõ ràng cùng vốn từ vựng phong phú.",
+      correctedText: "The global transition... For instance, Germany has successfully transitioned its Ruhr valley...",
+      mistakes: [],
+      suggestions: [],
+      criteriaDetails: {
+        TR: {
+          code: "TR",
+          name: "Task Response",
+          band: 7,
+          summary: "Bài viết giải quyết đầy đủ các phần của đề bài.",
+          nextBand: 8,
+          nextBandAdvice: "Đoạn này cần đưa ra các ví dụ thực tế cụ thể và số liệu rõ ràng.",
+          highlights: [
+            {
+              inEssay: "For instance, Northern European nations...",
+              rewritten: "For instance, Germany has successfully transitioned its Ruhr valley...",
+              critique: "Ví dụ này chỉ nhắc chung chung đến khu vực Bắc Âu.",
+              howToFix: "Cần thay thế bằng một quốc gia cụ thể cùng thành tựu đo lường được.",
+            },
+          ],
+        },
+        CC: {
+          code: "CC",
+          name: "Coherence & Cohesion",
+          band: 8,
+          summary: "Thông tin sắp xếp hợp lý với sự tiến triển rõ ràng.",
+          nextBand: 9,
+          nextBandAdvice: "Duy trì mạch lạc và cấu trúc đoạn văn rõ ràng.",
+          highlights: [],
+        },
+        LR: {
+          code: "LR",
+          name: "Lexical Resource",
+          band: 8,
+          summary: "Vốn từ phong phú, collocation tự nhiên.",
+          nextBand: 9,
+          nextBandAdvice: "Duy trì độ chính xác khi lựa chọn collocation.",
+          highlights: [],
+        },
+        GRA: {
+          code: "GRA",
+          name: "Grammatical Range & Accuracy",
+          band: 8,
+          summary: "Đa dạng cấu trúc câu phức chính xác.",
+          nextBand: 9,
+          nextBandAdvice: "Tiếp tục phát huy cấu trúc câu phức đa dạng.",
+          highlights: [],
+        },
+      },
+      suggestedVocabulary: [
+        {
+          word: "fossil fuel phase-out",
+          ipa: "/ˈfɒs.əl ˈfjuː.əl ˈfeɪz aʊt/",
+          meaning: "sự loại bỏ dần nhiên liệu hóa thạch",
+          example: "The fossil fuel phase-out requires massive investment.",
+          usageContext: "Dùng trong phần mở bài.",
+        },
+      ],
+    });
+
+    const essayWords = Array.from({ length: 260 }, (_, idx) => `energy${idx}`).join(" ");
+    render(
+      <WritingScaffoldingStudio
+        promptText="Discuss both the environmental benefits and socio-economic challenges of renewable energy. Write at least 250 words."
+        currentEssay={essayWords}
+        onEssayChange={vi.fn()}
+        studentAnswerId="sa-forumflash"
+        writingTask="TASK_2"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Chấm điểm/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Band ước lượng/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText("7.5")).toBeInTheDocument();
+    expect(screen.getByText("Tiêu chí TR")).toBeInTheDocument();
+    expect(screen.getByText("Trong bài")).toBeInTheDocument();
+    expect(screen.getByText("Nhận xét và cách sửa")).toBeInTheDocument();
+    expect(screen.getByText(/Để lên band 8\./i)).toBeInTheDocument();
+    expect(screen.getByText("Từ vựng gợi ý")).toBeInTheDocument();
+    expect(screen.getByText("fossil fuel phase-out")).toBeInTheDocument();
+    expect(screen.getByText("Bài viết lại")).toBeInTheDocument();
+    expect(screen.getByText(/293 từ/i)).toBeInTheDocument();
   });
 
   it("WordUnscrambleInteractive: thêm/gỡ chip và đặt lại câu", async () => {

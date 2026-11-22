@@ -12,6 +12,7 @@ const {
   getPendingVideosMock,
   getMyCoursesMock,
   getSkillProfileMock,
+  getMyStreakMock,
   mockClient,
 } = vi.hoisted(() => {
   const getMock = vi.fn();
@@ -26,6 +27,7 @@ const {
     getPendingVideosMock: vi.fn(),
     getMyCoursesMock: vi.fn(),
     getSkillProfileMock: vi.fn(),
+    getMyStreakMock: vi.fn(),
     mockClient: {
       get: getMock,
       post: postMock,
@@ -50,6 +52,7 @@ vi.mock("@/features/student/api/studentApi", () => ({
   studentApi: {
     getMyCourses: getMyCoursesMock,
     getSkillProfile: getSkillProfileMock,
+    getMyStreak: getMyStreakMock,
   },
 }));
 
@@ -114,6 +117,42 @@ describe("routes/ProtectedRoute", () => {
     renderProtected(["ROLE_TEACHER", "ROLE_ADMIN"]);
     expect(screen.getByText("Protected Content")).toBeInTheDocument();
   });
+
+  it("phân quyền độc lập cho từng cổng STUDENT, TEACHER, ADMIN và user đa vai trò", () => {
+    // 1. Cổng STUDENT: chỉ ROLE_STUDENT được vào
+    useAuthStore.getState().setAuth("jwt-s", makeUser(["ROLE_STUDENT"]));
+    const studentView = renderProtected(["ROLE_STUDENT"]);
+    expect(screen.getByText("Protected Content")).toBeInTheDocument();
+    studentView.unmount();
+
+    // TEACHER truy cập cổng STUDENT -> bị chặn /unauthorized
+    useAuthStore.getState().setAuth("jwt-t", makeUser(["ROLE_TEACHER"]));
+    const blockedStudentView = renderProtected(["ROLE_STUDENT"]);
+    expect(screen.getByText("Unauthorized View")).toBeInTheDocument();
+    blockedStudentView.unmount();
+
+    // 2. Cổng ADMIN: chỉ ROLE_ADMIN được vào, TEACHER bị chặn
+    const blockedAdminView = renderProtected(["ROLE_ADMIN"]);
+    expect(screen.getByText("Unauthorized View")).toBeInTheDocument();
+    blockedAdminView.unmount();
+
+    useAuthStore.getState().setAuth("jwt-a", makeUser(["ROLE_ADMIN"]));
+    const adminView = renderProtected(["ROLE_ADMIN"]);
+    expect(screen.getByText("Protected Content")).toBeInTheDocument();
+    adminView.unmount();
+
+    // 3. Cổng TEACHER cho phép cả ROLE_TEACHER và ROLE_ADMIN (hoặc user nhiều role)
+    useAuthStore.getState().setAuth("jwt-multi", makeUser(["ROLE_STUDENT", "ROLE_ADMIN"]));
+    const multiRoleTeacherView = renderProtected(["ROLE_TEACHER", "ROLE_ADMIN"]);
+    expect(screen.getByText("Protected Content")).toBeInTheDocument();
+    multiRoleTeacherView.unmount();
+
+    // 4. Trạng thái không nhất quán: isAuthenticated=true nhưng user=null -> chuyển hướng /login
+    useAuthStore.setState({ accessToken: "orphan-jwt", user: null, isAuthenticated: true });
+    const orphanView = renderProtected(["ROLE_STUDENT"]);
+    expect(screen.getByText("Login View")).toBeInTheDocument();
+    orphanView.unmount();
+  });
 });
 
 describe("components/layouts", () => {
@@ -126,6 +165,7 @@ describe("components/layouts", () => {
     getPendingVideosMock.mockReset();
     getMyCoursesMock.mockReset();
     getSkillProfileMock.mockReset();
+    getMyStreakMock.mockReset();
 
     getMock.mockImplementation((url: string) => {
       if (url.includes("/notifications")) {
@@ -160,6 +200,14 @@ describe("components/layouts", () => {
       writingScore: 2,
       grammarScore: 2,
       vocabularyScore: 2,
+    });
+    getMyStreakMock.mockResolvedValue({
+      currentStreak: 4,
+      lastActiveDate: "2026-11-18",
+      hasHomeworkToday: false,
+      completedToday: false,
+      todayCompletedTasks: 0,
+      todayTotalTasks: 0,
     });
   });
 
@@ -199,6 +247,10 @@ describe("components/layouts", () => {
     );
 
     expect(screen.getByText("Courses Outlet")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getMyStreakMock).toHaveBeenCalled();
+      expect(screen.getByText("4")).toBeInTheDocument();
+    });
     // Tại /student/courses có cả top nav và mobile bottom nav -> link 'Khóa học' xuất hiện nhiều hơn 1 lần
     const courseLinksOnNormalRoute = screen.getAllByRole("link", { name: /Khóa học/i }).length;
     expect(courseLinksOnNormalRoute).toBeGreaterThanOrEqual(2);
@@ -280,8 +332,12 @@ describe("components/layouts", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByText("Cổng Thông Tin Giảng Viên")).toBeInTheDocument();
+    expect(screen.getByText("Cổng giảng viên")).toBeInTheDocument();
     expect(screen.getByText("Teacher Classrooms")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Video của tôi/i })).toHaveAttribute(
+      "href",
+      "/teacher/videos",
+    );
 
     const fileInput = container.querySelector("input[type='file']") as HTMLInputElement;
     const avatarFile = new File(["img"], "avatar.png", { type: "image/png" });
@@ -319,7 +375,7 @@ describe("components/layouts", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByText("Hệ Thống Quản Trị Trung Tâm")).toBeInTheDocument();
+    expect(screen.getByText("Cổng quản trị")).toBeInTheDocument();
     const pendingBtn = await screen.findByRole("button", { name: /3 video chờ duyệt/i });
     await user.click(pendingBtn);
     expect(screen.getByText("Video Moderation")).toBeInTheDocument();

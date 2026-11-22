@@ -39,8 +39,13 @@ public class DailyAssignmentScheduler {
         }
 
         for (DailyStudyPlan plan : todayPlans) {
+            if (plan == null) {
+                continue;
+            }
             plan.setIsUnlocked(true);
-            String planTitle = plan.getTitle() != null ? plan.getTitle() : "DAY " + plan.getDayNumber();
+            String planTitle = (plan.getTitle() != null && !plan.getTitle().isBlank())
+                    ? plan.getTitle().trim()
+                    : "DAY " + plan.getDayNumber();
             try {
                 if (plan.getClassroom() != null && plan.getClassroom().getId() != null) {
                     NotificationDto notifDto = NotificationDto.builder()

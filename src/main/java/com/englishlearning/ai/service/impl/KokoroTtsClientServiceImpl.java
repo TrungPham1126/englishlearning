@@ -149,7 +149,7 @@ public class KokoroTtsClientServiceImpl implements KokoroTtsClientService {
                 durationSeconds = (double) pcmBytes / (24000.0 * 2.0);
             }
 
-            log.info("Nhận audio thành công từ Kokoro TTS: {} bytes (~{:.2f}s)", audioBytes.length, durationSeconds);
+            log.info("Nhận audio thành công từ Kokoro TTS: {} bytes (~{}s)", audioBytes.length, Math.round(durationSeconds * 100.0) / 100.0);
 
         } catch (Exception ex) {
             log.error("Lỗi khi kết nối tới TTS Microservice: {}", ex.getMessage(), ex);

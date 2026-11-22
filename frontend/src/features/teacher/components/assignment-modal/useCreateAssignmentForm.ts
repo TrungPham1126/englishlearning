@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
+import { notifyTeacherTaskStatus } from "@/utils/teacherTaskNotification";
+import { isGradingRubricOrMetaText } from "@/utils/sampleAudioPlayer";
 import {
   downloadExcelTemplate,
   downloadSkillExcelTemplate,
@@ -39,6 +41,7 @@ export interface UseCreateAssignmentFormOptions {
 interface SavePayload {
   skill: SkillKey;
   shadowing: boolean;
+  speakingMode?: SpeakingModeKey;
   questions: QuestionDraft[];
   readingPassage: string;
   listeningScript: string;
@@ -82,7 +85,7 @@ export function useCreateAssignmentForm({
   const [assignmentType, setAssignmentType] = useState<
     "VOCABULARY" | "READING" | "LISTENING" | "SPEAKING" | "WRITING" | "GRAMMAR"
   >("READING");
-  const [speakingMode, setSpeakingMode] = useState<"QA" | "SHADOWING">("SHADOWING");
+  const [speakingMode, setSpeakingMode] = useState<SpeakingModeKey>("QA");
   const [writingTaskType, setWritingTaskType] = useState<"TASK_1" | "TASK_2">("TASK_2");
   const [readingPassageIelts, setReadingPassageIelts] = useState<1 | 2 | 3>(1);
   const [selectedSubFormat, setSelectedSubFormat] = useState<string>("READING_FILL_BLANK");
@@ -205,9 +208,57 @@ export function useCreateAssignmentForm({
     if (mode === "EDIT" && initialData) {
       setTitle(initialData.title || "");
       setDescription(initialData.description || "");
+      const loadedSkill = initialData.skillType
+        ? (initialData.skillType.toUpperCase() as SkillKey)
+        : "READING";
       if (initialData.skillType) {
-        setAssignmentType(initialData.skillType.toUpperCase() as any);
+        setAssignmentType(loadedSkill as any);
       }
+
+      const rawMetaText = `${initialData.title || ""} ${initialData.description || ""}`.toLowerCase();
+      const hasPart2Hint =
+        rawMetaText.includes("part 2") ||
+        rawMetaText.includes("part_2") ||
+        rawMetaText.includes("cue card") ||
+        (initialData.questions || []).some((q: any) =>
+          String(q?.promptText || "").toLowerCase().includes("you should say:")
+        );
+      const hasPart3Hint =
+        rawMetaText.includes("part 3") ||
+        rawMetaText.includes("part_3") ||
+        rawMetaText.includes("thảo luận chuyên sâu");
+      const hasQaHint =
+        rawMetaText.includes("q&a") ||
+        rawMetaText.includes("hỏi đáp") ||
+        rawMetaText.includes("hỏi - đáp") ||
+        rawMetaText.includes("phỏng vấn") ||
+        rawMetaText.includes("speaking_qa");
+      const hasShadowHint =
+        rawMetaText.includes("shadow") ||
+        rawMetaText.includes("nhại") ||
+        rawMetaText.includes("đọc đuổi");
+
+      const inferredSpeakingMode: SpeakingModeKey = hasPart2Hint
+        ? "PART_2"
+        : hasPart3Hint
+        ? "PART_3"
+        : hasShadowHint && !hasQaHint
+        ? "SHADOWING"
+        : "QA";
+
+      if (loadedSkill === "SPEAKING") {
+        setSpeakingMode(inferredSpeakingMode);
+        setSelectedSubFormat(
+          inferredSpeakingMode === "PART_2"
+            ? "SPEAKING_PART_2"
+            : inferredSpeakingMode === "PART_3"
+            ? "SPEAKING_PART_3"
+            : inferredSpeakingMode === "SHADOWING"
+            ? "SPEAKING_SHADOWING"
+            : "SPEAKING_QA"
+        );
+      }
+
       setTimeLimitMinutes(initialData.timeLimitMinutes || initialData.estimatedMinutes || 30);
       setEstimatedMinutes(initialData.timeLimitMinutes || initialData.estimatedMinutes || 30);
       const errPct = initialData.maxAllowedErrorPercent != null
@@ -234,6 +285,8 @@ export function useCreateAssignmentForm({
       }
 
       if (initialData.questions && initialData.questions.length > 0) {
+        const isNonShadowSpeaking =
+          loadedSkill === "SPEAKING" && inferredSpeakingMode !== "SHADOWING";
         const mapped: QuestionDraft[] = initialData.questions.map((q: any) => {
           let opts = (q.options || []).map((o: any) => o.optionText || "");
           if (opts.length === 0 && q.questionType === "MULTIPLE_CHOICE") {
@@ -248,8 +301,8 @@ export function useCreateAssignmentForm({
             options: opts,
             correctAnswer: q.correctAnswer || fallbackMatchAns || "",
             explanation: q.explanation || "",
-            referenceAudioUrl: q.mediaUrl || "",
-            transcript: q.transcript || "",
+            referenceAudioUrl: isNonShadowSpeaking ? "" : q.mediaUrl || "",
+            transcript: isNonShadowSpeaking ? "" : q.transcript || "",
             points: q.points || 1,
           };
         });
@@ -262,7 +315,21 @@ export function useCreateAssignmentForm({
         setScheduledDate(initialDate);
       }
       if (initialSkillType) {
-        setAssignmentType(initialSkillType.toUpperCase() as any);
+        const upperSkill = initialSkillType.toUpperCase() as any;
+        setAssignmentType(upperSkill);
+        if (upperSkill === "SPEAKING") {
+          const defaultFmt = getLevelQuestionFormats("SPEAKING", aiLevel)[0]?.code || "SPEAKING_QA";
+          setSelectedSubFormat(defaultFmt);
+          setSpeakingMode(
+            defaultFmt.includes("PART_2")
+              ? "PART_2"
+              : defaultFmt.includes("PART_3")
+              ? "PART_3"
+              : defaultFmt.includes("SHADOWING")
+              ? "SHADOWING"
+              : "QA"
+          );
+        }
       }
       if (initialPlanId) {
         setSelectedPlanId(initialPlanId);
@@ -276,7 +343,7 @@ export function useCreateAssignmentForm({
     const subs = SUB_PARTS_CONFIG[assignmentType] || [];
     const currentSub = subs.find((s) => s.code === selectedSubFormat) || subs[0];
     const subLabel = currentSub ? currentSub.shortLabel : assignmentType;
-    setTitle(`${subLabel} (${aiLevel}) - Ngày ${scheduledDate}`);
+    setTitle(`${subLabel} (${aiLevel}) - ${scheduledDate}`);
   }, [mode, assignmentType, selectedSubFormat, aiLevel, scheduledDate]);
 
   const currentLevelFormats = useMemo(() => {
@@ -305,11 +372,16 @@ export function useCreateAssignmentForm({
     const lvl = targetLevel || aiLevel;
     setSelectedSubFormat(code);
     if (assignmentType === "SPEAKING") {
-      setSpeakingMode(code.includes("SHADOWING") ? "SHADOWING" : "QA");
+      if (code.includes("PART_2")) setSpeakingMode("PART_2");
+      else if (code.includes("PART_3")) setSpeakingMode("PART_3");
+      else if (code.includes("SHADOWING")) setSpeakingMode("SHADOWING");
+      else setSpeakingMode("QA");
     }
     if (assignmentType === "WRITING") {
       if (code === "WRITING_IELTS_TASK1") setWritingTaskType("TASK_1");
-      if (code === "WRITING_IELTS_TASK2") setWritingTaskType("TASK_2");
+      if (code === "WRITING_IELTS_TASK2" || code === "WRITING_DISCURSIVE_ESSAY") {
+        setWritingTaskType("TASK_2");
+      }
     }
     updateTopicSuggestion(assignmentType, lvl, code);
   };
@@ -331,14 +403,25 @@ export function useCreateAssignmentForm({
     setImportGroups([]);
     setImportReport(null);
     try {
-      const promptToUse = (customTopicOrPrompt || aiTopic || "General Practice").trim();
+      const rawTopicInput = (customTopicOrPrompt || aiTopic || "General Practice").trim();
+      const promptToUse =
+        assignmentType === "READING" &&
+        aiLevel === "IELTS" &&
+        readingPassageIelts &&
+        !/^\s*passage\s+\d+/i.test(rawTopicInput)
+          ? `Passage ${readingPassageIelts}: ${rawTopicInput}`
+          : rawTopicInput;
       let exType = selectedSubFormat;
       if (assignmentType === "SPEAKING") {
-        exType =
-          speakingMode === "SHADOWING" ||
-          (selectedSubFormat && selectedSubFormat.includes("SHADOWING"))
-            ? "SPEAKING_SHADOWING"
-            : "SPEAKING_QA";
+        if (speakingMode === "SHADOWING" || selectedSubFormat?.includes("SHADOWING")) {
+          exType = "SPEAKING_SHADOWING";
+        } else if (speakingMode === "PART_2" || selectedSubFormat?.includes("PART_2")) {
+          exType = "SPEAKING_PART_2";
+        } else if (speakingMode === "PART_3" || selectedSubFormat?.includes("PART_3")) {
+          exType = "SPEAKING_PART_3";
+        } else {
+          exType = "SPEAKING_QA";
+        }
       } else if (assignmentType === "GRAMMAR") {
         if (!exType || !exType.startsWith("GRAMMAR")) {
           exType = "GRAMMAR_MULTIPLE_CHOICE";
@@ -407,7 +490,7 @@ export function useCreateAssignmentForm({
       if (!rawQuestions || rawQuestions.length === 0) {
         const errorMsg =
           data?.message ||
-          "AI không thể tạo được danh sách câu hỏi phù hợp. Vui lòng kiểm tra lại chủ đề hoặc cấu hình.";
+          "AI không tạo được câu hỏi. Kiểm tra chủ đề/cấu hình.";
         setAiError(errorMsg);
         alert(`⚠️ ${errorMsg}`);
         return;
@@ -443,14 +526,37 @@ export function useCreateAssignmentForm({
         setMainAudioUrl(preGeneratedListeningAudio);
       }
 
+      const detectedMode = String(parsed?.speakingMode || "").toUpperCase();
+      const isPart2Task =
+        assignmentType === "SPEAKING" &&
+        (speakingMode === "PART_2" ||
+          selectedSubFormat.includes("PART_2") ||
+          detectedMode === "PART_2");
+      const isPart3Task =
+        assignmentType === "SPEAKING" &&
+        !isPart2Task &&
+        (speakingMode === "PART_3" ||
+          selectedSubFormat.includes("PART_3") ||
+          detectedMode === "PART_3");
       const isShadowingTask =
         assignmentType === "SPEAKING" &&
+        !isPart2Task &&
+        !isPart3Task &&
         (speakingMode === "SHADOWING" ||
           selectedSubFormat.includes("SHADOWING") ||
-          parsed?.speakingMode === "SHADOWING");
-      if (isShadowingTask) {
+          detectedMode === "SHADOWING");
+      if (isPart2Task) {
+        setSpeakingMode("PART_2");
+        setSelectedSubFormat("SPEAKING_PART_2");
+      } else if (isPart3Task) {
+        setSpeakingMode("PART_3");
+        setSelectedSubFormat("SPEAKING_PART_3");
+      } else if (isShadowingTask) {
         setSpeakingMode("SHADOWING");
         setSelectedSubFormat("SPEAKING_SHADOWING");
+      } else if (assignmentType === "SPEAKING") {
+        setSpeakingMode("QA");
+        setSelectedSubFormat("SPEAKING_QA");
       }
 
       const formatted: QuestionDraft[] = rawQuestions.map((q: any, idx: number) => {
@@ -461,11 +567,11 @@ export function useCreateAssignmentForm({
           q.sentence ||
           q.text ||
           (q.definition
-            ? `Đoán từ vựng qua định nghĩa: "${q.definition}"${
+            ? `Đoán từ: "${q.definition}"${
                 q.word ? ` (${q.word.charAt(0)}...)` : ""
               }`
             : "") ||
-          (q.word ? `Từ vựng cần học: "${q.word}"` : "") ||
+          (q.word ? `Từ vựng: "${q.word}"` : "") ||
           `Câu hỏi ${idx + 1}`;
 
         if (questionPrompt.includes("[READING PASSAGE]")) {
@@ -528,14 +634,18 @@ export function useCreateAssignmentForm({
 
         const isTrueFalse =
           subFormat.includes("TRUE_FALSE") ||
+          subFormat.includes("YES_NO") ||
           rawQType.includes("TRUE") ||
-          rawQType.includes("FALSE");
+          rawQType.includes("FALSE") ||
+          rawQType.includes("YES_NO");
 
+        const hasMcOptions =
+          Array.isArray(q.options || q.choices || q.answers) &&
+          (q.options || q.choices || q.answers).length >= 2;
         const isMatching =
-          subFormat.includes("MATCHING") ||
-          subFormat.includes("MATCH") ||
-          rawQType.includes("MATCHING") ||
-          rawQType.includes("MATCH");
+          (assignmentType === "VOCABULARY" &&
+            (subFormat.includes("MATCHING") || subFormat.includes("MATCH"))) ||
+          ((rawQType.includes("MATCHING") || rawQType.includes("MATCH")) && !hasMcOptions);
 
         if (assignmentType === "SPEAKING") {
           qType = "AUDIO_RESPONSE";
@@ -591,15 +701,31 @@ export function useCreateAssignmentForm({
           qType = "FILL_IN_BLANK";
         } else if (isTrueFalse) {
           qType = "TRUE_FALSE";
-          correct = (correct || "TRUE").toUpperCase();
+          const upperAns = (correct || "TRUE").trim().toUpperCase().replace(/_/g, " ");
+          const mappedTf =
+            upperAns === "YES" || upperAns === "T" || upperAns === "TRUE"
+              ? "TRUE"
+              : upperAns === "NO" || upperAns === "F" || upperAns === "FALSE"
+              ? "FALSE"
+              : upperAns.includes("NOT GIVEN") || upperAns === "NG"
+              ? "NOT GIVEN"
+              : normalizeTrueFalse(correct) || "TRUE";
+          correct = mappedTf;
           opts = ["TRUE", "FALSE", "NOT GIVEN"];
         } else {
           qType = "MULTIPLE_CHOICE";
+          const stripOptLabel = (val: string) =>
+            val.trim().replace(/^(?:[A-Da-d][.)\-:]\s+|\([A-Da-d]\)\s+)/, "").trim();
+
           const rawOptions = q.options || q.choices || q.answers || q.distractors;
           if (Array.isArray(rawOptions) && rawOptions.length > 0) {
             opts = rawOptions
               .map((opt: any) =>
-                typeof opt === "string" ? opt : opt.text || opt.label || opt.value || ""
+                stripOptLabel(
+                  typeof opt === "string"
+                    ? opt
+                    : opt.optionText || opt.text || opt.label || opt.value || ""
+                )
               )
               .filter((s: string) => typeof s === "string" && s.trim().length > 0);
 
@@ -607,35 +733,56 @@ export function useCreateAssignmentForm({
               (opt: any) => opt && (opt.isCorrect || opt.correct)
             );
             if (correctOpt) {
-              correct =
+              correct = stripOptLabel(
                 typeof correctOpt === "string"
                   ? correctOpt
-                  : correctOpt.text || correctOpt.label || "";
+                  : correctOpt.optionText || correctOpt.text || correctOpt.label || ""
+              );
             }
           } else if (typeof rawOptions === "object" && rawOptions !== null) {
             const keys = Object.keys(rawOptions);
             opts = keys
               .map((k) => {
                 const val = rawOptions[k];
-                return typeof val === "string" ? val : String(val);
+                return stripOptLabel(typeof val === "string" ? val : String(val));
               })
               .filter((s: string) => s.trim().length > 0);
             if (keys.includes(correct)) {
-              correct = rawOptions[correct];
+              correct = stripOptLabel(String(rawOptions[correct]));
             }
           } else if (q.optionA || q.optionB || q.optionC || q.optionD) {
-            opts = [q.optionA, q.optionB, q.optionC, q.optionD].filter(
-              (s: any) => typeof s === "string" && s.trim().length > 0
-            );
+            opts = [q.optionA, q.optionB, q.optionC, q.optionD]
+              .filter((s: any) => typeof s === "string" && s.trim().length > 0)
+              .map((s: string) => stripOptLabel(s));
           }
 
           if (opts.length > 0) {
-            const letterIdx = ["A", "B", "C", "D"].indexOf(
-              String(correct).toUpperCase().trim()
-            );
+            const rawTrimmed = String(correct || "").trim();
+            const letterMatch = rawTrimmed.match(/^\(?([A-Da-d])\)?(?:[.)\-:]\s*(.*))?$/);
+            const cleanCorrect = stripOptLabel(rawTrimmed);
+            const letterIdx =
+              letterMatch && (!letterMatch[2] || !letterMatch[2].trim())
+                ? ["A", "B", "C", "D"].indexOf(letterMatch[1].toUpperCase())
+                : -1;
+
             if (letterIdx >= 0 && opts[letterIdx]) {
               correct = opts[letterIdx];
-            } else if (!correct || !opts.includes(correct)) {
+            } else if (cleanCorrect) {
+              const matchedOpt = opts.find(
+                (o) => o.trim().toLowerCase() === cleanCorrect.toLowerCase()
+              );
+              if (matchedOpt) {
+                correct = matchedOpt;
+              } else {
+                // Keep the AI's intended correct answer aligned with explanation instead of overwriting with opts[0]
+                if (opts.length < 4) {
+                  opts = [...opts, cleanCorrect];
+                } else {
+                  opts = [...opts.slice(0, opts.length - 1), cleanCorrect];
+                }
+                correct = cleanCorrect;
+              }
+            } else {
               correct = opts[0];
             }
           }
@@ -646,7 +793,7 @@ export function useCreateAssignmentForm({
               opts = [];
             } else {
               throw new Error(
-                `Câu hỏi ${idx + 1} ("${questionPrompt}") thiếu đáp án hoặc danh sách lựa chọn từ AI.`
+                `Câu ${idx + 1} ("${questionPrompt}") thiếu đáp án/lựa chọn từ AI.`
               );
             }
           }
@@ -674,9 +821,14 @@ export function useCreateAssignmentForm({
           rawAudio = "";
           transcript = "";
         } else if (assignmentType === "SPEAKING") {
-          rawAudio = q.audioUrl || q.mediaUrl || "";
-          if (rawAudio.includes("translate.google")) {
+          if (!isShadowingTask) {
             rawAudio = "";
+            transcript = "";
+          } else {
+            rawAudio = q.audioUrl || q.mediaUrl || "";
+            if (rawAudio.includes("translate.google")) {
+              rawAudio = "";
+            }
           }
         }
 
@@ -707,9 +859,9 @@ export function useCreateAssignmentForm({
         err.response?.data?.message ||
         err.response?.data?.error ||
         err.message ||
-        "Lỗi không xác định khi gọi AI tạo bài tập.";
+        "Lỗi gọi AI tạo bài tập.";
       setAiError(errMsg);
-      alert(`⚠️ Lỗi tạo bài tập AI:\n${errMsg}`);
+      alert(`Lỗi AI:\n${errMsg}`);
     } finally {
       setIsGeneratingAi(false);
     }
@@ -765,6 +917,8 @@ export function useCreateAssignmentForm({
 
   const defaultSubFormatFor = (skill: SkillKey, mode: SpeakingModeKey): string => {
     if (skill === "SPEAKING") {
+      if (mode === "PART_2") return "SPEAKING_PART_2";
+      if (mode === "PART_3") return "SPEAKING_PART_3";
       return mode === "SHADOWING" ? "SPEAKING_SHADOWING" : "SPEAKING_QA";
     }
     const subs = SUB_PARTS_CONFIG[skill] || [];
@@ -828,19 +982,19 @@ export function useCreateAssignmentForm({
           source: "EXCEL",
           totalRows: 0,
           imported: 0,
-          errors: ["File Excel trống hoặc Sheet đầu tiên không có dòng dữ liệu hợp lệ."],
+          errors: ["File Excel trống hoặc Sheet đầu không có dữ liệu."],
           warnings: [],
         });
         return;
       }
       applyImportResult(parseExcelRows(rows, assignmentType, speakingMode));
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "File không đúng cấu trúc";
+      const message = err instanceof Error ? err.message : "Sai cấu trúc file";
       setImportReport({
         source: "EXCEL",
         totalRows: 0,
         imported: 0,
-        errors: [`Không đọc được file Excel: ${message}`],
+        errors: [`Lỗi đọc Excel: ${message}`],
         warnings: [],
       });
     } finally {
@@ -850,7 +1004,7 @@ export function useCreateAssignmentForm({
 
   const handleQuickParseText = () => {
     if (!rawText.trim()) {
-      alert("Vui lòng dán hoặc nhập nội dung văn bản thô!");
+      alert("Chưa có nội dung văn bản.");
       return;
     }
     applyImportResult(parseRawText(rawText, assignmentType, speakingMode));
@@ -916,19 +1070,19 @@ export function useCreateAssignmentForm({
       if (q.questionType === "MULTIPLE_CHOICE") {
         const filled = q.options.filter((o) => o.trim());
         if (filled.length < 2) {
-          issues.push(`${tag}: trắc nghiệm cần tối thiểu 2 lựa chọn có nội dung.`);
+          issues.push(`${tag}: cần >= 2 lựa chọn.`);
         }
         if (!q.correctAnswer.trim() || !filled.includes(q.correctAnswer)) {
-          issues.push(`${tag}: chưa chọn đáp án đúng khớp với một lựa chọn.`);
+          issues.push(`${tag}: thiếu đáp án đúng khớp lựa chọn.`);
         }
       } else if (q.questionType === "TRUE_FALSE") {
         if (!normalizeTrueFalse(q.correctAnswer)) {
-          issues.push(`${tag}: đáp án phải là TRUE, FALSE hoặc NOT GIVEN.`);
+          issues.push(`${tag}: đáp án phải là TRUE / FALSE / NOT GIVEN.`);
         }
       } else if (q.questionType === "FILL_IN_BLANK" && !q.correctAnswer.trim()) {
-        issues.push(`${tag}: thiếu đáp án cần điền.`);
+        issues.push(`${tag}: thiếu đáp án điền từ.`);
       } else if (q.questionType === "MATCHING" && !q.correctAnswer.trim()) {
-        issues.push(`${tag}: thiếu nghĩa/từ ghép cặp tương ứng.`);
+        issues.push(`${tag}: thiếu từ/nghĩa ghép cặp.`);
       }
     });
     return issues;
@@ -942,12 +1096,12 @@ export function useCreateAssignmentForm({
         : validateQuestions(questions, "");
 
     if (questions.length === 0 && synced.length <= 1) {
-      alert("Chưa có câu hỏi nào. Hãy thêm ít nhất 1 câu hỏi trước khi tiếp tục!");
+      alert("Cần ít nhất 1 câu hỏi.");
       return;
     }
     if (issues.length > 0) {
       alert(
-        `⚠️ Cần sửa ${issues.length} lỗi trước khi giao bài:\n\n${issues
+        `Cần sửa ${issues.length} lỗi:\n\n${issues
           .slice(0, 12)
           .join("\n")}${issues.length > 12 ? "\n..." : ""}`
       );
@@ -962,7 +1116,7 @@ export function useCreateAssignmentForm({
     ).trim();
     if (!textToSynthesize) {
       setSynthesizeAudioError(
-        "Vui lòng nhập kịch bản đoạn nghe (Listening Script) hoặc nội dung câu hỏi trước khi tạo audio!"
+        "Cần nhập script nghe hoặc câu hỏi trước khi tạo audio."
       );
       return;
     }
@@ -978,15 +1132,15 @@ export function useCreateAssignmentForm({
       const url = res.data?.data || (res as any).data;
       if (url) {
         setMainAudioUrl(url);
-        setAudioUploadSuccess("Đã tạo âm thanh bài nghe hoàn tất");
+        setAudioUploadSuccess("Đã tạo audio");
         setSynthesizeAudioError(null);
       }
     } catch (e: any) {
       const errMsg =
         e.response?.data?.message ||
         (e.code === "ECONNABORTED" || e.message?.includes("timeout")
-          ? "Quá thời gian xử lý khi tạo âm thanh bài nghe. Vui lòng bấm 'Thử tạo lại ngay'."
-          : e.message || "Không thể tạo âm thanh lúc này.");
+          ? "Hết thời gian tạo audio. Bấm 'Thử tạo lại ngay'."
+          : e.message || "Không tạo được audio.");
       setSynthesizeAudioError(errMsg);
     } finally {
       setIsSynthesizingTts(false);
@@ -1003,11 +1157,11 @@ export function useCreateAssignmentForm({
       const url = res.data?.data || (res as any).data;
       if (url) {
         setMainAudioUrl(url);
-        setAudioUploadSuccess("Tải lên file audio thành công!");
+        setAudioUploadSuccess("Đã tải audio lên");
       }
     } catch (e: any) {
       setSynthesizeAudioError(
-        "Tải lên file audio thất bại: " + (e.response?.data?.message || e.message)
+        "Lỗi tải audio: " + (e.response?.data?.message || e.message)
       );
     } finally {
       setIsUploadingAudio(false);
@@ -1054,7 +1208,7 @@ export function useCreateAssignmentForm({
       audioElem.onended = () => setIsPlayingMainAudio(false);
       audioElem.onerror = () => {
         setIsPlayingMainAudio(false);
-        setSynthesizeAudioError("Không thể phát file âm thanh này");
+        setSynthesizeAudioError("Không phát được audio");
       };
       audioElem
         .play()
@@ -1074,7 +1228,7 @@ export function useCreateAssignmentForm({
     const textToRead =
       mainTranscript.trim() || questions.map((q) => q.prompt).join(". ");
     if (!textToRead) {
-      setSynthesizeAudioError("Chưa có kịch bản âm thanh để nghe thử!");
+      setSynthesizeAudioError("Chưa có script để nghe thử.");
       return;
     }
     setSynthesizeAudioError(null);
@@ -1107,7 +1261,7 @@ export function useCreateAssignmentForm({
     } catch (e: any) {
       setPlayingPreviewId(null);
       setSynthesizeAudioError(
-        "Không thể phát thử giọng đọc: " + (e.response?.data?.message || e.message)
+        "Lỗi nghe thử: " + (e.response?.data?.message || e.message)
       );
     }
   };
@@ -1199,7 +1353,7 @@ export function useCreateAssignmentForm({
 
   const handleFinalSave = async () => {
     if (!title.trim()) {
-      alert("Vui lòng nhập tiêu đề bài tập!");
+      alert("Thiếu tiêu đề bài tập.");
       return;
     }
 
@@ -1209,6 +1363,7 @@ export function useCreateAssignmentForm({
         ? synced.map((g) => ({
             skill: g.skill,
             shadowing: g.skill === "SPEAKING" && g.speakingMode === "SHADOWING",
+            speakingMode: g.speakingMode,
             questions: g.questions,
             readingPassage: g.skill === "LISTENING" ? "" : g.passage,
             listeningScript: g.skill === "LISTENING" ? g.passage : "",
@@ -1218,6 +1373,10 @@ export function useCreateAssignmentForm({
               g.skill === "SPEAKING"
                 ? g.speakingMode === "SHADOWING"
                   ? " Shadowing"
+                  : g.speakingMode === "PART_2"
+                  ? " IELTS Part 2"
+                  : g.speakingMode === "PART_3"
+                  ? " IELTS Part 3"
                   : " Hỏi đáp"
                 : ""
             }`,
@@ -1227,8 +1386,23 @@ export function useCreateAssignmentForm({
               skill: assignmentType,
               shadowing:
                 assignmentType === "SPEAKING" &&
-                (speakingMode === "SHADOWING" ||
-                  selectedSubFormat.includes("SHADOWING")),
+                (selectedSubFormat === "SPEAKING_SHADOWING" ||
+                  selectedSubFormat.includes("SHADOWING") ||
+                  (!selectedSubFormat.includes("PART_2") &&
+                    !selectedSubFormat.includes("PART_3") &&
+                    !selectedSubFormat.includes("QA") &&
+                    speakingMode === "SHADOWING")),
+              speakingMode:
+                assignmentType === "SPEAKING"
+                  ? selectedSubFormat.includes("PART_2")
+                    ? "PART_2"
+                    : selectedSubFormat.includes("PART_3")
+                    ? "PART_3"
+                    : selectedSubFormat.includes("SHADOWING") ||
+                      (!selectedSubFormat.includes("QA") && speakingMode === "SHADOWING")
+                    ? "SHADOWING"
+                    : "QA"
+                  : undefined,
               questions,
               readingPassage: readingPassageText,
               listeningScript: mainTranscript,
@@ -1240,7 +1414,7 @@ export function useCreateAssignmentForm({
 
     const activePayloads = payloads.filter((p) => p.questions.length > 0);
     if (activePayloads.length === 0) {
-      alert("Chưa có câu hỏi nào để lưu. Vui lòng quay lại Bước 2 để thêm câu hỏi!");
+      alert("Chưa có câu hỏi để lưu (quay lại Bước 2).");
       return;
     }
     const issues = activePayloads.flatMap((p) =>
@@ -1248,16 +1422,16 @@ export function useCreateAssignmentForm({
     );
     if (issues.length > 0) {
       alert(
-        `⚠️ Cần sửa ${issues.length} lỗi trước khi lưu:\n\n${issues
+        `Cần sửa ${issues.length} lỗi:\n\n${issues
           .slice(0, 12)
           .join("\n")}${issues.length > 12 ? "\n..." : ""}`
       );
       return;
     }
 
-    setIsSaving(true);
-    try {
-      if (mode === "EDIT" && initialData?.id) {
+    if (mode === "EDIT" && initialData?.id) {
+      setIsSaving(true);
+      try {
         const p = activePayloads[0];
         const updatePayload = {
           classroomId: classId,
@@ -1275,8 +1449,12 @@ export function useCreateAssignmentForm({
           listeningScript:
             p.skill === "LISTENING" ? p.listeningScript || undefined : undefined,
           questions: p.questions.map((q) => {
+            const validShadowSource =
+              q.correctAnswer && !isGradingRubricOrMetaText(q.correctAnswer)
+                ? q.correctAnswer
+                : q.prompt;
             const cleanShadowText = p.shadowing
-              ? (q.correctAnswer || q.prompt || "").trim()
+              ? (validShadowSource || q.prompt || "").trim()
               : q.prompt.trim();
 
             const matchingOption = q.options.find((opt, idx) => {
@@ -1301,11 +1479,11 @@ export function useCreateAssignmentForm({
               questionType: q.questionType,
               correctAnswer: resolvedCorrectAnswer,
               mediaUrl:
-                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                p.skill === "VOCABULARY" || (p.skill === "SPEAKING" && p.shadowing)
                   ? q.referenceAudioUrl || undefined
                   : undefined,
               transcript:
-                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                p.skill === "VOCABULARY" || (p.skill === "SPEAKING" && p.shadowing)
                   ? q.transcript || undefined
                   : undefined,
               explanation: q.explanation || "",
@@ -1350,47 +1528,118 @@ export function useCreateAssignmentForm({
         };
 
         await teacherApi.updateAssignment(initialData.id, updatePayload);
-        alert(`Đã cập nhật thành công bài tập "${title.trim()}"!`);
+        alert(`Đã cập nhật "${title.trim()}".`);
         onAssignmentCreated?.();
         onSuccess?.();
         onClose();
-        return;
+      } catch (err: any) {
+        const errorMsg =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Lỗi cập nhật bài tập.";
+        alert(`Lỗi cập nhật:\n${errorMsg}`);
+        console.error(err);
+      } finally {
+        setIsSaving(false);
       }
+      return;
+    }
 
+    // CREATE mode: Chấp nhận yêu cầu ngay, đóng modal để giáo viên làm việc khác và xử lý ngầm
+    const normalizePlanDate = (val: any): string => {
+      if (!val) return "";
+      if (Array.isArray(val) && val.length >= 3) {
+        const [y, m, d] = val;
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+      const str = String(val).trim();
+      return str.includes("T") ? str.split("T")[0] : str;
+    };
+
+    const capturedClassId = classId;
+    const capturedTitle = title.trim();
+    const capturedDescription = description;
+    const capturedScheduledDate = scheduledDate;
+    const capturedSelectedPlanId = selectedPlanId;
+    const capturedDailyPlans = dailyPlans;
+    const capturedDueDateIso = dueDate
+      ? new Date(dueDate).toISOString()
+      : new Date(Date.now() + 86400000).toISOString();
+    const capturedEstimatedMinutes = estimatedMinutes;
+    const capturedTimeLimitMinutes = timeLimitMinutes;
+    const capturedMaxAllowedErrorPercent = maxAllowedErrorPercent;
+    const capturedMaxAttempts = maxAttempts;
+    const capturedAiLevel = aiLevel;
+    const capturedDifficulty = difficulty;
+    const capturedTargetStudents = targetStudents;
+    const capturedPayloads = activePayloads;
+    const capturedRefreshCallback = onSuccess || onAssignmentCreated;
+    const taskKey = `assign-plan-${capturedClassId}-${Date.now()}`;
+
+    notifyTeacherTaskStatus({
+      status: "PROCESSING",
+      taskKey,
+      title: "Đang gán bài tập...",
+      message: `Đang xử lý "${capturedTitle}" (${capturedScheduledDate}).`,
+      classroomId: capturedClassId,
+      targetUrl: `/teacher/classrooms/${capturedClassId}/plans`,
+    });
+
+    setIsSaving(false);
+    onClose();
+
+    try {
       let targetPlan: any = null;
-      if (selectedPlanId && selectedPlanId !== "NEW_DAY") {
-        targetPlan = dailyPlans.find((p: any) => p.id === selectedPlanId);
+      if (capturedSelectedPlanId && capturedSelectedPlanId !== "NEW_DAY") {
+        targetPlan = capturedDailyPlans.find((p: any) => p.id === capturedSelectedPlanId) || null;
+        if (
+          targetPlan?.scheduledDate &&
+          capturedScheduledDate &&
+          normalizePlanDate(targetPlan.scheduledDate) !== capturedScheduledDate
+        ) {
+          targetPlan = null;
+        }
       }
       let planItemBase = targetPlan?.items?.length || 0;
       let addedItems = 0;
 
-      for (const p of activePayloads) {
+      for (const p of capturedPayloads) {
         const createdAssign: any = await teacherApi.createAssignment({
-          classroomId: classId,
+          classroomId: capturedClassId,
           title: p.title,
           description: `${
             p.readingPassage.trim() ? `[READING PASSAGE]\n${p.readingPassage.trim()}\n\n` : ""
-          }${description}\n\n[Loại: ${p.skill}${
+          }${capturedDescription}\n\n[Loại: ${p.skill}${
             p.skill === "SPEAKING"
-              ? p.shadowing
+              ? p.speakingMode === "PART_2"
+                ? " - IELTS Part 2 (Cue Card)"
+                : p.speakingMode === "PART_3"
+                ? " - IELTS Part 3 (Discussion)"
+                : p.shadowing
                 ? " - Shadowing"
                 : " - Hỏi Đáp Phỏng Vấn"
               : ""
-          }] [Trình độ: ${aiLevel}] [Độ khó: ${difficulty}] [Dự kiến: ${estimatedMinutes}p] [Đối tượng: ${
-            targetStudents === "ALL" ? "Tất cả học sinh" : "Học sinh cần cải thiện"
+          }] [Trình độ: ${capturedAiLevel}] [Độ khó: ${capturedDifficulty}] [Dự kiến: ${capturedEstimatedMinutes}p] [Đối tượng: ${
+            capturedTargetStudents === "ALL" ? "Tất cả học sinh" : "Học sinh cần cải thiện"
           }]`,
           skillType: p.skill,
-          timeLimitMinutes: timeLimitMinutes > 0 ? timeLimitMinutes : estimatedMinutes,
-          maxAllowedErrorPercent: maxAllowedErrorPercent,
-          passScore: (100 - maxAllowedErrorPercent) / 10,
-          maxAttempts: maxAttempts > 0 ? maxAttempts : 3,
-          dueDate: new Date(dueDate).toISOString(),
+          timeLimitMinutes:
+            capturedTimeLimitMinutes > 0 ? capturedTimeLimitMinutes : capturedEstimatedMinutes,
+          maxAllowedErrorPercent: capturedMaxAllowedErrorPercent,
+          passScore: (100 - capturedMaxAllowedErrorPercent) / 10,
+          maxAttempts: capturedMaxAttempts > 0 ? capturedMaxAttempts : 3,
+          dueDate: capturedDueDateIso,
           audioUrl: p.skill === "LISTENING" ? p.audioUrl || undefined : undefined,
           listeningScript:
             p.skill === "LISTENING" ? p.listeningScript || undefined : undefined,
           questions: p.questions.map((q) => {
+            const validShadowSource =
+              q.correctAnswer && !isGradingRubricOrMetaText(q.correctAnswer)
+                ? q.correctAnswer
+                : q.prompt;
             const cleanShadowText = p.shadowing
-              ? (q.correctAnswer || q.prompt || "").trim()
+              ? (validShadowSource || q.prompt || "").trim()
               : q.prompt.trim();
 
             const matchingOption = q.options.find((opt, idx) => {
@@ -1415,11 +1664,11 @@ export function useCreateAssignmentForm({
               questionType: q.questionType,
               correctAnswer: resolvedCorrectAnswer,
               mediaUrl:
-                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                p.skill === "VOCABULARY" || (p.skill === "SPEAKING" && p.shadowing)
                   ? q.referenceAudioUrl || undefined
                   : undefined,
               transcript:
-                p.skill === "VOCABULARY" || p.skill === "SPEAKING"
+                p.skill === "VOCABULARY" || (p.skill === "SPEAKING" && p.shadowing)
                   ? q.transcript || undefined
                   : undefined,
               explanation: q.explanation || "",
@@ -1471,70 +1720,104 @@ export function useCreateAssignmentForm({
 
         const assignId =
           createdAssign.data?.data?.id || createdAssign.data?.id || createdAssign.id;
+        if (!assignId) {
+          throw new Error("Thiếu ID bài tập từ máy chủ.");
+        }
 
         if (!targetPlan) {
-          const plansRes: any = await teacherApi.getDailyPlans(classId);
+          const plansRes: any = await teacherApi.getDailyPlans(capturedClassId);
           const existingPlans = plansRes.data?.data || [];
           targetPlan = existingPlans.find(
-            (pl: any) => pl.scheduledDate === scheduledDate
+            (pl: any) => normalizePlanDate(pl.scheduledDate) === capturedScheduledDate
           );
 
           if (!targetPlan) {
-            const newDayRes: any = await teacherApi.createDailyPlan(classId, {
-              dayNumber: existingPlans.length + 1,
-              title: `DAY ${existingPlans.length + 1}: ${title.trim()}`,
-              scheduledDate,
-              estimatedMinutes,
+            const maxDayNum = existingPlans.reduce(
+              (max: number, pl: any) => Math.max(max, Number(pl?.dayNumber) || 0),
+              0
+            );
+            const nextDayNumber = Math.max(existingPlans.length + 1, maxDayNum + 1);
+            const newDayRes: any = await teacherApi.createDailyPlan(capturedClassId, {
+              dayNumber: nextDayNumber,
+              title: `DAY ${nextDayNumber}: ${capturedTitle}`,
+              scheduledDate: capturedScheduledDate,
+              estimatedMinutes: capturedEstimatedMinutes,
             });
             targetPlan = newDayRes.data?.data || newDayRes.data;
           }
           planItemBase = targetPlan?.items?.length || 0;
         }
 
-        if (targetPlan?.id) {
-          const subs = SUB_PARTS_CONFIG[p.skill] || [];
-          const currentSub = subs.find((s) => s.code === p.subFormat) || subs[0];
-          const subLabel = currentSub ? currentSub.shortLabel : p.skill;
-
-          const skillIcons: Record<string, string> = {
-            GRAMMAR: "🧩",
-            LISTENING: "🎧",
-            READING: "📖",
-            VOCABULARY: "📚",
-            SPEAKING: "🎙️",
-            WRITING: "✍️",
-          };
-          const skillIcon = skillIcons[p.skill] || "📝";
-          const sectionName = `${skillIcon} ${p.skill}: ${subLabel}`;
-
-          addedItems += 1;
-          await teacherApi.addPlanItem(targetPlan.id, {
-            sectionName,
-            title: p.title,
-            itemType: p.skill,
-            orderIndex: planItemBase + addedItems,
-            assignmentId: assignId,
-          });
+        if (!targetPlan?.id) {
+          throw new Error("Không tìm/tạo được Ngày học trong lộ trình.");
         }
+
+        const subs = SUB_PARTS_CONFIG[p.skill] || [];
+        const currentSub = subs.find((s) => s.code === p.subFormat) || subs[0];
+        const subLabel = currentSub ? currentSub.shortLabel : p.skill;
+
+        const skillIcons: Record<string, string> = {
+          GRAMMAR: "🧩",
+          LISTENING: "🎧",
+          READING: "📖",
+          VOCABULARY: "📚",
+          SPEAKING: "🎙️",
+          WRITING: "✍️",
+        };
+        const skillIcon = skillIcons[p.skill] || "📝";
+        const sectionName = `${skillIcon} ${p.skill}: ${subLabel}`;
+
+        addedItems += 1;
+        await teacherApi.addPlanItem(targetPlan.id, {
+          sectionName,
+          title: p.title,
+          itemType: p.skill,
+          orderIndex: planItemBase + addedItems,
+          assignmentId: assignId,
+        });
       }
 
-      alert(
-        activePayloads.length > 1
-          ? `🎉 Đã tạo ${activePayloads.length} bài tập (theo từng kỹ năng) và gán vào lộ trình thành công!`
-          : "🎉 Đã tạo và gán bài tập thành công vào lộ trình!"
-      );
-      (onSuccess || onAssignmentCreated)?.();
-      onClose();
+      if (addedItems === 0) {
+        throw new Error("Không gắn được bài tập vào Ngày học.");
+      }
+
+      capturedRefreshCallback?.();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("daily-plan-updated", {
+            detail: { classId: capturedClassId, planId: targetPlan?.id },
+          })
+        );
+      }
+
+      const dayLabel = targetPlan?.dayNumber ? `Day ${targetPlan.dayNumber} (${capturedScheduledDate})` : `ngày ${capturedScheduledDate}`;
+      notifyTeacherTaskStatus({
+        status: "SUCCESS",
+        taskKey,
+        title: "Đã gán bài tập",
+        message:
+          capturedPayloads.length > 1
+            ? `Đã lưu ${capturedPayloads.length} bài tập vào ${dayLabel}.`
+            : `Đã gắn "${capturedTitle}" vào ${dayLabel}.`,
+        classroomId: capturedClassId,
+        targetUrl: `/teacher/classrooms/${capturedClassId}/plans`,
+        referenceId: targetPlan?.id || null,
+      });
     } catch (err: any) {
       const errorMsg =
         err.response?.data?.message ||
         err.response?.data?.error ||
         err.message ||
-        "Đã xảy ra lỗi khi tạo và gán bài tập.";
-      alert(`Không thể tạo bài tập:\n${errorMsg}`);
-      console.error(err);
-    } finally {
-      setIsSaving(false);
+        "Lỗi tạo và gán bài tập.";
+      console.error("Lỗi gán bài tập vào lộ trình:", err);
+      notifyTeacherTaskStatus({
+        status: "ERROR",
+        taskKey,
+        title: "Lỗi gán bài tập - Cần gán lại",
+        message: `Không gắn được "${capturedTitle}" (${capturedScheduledDate}): ${errorMsg}.`,
+        classroomId: capturedClassId,
+        targetUrl: `/teacher/classrooms/${capturedClassId}/plans`,
+      });
     }
   };
 

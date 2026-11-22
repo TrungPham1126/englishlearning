@@ -157,4 +157,34 @@ class QuotaManagementServiceImplTest {
         assertThat(updated.getDailyLimit()).isZero();
         assertThat(updated.getUsedToday()).isZero();
     }
+
+    @Test
+    @DisplayName("deductAiQuota: tự tạo quota mặc định (limit=20) khi chưa có, reset khi lastResetDate=null & cập nhật dailyLimit dương")
+    void deductAiQuota_createsDefaultQuotaWhenMissingResetsNullDateAndUpdatesPositiveLimit() {
+        Student student = Student.builder().id(studentId).build();
+        when(studentAiQuotaRepository.save(any(StudentAiQuota.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 1. Cả findByStudentIdWithLock và findByStudentId đều rỗng -> tạo mới với dailyLimit=20 rồi trừ 3 lượt
+        when(studentAiQuotaRepository.findByStudentIdWithLock(studentId)).thenReturn(Optional.empty());
+        when(studentAiQuotaRepository.findByStudentId(studentId)).thenReturn(Optional.empty());
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+
+        StudentAiQuota createdAndDeducted = quotaManagementService.deductAiQuota(studentId, 3);
+        assertThat(createdAndDeducted.getDailyLimit()).isEqualTo(20);
+        assertThat(createdAndDeducted.getUsedToday()).isEqualTo(3);
+
+        // 2. lastResetDate == null -> tự reset về 0, đặt ngày hôm nay rồi trừ 2 lượt
+        StudentAiQuota nullDateQuota = StudentAiQuota.builder()
+                .student(student).dailyLimit(20).usedToday(15).lastResetDate(null).isBlocked(false).build();
+        when(studentAiQuotaRepository.findByStudentIdWithLock(studentId)).thenReturn(Optional.of(nullDateQuota));
+
+        StudentAiQuota afterNullDate = quotaManagementService.deductAiQuota(studentId, 2);
+        assertThat(afterNullDate.getUsedToday()).isEqualTo(2);
+        assertThat(afterNullDate.getLastResetDate()).isEqualTo(LocalDate.now());
+
+        // 3. updateDailyLimit dương trên bản ghi sẵn có -> cập nhật về 50
+        when(studentAiQuotaRepository.findByStudentId(studentId)).thenReturn(Optional.of(nullDateQuota));
+        StudentAiQuota raised = quotaManagementService.updateDailyLimit(studentId, 50);
+        assertThat(raised.getDailyLimit()).isEqualTo(50);
+    }
 }

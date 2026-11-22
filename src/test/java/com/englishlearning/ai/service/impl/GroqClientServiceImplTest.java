@@ -15,17 +15,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -147,5 +154,54 @@ class GroqClientServiceImplTest {
         assertThat(GroqClientService.stripMarkdown(null)).isEqualTo("{}");
         assertThat(GroqClientService.stripMarkdown("```json\n{}\n```")).isEqualTo("{}");
         assertThat(GroqClientService.stripMarkdown("```\n{\"x\":1}\n```")).isEqualTo("{\"x\":1}");
+    }
+
+    @Test
+    @DisplayName("transcribeAudio: filename null hoặc khoảng trắng mặc định gửi 'audio.wav'")
+    @SuppressWarnings("unchecked")
+    void transcribeAudio_blankFilenameDefaultsToAudioWav() {
+        MockMultipartFile blankNameFile = new MockMultipartFile("audio", "   ", "audio/wav", "wav".getBytes());
+        MockMultipartFile nullNameFile = new MockMultipartFile("audio", null, "audio/wav", "wav".getBytes());
+        when(restTemplate.postForEntity(eq("https://api.groq.com/audio"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"text\":\"ok\"}"));
+
+        service.transcribeAudio(blankNameFile);
+        service.transcribeAudio(nullNameFile);
+
+        ArgumentCaptor<HttpEntity<MultiValueMap<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).postForEntity(eq("https://api.groq.com/audio"), captor.capture(), eq(String.class));
+        assertThat(((ByteArrayResource) captor.getAllValues().get(0).getBody().getFirst("file")).getFilename())
+                .isEqualTo("audio.wav");
+        assertThat(((ByteArrayResource) captor.getAllValues().get(1).getBody().getFirst("file")).getFilename())
+                .isEqualTo("audio.wav");
+    }
+
+    @Test
+    @DisplayName("chatCompletionJson: danh sách choices rỗng ném BadRequestException; phân giải String email principal ROLE_ADMIN & kẹp temperature âm")
+    @SuppressWarnings("unchecked")
+    void chatCompletionJson_emptyChoicesThrowsBadRequestAndResolvesEmailPrincipalWithClampedTemp() {
+        when(restTemplate.postForEntity(eq("https://api.groq.com/chat"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"choices\":[]}"));
+
+        assertThatThrownBy(() -> service.chatCompletionJson("Sys", "Prompt", 0.2, UUID.randomUUID(), false))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("choices rỗng");
+
+        UUID adminId = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin@english.test", null,
+                        List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+        when(userRepository.findByEmail("admin@english.test"))
+                .thenReturn(Optional.of(User.builder().id(adminId).email("admin@english.test").build()));
+        when(restTemplate.postForEntity(eq("https://api.groq.com/chat"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}"));
+
+        service.chatCompletionJson("Sys", "Prompt", -1.0);
+
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).postForEntity(eq("https://api.groq.com/chat"), entityCaptor.capture(), eq(String.class));
+        assertThat(entityCaptor.getAllValues().get(1).getBody().get("temperature")).isEqualTo(0.0);
+        verify(aiMonitoringService).checkRateLimitAndQuota(adminId, true);
+        verify(aiMonitoringService).recordTokenUsage(eq(adminId), eq("TEACHER"), anyLong(), anyLong(), eq("GROQ"));
     }
 }

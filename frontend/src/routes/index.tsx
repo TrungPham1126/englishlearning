@@ -63,6 +63,8 @@ const DailyHomeworkPage = lazy(() => import("@/features/student/pages/DailyHomew
 const TeacherDashboardPage = lazy(() => import("@/features/teacher/pages/TeacherDashboardPage"));
 const TeacherClassroomsPage = lazy(() => import("@/features/teacher/pages/TeacherClassroomsPage"));
 const TeacherClassDetailPage = lazy(() => import("@/features/teacher/pages/TeacherClassDetailPage"));
+const TeacherLessonDetailPage = lazy(() => import("@/features/teacher/pages/TeacherLessonDetailPage"));
+const TeacherVideosPage = lazy(() => import("@/features/teacher/pages/TeacherVideosPage"));
 const TeacherClassStudentsPage = lazy(() => import("@/features/teacher/pages/TeacherClassStudentsPage"));
 const TeacherDailyPlanPage = lazy(() => import("@/features/teacher/pages/TeacherDailyPlanPage"));
 const TeacherGradingPage = lazy(() => import("@/features/teacher/pages/TeacherGradingPage"));
@@ -175,6 +177,18 @@ const routes: RouteObject[] = [
       {
         path: "classrooms/:classId",
         element: withSuspense(TeacherClassDetailPage),
+      },
+      {
+        path: "classrooms/:classId/lessons/:lessonId",
+        element: withSuspense(TeacherLessonDetailPage),
+      },
+      {
+        path: "lessons/:lessonId",
+        element: withSuspense(TeacherLessonDetailPage),
+      },
+      {
+        path: "videos",
+        element: withSuspense(TeacherVideosPage),
       },
       {
         path: "classrooms/:classId/students",

@@ -244,6 +244,56 @@ class CurriculumControllerTest {
                         .with(csrf()))
                 .andExpect(status().isOk());
 
+        DocumentResponse updatedDocResp = DocumentResponse.builder()
+                .id(docId)
+                .lessonId(lessonId)
+                .fileName("notes-v2.docx")
+                .fileUrl("https://cdn.test/notes-v2.docx")
+                .fileType("DOCX")
+                .build();
+        when(curriculumService.updateDocument(eq(docId), any(DocumentUpdateRequest.class))).thenReturn(updatedDocResp);
+        mockMvc.perform(put("/api/curriculum/documents/{documentId}", docId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "fileName": "notes-v2.docx", "fileType": "DOCX" }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fileName").value("notes-v2.docx"))
+                .andExpect(jsonPath("$.data.fileType").value("DOCX"));
+
+        // STUDENT bị chặn 403 và body rỗng trả 400
+        mockMvc.perform(put("/api/curriculum/documents/{documentId}", docId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "fileName": "x.pdf" }
+                                """))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/curriculum/documents/{documentId}", docId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        when(curriculumService.replaceDocumentFile(eq(docId), any(), eq("notes-v2.docx"), eq("DOCX")))
+                .thenReturn(updatedDocResp);
+        mockMvc.perform(multipart("/api/curriculum/documents/{documentId}/file", docId)
+                        .file(file)
+                        .param("fileName", "notes-v2.docx")
+                        .param("fileType", "DOCX")
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        })
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fileUrl").value("https://cdn.test/notes-v2.docx"));
+
         GrammarTopicResponse topicResp = GrammarTopicResponse.builder()
                 .id(topicId)
                 .lessonId(lessonId)
@@ -268,10 +318,259 @@ class CurriculumControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value(topicId.toString()));
 
+        GrammarTopicResponse updatedTopicResp = GrammarTopicResponse.builder()
+                .id(topicId)
+                .lessonId(lessonId)
+                .title("Past Perfect")
+                .ruleSummary("Action before another past action")
+                .formula("S + had + V3")
+                .build();
+        when(curriculumService.updateGrammarTopic(eq(topicId), any(GrammarTopicRequest.class))).thenReturn(updatedTopicResp);
+        mockMvc.perform(put("/api/curriculum/grammar/{topicId}", topicId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "Past Perfect", "ruleSummary": "Action before another past action", "formula": "S + had + V3" }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("Past Perfect"))
+                .andExpect(jsonPath("$.data.formula").value("S + had + V3"));
+
+        mockMvc.perform(put("/api/curriculum/grammar/{topicId}", topicId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "X", "ruleSummary": "Y" }
+                                """))
+                .andExpect(status().isForbidden());
+
         doNothing().when(curriculumService).deleteGrammarTopic(topicId);
         mockMvc.perform(delete("/api/curriculum/grammar/{topicId}", topicId)
                         .with(user(userWithRole(RoleName.ROLE_TEACHER)))
                         .with(csrf()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /api/curriculum/lessons - Lớp học không tồn tại trả về 404 Not Found")
+    void createLesson_classroomNotFound_returns404() throws Exception {
+        when(curriculumService.createLesson(any(LessonRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy lớp học"));
+
+        mockMvc.perform(post("/api/curriculum/lessons")
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "classId": "11111111-1111-1111-1111-111111111111",
+                                  "title": "Unit 1"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("PUT /api/curriculum/lessons/{id} - STUDENT bị chặn 403 Forbidden")
+    void updateLesson_asStudent_returns403() throws Exception {
+        mockMvc.perform(put("/api/curriculum/lessons/{id}", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "Hacked" }
+                                """))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("PUT /api/curriculum/lessons/{id} - Thiếu title trả về 400 Bad Request")
+    void updateLesson_blankTitle_returns400() throws Exception {
+        mockMvc.perform(put("/api/curriculum/lessons/{id}", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "   " }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.title").exists());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("PUT /api/curriculum/lessons/{id} - Bài học không tồn tại trả về 404 Not Found")
+    void updateLesson_lessonNotFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        when(curriculumService.updateLesson(eq(missingId), any(LessonUpdateRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy bài học"));
+
+        mockMvc.perform(put("/api/curriculum/lessons/{id}", missingId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "Unit X" }
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/lessons/{id} - STUDENT bị chặn 403 Forbidden")
+    void deleteLesson_asStudent_returns403() throws Exception {
+        mockMvc.perform(delete("/api/curriculum/lessons/{id}", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/lessons/{id} - Bài học không tồn tại trả về 404 Not Found")
+    void deleteLesson_lessonNotFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Không tìm thấy bài học"))
+                .when(curriculumService).deleteLesson(missingId);
+
+        mockMvc.perform(delete("/api/curriculum/lessons/{id}", missingId)
+                        .with(user(userWithRole(RoleName.ROLE_ADMIN)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/curriculum/lessons/{lessonId}/documents - STUDENT bị chặn 403 Forbidden")
+    void uploadDocument_asStudent_returns403() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/curriculum/lessons/{lessonId}/documents", lessonId)
+                        .file(file)
+                        .param("fileType", "PDF")
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("POST /api/curriculum/lessons/{lessonId}/documents - Bài học không tồn tại trả về 404 Not Found")
+    void uploadDocument_lessonNotFound_returns404() throws Exception {
+        UUID missingLesson = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[]{1});
+        when(curriculumService.uploadLessonDocument(eq(missingLesson), any(), eq("PDF")))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy bài học"));
+
+        mockMvc.perform(multipart("/api/curriculum/lessons/{lessonId}/documents", missingLesson)
+                        .file(file)
+                        .param("fileType", "PDF")
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("PUT /api/curriculum/documents/{documentId}/file - STUDENT bị chặn 403 Forbidden")
+    void replaceDocumentFile_asStudent_returns403() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.pdf", "application/pdf", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/curriculum/documents/{documentId}/file", docId)
+                        .file(file)
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        })
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/documents/{documentId} - STUDENT bị chặn 403 Forbidden")
+    void deleteDocument_asStudent_returns403() throws Exception {
+        mockMvc.perform(delete("/api/curriculum/documents/{documentId}", docId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/documents/{documentId} - Tài liệu không tồn tại trả về 404 Not Found")
+    void deleteDocument_documentNotFound_returns404() throws Exception {
+        UUID missingDoc = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Không tìm thấy tài liệu"))
+                .when(curriculumService).deleteDocument(missingDoc);
+
+        mockMvc.perform(delete("/api/curriculum/documents/{documentId}", missingDoc)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /api/curriculum/lessons/{lessonId}/grammar - Thiếu title/ruleSummary trả về 400 Bad Request")
+    void addGrammarTopic_blankTitleOrSummary_returns400() throws Exception {
+        mockMvc.perform(post("/api/curriculum/lessons/{lessonId}/grammar", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "", "ruleSummary": "" }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.title").exists())
+                .andExpect(jsonPath("$.validationErrors.ruleSummary").exists());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("POST /api/curriculum/lessons/{lessonId}/grammar - STUDENT bị chặn 403 Forbidden")
+    void addGrammarTopic_asStudent_returns403() throws Exception {
+        mockMvc.perform(post("/api/curriculum/lessons/{lessonId}/grammar", lessonId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "title": "Past Simple", "ruleSummary": "Action in past" }
+                                """))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/grammar/{topicId} - STUDENT bị chặn 403 Forbidden")
+    void deleteGrammarTopic_asStudent_returns403() throws Exception {
+        mockMvc.perform(delete("/api/curriculum/grammar/{topicId}", topicId)
+                        .with(user(userWithRole(RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(curriculumService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/curriculum/grammar/{topicId} - Chủ điểm không tồn tại trả về 404 Not Found")
+    void deleteGrammarTopic_topicNotFound_returns404() throws Exception {
+        UUID missingTopic = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Không tìm thấy chủ điểm ngữ pháp"))
+                .when(curriculumService).deleteGrammarTopic(missingTopic);
+
+        mockMvc.perform(delete("/api/curriculum/grammar/{topicId}", missingTopic)
+                        .with(user(userWithRole(RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
     }
 }

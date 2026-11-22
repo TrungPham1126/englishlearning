@@ -111,3 +111,12 @@ def test_estimate_overall_confidence_and_determine_evaluation_status_all_paths()
     assert confidence_estimator.determine_evaluation_status(0.2, 0.9, q_ok) == EvaluationStatus.LOW_CONFIDENCE
     assert confidence_estimator.determine_evaluation_status(0.52, 0.9, q_ok) == EvaluationStatus.PARTIAL_EVALUATION
     assert confidence_estimator.determine_evaluation_status(0.80, 0.9, q_ok) == EvaluationStatus.SUCCESS
+
+    # Kiểm tra nhánh alignment_conf < 0.45 -> LOW_CONFIDENCE và alignment_conf < 0.60 -> PARTIAL_EVALUATION
+    assert confidence_estimator.determine_evaluation_status(0.75, 0.42, q_ok) == EvaluationStatus.LOW_CONFIDENCE
+    assert confidence_estimator.determine_evaluation_status(0.75, 0.55, q_ok) == EvaluationStatus.PARTIAL_EVALUATION
+
+    # Kiểm tra non-plosive consonant ('s') dùng target_dur = 0.045 và kẹp dur_factor tối thiểu 0.75
+    short_fricative = AlignedPhoneme(symbol="/s/", start=0.0, end=0.01, posterior=0.80, confidence=0.80, phoneme_type="consonant")
+    assert confidence_estimator.estimate_phoneme_confidence(short_fricative) == pytest.approx(0.80 * 0.70 + 0.75 * 0.30, abs=1e-4)
+

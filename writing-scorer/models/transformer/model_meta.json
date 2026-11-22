@@ -1,0 +1,312 @@
+{
+  "model_type": "transformer_multitask",
+  "backbone": "microsoft/deberta-v3-small",
+  "optimizer": "adafactor",
+  "hidden_size": 768,
+  "dropout": 0.15,
+  "max_length": 512,
+  "use_token_type_ids": false,
+  "best_epoch": 4,
+  "epochs": 4,
+  "batch_size": 4,
+  "grad_accum": 8,
+  "lr": 3.5e-05,
+  "fp16": false,
+  "gradient_checkpointing": false,
+  "peak_vram_mb": 3173.0,
+  "train_seconds": 4235.2,
+  "calibrators": {
+    "overall_band": [
+      1.002012,
+      -0.087032
+    ],
+    "task_response": [
+      1.0,
+      0.0
+    ],
+    "coherence_cohesion": [
+      0.99832,
+      -0.101269
+    ],
+    "lexical_resource": [
+      1.014068,
+      -0.134596
+    ],
+    "grammatical_range": [
+      0.992836,
+      -0.032634
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.2509,
+      "val_overall": {
+        "n": 876,
+        "mae": 0.3709,
+        "rmse": 0.4961,
+        "rounded_mae": 0.359,
+        "rounded_rmse": 0.5193,
+        "pearson": 0.7681,
+        "spearman": 0.7993,
+        "qwk": 0.6985,
+        "exact_match_pct": 39.38,
+        "within_0_5_pct": 91.44,
+        "within_1_0_pct": 98.74
+      },
+      "epoch_seconds": 1043.1,
+      "peak_vram_mb": 3171.9
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1623,
+      "val_overall": {
+        "n": 876,
+        "mae": 0.2781,
+        "rmse": 0.418,
+        "rounded_mae": 0.2432,
+        "rounded_rmse": 0.436,
+        "pearson": 0.8292,
+        "spearman": 0.831,
+        "qwk": 0.7769,
+        "exact_match_pct": 58.68,
+        "within_0_5_pct": 94.98,
+        "within_1_0_pct": 98.97
+      },
+      "epoch_seconds": 1051.6,
+      "peak_vram_mb": 3171.9
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.1163,
+      "val_overall": {
+        "n": 876,
+        "mae": 0.2631,
+        "rmse": 0.3935,
+        "rounded_mae": 0.2237,
+        "rounded_rmse": 0.4061,
+        "pearson": 0.8405,
+        "spearman": 0.8364,
+        "qwk": 0.7996,
+        "exact_match_pct": 61.19,
+        "within_0_5_pct": 95.89,
+        "within_1_0_pct": 99.2
+      },
+      "epoch_seconds": 1034.3,
+      "peak_vram_mb": 3171.9
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.0944,
+      "val_overall": {
+        "n": 876,
+        "mae": 0.2606,
+        "rmse": 0.3859,
+        "rounded_mae": 0.2317,
+        "rounded_rmse": 0.4103,
+        "pearson": 0.8431,
+        "spearman": 0.838,
+        "qwk": 0.8061,
+        "exact_match_pct": 59.25,
+        "within_0_5_pct": 96.35,
+        "within_1_0_pct": 99.2
+      },
+      "epoch_seconds": 1017.7,
+      "peak_vram_mb": 3173.0
+    }
+  ],
+  "val": {
+    "overall": {
+      "n": 876,
+      "mae": 0.2599,
+      "rmse": 0.3784,
+      "rounded_mae": 0.2295,
+      "rounded_rmse": 0.4033,
+      "pearson": 0.8431,
+      "spearman": 0.838,
+      "qwk": 0.8106,
+      "exact_match_pct": 59.13,
+      "within_0_5_pct": 96.69,
+      "within_1_0_pct": 99.32
+    },
+    "by_source": {
+      "Jackrong/IELTS-writing-feedback-reasoning": {
+        "n": 873,
+        "mae": 0.2578,
+        "rmse": 0.3743,
+        "rounded_mae": 0.2274,
+        "rounded_rmse": 0.4001,
+        "pearson": 0.8463,
+        "spearman": 0.8417,
+        "qwk": 0.8136,
+        "exact_match_pct": 59.34,
+        "within_0_5_pct": 96.79,
+        "within_1_0_pct": 99.43
+      },
+      "chillies/IELTS-writing-task-2-evaluation": {
+        "n": 3,
+        "mae": 0.8707,
+        "rmse": 1.0216,
+        "rounded_mae": 0.8333,
+        "rounded_rmse": 0.9574,
+        "pearson": 0.1408,
+        "spearman": -0.5,
+        "qwk": 0.1081,
+        "exact_match_pct": 0.0,
+        "within_0_5_pct": 66.67,
+        "within_1_0_pct": 66.67
+      }
+    },
+    "subcriteria": {
+      "task_response": {
+        "n": 875,
+        "mae": 0.3592,
+        "rmse": 0.6468,
+        "rounded_mae": 0.3303,
+        "rounded_rmse": 0.6594,
+        "pearson": 0.6549,
+        "spearman": 0.7227,
+        "qwk": 0.6,
+        "exact_match_pct": 53.83,
+        "within_0_5_pct": 91.09,
+        "within_1_0_pct": 96.57
+      },
+      "coherence_cohesion": {
+        "n": 875,
+        "mae": 0.2805,
+        "rmse": 0.3733,
+        "rounded_mae": 0.2457,
+        "rounded_rmse": 0.3906,
+        "pearson": 0.8478,
+        "spearman": 0.8049,
+        "qwk": 0.8247,
+        "exact_match_pct": 55.77,
+        "within_0_5_pct": 95.77,
+        "within_1_0_pct": 99.54
+      },
+      "lexical_resource": {
+        "n": 875,
+        "mae": 0.2521,
+        "rmse": 0.3355,
+        "rounded_mae": 0.2131,
+        "rounded_rmse": 0.3574,
+        "pearson": 0.8786,
+        "spearman": 0.8518,
+        "qwk": 0.8584,
+        "exact_match_pct": 60.69,
+        "within_0_5_pct": 97.26,
+        "within_1_0_pct": 99.66
+      },
+      "grammatical_range": {
+        "n": 875,
+        "mae": 0.2497,
+        "rmse": 0.3253,
+        "rounded_mae": 0.22,
+        "rounded_rmse": 0.3566,
+        "pearson": 0.8866,
+        "spearman": 0.8669,
+        "qwk": 0.8591,
+        "exact_match_pct": 58.63,
+        "within_0_5_pct": 98.06,
+        "within_1_0_pct": 99.43
+      }
+    }
+  },
+  "test": {
+    "overall": {
+      "n": 876,
+      "mae": 0.2715,
+      "rmse": 0.3985,
+      "rounded_mae": 0.238,
+      "rounded_rmse": 0.4169,
+      "pearson": 0.8217,
+      "spearman": 0.8241,
+      "qwk": 0.7961,
+      "exact_match_pct": 59.02,
+      "within_0_5_pct": 95.66,
+      "within_1_0_pct": 98.86
+    },
+    "by_source": {
+      "Jackrong/IELTS-writing-feedback-reasoning": {
+        "n": 873,
+        "mae": 0.2696,
+        "rmse": 0.3945,
+        "rounded_mae": 0.2365,
+        "rounded_rmse": 0.4142,
+        "pearson": 0.823,
+        "spearman": 0.8277,
+        "qwk": 0.7961,
+        "exact_match_pct": 59.11,
+        "within_0_5_pct": 95.76,
+        "within_1_0_pct": 98.97
+      },
+      "chillies/IELTS-writing-task-2-evaluation": {
+        "n": 3,
+        "mae": 0.8285,
+        "rmse": 1.0385,
+        "rounded_mae": 0.6667,
+        "rounded_rmse": 0.9129,
+        "pearson": 0.9176,
+        "spearman": 0.5,
+        "qwk": 0.7917,
+        "exact_match_pct": 33.33,
+        "within_0_5_pct": 66.67,
+        "within_1_0_pct": 66.67
+      }
+    },
+    "subcriteria": {
+      "task_response": {
+        "n": 876,
+        "mae": 0.4017,
+        "rmse": 0.7072,
+        "rounded_mae": 0.3881,
+        "rounded_rmse": 0.7321,
+        "pearson": 0.6417,
+        "spearman": 0.7008,
+        "qwk": 0.557,
+        "exact_match_pct": 48.4,
+        "within_0_5_pct": 87.44,
+        "within_1_0_pct": 96.46
+      },
+      "coherence_cohesion": {
+        "n": 876,
+        "mae": 0.2934,
+        "rmse": 0.4156,
+        "rounded_mae": 0.2614,
+        "rounded_rmse": 0.4353,
+        "pearson": 0.8207,
+        "spearman": 0.8132,
+        "qwk": 0.7879,
+        "exact_match_pct": 55.02,
+        "within_0_5_pct": 94.52,
+        "within_1_0_pct": 99.32
+      },
+      "lexical_resource": {
+        "n": 876,
+        "mae": 0.2542,
+        "rmse": 0.3786,
+        "rounded_mae": 0.2203,
+        "rounded_rmse": 0.3998,
+        "pearson": 0.8413,
+        "spearman": 0.8362,
+        "qwk": 0.8169,
+        "exact_match_pct": 60.62,
+        "within_0_5_pct": 97.03,
+        "within_1_0_pct": 99.43
+      },
+      "grammatical_range": {
+        "n": 876,
+        "mae": 0.2579,
+        "rmse": 0.3758,
+        "rounded_mae": 0.2283,
+        "rounded_rmse": 0.4117,
+        "pearson": 0.86,
+        "spearman": 0.8701,
+        "qwk": 0.8209,
+        "exact_match_pct": 60.39,
+        "within_0_5_pct": 95.78,
+        "within_1_0_pct": 99.32
+      }
+    }
+  }
+}

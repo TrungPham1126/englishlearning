@@ -62,11 +62,18 @@ describe("store/useAuthStore", () => {
     expect(useAuthStore.getState().user?.targetCefr).toBe("C1");
     expect(JSON.parse(localStorage.getItem("user")!).firstName).toBe("Hoang");
 
+    localStorage.setItem("elp_student_streak", JSON.stringify({ currentStreak: 5 }));
     useAuthStore.getState().logout();
     expect(useAuthStore.getState().accessToken).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(localStorage.getItem("accessToken")).toBeNull();
+    expect(localStorage.getItem("user")).toBeNull();
+    expect(localStorage.getItem("elp_student_streak")).toBeNull();
+
+    // updateUser khi user=null không làm thay đổi state hay ghi vào localStorage
+    useAuthStore.getState().updateUser({ firstName: "Ghost" });
+    expect(useAuthStore.getState().user).toBeNull();
     expect(localStorage.getItem("user")).toBeNull();
   });
 });

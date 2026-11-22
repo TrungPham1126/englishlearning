@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "../api/studentApi";
-import VideoPlayer from "../components/VideoPlayer";
+import VideoPlayer, { resolveVideoSources } from "../components/VideoPlayer";
 import type {
   LessonDetailResponse,
   VideoResponse,
@@ -117,15 +117,30 @@ export default function LessonDetailPage() {
     progress?.completed;
 
   const currentWatchedSeconds = progress?.watchedSeconds ?? lesson.watchedSeconds ?? 0;
+  const {
+    isProcessing: isVideoProcessing,
+    streamUrl: videoStreamUrl,
+    rawUrl: videoRawUrl,
+  } = resolveVideoSources(video);
 
   return (
     <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* CỘT TRÁI: Video Player + Tab Content */}
       <div className="lg:col-span-8 space-y-4">
-        {video?.hlsPlaylistUrl ? (
+        {isVideoProcessing ? (
+          <div className="relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-300 mb-2 border border-sky-400/30">
+              <Clock size={22} />
+            </div>
+            <span className="text-slate-200 font-medium text-sm">
+              Video bài giảng đang được xử lý
+            </span>
+          </div>
+        ) : videoStreamUrl && video?.id ? (
           <VideoPlayer
             videoId={video.id}
-            streamUrl={video.hlsPlaylistUrl}
+            streamUrl={videoStreamUrl}
+            rawUrl={videoRawUrl}
             initialSeconds={initialSeekSecondsRef.current ?? 0}
           />
         ) : (

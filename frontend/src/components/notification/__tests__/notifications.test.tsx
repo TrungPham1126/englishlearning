@@ -223,4 +223,73 @@ describe("components/notification - NotificationBell & NotificationDetailModal",
     expect(screen.getByText("HỆ THỐNG")).toBeInTheDocument();
     expect(screen.getByText("Hệ thống nâng cấp lúc 23:00")).toBeInTheDocument();
   });
+
+  it("hiển thị floating toast và cập nhật chuông khi nhận sự kiện teacher-task-toast & teacher-notification-local", async () => {
+    const user = userEvent.setup();
+    getMock.mockResolvedValue({ data: { data: { content: [] } } });
+    render(
+      <MemoryRouter>
+        <NotificationBell />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith("/api/v1/notifications?page=0&size=30");
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("teacher-task-toast", {
+        detail: {
+          id: "toast-1",
+          taskKey: "assign:unit-1",
+          status: "PROCESSING",
+          title: 'Đang tạo và gán "Unit 1"',
+          message: "Hệ thống đang xử lý gán bài tập vào lộ trình.",
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    );
+
+    expect(
+      await screen.findByText('Đang tạo và gán "Unit 1"'),
+    ).toBeInTheDocument();
+
+    window.dispatchEvent(
+      new CustomEvent("teacher-task-toast", {
+        detail: {
+          id: "toast-2",
+          taskKey: "assign:unit-1",
+          status: "SUCCESS",
+          title: "Gán bài tập vào lộ trình thành công",
+          message: 'Đã gán "Unit 1" vào Ngày 5.',
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    );
+
+    expect(
+      await screen.findByText("Gán bài tập vào lộ trình thành công"),
+    ).toBeInTheDocument();
+
+    window.dispatchEvent(
+      new CustomEvent("teacher-notification-local", {
+        detail: {
+          id: "local-notif-1",
+          title: "Lỗi gán bài tập vào lộ trình - Cần gán lại",
+          message: 'Không thể gán "Unit 2" vào lộ trình: Lỗi mạng.',
+          type: "SYSTEM_ALERT",
+          actionType: "TEXT_ANNOUNCEMENT",
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    );
+
+    const bellButton = screen.getByRole("button", { name: "Thông báo hệ thống" });
+    await user.click(bellButton);
+
+    expect(
+      await screen.findByText("Lỗi gán bài tập vào lộ trình - Cần gán lại"),
+    ).toBeInTheDocument();
+  });
 });

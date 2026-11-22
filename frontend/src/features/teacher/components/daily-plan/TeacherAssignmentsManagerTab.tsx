@@ -134,10 +134,10 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Quản Lý Toàn Bộ Bài Đã Giao
+              Bài đã giao
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tổng cộng {classAssignments.length} bài tập • Hiển thị {filteredAssignments.length} bài phù hợp
+              {filteredAssignments.length} / {classAssignments.length} bài tập
             </p>
           </div>
         </div>
@@ -148,7 +148,7 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
           className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          <span>Tạo Bài Tập Mới</span>
+          <span>Tạo bài tập</span>
         </button>
       </div>
 
@@ -161,7 +161,7 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm theo tiêu đề bài tập hoặc kỹ năng..."
+            placeholder="Tìm bài tập..."
             className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -174,13 +174,13 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
             onChange={(e) => setSelectedSkill(e.target.value)}
             className="text-xs font-bold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 cursor-pointer outline-none"
           >
-            <option value="ALL">Tất cả kỹ năng</option>
-            <option value="READING">Đọc hiểu (Reading)</option>
-            <option value="LISTENING">Nghe hiểu (Listening)</option>
-            <option value="SPEAKING">Nói (Speaking/Shadowing)</option>
-            <option value="WRITING">Viết (Writing)</option>
-            <option value="VOCABULARY">Từ vựng (Vocabulary)</option>
-            <option value="GRAMMAR">Ngữ pháp (Grammar)</option>
+            <option value="ALL">Mọi kỹ năng</option>
+            <option value="READING">Reading</option>
+            <option value="LISTENING">Listening</option>
+            <option value="SPEAKING">Speaking</option>
+            <option value="WRITING">Writing</option>
+            <option value="VOCABULARY">Vocabulary</option>
+            <option value="GRAMMAR">Grammar</option>
           </select>
 
           {/* Day Filter */}
@@ -189,13 +189,13 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
             onChange={(e) => setSelectedDayId(e.target.value)}
             className="text-xs font-bold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 cursor-pointer outline-none"
           >
-            <option value="ALL">Tất cả các ngày học</option>
+            <option value="ALL">Tất cả ngày</option>
             {plans.map((p) => (
               <option key={p.id} value={String(p.dayNumber)}>
                 Day {p.dayNumber} ({p.scheduledDate})
               </option>
             ))}
-            <option value="UNASSIGNED">Chưa gắn vào Day</option>
+            <option value="UNASSIGNED">Chưa gắn Day</option>
           </select>
         </div>
       </div>
@@ -205,7 +205,7 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
         <div className="p-12 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] space-y-3">
           <Inbox className="h-10 w-10 mx-auto text-slate-400 opacity-60" />
           <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
-            Không tìm thấy bài tập nào phù hợp với bộ lọc.
+            Không có bài tập phù hợp.
           </p>
           <button
             type="button"
@@ -216,7 +216,7 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
             }}
             className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
           >
-            Xóa bộ lọc tìm kiếm
+            Xóa bộ lọc
           </button>
         </div>
       ) : (
@@ -287,11 +287,11 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
                   </div>
                   <div className="flex items-center gap-1 font-medium">
                     <RotateCcw size={12} className="text-blue-500 shrink-0" />
-                    <span>Tối đa {maxAttempts} lần</span>
+                    <span>{maxAttempts} lần</span>
                   </div>
                   <div className="flex items-center gap-1 font-medium">
                     <FileText size={12} className="text-emerald-500 shrink-0" />
-                    <span>{questionCount} câu hỏi</span>
+                    <span>{questionCount} câu</span>
                   </div>
                 </div>
 
@@ -303,7 +303,7 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
                     className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition cursor-pointer"
                   >
                     <Eye size={13} />
-                    <span>Xem Đề</span>
+                    <span>Xem đề</span>
                   </button>
 
                   <button
@@ -312,14 +312,14 @@ export const TeacherAssignmentsManagerTab: React.FC<TeacherAssignmentsManagerTab
                     className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-xs transition cursor-pointer"
                   >
                     <Edit3 size={13} />
-                    <span>Sửa Bài</span>
+                    <span>Sửa</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => onDeleteAssignment(a.id, a.title)}
                     className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
-                    title="Xóa bài tập này"
+                    title="Xóa"
                   >
                     <Trash2 size={14} />
                   </button>

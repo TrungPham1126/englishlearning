@@ -1,0 +1,233 @@
+{
+  "model_type": "baseline_ridge_lgbm_ensemble",
+  "train_seconds": 306.72,
+  "train_rows": 7005,
+  "val_rows": 876,
+  "test_rows": 876,
+  "num_surface_features": 67,
+  "svd_components": 80,
+  "blend_weights": {
+    "overall_band": 1.0,
+    "task_response": 1.0,
+    "coherence_cohesion": 0.95,
+    "lexical_resource": 0.95,
+    "grammatical_range": 0.9
+  },
+  "calibrators": {
+    "overall_band": [
+      1.0,
+      0.0
+    ],
+    "task_response": [
+      0.9937551584071058,
+      0.05868759036864506
+    ],
+    "coherence_cohesion": [
+      1.0,
+      0.0
+    ],
+    "lexical_resource": [
+      1.0838507778886584,
+      -0.46008371771492224
+    ],
+    "grammatical_range": [
+      1.0,
+      0.0
+    ]
+  },
+  "overall_criteria_blend": 0.3,
+  "val": {
+    "overall": {
+      "n": 876,
+      "mae": 0.3195,
+      "rmse": 0.4324,
+      "rounded_mae": 0.2962,
+      "rounded_rmse": 0.4605,
+      "pearson": 0.7915,
+      "spearman": 0.7443,
+      "qwk": 0.7287,
+      "exact_match_pct": 50.8,
+      "within_0_5_pct": 91.67,
+      "within_1_0_pct": 98.86
+    },
+    "by_source": {
+      "Jackrong/IELTS-writing-feedback-reasoning": {
+        "n": 873,
+        "mae": 0.3183,
+        "rmse": 0.4304,
+        "rounded_mae": 0.2955,
+        "rounded_rmse": 0.4597,
+        "pearson": 0.793,
+        "spearman": 0.7455,
+        "qwk": 0.7291,
+        "exact_match_pct": 50.86,
+        "within_0_5_pct": 91.75,
+        "within_1_0_pct": 98.85
+      },
+      "chillies/IELTS-writing-task-2-evaluation": {
+        "n": 3,
+        "mae": 0.6628,
+        "rmse": 0.8319,
+        "rounded_mae": 0.5,
+        "rounded_rmse": 0.6455,
+        "pearson": 0.3133,
+        "spearman": 0.5,
+        "qwk": 0.5455,
+        "exact_match_pct": 33.33,
+        "within_0_5_pct": 66.67,
+        "within_1_0_pct": 100.0
+      }
+    },
+    "subcriteria": {
+      "task_response": {
+        "n": 875,
+        "mae": 0.3763,
+        "rmse": 0.5404,
+        "rounded_mae": 0.3429,
+        "rounded_rmse": 0.5503,
+        "pearson": 0.7677,
+        "spearman": 0.6773,
+        "qwk": 0.7366,
+        "exact_match_pct": 48.23,
+        "within_0_5_pct": 88.0,
+        "within_1_0_pct": 97.14
+      },
+      "coherence_cohesion": {
+        "n": 875,
+        "mae": 0.3442,
+        "rmse": 0.4474,
+        "rounded_mae": 0.3171,
+        "rounded_rmse": 0.4669,
+        "pearson": 0.7729,
+        "spearman": 0.711,
+        "qwk": 0.7232,
+        "exact_match_pct": 47.31,
+        "within_0_5_pct": 90.29,
+        "within_1_0_pct": 99.09
+      },
+      "lexical_resource": {
+        "n": 875,
+        "mae": 0.3479,
+        "rmse": 0.4582,
+        "rounded_mae": 0.3297,
+        "rounded_rmse": 0.4837,
+        "pearson": 0.7582,
+        "spearman": 0.7273,
+        "qwk": 0.7104,
+        "exact_match_pct": 45.83,
+        "within_0_5_pct": 89.83,
+        "within_1_0_pct": 98.74
+      },
+      "grammatical_range": {
+        "n": 875,
+        "mae": 0.362,
+        "rmse": 0.4678,
+        "rounded_mae": 0.3389,
+        "rounded_rmse": 0.4867,
+        "pearson": 0.7477,
+        "spearman": 0.7049,
+        "qwk": 0.6954,
+        "exact_match_pct": 43.66,
+        "within_0_5_pct": 90.29,
+        "within_1_0_pct": 98.51
+      }
+    }
+  },
+  "test": {
+    "overall": {
+      "n": 876,
+      "mae": 0.3357,
+      "rmse": 0.478,
+      "rounded_mae": 0.3168,
+      "rounded_rmse": 0.5043,
+      "pearson": 0.7312,
+      "spearman": 0.7336,
+      "qwk": 0.6726,
+      "exact_match_pct": 48.74,
+      "within_0_5_pct": 92.12,
+      "within_1_0_pct": 97.49
+    },
+    "by_source": {
+      "Jackrong/IELTS-writing-feedback-reasoning": {
+        "n": 873,
+        "mae": 0.3334,
+        "rmse": 0.4738,
+        "rounded_mae": 0.3144,
+        "rounded_rmse": 0.5,
+        "pearson": 0.7324,
+        "spearman": 0.7373,
+        "qwk": 0.674,
+        "exact_match_pct": 48.91,
+        "within_0_5_pct": 92.21,
+        "within_1_0_pct": 97.59
+      },
+      "chillies/IELTS-writing-task-2-evaluation": {
+        "n": 3,
+        "mae": 1.0077,
+        "rmse": 1.1856,
+        "rounded_mae": 1.0,
+        "rounded_rmse": 1.2247,
+        "pearson": 0.8372,
+        "spearman": 0.5,
+        "qwk": 0.5714,
+        "exact_match_pct": 0.0,
+        "within_0_5_pct": 66.67,
+        "within_1_0_pct": 66.67
+      }
+    },
+    "subcriteria": {
+      "task_response": {
+        "n": 876,
+        "mae": 0.4041,
+        "rmse": 0.6059,
+        "rounded_mae": 0.3773,
+        "rounded_rmse": 0.6196,
+        "pearson": 0.7445,
+        "spearman": 0.6821,
+        "qwk": 0.7113,
+        "exact_match_pct": 46.23,
+        "within_0_5_pct": 86.99,
+        "within_1_0_pct": 95.78
+      },
+      "coherence_cohesion": {
+        "n": 876,
+        "mae": 0.3712,
+        "rmse": 0.5184,
+        "rounded_mae": 0.3482,
+        "rounded_rmse": 0.539,
+        "pearson": 0.7018,
+        "spearman": 0.6987,
+        "qwk": 0.6425,
+        "exact_match_pct": 44.86,
+        "within_0_5_pct": 89.73,
+        "within_1_0_pct": 97.95
+      },
+      "lexical_resource": {
+        "n": 876,
+        "mae": 0.3599,
+        "rmse": 0.5101,
+        "rounded_mae": 0.3379,
+        "rounded_rmse": 0.5288,
+        "pearson": 0.6857,
+        "spearman": 0.685,
+        "qwk": 0.638,
+        "exact_match_pct": 46.46,
+        "within_0_5_pct": 89.5,
+        "within_1_0_pct": 98.17
+      },
+      "grammatical_range": {
+        "n": 876,
+        "mae": 0.3809,
+        "rmse": 0.5437,
+        "rounded_mae": 0.3642,
+        "rounded_rmse": 0.5724,
+        "pearson": 0.6774,
+        "spearman": 0.6911,
+        "qwk": 0.5993,
+        "exact_match_pct": 43.72,
+        "within_0_5_pct": 89.61,
+        "within_1_0_pct": 96.8
+      }
+    }
+  }
+}

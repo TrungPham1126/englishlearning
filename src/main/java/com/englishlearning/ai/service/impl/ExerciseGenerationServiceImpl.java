@@ -32,10 +32,11 @@ public class ExerciseGenerationServiceImpl implements ExerciseGenerationService 
     private final ObjectMapper objectMapper;
 
     private static final String MATCHING_SYSTEM_INSTRUCTION = """
-            Bạn là chuyên gia giáo dục tiếng Anh. Nhiệm vụ của bạn là tạo một bài tập nối từ vựng (Vocabulary Matching Exercise).
+            Bạn là chuyên gia giáo dục tiếng Anh Cambridge/IELTS. Nhiệm vụ của bạn là tạo một bài tập nối từ vựng (Vocabulary Matching Exercise).
             Yêu cầu:
-            - Tạo đúng từ 5 đến 8 cặp từ vựng - nghĩa tiếng Anh đối ứng 1-1 theo chủ đề được yêu cầu.
-            - Mỗi cặp gồm: word (từ vựng), ipa (phiên âm chuẩn quốc tế), meaning (định nghĩa tiếng Anh súc tích, rõ nghĩa, không chứa từ khóa).
+            - Từ vựng và định nghĩa PHẢI phù hợp 100% với trình độ CEFR được yêu cầu (A1/A2 dùng từ vựng cơ bản kèm nghĩa tiếng Việt ngắn gọn; B1/B2/C1 dùng từ học thuật/ngữ cảnh phù hợp kèm nghĩa tiếng Việt + định nghĩa tiếng Anh súc tích).
+            - Tạo đúng từ 5 đến 8 cặp từ vựng - nghĩa đối ứng 1-1 duy nhất theo chủ đề được yêu cầu.
+            - Mỗi cặp gồm: word (từ vựng), ipa (phiên âm chuẩn quốc tế), meaning (nghĩa ngắn gọn rõ ràng, không chứa từ khóa gốc), explanation (giải thích từ loại, IPA và 1 câu ví dụ chuẩn ngữ pháp bằng tiếng Việt/Anh).
             - Tuyệt đối KHÔNG sinh các phương án lựa chọn gây nhiễu A, B, C, D cho từng từ.
             - Định dạng trả về BẮT BUỘC là JSON hợp lệ theo schema sau (không thêm markdown ngoài khối JSON):
             {
@@ -44,15 +45,17 @@ public class ExerciseGenerationServiceImpl implements ExerciseGenerationService 
               "pairs": [
                 {
                   "id": "1",
-                  "word": "mother",
-                  "ipa": "/ˈmʌðər/",
-                  "meaning": "A female parent"
+                  "word": "library",
+                  "ipa": "/ˈlaɪ.brər.i/",
+                  "meaning": "(n) Thư viện - nơi đọc và mượn sách",
+                  "explanation": "/ˈlaɪ.brər.i/ (n): Thư viện. Ví dụ: Students borrow books from the library."
                 },
                 {
                   "id": "2",
-                  "word": "kitchen",
-                  "ipa": "/ˈkɪtʃɪn/",
-                  "meaning": "A room where food is cooked"
+                  "word": "schedule",
+                  "ipa": "/ˈskedʒ.uːl/",
+                  "meaning": "(n) Lịch trình, thời khóa biểu",
+                  "explanation": "/ˈskedʒ.uːl/ (n): Lịch trình. Ví dụ: She checks her work schedule every morning."
                 }
               ]
             }
@@ -60,16 +63,21 @@ public class ExerciseGenerationServiceImpl implements ExerciseGenerationService 
 
     private static final String EXERCISE_GEN_SYSTEM_INSTRUCTION = """
             You are an expert Cambridge English test author.
-            Generate English exercise questions based on the teacher's prompt and CEFR level.
+            Generate English exercise questions strictly calibrated to the requested CEFR level (A1, A2, B1, B2, C1, or IELTS).
+            CRITICAL RULES:
+            - Every sentence, option, and answer MUST be 100% grammatically accurate with zero ambiguities.
+            - All 4 options in "options" MUST be distinct and MUST NOT include "A. ", "B. ", "C. ", "D. " prefixes.
+            - "correctAnswer" MUST be an exact character-for-character match with one element in "options".
+            - "explanation" MUST be written in clear Vietnamese explaining the correct answer, grammar/vocabulary rule, and why the other distractors are wrong.
             Return strictly valid JSON with format:
             {
                "questions": [
                   {
-                     "promptText": "Question prompt here",
+                     "promptText": "Question prompt here (include '______' if sentence gap-fill)",
                      "questionType": "MULTIPLE_CHOICE",
-                     "options": ["A", "B", "C", "D"],
-                     "correctAnswer": "A",
-                     "explanation": "Explanation here"
+                     "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+                     "correctAnswer": "Option 1",
+                     "explanation": "Giải thích chi tiết bằng tiếng Việt"
                   }
                ]
             }
@@ -167,7 +175,9 @@ public class ExerciseGenerationServiceImpl implements ExerciseGenerationService 
                             qNode.put("correctAnswer", meaning);
                             qNode.put("matchText", meaning);
                             qNode.put("meaning", meaning);
-                            qNode.put("explanation", !ipa.isBlank() ? (ipa + " - " + meaning) : meaning);
+                            String expl = pairNode.path("explanation").asText("").trim();
+                            String defaultExpl = !ipa.isBlank() ? (ipa + " - " + meaning) : meaning;
+                            qNode.put("explanation", expl.isBlank() ? defaultExpl : (!ipa.isBlank() && !expl.contains(ipa) ? ipa + " | " + expl : expl));
 
                             ArrayNode optArr = qNode.putArray("options");
                             ObjectNode optObj = optArr.addObject();
@@ -227,8 +237,15 @@ public class ExerciseGenerationServiceImpl implements ExerciseGenerationService 
                     for (JsonNode qNode : questionsArray) {
                         if (qNode.isObject() && qNode.has("promptText")) {
                             String promptText = qNode.get("promptText").asText();
-                            String audioUrl = ttsAudioService.synthesizeTtsAudio(promptText, "af_heart");
-                            ((ObjectNode) qNode).put("mediaUrl", audioUrl);
+                            String audioUrl = null;
+                            try {
+                                audioUrl = ttsAudioService.synthesizeTtsAudio(promptText, "af_heart");
+                            } catch (Exception ttsEx) {
+                                log.warn("Lỗi sinh TTS cho câu hỏi '{}': {}", promptText, ttsEx.getMessage());
+                            }
+                            if (audioUrl != null && !audioUrl.isBlank()) {
+                                ((ObjectNode) qNode).put("mediaUrl", audioUrl);
+                            }
                         }
                     }
                     finalResponseJson = objectMapper.writeValueAsString(root);

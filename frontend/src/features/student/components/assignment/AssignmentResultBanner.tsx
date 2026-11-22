@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, AlertCircle, CheckCircle2, RotateCcw, Loader2, XCircle } from 'lucide-react';
 import type { AttemptResponse } from '@/features/student/types';
+import { normalizeScoreTo10 } from '@/utils/scoreScale';
 
 export interface AssignmentResultBannerProps {
   retakeEvaluation: {
@@ -35,9 +36,13 @@ export const AssignmentResultBanner: React.FC<AssignmentResultBannerProps> = ({
   const correctCount = reviewStats.correctCount;
   const statsPercent = Math.round((correctCount / totalQ) * 100);
   
-  // Điểm số từ attempt
+  // Điểm số từ attempt (chuẩn thang 10)
   const rawScore = attempt?.score != null ? attempt.score : (attempt as any)?.totalScore;
-  const scorePercent = rawScore != null ? (Number(rawScore) / 10) * 100 : statsPercent;
+  const normalizedScore = normalizeScoreTo10(rawScore);
+  const scorePercent =
+    normalizedScore != null
+      ? Math.min(100, Math.max(0, (normalizedScore / 10) * 100))
+      : statsPercent;
   
   const isNotPass = Boolean(retakeEvaluation && !retakeEvaluation.canRetry && retakeEvaluation.message.includes('NOT PASS'));
 

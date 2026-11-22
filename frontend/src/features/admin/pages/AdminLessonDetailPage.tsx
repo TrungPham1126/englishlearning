@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { adminApi } from "@/features/admin/api/adminApi";
-import VideoPlayer from "@/features/student/components/VideoPlayer";
+import VideoPlayer, { resolveVideoSources } from "@/features/student/components/VideoPlayer";
 import {
   Play,
   FileText,
@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Loader2,
   Trash2,
+  Clock,
 } from "lucide-react";
 
 export default function AdminLessonDetailPage() {
@@ -55,7 +56,7 @@ export default function AdminLessonDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-slate-500 font-semibold gap-3">
         <Loader2 className="animate-spin text-blue-700" size={32} />
-        <span>Đang tải nội dung bài giảng...</span>
+        <span>Đang tải...</span>
       </div>
     );
   }
@@ -72,10 +73,10 @@ export default function AdminLessonDetailPage() {
         </button>
         <div>
           <h1 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Góc Nhìn Học Viên: {lesson.title}
+            {lesson.title}
           </h1>
           <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-            Bạn đang xem trước bài giảng giống hệt những gì học viên sẽ thấy.
+            Chế độ xem trước học viên
           </p>
         </div>
       </div>
@@ -83,44 +84,71 @@ export default function AdminLessonDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* CỘT TRÁI: Video Player + Tab Content */}
         <div className="lg:col-span-8 space-y-4">
-          {video?.hlsPlaylistUrl ? (
-            <div className="relative">
-              <VideoPlayer
-                videoId={video.id}
-                streamUrl={video.hlsPlaylistUrl}
-                enableProgressSync={false}
-              />
-              <div className="absolute top-4 left-4 z-40 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 backdrop-blur pointer-events-none">
-                Giao diện Xem Trước
+          {(() => {
+            const {
+              isProcessing: isVideoProcessing,
+              streamUrl: videoStreamUrl,
+              rawUrl: videoRawUrl,
+            } = resolveVideoSources(video);
+
+            if (isVideoProcessing) {
+              return (
+                <div className="border border-slate-200 dark:border-slate-800 bg-slate-900 rounded-xl overflow-hidden aspect-video shadow-sm flex items-center justify-center relative">
+                  <div className="text-slate-300 text-sm font-semibold flex flex-col items-center gap-3">
+                    <Clock size={40} className="text-sky-400" />
+                    <span>Đang xử lý video HLS</span>
+                  </div>
+                  <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 pointer-events-none">
+                    Xem trước
+                  </div>
+                </div>
+              );
+            }
+
+            if (videoStreamUrl) {
+              return (
+                <div className="relative">
+                  <VideoPlayer
+                    videoId={video.id}
+                    streamUrl={videoStreamUrl}
+                    rawUrl={videoRawUrl}
+                    enableProgressSync={false}
+                  />
+                  <div className="absolute top-4 left-4 z-40 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 backdrop-blur pointer-events-none">
+                    Xem trước
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="border border-slate-200 dark:border-slate-800 bg-slate-900 rounded-xl overflow-hidden aspect-video shadow-sm flex items-center justify-center relative">
+                <div className="text-slate-400 text-sm font-semibold flex flex-col items-center gap-3">
+                  <Play size={48} className="opacity-40" />
+                  <span>Chưa có video</span>
+                </div>
+                <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 pointer-events-none">
+                  Xem trước
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="border border-slate-200 dark:border-slate-800 bg-slate-900 rounded-xl overflow-hidden aspect-video shadow-sm flex items-center justify-center relative">
-              <div className="text-slate-400 text-sm font-semibold flex flex-col items-center gap-3">
-                <Play size={48} className="opacity-40" />
-                <span>Bài giảng này chưa có Video bài giảng</span>
-              </div>
-              <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg border border-white/20 pointer-events-none">
-                Giao diện Xem Trước
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="flex border-b border-slate-200 px-4 bg-slate-50 overflow-x-auto">
               {[
-                { id: "overview", label: "Tổng Quan" },
+                { id: "overview", label: "Tổng quan" },
                 {
                   id: "docs",
-                  label: `Tài Liệu (${lesson.documents?.length || 0})`,
+                  label: `Tài liệu (${lesson.documents?.length || 0})`,
                 },
                 {
                   id: "vocab",
-                  label: `Từ Vựng (${lesson.vocabularies?.length || 0})`,
+                  label: `Từ vựng (${lesson.vocabularies?.length || 0})`,
                 },
                 {
                   id: "grammar",
-                  label: `Ngữ Pháp (${lesson.grammarTopics?.length || 0})`,
+                  label: `Ngữ pháp (${lesson.grammarTopics?.length || 0})`,
                 },
               ].map((tab) => (
                 <button
@@ -144,10 +172,10 @@ export default function AdminLessonDetailPage() {
                     {lesson.title}
                   </h2>
                   <p className="text-sm text-slate-600 font-medium">
-                    Mục tiêu bài học: {lesson.objectives || "Đang cập nhật."}
+                    Mục tiêu: {lesson.objectives || "Chưa có."}
                   </p>
                   <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-line border-t border-slate-100 pt-4 mt-4">
-                    {lesson.content || "Nội dung chi tiết đang được cập nhật."}
+                    {lesson.content || "Chưa có nội dung."}
                   </div>
                 </div>
               )}
@@ -156,7 +184,7 @@ export default function AdminLessonDetailPage() {
                 <div className="space-y-3">
                   {lesson.documents?.length === 0 && (
                     <p className="text-sm text-slate-500 italic">
-                      Chưa có tài liệu đính kèm.
+                      Chưa có tài liệu.
                     </p>
                   )}
                   {lesson.documents?.map((doc: any) => (
@@ -178,11 +206,11 @@ export default function AdminLessonDetailPage() {
                           rel="noreferrer"
                           className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg font-bold text-xs transition"
                         >
-                          <Download size={14} /> Tải Xuống
+                          <Download size={14} /> Tải xuống
                         </a>
                         <button
                           onClick={async () => {
-                            if (window.confirm("Bạn có chắc muốn xóa tài liệu này?")) {
+                            if (window.confirm("Xóa tài liệu này?")) {
                               try {
                                 await adminApi.deleteDocument(doc.id);
                                 setLesson((prev: any) =>
@@ -196,7 +224,7 @@ export default function AdminLessonDetailPage() {
                                     : prev
                                 );
                               } catch {
-                                alert("Xóa thất bại!");
+                                alert("Xóa tài liệu thất bại.");
                               }
                             }
                           }}
@@ -214,7 +242,7 @@ export default function AdminLessonDetailPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {lesson.vocabularies?.length === 0 && (
                     <p className="text-sm text-slate-500 italic">
-                      Chưa có từ vựng nào.
+                      Chưa có từ vựng.
                     </p>
                   )}
                   {lesson.vocabularies?.map((v: any) => (
@@ -244,7 +272,7 @@ export default function AdminLessonDetailPage() {
                 <div className="space-y-4">
                   {lesson.grammarTopics?.length === 0 && (
                     <p className="text-sm text-slate-500 italic">
-                      Chưa có ngữ pháp nào.
+                      Chưa có ngữ pháp.
                     </p>
                   )}
                   {lesson.grammarTopics?.map((g: any) => (
@@ -275,8 +303,7 @@ export default function AdminLessonDetailPage() {
         <div className="lg:col-span-4 border border-slate-200 bg-white rounded-xl shadow-sm overflow-hidden flex flex-col sticky top-24">
           <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <BookOpen size={18} className="text-blue-700" /> Danh Sách Bài
-              Giảng
+              <BookOpen size={18} className="text-blue-700" /> Bài giảng
             </h3>
             <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded-md">
               {playlist.length} bài
@@ -307,7 +334,7 @@ export default function AdminLessonDetailPage() {
                   </div>
                   {isCurrent ? (
                     <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-black tracking-widest uppercase shrink-0">
-                      ĐANG XEM
+                      Đang xem
                     </span>
                   ) : (
                     <ChevronRight

@@ -88,6 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("user");
+      localStorage.removeItem("elp_student_streak");
     } catch {
       // Ignore storage errors
     }

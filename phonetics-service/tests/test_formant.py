@@ -152,3 +152,30 @@ def test_analyze_vowel_short_gate_and_real_ship_vs_sheep():
     assert st_ship == "OK" and f1_ship is not None and f2_ship is not None
     assert sc_sheep >= 75.0
     assert f2_sheep > f2_ship  # /iː/ is more front than lax /ɪ/
+
+
+def test_male_vs_female_mahalanobis_centroids_and_zero_contradiction_rule():
+    # 1. So sánh tâm formant Nam vs Nữ cho cùng nguyên âm /iː/ (FLEECE): Nữ có F1, F2 mục tiêu cao hơn Nam
+    male_centroids = formant_service._get_target_centroids("iː", "MALE")
+    female_centroids = formant_service._get_target_centroids("iː", "FEMALE")
+    assert male_centroids[0]["mean"][0] < female_centroids[0]["mean"][0]
+    assert male_centroids[0]["mean"][1] < female_centroids[0]["mean"][1]
+
+    # Mẫu F1=330, F2=2900 nằm sát tâm Nữ (330, 2750) nhưng vượt ngoài ngưỡng dung sai tâm Nam (280, 2250)
+    sc_female, fb_female = formant_service._score_mahalanobis(
+        330.0, 2900.0, female_centroids[0]["mean"][0], female_centroids[0]["mean"][1], female_centroids[0]
+    )
+    sc_male, fb_male = formant_service._score_mahalanobis(
+        330.0, 2900.0, male_centroids[0]["mean"][0], male_centroids[0]["mean"][1], male_centroids[0]
+    )
+    assert sc_female > sc_male + 15.0
+    assert sc_female >= 95.0 and "chuẩn xác" in fb_female.lower()
+
+    # 2. Zero-contradiction feedback: khi điểm < 75 nhưng cả |z1| và |z2| chưa vượt ngưỡng z_threshold riêng lẻ (lệch chéo)
+    ref_diag = {"mean": [500.0, 1500.0], "std": [100.0, 200.0], "cov": [[2500.0, 0.0], [0.0, 10000.0]]}
+    sc_diag, fb_diag = formant_service._score_mahalanobis(
+        670.0, 1840.0, 500.0, 1500.0, ref_diag, is_flexible_vowel=True
+    )
+    assert sc_diag < 75.0
+    assert "cần chú ý điều chỉnh khẩu hình" in fb_diag.lower()
+

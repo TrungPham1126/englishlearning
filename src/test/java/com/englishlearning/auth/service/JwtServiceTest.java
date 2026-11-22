@@ -6,7 +6,10 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.auth.service.impl.JwtServiceImpl;
 import com.englishlearning.common.config.AppProperties;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +17,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -229,5 +236,186 @@ class JwtServiceTest {
         // When / Then
         assertThatThrownBy(() -> jwtService.extractUsername("not-a-valid-jwt-string"))
                 .isInstanceOf(MalformedJwtException.class);
+    }
+
+    @Test
+    @DisplayName("extractUsername: Token ký bằng secret khác phải ném SignatureException")
+    void extractUsername_signedWithDifferentSecret_throwsSignatureException() {
+        // Given
+        String otherSecret = Base64.getEncoder().encodeToString(
+                "another-super-secret-signing-key-for-testing-123456".getBytes(StandardCharsets.UTF_8));
+        AppProperties otherProps = new AppProperties();
+        otherProps.getJwt().setSecret(otherSecret);
+        otherProps.getJwt().setAccessTokenExpirationMs(60000L);
+        JwtService otherJwtService = new JwtServiceImpl(otherProps);
+
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build();
+        String foreignToken = otherJwtService.generateAccessToken(new CustomUserDetails(user));
+
+        // When / Then
+        assertThatThrownBy(() -> jwtService.extractUsername(foreignToken))
+                .isInstanceOf(SignatureException.class);
+    }
+
+    @Test
+    @DisplayName("extractUsername: Token null hoặc rỗng ném IllegalArgumentException")
+    void extractUsername_nullOrBlankToken_throwsIllegalArgumentException() {
+        // When / Then
+        assertThatThrownBy(() -> jwtService.extractUsername(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> jwtService.extractUsername("   "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("isTokenValid: Token null hoặc rỗng trả về false an toàn")
+    void isTokenValid_nullOrBlankToken_returnsFalse() {
+        // Given
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build();
+        UserDetails details = new CustomUserDetails(user);
+
+        // When & Then
+        assertThat(jwtService.isTokenValid(null, details)).isFalse();
+        assertThat(jwtService.isTokenValid("   ", details)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isTokenValid: UserDetails null trả về false an toàn")
+    void isTokenValid_nullUserDetails_returnsFalse() {
+        // Given
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build();
+        String validToken = jwtService.generateAccessToken(new CustomUserDetails(user));
+
+        // When & Then
+        assertThat(jwtService.isTokenValid(validToken, null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isTokenValid: Token hợp lệ nhưng thiếu claim subject trả về false")
+    void isTokenValid_tokenWithoutSubjectClaim_returnsFalse() {
+        // Given
+        SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(TEST_SECRET_BASE64));
+        String subjectlessToken = Jwts.builder()
+                .expiration(new Date(System.currentTimeMillis() + 60000L))
+                .signWith(key)
+                .compact();
+        UserDetails details = new CustomUserDetails(User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build());
+
+        // When & Then
+        assertThat(jwtService.isTokenValid(subjectlessToken, details)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isTokenValid: Token hợp lệ nhưng thiếu claim expiration trả về false")
+    void isTokenValid_tokenWithoutExpirationClaim_returnsFalse() {
+        // Given
+        SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(TEST_SECRET_BASE64));
+        String expLessToken = Jwts.builder()
+                .subject("student@elp.edu.vn")
+                .signWith(key)
+                .compact();
+        UserDetails details = new CustomUserDetails(User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build());
+
+        // When & Then
+        assertThat(jwtService.isTokenValid(expLessToken, details)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isTokenValid: Token rác sai cấu trúc ném MalformedJwtException")
+    void isTokenValid_malformedToken_throwsMalformedJwtException() {
+        // Given
+        UserDetails details = new CustomUserDetails(User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build());
+
+        // When / Then
+        assertThatThrownBy(() -> jwtService.isTokenValid("malformed.jwt", details))
+                .isInstanceOf(MalformedJwtException.class);
+    }
+
+    @Test
+    @DisplayName("isTokenValid: Token bị giả mạo chữ ký ném SignatureException")
+    void isTokenValid_tamperedSignature_throwsSignatureException() {
+        // Given
+        UserDetails details = new CustomUserDetails(User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of())
+                .build());
+        String validToken = jwtService.generateAccessToken(details);
+        String tamperedToken = validToken.substring(0, validToken.length() - 4) + "YYYY";
+
+        // When / Then
+        assertThatThrownBy(() -> jwtService.isTokenValid(tamperedToken, details))
+                .isInstanceOf(SignatureException.class);
+    }
+
+    @Test
+    @DisplayName("generateAccessToken: UserDetails null ném IllegalArgumentException")
+    void generateAccessToken_nullUserDetails_throwsIllegalArgumentException() {
+        // When / Then
+        assertThatThrownBy(() -> jwtService.generateAccessToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("generateAccessToken: User có nhiều role phải đưa đầy đủ roles vào claim")
+    void generateAccessToken_multipleRoles_includesAllRolesInClaim() {
+        // Given
+        User multiRoleUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("admin-teacher@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(
+                        Role.builder().name(RoleName.ROLE_ADMIN).build(),
+                        Role.builder().name(RoleName.ROLE_TEACHER).build()
+                ))
+                .build();
+        CustomUserDetails details = new CustomUserDetails(multiRoleUser);
+
+        // When
+        String token = jwtService.generateAccessToken(details);
+        @SuppressWarnings("unchecked")
+        List<String> extractedRoles = jwtService.extractClaim(token, claims -> claims.get("roles", List.class));
+
+        // Then
+        assertThat(extractedRoles).containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_TEACHER");
     }
 }

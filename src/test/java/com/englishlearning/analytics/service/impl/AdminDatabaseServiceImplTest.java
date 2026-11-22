@@ -183,6 +183,34 @@ class AdminDatabaseServiceImplTest {
     }
 
     @Test
+    @DisplayName("getDatabaseOverview chuẩn hóa điểm attempt legacy (> 10.0) về thang 10")
+    void getDatabaseOverview_normalizesLegacyScoresToScale10() {
+        UUID cid1 = UUID.randomUUID();
+        Classroom c1 = buildClassroom(cid1, "IELTS K02", ClassStatus.IN_PROGRESS);
+        UUID stId = UUID.randomUUID();
+        Student st = Student.builder().id(stId).user(User.builder().id(stId).email("hv2@test.com").build()).build();
+
+        Assignment exam = Assignment.builder().id(UUID.randomUUID()).classroom(c1).isExam(true).build();
+        AssignmentAttempt legacyAttempt = AssignmentAttempt.builder()
+                .id(UUID.randomUUID()).assignment(exam).student(st).status(AttemptStatus.COMPLETED).totalScore(82.0).isCheatingFlagged(false).build();
+
+        when(classroomRepository.findAll()).thenReturn(new java.util.ArrayList<>(List.of(c1)));
+        when(classStudentRepository.findByClassroomId(cid1)).thenReturn(List.of(ClassStudent.builder().classroom(c1).student(st).build()));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(cid1)).thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.findByClassroomId(cid1)).thenReturn(Collections.emptyList());
+        when(assignmentRepository.findByClassroomId(cid1)).thenReturn(List.of(exam));
+        when(assignmentAttemptRepository.findAllByClassroomIdWithDetails(cid1)).thenReturn(List.of(legacyAttempt));
+        when(studentAnswerRepository.countByClassroomId(cid1)).thenReturn(1L);
+        when(aiEvaluationRepository.countByClassroomId(cid1)).thenReturn(0L);
+        when(studentAnswerRepository.countAudioResponsesByClassroomId(cid1)).thenReturn(0L);
+
+        AdminDatabaseOverviewDto overview = adminDatabaseService.getDatabaseOverview();
+
+        assertThat(overview.getClassrooms()).hasSize(1);
+        assertThat(overview.getClassrooms().get(0).getAverageScore()).isEqualTo(8.2);
+    }
+
+    @Test
     @DisplayName("purgeClassroomSubmissions từ chối lớp đang học khi force=false")
     void purgeClassroomSubmissions_rejectsActiveWithoutForce() {
         UUID cid = UUID.randomUUID();
@@ -297,6 +325,43 @@ class AdminDatabaseServiceImplTest {
         verify(classroomRepository).deleteClassroomRowById(cid);
         // Đảm bảo file dùng chung KHÔNG bị đưa vào danh sách xóa R2 tài liệu lớp
         verify(r2StorageService).deleteObjectsByUrlsOrKeys(argThat(cols -> cols.contains(classDocUrl) && !cols.contains(sharedDocUrl)));
+    }
+
+    @Test
+    @DisplayName("deleteClassroom trích xuất đúng prefix hls/{videoId}/ từ URL proxy backend và không xóa nhầm prefix hls/ rỗng")
+    void deleteClassroom_extractsSafeHlsPrefixFromBackendProxyUrl() {
+        UUID cid = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        UUID vProxyId = UUID.randomUUID();
+        UUID vInvalidBareId = UUID.randomUUID();
+
+        Classroom classroom = buildClassroom(cid, "Lop Proxy", ClassStatus.COMPLETED);
+        when(classroomRepository.findById(cid)).thenReturn(Optional.of(classroom));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(cid)).thenReturn(List.of(Lesson.builder().id(lessonId).build()));
+        when(assignmentRepository.findByClassroomId(cid)).thenReturn(Collections.emptyList());
+        when(assignmentRepository.findByLessonIdIn(List.of(lessonId))).thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.findByClassroomId(cid)).thenReturn(Collections.emptyList());
+        when(classStudentRepository.findByClassroomId(cid)).thenReturn(Collections.emptyList());
+        when(globalResourceRepository.findAll()).thenReturn(Collections.emptyList());
+        when(lessonDocumentRepository.findByLessonIdIn(List.of(lessonId))).thenReturn(Collections.emptyList());
+
+        Video normalizedProxyVideo = Video.builder()
+                .id(vProxyId)
+                .hlsPlaylistUrl("/api/v1/videos/" + vProxyId + "/hls/master.m3u8")
+                .build();
+        Video malformedBareHlsVideo = Video.builder()
+                .id(vInvalidBareId)
+                .hlsPlaylistUrl("https://cdn.r2.dev/hls/master.m3u8")
+                .build();
+        when(videoRepository.findByLessonIdIn(List.of(lessonId)))
+                .thenReturn(List.of(normalizedProxyVideo, malformedBareHlsVideo));
+        when(r2StorageService.deleteObjectsByPrefix("hls/" + vProxyId + "/")).thenReturn(5);
+
+        ClassroomPurgeResultDto res = adminDatabaseService.deleteClassroom(cid, UUID.randomUUID(), "127.0.0.1");
+
+        assertThat(res.getDeletedR2MediaFiles()).isEqualTo(5);
+        verify(r2StorageService).deleteObjectsByPrefix("hls/" + vProxyId + "/");
+        verify(r2StorageService, never()).deleteObjectsByPrefix("hls/");
     }
 
     @Test
@@ -421,5 +486,74 @@ class AdminDatabaseServiceImplTest {
         assertThat(report.getTotalObjects()).isEqualTo(16L);
         assertThat(report.getTotalPayableUsd()).isEqualTo(0.0); // Trong Free Tier 10GB
         assertThat(report.getCategoryBreakdowns()).hasSize(5);
+    }
+
+    @Test
+    @DisplayName("Kiểm thử purge force=true, lớp CANCELLED, lỗi 404, phân loại đủ 6 mức điểm, bỏ qua attempt IN_PROGRESS và xuất báo cáo trung tâm")
+    void adminDatabase_coversForcePurgeClassificationsCenterExportAndFallbackMediaEstimate() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        when(classroomRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminDatabaseService.purgeClassroomSubmissions(missingId, true, UUID.randomUUID(), "127.0.0.1"))
+                .isInstanceOf(com.englishlearning.common.exception.ResourceNotFoundException.class);
+        assertThatThrownBy(() -> adminDatabaseService.deleteClassroom(missingId, UUID.randomUUID(), "127.0.0.1"))
+                .isInstanceOf(com.englishlearning.common.exception.ResourceNotFoundException.class);
+        assertThatThrownBy(() -> adminDatabaseService.getClassroomDetailedReport(missingId))
+                .isInstanceOf(com.englishlearning.common.exception.ResourceNotFoundException.class);
+
+        // 1. Purge lớp IN_PROGRESS với force=true & auditLog ném lỗi vẫn không làm hỏng transaction
+        UUID activeId = UUID.randomUUID();
+        Classroom activeClass = buildClassroom(activeId, "Active Force Purge", ClassStatus.IN_PROGRESS);
+        when(classroomRepository.findById(activeId)).thenReturn(Optional.of(activeClass));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(activeId)).thenReturn(Collections.emptyList());
+        when(assignmentRepository.findByClassroomId(activeId)).thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.findByClassroomId(activeId)).thenReturn(Collections.emptyList());
+        when(classStudentRepository.findByClassroomId(activeId)).thenReturn(Collections.emptyList());
+        doThrow(new RuntimeException("Audit DB unavailable")).when(auditLogService)
+                .recordAuditLog(any(UUID.class), anyString(), anyString(), anyString(), anyString(), anyString());
+
+        ClassroomPurgeResultDto forcePurgeRes = adminDatabaseService.purgeClassroomSubmissions(activeId, true, UUID.randomUUID(), "127.0.0.1");
+        assertThat(forcePurgeRes.isEntireClassroomDeleted()).isFalse();
+
+        // 2. getClassroomDetailedReport: bỏ qua attempt IN_PROGRESS & phân loại đủ 6 hạng học lực
+        UUID reportClassId = UUID.randomUUID();
+        Classroom reportClass = Classroom.builder().id(reportClassId).name("Report Class").build();
+        when(classroomRepository.findById(reportClassId)).thenReturn(Optional.of(reportClass));
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(reportClassId)).thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.findByClassroomId(reportClassId)).thenReturn(Collections.emptyList());
+        when(assignmentRepository.findByClassroomId(reportClassId)).thenReturn(Collections.emptyList());
+
+        UUID s1 = UUID.randomUUID(), s2 = UUID.randomUUID(), s3 = UUID.randomUUID();
+        UUID s4 = UUID.randomUUID(), s5 = UUID.randomUUID(), s6 = UUID.randomUUID();
+        when(assignmentAttemptRepository.findAllByClassroomIdWithDetails(reportClassId)).thenReturn(List.of(
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s1).build()).status(AttemptStatus.COMPLETED).totalScore(9.0).build(),
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s2).build()).status(AttemptStatus.COMPLETED).totalScore(8.0).build(),
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s3).build()).status(AttemptStatus.COMPLETED).totalScore(6.5).build(),
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s4).build()).status(AttemptStatus.COMPLETED).totalScore(5.5).build(),
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s5).build()).status(AttemptStatus.COMPLETED).totalScore(4.0).build(),
+                AssignmentAttempt.builder().id(UUID.randomUUID()).student(Student.builder().id(s6).build()).status(AttemptStatus.IN_PROGRESS).totalScore(9.5).build()
+        ));
+        when(classroomService.getClassStudentsProgress(reportClassId)).thenReturn(List.of(
+                StudentProgressResponse.builder().studentId(s1).fullName("S1").averageScore(9.0).build(),
+                StudentProgressResponse.builder().studentId(s2).fullName("S2").averageScore(8.0).build(),
+                StudentProgressResponse.builder().studentId(s3).fullName("S3").averageScore(6.5).build(),
+                StudentProgressResponse.builder().studentId(s4).fullName("S4").averageScore(5.5).build(),
+                StudentProgressResponse.builder().studentId(s5).fullName("S5").averageScore(4.0).build(),
+                StudentProgressResponse.builder().studentId(s6).fullName("S6").averageScore(9.5).build()
+        ));
+
+        var detailedReport = adminDatabaseService.getClassroomDetailedReport(reportClassId);
+        assertThat(detailedReport.getTotalAttempts()).isEqualTo(5); // attempt IN_PROGRESS của s6 bị lọc bỏ
+        assertThat(detailedReport.getStudents())
+                .extracting(com.englishlearning.analytics.dto.ClassroomDetailedReportDto.StudentReportRowDto::getClassification)
+                .containsExactly("Xuất sắc", "Giỏi", "Khá", "Trung bình", "Cần cố gắng", "Chưa có điểm");
+
+        // 3. exportCenterOverviewExcel vẫn tạo được workbook 4 sheet ngay cả khi getR2CostReport gặp sự cố
+        when(classroomRepository.findAll()).thenReturn(new java.util.ArrayList<>());
+        when(r2StorageService.inspectBucketSnapshot()).thenThrow(new RuntimeException("R2 snapshot error"));
+        byte[] centerBytes = adminDatabaseService.exportCenterOverviewExcel();
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(centerBytes))) {
+            assertThat(wb.getNumberOfSheets()).isEqualTo(4);
+        }
     }
 }

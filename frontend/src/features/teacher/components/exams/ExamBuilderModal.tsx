@@ -44,25 +44,25 @@ interface ExamBuilderModalProps {
 }
 
 const SKILL_OPTIONS = [
-  { id: "READING", label: "Đọc hiểu (Reading)" },
-  { id: "LISTENING", label: "Nghe hiểu (Listening)" },
-  { id: "GRAMMAR", label: "Ngữ pháp (Grammar)" },
-  { id: "VOCABULARY", label: "Từ vựng (Vocabulary)" },
-  { id: "WRITING", label: "Viết luận (Writing)" },
-  { id: "SPEAKING", label: "Luyện nói (Speaking)" },
+  { id: "READING", label: "Reading" },
+  { id: "LISTENING", label: "Listening" },
+  { id: "GRAMMAR", label: "Grammar" },
+  { id: "VOCABULARY", label: "Vocabulary" },
+  { id: "WRITING", label: "Writing" },
+  { id: "SPEAKING", label: "Speaking" },
 ];
 
 const QUESTION_TYPE_OPTIONS = [
-  { id: "MULTIPLE_CHOICE", label: "Trắc nghiệm (A/B/C/D)" },
-  { id: "TRUE_FALSE", label: "Đúng / Sai (True/False)" },
-  { id: "FILL_IN_BLANK", label: "Điền vào chỗ trống" },
-  { id: "MATCHING", label: "Nối cặp (Matching)" },
-  { id: "ESSAY", label: "Viết luận (Essay)" },
-  { id: "AUDIO_RESPONSE", label: "Ghi âm nói (Speaking)" },
+  { id: "MULTIPLE_CHOICE", label: "Trắc nghiệm" },
+  { id: "TRUE_FALSE", label: "Đúng / Sai" },
+  { id: "FILL_IN_BLANK", label: "Điền khuyết" },
+  { id: "MATCHING", label: "Nối cặp" },
+  { id: "ESSAY", label: "Viết luận" },
+  { id: "AUDIO_RESPONSE", label: "Ghi âm nói" },
 ];
 
 const AI_FORMAT_OPTIONS = [
-  { id: "MIXED", label: "Kết hợp đa dạng" },
+  { id: "MIXED", label: "Đa dạng" },
   ...QUESTION_TYPE_OPTIONS,
 ];
 
@@ -86,10 +86,10 @@ function defaultOptionsForType(qType: string): ExamOptionDraft[] {
   }
   if (qType === "MULTIPLE_CHOICE") {
     return [
-      { optionText: "Lựa chọn A", isCorrect: true },
-      { optionText: "Lựa chọn B", isCorrect: false },
-      { optionText: "Lựa chọn C", isCorrect: false },
-      { optionText: "Lựa chọn D", isCorrect: false },
+      { optionText: "Đáp án A", isCorrect: true },
+      { optionText: "Đáp án B", isCorrect: false },
+      { optionText: "Đáp án C", isCorrect: false },
+      { optionText: "Đáp án D", isCorrect: false },
     ];
   }
   if (qType === "MATCHING") {
@@ -168,7 +168,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
 
   // Công cụ nguồn câu hỏi (AI Sinh Đề / Ngân hàng câu hỏi)
   const [activeTool, setActiveTool] = useState<"NONE" | "AI" | "BANK">("NONE");
-  const [aiTopic, setAiTopic] = useState<string>("Tổng hợp giữa kỳ - Đời sống, Công nghệ & Học tập");
+  const [aiTopic, setAiTopic] = useState<string>("Đời sống, Công nghệ & Học tập");
   const [aiLevel, setAiLevel] = useState<string>("B1");
   const [aiInstructions, setAiInstructions] = useState<string>("");
   const [aiSections, setAiSections] = useState<AiExamSectionConfig[]>([
@@ -195,7 +195,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
       .then((res) => setBankItems(res.data?.data || []))
       .catch((err) => {
         console.error("Lỗi tải ngân hàng câu hỏi:", err);
-        setErrorMsg("Không thể tải ngân hàng câu hỏi của lớp.");
+        setErrorMsg("Lỗi tải ngân hàng câu hỏi.");
       })
       .finally(() => setLoadingBank(false));
   }, [activeTool, bankItems.length, classId]);
@@ -237,7 +237,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
 
   const handleGenerateAiExam = async () => {
     if (aiSections.length === 0) {
-      setErrorMsg("Vui lòng cấu hình ít nhất 1 phần kỹ năng cho AI sinh đề.");
+      setErrorMsg("Cần ít nhất 1 phần kỹ năng.");
       return;
     }
     setErrorMsg(null);
@@ -253,7 +253,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
       });
       const draft = res.data?.data;
       if (!draft) {
-        setErrorMsg("AI không trả về dữ liệu đề thi.");
+        setErrorMsg("AI không trả về dữ liệu.");
         return;
       }
       if (!title.trim() && draft.title) setTitle(draft.title);
@@ -290,14 +290,14 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
           : [...prev, ...generatedQuestions];
       });
       setSuccessMsg(
-        `AI đã sinh thành công ${generatedQuestions.length} câu hỏi theo cấu trúc đã chọn. Bạn có thể kiểm tra và chỉnh sửa bên dưới.`,
+        `AI đã tạo ${generatedQuestions.length} câu hỏi.`,
       );
       setActiveTool("NONE");
     } catch (err: any) {
       console.error("AI Exam Generator error:", err);
       setErrorMsg(
         err?.response?.data?.message ||
-          "Không thể gọi AI sinh đề thi lúc này. Vui lòng thử lại.",
+          "Lỗi AI tạo đề. Thử lại sau.",
       );
     } finally {
       setGeneratingAi(false);
@@ -327,7 +327,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
       const isPlaceholder = prev.length === 1 && !prev[0].promptText.trim();
       return isPlaceholder ? [newQ] : [...prev, newQ];
     });
-    setSuccessMsg(`Đã thêm câu hỏi từ "${item.assignmentTitle}" vào đề thi.`);
+    setSuccessMsg(`Đã thêm câu hỏi từ "${item.assignmentTitle}".`);
   };
 
   const updateQuestion = (index: number, patch: Partial<ExamQuestionDraft>) => {
@@ -355,12 +355,12 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
     e.preventDefault();
     setErrorMsg(null);
     if (!title.trim()) {
-      setErrorMsg("Vui lòng nhập tiêu đề bài thi.");
+      setErrorMsg("Thiếu tên bài thi.");
       return;
     }
     const validQuestions = questions.filter((q) => q.promptText.trim().length > 0);
     if (validQuestions.length === 0) {
-      setErrorMsg("Bài thi cần ít nhất 1 câu hỏi có nội dung.");
+      setErrorMsg("Cần ít nhất 1 câu hỏi.");
       return;
     }
 
@@ -417,7 +417,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
     } catch (err: any) {
       console.error("Lỗi lưu bài thi:", err);
       setErrorMsg(
-        err?.response?.data?.message || "Không thể lưu bài thi. Vui lòng kiểm tra dữ liệu.",
+        err?.response?.data?.message || "Lưu bài thi thất bại.",
       );
     } finally {
       setSaving(false);
@@ -433,14 +433,9 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-700 text-white">
               <ShieldCheck className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
-                {isEditing ? "Chỉnh Sửa Đề Thi" : "Tạo Bài Thi & Kiểm Tra Mới"}
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Chọn nhiều kỹ năng, dùng AI sinh đề, lấy từ ngân hàng lớp &amp; bật chống gian lận toàn màn hình
-              </p>
-            </div>
+            <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
+              {isEditing ? "Sửa bài thi" : "Tạo bài thi"}
+            </h2>
           </div>
           <button
             type="button"
@@ -476,20 +471,20 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="VD: Bài thi giữa kỳ I - Đọc, Nghe, Ngữ pháp & Viết luận"
+                placeholder="VD: Kiểm tra giữa kỳ I"
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-600"
               />
             </div>
 
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Hướng dẫn / Mô tả đề thi
+                Mô tả / Hướng dẫn
               </label>
               <textarea
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Ghi chú nội quy phòng thi hoặc hướng dẫn làm bài cho học viên..."
+                placeholder="Nội quy hoặc hướng dẫn làm bài..."
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
               />
             </div>
@@ -509,7 +504,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Điểm đạt ( /10 )
+                  Điểm đạt (/10)
                 </label>
                 <input
                   type="number"
@@ -523,7 +518,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Số lượt thi
+                  Lượt thi
                 </label>
                 <input
                   type="number"
@@ -545,10 +540,10 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                   onChange={(e) => setStrictFullscreen(e.target.checked)}
                   className="h-4 w-4 rounded accent-indigo-600"
                 />
-                <span>Bắt buộc Toàn màn hình (Chống chuyển tab / rời màn hình)</span>
+                <span>Toàn màn hình (chống rời tab)</span>
               </label>
               <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-                <span>Số lần vi phạm đánh dấu gian lận:</span>
+                <span>Vi phạm tối đa:</span>
                 <input
                   type="number"
                   min={1}
@@ -564,7 +559,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
           {/* 2. Kỹ năng kiểm tra */}
           <div className="space-y-2">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              Các kỹ năng trong bài thi ({examSkills.length} kỹ năng):
+              Kỹ năng ({examSkills.length}):
             </label>
             <div className="flex flex-wrap gap-2">
               {SKILL_OPTIONS.map((skill) => {
@@ -600,7 +595,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               }`}
             >
               <Sparkles className="h-4 w-4" />
-              <span>AI Sinh Đề Thi Theo Kỹ Năng &amp; Dạng Bài</span>
+              <span>AI sinh đề</span>
               {activeTool === "AI" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
 
@@ -614,7 +609,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               }`}
             >
               <Library className="h-4 w-4" />
-              <span>Chọn Câu Hỏi Có Sẵn Từ Lớp</span>
+              <span>Ngân hàng câu hỏi</span>
               {activeTool === "BANK" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           </div>
@@ -625,19 +620,19 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
                   <label className="block text-[11px] font-bold text-indigo-900 dark:text-indigo-200 mb-1">
-                    Chủ đề đề thi *
+                    Chủ đề *
                   </label>
                   <input
                     type="text"
                     value={aiTopic}
                     onChange={(e) => setAiTopic(e.target.value)}
-                    placeholder="VD: Environment, Technology & Career Development"
+                    placeholder="VD: Technology, Career..."
                     className="w-full rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-indigo-900 dark:text-indigo-200 mb-1">
-                    Trình độ CEFR
+                    CEFR
                   </label>
                   <select
                     value={aiLevel}
@@ -656,7 +651,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200">
-                    Ma trận kỹ năng &amp; dạng bài AI sẽ sinh:
+                    Cấu trúc đề AI:
                   </span>
                   <button
                     type="button"
@@ -673,7 +668,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                     }
                     className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 hover:underline cursor-pointer"
                   >
-                    + Thêm phần kỹ năng
+                    + Thêm phần
                   </button>
                 </div>
 
@@ -776,7 +771,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                   type="text"
                   value={aiInstructions}
                   onChange={(e) => setAiInstructions(e.target.value)}
-                  placeholder="Yêu cầu thêm cho AI (VD: Bối cảnh IELTS Academic, có giải thích tiếng Việt)..."
+                  placeholder="Yêu cầu thêm cho AI (VD: IELTS Academic)..."
                   className="w-full sm:flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs"
                 />
                 <button
@@ -788,12 +783,12 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                   {generatingAi ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>AI đang tạo đề...</span>
+                      <span>Đang tạo đề...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-3.5 w-3.5" />
-                      <span>Tạo Đề Nháp Bằng AI</span>
+                      <span>Tạo đề bằng AI</span>
                     </>
                   )}
                 </button>
@@ -811,7 +806,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                     type="text"
                     value={bankSearch}
                     onChange={(e) => setBankSearch(e.target.value)}
-                    placeholder="Tìm nội dung câu hỏi trong lớp..."
+                    placeholder="Tìm câu hỏi..."
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-8 pr-3 py-1.5 text-xs"
                   />
                 </div>
@@ -832,11 +827,11 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               {loadingBank ? (
                 <div className="py-6 text-center text-xs text-slate-500">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto mb-1 text-emerald-600" />
-                  Đang tải câu hỏi có sẵn từ lớp...
+                  Đang tải...
                 </div>
               ) : filteredBankItems.length === 0 ? (
                 <p className="py-4 text-center text-xs text-slate-500">
-                  Không có câu hỏi phù hợp trong ngân hàng lớp.
+                  Không có câu hỏi phù hợp.
                 </p>
               ) : (
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
@@ -879,7 +874,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                Danh Sách Câu Hỏi Đề Thi ({questions.length} câu)
+                Câu hỏi ({questions.length})
               </h3>
               <button
                 type="button"
@@ -969,7 +964,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                   rows={2}
                   value={q.promptText}
                   onChange={(e) => updateQuestion(qIdx, { promptText: e.target.value })}
-                  placeholder="Nhập nội dung câu hỏi / đoạn đọc / đề bài..."
+                  placeholder="Nội dung câu hỏi / đề bài..."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
                 />
 
@@ -978,7 +973,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                     type="text"
                     value={q.transcript || ""}
                     onChange={(e) => updateQuestion(qIdx, { transcript: e.target.value })}
-                    placeholder="Kịch bản audio / Transcript đọc mẫu (hệ thống tự tạo giọng đọc TTS nếu là bài Listening/Speaking)..."
+                    placeholder="Transcript đọc mẫu (tự tạo TTS)..."
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs"
                   />
                 )}
@@ -988,7 +983,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                     type="text"
                     value={q.correctAnswer || ""}
                     onChange={(e) => updateQuestion(qIdx, { correctAnswer: e.target.value })}
-                    placeholder="Đáp án đúng cần điền..."
+                    placeholder="Đáp án đúng..."
                     className="w-full rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs"
                   />
                 )}
@@ -1012,7 +1007,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                               ),
                             })
                           }
-                          title="Đánh dấu đáp án đúng"
+                          title="Đáp án đúng"
                           className="h-4 w-4 accent-emerald-600 cursor-pointer"
                         />
                         <input
@@ -1039,7 +1034,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
                                 ),
                               })
                             }
-                            placeholder="Vế nối tương ứng"
+                            placeholder="Vế nối"
                             className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs"
                           />
                         )}
@@ -1068,10 +1063,10 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
               {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Đang lưu đề thi...</span>
+                  <span>Đang lưu...</span>
                 </>
               ) : (
-                <span>{isEditing ? "Cập Nhật Bài Thi" : "Xuất Bản Bài Thi"}</span>
+                <span>{isEditing ? "Cập nhật" : "Xuất bản"}</span>
               )}
             </button>
           </div>

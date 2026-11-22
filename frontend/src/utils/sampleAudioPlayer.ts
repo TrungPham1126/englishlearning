@@ -143,6 +143,11 @@ export function isGradingRubricOrMetaText(text?: string | null): boolean {
   if (!trimmed) return true;
   const lower = trimmed.toLowerCase();
 
+  // Văn bản chứa dấu tiếng Việt hoặc mẫu rubric đánh số (1) ... là tiêu chí/hướng dẫn, tuyệt đối không phải câu mẫu tiếng Anh
+  if (/[\u00C0-\u024F\u1E00-\u1EFF]/u.test(trimmed)) {
+    return true;
+  }
+
   return (
     lower.startsWith("audio speech submission") ||
     lower.startsWith("sample high-band") ||
@@ -150,6 +155,8 @@ export function isGradingRubricOrMetaText(text?: string | null): boolean {
     lower.startsWith("answer should") ||
     lower.startsWith("presentation response") ||
     lower.startsWith("spoken response") ||
+    lower.startsWith("key points") ||
+    lower.startsWith("(1)") ||
     lower.includes("prosodic fluency") ||
     /^(option|opt|choice)[-_]?[0-9a-z]+$/i.test(trimmed) ||
     /^[A-D]$/i.test(trimmed)

@@ -194,5 +194,46 @@ public class KokoroTtsClientServiceTest {
 
         mockServer.verify();
     }
+
+    @Test
+    @DisplayName("Body rỗng / HTTP 400 ném lỗi thân thiện & cache key chuẩn hóa chữ hoa/thường tên voice")
+    void synthesizeSpeech_emptyBodyAndHttp400ThrowFriendlyErrorAndCacheKeyNormalizesVoiceCase() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+
+        // 1. HTTP 200 với body rỗng -> lỗi thân thiện
+        mockServer.expect(requestTo(TTS_URL))
+                .andRespond(withSuccess(new byte[0], MediaType.valueOf("audio/wav")));
+        assertThatThrownBy(() -> kokoroTtsClientService.synthesizeSpeech(
+                TtsRequest.builder().text("Empty payload case").build()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không thể tạo âm thanh bài học lúc này");
+
+        // 2. HTTP 400 Bad Request -> lỗi thân thiện
+        mockServer.reset();
+        mockServer.expect(requestTo(TTS_URL))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> kokoroTtsClientService.synthesizeSpeech(
+                TtsRequest.builder().text("Bad request case").build()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không thể tạo âm thanh bài học lúc này");
+
+        // 3. Cache key chuẩn hóa lowercase cho voice ("AF_HEART" == "af_heart")
+        mockServer.reset();
+        when(documentStorageService.storeAudioBytes(any(), anyString(), eq("audio/wav")))
+                .thenReturn("https://cdn.example.com/cached_norm.wav");
+        mockServer.expect(requestTo(TTS_URL))
+                .andRespond(withSuccess(new byte[44 + 24_000], MediaType.valueOf("audio/wav")));
+
+        TtsResponse first = kokoroTtsClientService.synthesizeSpeech(
+                TtsRequest.builder().text("Cache key test").voice("af_heart").speed(1.0).build());
+        TtsResponse second = kokoroTtsClientService.synthesizeSpeech(
+                TtsRequest.builder().text("  Cache key test  ").voice("  AF_HEART  ").speed(1.0).build());
+
+        mockServer.verify();
+        assertThat(first.isCached()).isFalse();
+        assertThat(second.isCached()).isTrue();
+        assertThat(second.getAudioUrl()).isEqualTo("https://cdn.example.com/cached_norm.wav");
+        verify(documentStorageService, times(1)).storeAudioBytes(any(), anyString(), eq("audio/wav"));
+    }
 }
 

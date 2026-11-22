@@ -1,12 +1,34 @@
 package com.englishlearning.video.service;
 
 import com.englishlearning.video.dto.R2BucketSnapshot;
+import com.englishlearning.video.dto.R2ObjectStream;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Optional;
 
 public interface R2StorageService {
+
+    /**
+     * Kiểm tra R2 đã được cấu hình hợp lệ (không phải dummy/placeholder) hay chưa.
+     */
+    boolean isConfigured();
+
+    /**
+     * Kiểm tra URL có thuộc bucket R2 công khai đang cấu hình hay không.
+     */
+    boolean isManagedPublicUrl(String urlOrKey);
+
+    /**
+     * Trích xuất R2 object key từ public URL hoặc key thô.
+     */
+    String extractObjectKey(String urlOrKey);
+
+    /**
+     * Mở stream đọc (hoặc HEAD) đối tượng trên R2, hỗ trợ byte-range request.
+     */
+    Optional<R2ObjectStream> openObjectStream(String key, String rangeHeader, boolean headOnly);
 
     /**
      * Upload một file đơn lẻ (raw video hoặc thumbnail hoặc file audio speaking)

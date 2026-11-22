@@ -444,4 +444,74 @@ public class NotificationControllerTest {
 
         verify(notificationService, times(2)).markAllAsRead(studentId);
     }
+
+    @Test
+    @DisplayName("POST /self: Tự gán recipientUserId theo user đang đăng nhập và dispatch thành công -> 200 OK")
+    void sendSelfNotification_authenticatedUser_setsRecipientAndDispatches() throws Exception {
+        String body = """
+                {
+                  "title": "Gán bài tập vào lộ trình thành công",
+                  "message": "Đã gán Unit 1 vào Ngày 5.",
+                  "notificationType": "ANNOUNCEMENT"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/notifications/self")
+                        .with(user(customStudentDetails))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.message").value("Đã tạo thông báo cá nhân"));
+
+        verify(notificationService, times(1)).dispatchNotification(argThat(dto ->
+                studentId.equals(dto.getRecipientUserId())
+                        && "Gán bài tập vào lộ trình thành công".equals(dto.getTitle())
+        ));
+    }
+
+    @Test
+    @DisplayName("POST /self: Chưa đăng nhập -> Từ chối 401/403")
+    void sendSelfNotification_unauthenticated_returnsUnauthorizedOrForbidden() throws Exception {
+        mockMvc.perform(post("/api/v1/notifications/self")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Test\"}"))
+                .andExpect(status().is4xxClientError());
+
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    @WithMockUser(roles = {"STUDENT"})
+    @DisplayName("POST /self, PATCH /{id}/read, PATCH /read-all khi Principal không phải CustomUserDetails -> Trả về 401; POST /self lỗi service -> 500")
+    void endpointsRequiringCustomUserDetails_handleNullPrincipalAndSelfServiceError() throws Exception {
+        UUID notifId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/notifications/self")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Test\"}"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(patch("/api/v1/notifications/{id}/read", notifId).with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(patch("/api/v1/notifications/read-all").with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        // POST /self với CustomUserDetails khi service ném lỗi -> trả về 500 ApiResponse.error
+        doThrow(new RuntimeException("Queue write error"))
+                .when(notificationService).dispatchNotification(any(NotificationDto.class));
+
+        mockMvc.perform(post("/api/v1/notifications/self")
+                        .with(user(customStudentDetails))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Self\",\"actionType\":\"CUSTOM_ACTION\"}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.message").value("Lỗi khi tạo thông báo cá nhân: Queue write error"));
+    }
 }

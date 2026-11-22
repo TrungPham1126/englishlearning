@@ -1,0 +1,180 @@
+{
+  "schema_fields": [
+    "id",
+    "source",
+    "prompt",
+    "essay",
+    "overall_band",
+    "task_response",
+    "coherence_cohesion",
+    "lexical_resource",
+    "grammatical_range",
+    "reasoning",
+    "feedback"
+  ],
+  "raw_counts_by_source": {
+    "chillies/IELTS-writing-task-2-evaluation": 10324,
+    "Jackrong/IELTS-writing-feedback-reasoning": 8946
+  },
+  "drop_reasons": {
+    "chillies_non_essay_artifact": 11,
+    "chillies_short_essay_lt30": 1,
+    "jackrong_non_essay_artifact": 1
+  },
+  "deduplication": {
+    "within_source_duplicates_dropped": {
+      "Jackrong/IELTS-writing-feedback-reasoning": 215,
+      "chillies/IELTS-writing-task-2-evaluation": 1
+    },
+    "cross_source_overlap_chillies_replaced_by_jackrong": 10284,
+    "total_unique_records": 8757,
+    "jackrong_topic_split_methods": {
+      "chillies_exact_topic": 8946
+    }
+  },
+  "final_counts_by_source": {
+    "Jackrong/IELTS-writing-feedback-reasoning": 8730,
+    "chillies/IELTS-writing-task-2-evaluation": 27
+  },
+  "final_band_distribution": {
+    "1.0": 8,
+    "1.5": 1,
+    "2.0": 6,
+    "2.5": 1,
+    "3.0": 15,
+    "3.5": 43,
+    "4.0": 121,
+    "4.5": 267,
+    "5.0": 1378,
+    "5.5": 1860,
+    "6.0": 3712,
+    "6.5": 872,
+    "7.0": 311,
+    "7.5": 82,
+    "8.0": 64,
+    "8.5": 9,
+    "9.0": 7
+  },
+  "final_subcriteria_coverage": {
+    "task_response": {
+      "count": 8754,
+      "ratio": 0.9997
+    },
+    "coherence_cohesion": {
+      "count": 8752,
+      "ratio": 0.9994
+    },
+    "lexical_resource": {
+      "count": 8751,
+      "ratio": 0.9993
+    },
+    "grammatical_range": {
+      "count": 8751,
+      "ratio": 0.9993
+    }
+  },
+  "splits": {
+    "train": {
+      "count": 7005,
+      "by_source": {
+        "Jackrong/IELTS-writing-feedback-reasoning": 6984,
+        "chillies/IELTS-writing-task-2-evaluation": 21
+      },
+      "band_distribution": {
+        "1.0": 6,
+        "1.5": 1,
+        "2.0": 4,
+        "2.5": 1,
+        "3.0": 12,
+        "3.5": 35,
+        "4.0": 97,
+        "4.5": 213,
+        "5.0": 1102,
+        "5.5": 1488,
+        "6.0": 2970,
+        "6.5": 698,
+        "7.0": 248,
+        "7.5": 66,
+        "8.0": 52,
+        "8.5": 7,
+        "9.0": 5
+      },
+      "subcriteria_coverage": {
+        "task_response": 7003,
+        "coherence_cohesion": 7001,
+        "lexical_resource": 7000,
+        "grammatical_range": 7000
+      },
+      "reasoning_coverage": 6984,
+      "feedback_coverage": 7005
+    },
+    "val": {
+      "count": 876,
+      "by_source": {
+        "Jackrong/IELTS-writing-feedback-reasoning": 873,
+        "chillies/IELTS-writing-task-2-evaluation": 3
+      },
+      "band_distribution": {
+        "1.0": 1,
+        "2.0": 1,
+        "3.0": 2,
+        "3.5": 4,
+        "4.0": 12,
+        "4.5": 27,
+        "5.0": 138,
+        "5.5": 186,
+        "6.0": 371,
+        "6.5": 87,
+        "7.0": 31,
+        "7.5": 8,
+        "8.0": 6,
+        "8.5": 1,
+        "9.0": 1
+      },
+      "subcriteria_coverage": {
+        "task_response": 875,
+        "coherence_cohesion": 875,
+        "lexical_resource": 875,
+        "grammatical_range": 875
+      },
+      "reasoning_coverage": 873,
+      "feedback_coverage": 876
+    },
+    "test": {
+      "count": 876,
+      "by_source": {
+        "Jackrong/IELTS-writing-feedback-reasoning": 873,
+        "chillies/IELTS-writing-task-2-evaluation": 3
+      },
+      "band_distribution": {
+        "1.0": 1,
+        "2.0": 1,
+        "3.0": 1,
+        "3.5": 4,
+        "4.0": 12,
+        "4.5": 27,
+        "5.0": 138,
+        "5.5": 186,
+        "6.0": 371,
+        "6.5": 87,
+        "7.0": 32,
+        "7.5": 8,
+        "8.0": 6,
+        "8.5": 1,
+        "9.0": 1
+      },
+      "subcriteria_coverage": {
+        "task_response": 876,
+        "coherence_cohesion": 876,
+        "lexical_resource": 876,
+        "grammatical_range": 876
+      },
+      "reasoning_coverage": 873,
+      "feedback_coverage": 876
+    }
+  },
+  "zero_essay_leakage_verified": true,
+  "zero_prompt_leakage_verified": true,
+  "num_leakage_groups": 1852,
+  "seed": 42
+}

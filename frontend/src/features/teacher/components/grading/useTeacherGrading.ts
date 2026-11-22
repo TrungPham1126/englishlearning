@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
 import type { ClassroomItem } from "../../api/teacherApi";
 import type { GradingSubmission, GradingSubmissionDetail } from "./gradingTypes";
+import { normalizeScoreTo10 } from "@/utils/scoreScale";
 
 export function useTeacherGrading(scopedClassId?: string) {
   const [classes, setClasses] = useState<ClassroomItem[]>([]);
@@ -154,7 +155,11 @@ export function useTeacherGrading(scopedClassId?: string) {
           ...detail,
           questions: filteredQuestions,
         });
-        setInputScore(detail?.score !== null && detail?.score !== undefined ? String(detail.score) : "");
+        setInputScore(
+          detail?.score !== null && detail?.score !== undefined
+            ? String(normalizeScoreTo10(detail.score) ?? "")
+            : "",
+        );
         setFeedback(detail?.teacherFeedback || "");
       } else {
         setAnswerScores({});
@@ -163,7 +168,7 @@ export function useTeacherGrading(scopedClassId?: string) {
     } catch (err) {
       if (reqId !== detailRequestIdRef.current) return;
       console.error("Lỗi tải chi tiết bài làm:", err);
-      alert("Không thể tải chi tiết bài làm của học sinh.");
+      alert("Tải bài nộp thất bại.");
     } finally {
       if (reqId === detailRequestIdRef.current) {
         setLoadingDetail(false);
@@ -184,7 +189,7 @@ export function useTeacherGrading(scopedClassId?: string) {
     if (!selectedSub) return;
     const parsedScore = parseFloat(inputScore);
     if (isNaN(parsedScore) || parsedScore < 0 || parsedScore > 10) {
-      alert("Vui lòng nhập điểm số hợp lệ từ 0 đến 10.");
+      alert("Điểm phải từ 0 đến 10.");
       return;
     }
 
@@ -199,7 +204,7 @@ export function useTeacherGrading(scopedClassId?: string) {
         ...(hasAnswerScores ? { answerScores } : {}),
       });
 
-      setSaveSuccess(`Đã lưu điểm ${parsedScore} và gửi nhận xét cho học viên.`);
+      setSaveSuccess(`Đã lưu điểm ${parsedScore}.`);
 
       // Cập nhật state nội bộ
       setSubmissions((prev) =>
@@ -222,7 +227,7 @@ export function useTeacherGrading(scopedClassId?: string) {
       }));
     } catch (err: any) {
       console.error("Lỗi chấm điểm:", err);
-      alert(err.response?.data?.message || "Lỗi khi chấm điểm.");
+      alert(err.response?.data?.message || "Lưu điểm thất bại.");
     } finally {
       setSavingGrade(false);
     }

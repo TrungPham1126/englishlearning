@@ -108,7 +108,7 @@ describe("features/auth - LoginPage", () => {
   }
 
   it("kiểm tra validation email trống, email sai định dạng, mật khẩu trống và bật/tắt hiện mật khẩu", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderLogin();
 
     const submitBtn = screen.getByRole("button", { name: /Đăng nhập/i });
@@ -132,20 +132,19 @@ describe("features/auth - LoginPage", () => {
     expect(passwordInput.type).toBe("password");
   });
 
-  it("điều hướng đúng theo từng vai trò (ADMIN -> /admin/users, TEACHER -> /teacher/classrooms, STUDENT -> /student/courses)", async () => {
-    const user = userEvent.setup();
-
-    for (const [role, expectedPath] of [
-      ["ROLE_ADMIN", "/admin/users"],
-      ["ROLE_TEACHER", "/teacher/classrooms"],
-      ["ROLE_STUDENT", "/student/courses"],
-    ] as const) {
-      navigateMock.mockReset();
+  it.each([
+    ["ROLE_ADMIN", "/admin/users"],
+    ["ROLE_TEACHER", "/teacher/classrooms"],
+    ["ROLE_STUDENT", "/student/courses"],
+  ] as const)(
+    "điều hướng đúng cho vai trò %s -> %s",
+    async (role, expectedPath) => {
+      const user = userEvent.setup({ delay: null });
       postMock.mockResolvedValueOnce({
         data: { status: "SUCCESS", data: makeAuthResponse([role]) },
       });
 
-      const { unmount } = renderLogin();
+      renderLogin();
       const emailInput = screen.getByLabelText(/Email/i);
       const passwordInput = document.querySelector("input[name='password']") as HTMLInputElement;
 
@@ -161,13 +160,11 @@ describe("features/auth - LoginPage", () => {
         expect(useAuthStore.getState().isAuthenticated).toBe(true);
         expect(navigateMock).toHaveBeenCalledWith(expectedPath, { replace: true });
       });
-
-      unmount();
-    }
-  });
+    },
+  );
 
   it("hiển thị thông báo lỗi từ server, lỗi mạng (không có response) và lỗi mặc định", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderLogin();
 
     const emailInput = screen.getByLabelText(/Email/i);

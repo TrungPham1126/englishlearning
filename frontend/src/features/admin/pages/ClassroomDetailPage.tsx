@@ -92,10 +92,10 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.assignTeacher(classId, selectedTeacherId);
-      alert("Phân công giảng viên thành công!");
+      alert("Đã phân công giảng viên.");
       fetchData();
     } catch {
-      alert("Lỗi phân công giảng viên");
+      alert("Phân công giảng viên thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -106,10 +106,10 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.updateClassStatus(classId, newStatus);
-      alert("Cập nhật trạng thái thành công!");
+      alert("Đã cập nhật trạng thái.");
       fetchData();
     } catch {
-      alert("Lỗi cập nhật trạng thái");
+      alert("Cập nhật trạng thái thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -125,11 +125,11 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.createLesson({ classId, ...form });
-      alert("Tạo bài giảng thành công!");
+      alert("Đã tạo bài giảng.");
       await fetchData();
       return true;
     } catch {
-      alert("Lỗi khi tạo bài giảng");
+      alert("Tạo bài giảng thất bại.");
       return false;
     } finally {
       setIsProcessing(false);
@@ -137,13 +137,13 @@ export default function ClassroomDetailPage() {
   };
 
   const handleDeleteLesson = async (lessonId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa bài giảng này?")) return;
+    if (!window.confirm("Xóa bài giảng này?")) return;
     try {
       await adminApi.deleteLesson(lessonId);
-      alert("Đã xóa bài giảng!");
+      alert("Đã xóa bài giảng.");
       fetchData();
     } catch {
-      alert("Lỗi khi xóa bài giảng");
+      alert("Xóa bài giảng thất bại.");
     }
   };
 
@@ -152,11 +152,11 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.enrollStudent(classId, identifier);
-      alert("Ghi danh học viên thành công!");
+      alert("Đã ghi danh học viên.");
       await fetchData();
       return true;
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi ghi danh học viên");
+      alert(err.response?.data?.message || "Ghi danh thất bại.");
       return false;
     } finally {
       setIsProcessing(false);
@@ -165,16 +165,16 @@ export default function ClassroomDetailPage() {
 
   const handleRemoveStudent = async (studentId: string, studentName: string) => {
     if (!classId) return;
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa học viên "${studentName}" khỏi lớp?`)) {
+    if (!window.confirm(`Xóa "${studentName}" khỏi lớp?`)) {
       return;
     }
     setIsProcessing(true);
     try {
       await adminApi.removeStudentFromClass(classId, studentId);
-      alert(`Đã xóa học viên ${studentName} khỏi lớp!`);
+      alert(`Đã xóa ${studentName} khỏi lớp.`);
       fetchData();
     } catch {
-      alert("Lỗi khi xóa học viên khỏi lớp");
+      alert("Xóa học viên khỏi lớp thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -184,10 +184,10 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.reviewVideo(id, true);
-      alert("Phê duyệt video thành công!");
+      alert("Đã duyệt video.");
       fetchData();
     } catch {
-      alert("Lỗi duyệt video");
+      alert("Duyệt video thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -197,11 +197,11 @@ export default function ClassroomDetailPage() {
     setIsProcessing(true);
     try {
       await adminApi.reviewVideo(id, false, reason);
-      alert("Đã từ chối video!");
+      alert("Đã từ chối video.");
       fetchData();
       return true;
     } catch {
-      alert("Lỗi từ chối video");
+      alert("Từ chối video thất bại.");
       return false;
     } finally {
       setIsProcessing(false);
@@ -216,7 +216,7 @@ export default function ClassroomDetailPage() {
       const res = await adminApi.getClassroomDetailedReport(classId);
       setPreviewReport(res);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Không thể tải báo cáo lớp học");
+      alert(err.response?.data?.message || "Tải báo cáo thất bại.");
     } finally {
       setPreviewLoading(false);
     }
@@ -228,7 +228,7 @@ export default function ClassroomDetailPage() {
     try {
       await adminApi.downloadClassroomReportExcel(id, name);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi xuất báo cáo Excel");
+      alert(err.response?.data?.message || "Xuất Excel thất bại.");
     } finally {
       setExportingReport(false);
     }
@@ -250,7 +250,7 @@ export default function ClassroomDetailPage() {
         fetchData();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || "Không thể xử lý dữ liệu lớp học");
+      alert(err.response?.data?.message || "Xử lý dữ liệu lớp thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -267,7 +267,7 @@ export default function ClassroomDetailPage() {
   if (!classroom) {
     return (
       <div className="p-10 text-center text-rose-500 font-bold">
-        Không tìm thấy thông tin lớp học.
+        Không tìm thấy lớp học.
       </div>
     );
   }

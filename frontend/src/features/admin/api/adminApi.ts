@@ -348,11 +348,6 @@ export const adminApi = {
       `/api/v1/admin/database/classrooms/${classroomId}/report`,
       { responseType: "blob" },
     );
-    const blob = new Blob([res.data], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
     const safeName = (classroomName || classroomId)
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -360,12 +355,17 @@ export const adminApi = {
       .replace(/Đ/g, "D")
       .replace(/[^a-zA-Z0-9_-]+/g, "_")
       .replace(/^_+|_+$/g, "");
-    link.href = url;
-    link.download = `Bao_cao_lop_${safeName || "lop_hoc"}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    triggerExcelBlobDownload(
+      res.data,
+      `Bao_cao_lop_${safeName || "lop_hoc"}.xlsx`,
+    );
+  },
+  downloadCenterReportExcel: async (): Promise<void> => {
+    const res = await axiosClient.get(
+      "/api/v1/admin/database/export-center-report",
+      { responseType: "blob" },
+    );
+    triggerExcelBlobDownload(res.data, "Bao_cao_tong_hop_trung_tam_ELP.xlsx");
   },
   getR2CostReport: async (): Promise<R2CostReport> => {
     const res = await axiosClient.get<ApiResponse<R2CostReport>>(
@@ -374,3 +374,17 @@ export const adminApi = {
     return res.data.data;
   },
 };
+
+function triggerExcelBlobDownload(data: BlobPart, filename: string): void {
+  const blob = new Blob([data], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

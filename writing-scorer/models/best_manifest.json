@@ -1,0 +1,8 @@
+{
+  "selected_model": "hybrid",
+  "val_qwk": 0.828,
+  "val_mae": 0.2502,
+  "transformer_dir": "D:\\HocTap_DoAn\\doanchuyennganh\\englishlearning\\writing-scorer\\models\\transformer",
+  "baseline_dir": "D:\\HocTap_DoAn\\doanchuyennganh\\englishlearning\\writing-scorer\\models\\baseline",
+  "hybrid_dir": "D:\\HocTap_DoAn\\doanchuyennganh\\englishlearning\\writing-scorer\\models\\hybrid"
+}

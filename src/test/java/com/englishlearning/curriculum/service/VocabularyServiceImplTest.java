@@ -1,5 +1,6 @@
 package com.englishlearning.curriculum.service;
 
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.VocabularyRequest;
 import com.englishlearning.curriculum.dto.VocabularyResponse;
@@ -16,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -192,13 +194,15 @@ class VocabularyServiceImplTest {
         assertThat(res.getMeaning()).isEqualTo("lưu loát");
         assertThat(res.getPartOfSpeech()).isEqualTo("adjective");
 
-        // Khi IPA mới được truyền tường minh -> ghi đè không gọi lookup nữa
+        // Khi IPA mới được truyền tường minh -> ghi đè không gọi lookup nữa, và cho phép xóa rỗng exampleSentence
         VocabularyRequest reqExplicitIpa = new VocabularyRequest();
         reqExplicitIpa.setWord("articulate");
         reqExplicitIpa.setIpa("/custom/");
         reqExplicitIpa.setMeaning("rõ ràng");
+        reqExplicitIpa.setExampleSentence("   ");
         VocabularyResponse res2 = vocabularyService.updateVocabulary(vocabId, reqExplicitIpa);
         assertThat(res2.getIpa()).isEqualTo("/custom/");
+        assertThat(res2.getExampleSentence()).isEmpty();
         verify(dictionaryLookupService, times(1)).lookup(any());
     }
 
@@ -221,5 +225,132 @@ class VocabularyServiceImplTest {
         ArgumentCaptor<VocabularyItem> captor = ArgumentCaptor.forClass(VocabularyItem.class);
         verify(vocabularyRepository).delete(captor.capture());
         assertThat(captor.getValue().getId()).isEqualTo(existingId);
+    }
+
+    @Test
+    @DisplayName("addVocabulary_whenRequestNull_throwsBadRequestException")
+    void addVocabulary_whenRequestNull_throwsBadRequestException() {
+        UUID lessonId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> vocabularyService.addVocabulary(lessonId, null))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(lessonRepository, dictionaryLookupService, vocabularyRepository);
+    }
+
+    @Test
+    @DisplayName("addVocabulary_whenWordBlank_throwsBadRequestException")
+    void addVocabulary_whenWordBlank_throwsBadRequestException() {
+        UUID lessonId = UUID.randomUUID();
+        VocabularyRequest req = new VocabularyRequest();
+        req.setWord("   ");
+        req.setMeaning("nghĩa");
+
+        assertThatThrownBy(() -> vocabularyService.addVocabulary(lessonId, req))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(lessonRepository, dictionaryLookupService, vocabularyRepository);
+    }
+
+    @Test
+    @DisplayName("getVocabulariesByLesson_whenRepositoryReturnsNull_returnsEmptyList")
+    void getVocabulariesByLesson_whenRepositoryReturnsNull_returnsEmptyList() {
+        UUID lessonId = UUID.randomUUID();
+        when(vocabularyRepository.findByLessonId(lessonId)).thenReturn(null);
+
+        List<VocabularyResponse> result = vocabularyService.getVocabulariesByLesson(lessonId);
+
+        assertThat(result).isEqualTo(Collections.emptyList());
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenRequestNull_throwsBadRequestException")
+    void updateVocabulary_whenRequestNull_throwsBadRequestException() {
+        UUID vocabId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> vocabularyService.updateVocabulary(vocabId, null))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(vocabularyRepository, dictionaryLookupService);
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenWordBlankInRequest_preservesExistingWord")
+    void updateVocabulary_whenWordBlankInRequest_preservesExistingWord() {
+        UUID vocabId = UUID.randomUUID();
+        VocabularyItem existing = VocabularyItem.builder()
+                .id(vocabId)
+                .word("serendipity")
+                .ipa("/ˌser.ənˈdɪp.ə.ti/")
+                .audioUrl("https://audio.test/serendipity.mp3")
+                .meaning("tình cờ may mắn")
+                .partOfSpeech("noun")
+                .build();
+
+        VocabularyRequest req = new VocabularyRequest();
+        req.setWord("   ");
+        req.setMeaning("cơ duyên may mắn");
+
+        when(vocabularyRepository.findById(vocabId)).thenReturn(Optional.of(existing));
+        when(vocabularyRepository.save(any(VocabularyItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        VocabularyResponse res = vocabularyService.updateVocabulary(vocabId, req);
+
+        assertThat(res.getWord()).isEqualTo("serendipity");
+        assertThat(res.getMeaning()).isEqualTo("cơ duyên may mắn");
+        verifyNoInteractions(dictionaryLookupService);
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenIpaExistsButAudioMissing_autoFillsAudioWithoutOverwritingIpa")
+    void updateVocabulary_whenIpaExistsButAudioMissing_autoFillsAudioWithoutOverwritingIpa() {
+        UUID vocabId = UUID.randomUUID();
+        VocabularyItem existing = VocabularyItem.builder()
+                .id(vocabId)
+                .word("perseverance")
+                .ipa("/ˌpɜː.sɪˈvɪə.rəns/")
+                .audioUrl("   ")
+                .meaning("kiên trì")
+                .partOfSpeech("noun")
+                .build();
+
+        VocabularyRequest req = new VocabularyRequest();
+        req.setWord("perseverance");
+        req.setIpa(null);
+
+        when(vocabularyRepository.findById(vocabId)).thenReturn(Optional.of(existing));
+        when(dictionaryLookupService.lookup("perseverance")).thenReturn(DictionaryLookupService.DictionaryEntryDto.builder()
+                .ipa("/DIFFERENT/")
+                .audioUrl("https://dict.youdao.com/dictvoice?audio=perseverance&type=2")
+                .build());
+        when(vocabularyRepository.save(any(VocabularyItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        VocabularyResponse res = vocabularyService.updateVocabulary(vocabId, req);
+
+        assertThat(res.getIpa()).isEqualTo("/ˌpɜː.sɪˈvɪə.rəns/");
+        assertThat(res.getAudioUrl()).isEqualTo("https://dict.youdao.com/dictvoice?audio=perseverance&type=2");
+    }
+
+    @Test
+    @DisplayName("updateVocabulary_whenLookupReturnsNull_keepsExistingBlankIpaAndAudio")
+    void updateVocabulary_whenLookupReturnsNull_keepsExistingBlankIpaAndAudio() {
+        UUID vocabId = UUID.randomUUID();
+        VocabularyItem existing = VocabularyItem.builder()
+                .id(vocabId)
+                .word("neologism")
+                .ipa("")
+                .audioUrl(null)
+                .meaning("từ mới")
+                .partOfSpeech("noun")
+                .build();
+
+        VocabularyRequest req = new VocabularyRequest();
+        req.setWord("neologism");
+
+        when(vocabularyRepository.findById(vocabId)).thenReturn(Optional.of(existing));
+        when(dictionaryLookupService.lookup("neologism")).thenReturn(null);
+        when(vocabularyRepository.save(any(VocabularyItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        VocabularyResponse res = vocabularyService.updateVocabulary(vocabId, req);
+
+        assertThat(res.getIpa()).isEmpty();
+        assertThat(res.getAudioUrl()).isNull();
     }
 }

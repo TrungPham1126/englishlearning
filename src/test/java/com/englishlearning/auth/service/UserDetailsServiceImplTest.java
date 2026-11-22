@@ -21,6 +21,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -110,5 +111,87 @@ class UserDetailsServiceImplTest {
                 .hasMessageContaining("Không tìm thấy người dùng với email: " + nonExistentEmail);
 
         verify(userRepository).findByEmail(nonExistentEmail);
+    }
+
+    @Test
+    @DisplayName("loadUserByUsername: Chuẩn hóa chữ hoa và khoảng trắng ở email trước khi truy vấn DB")
+    void loadUserByUsername_emailWithUppercaseAndWhitespace_normalizesBeforeLookup() {
+        // Given
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email("student@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(Role.builder().name(RoleName.ROLE_STUDENT).build()))
+                .build();
+        when(userRepository.findByEmail("student@elp.edu.vn")).thenReturn(Optional.of(user));
+
+        // When
+        UserDetails details = userDetailsService.loadUserByUsername("  Student@ELP.EDU.VN ");
+
+        // Then
+        assertThat(details.getUsername()).isEqualTo("student@elp.edu.vn");
+        verify(userRepository).findByEmail("student@elp.edu.vn");
+    }
+
+    @Test
+    @DisplayName("loadUserByUsername: Email null hoặc rỗng -> Ném UsernameNotFoundException mà không query DB")
+    void loadUserByUsername_nullOrBlankEmail_throwsUsernameNotFoundExceptionWithoutDbLookup() {
+        assertThatThrownBy(() -> userDetailsService.loadUserByUsername(null))
+                .isInstanceOf(UsernameNotFoundException.class)
+                .hasMessage("Email không được để trống");
+
+        assertThatThrownBy(() -> userDetailsService.loadUserByUsername("   "))
+                .isInstanceOf(UsernameNotFoundException.class)
+                .hasMessage("Email không được để trống");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("loadUserByUsername: User có isActive = null và roles = null -> Trả về tài khoản bị vô hiệu hóa với authorities rỗng")
+    void loadUserByUsername_userWithNullIsActiveAndNullRoles_returnsDisabledWithEmptyAuthorities() {
+        // Given
+        User incompleteUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("incomplete@elp.edu.vn")
+                .password("hash")
+                .isActive(null)
+                .roles(null)
+                .build();
+        when(userRepository.findByEmail("incomplete@elp.edu.vn")).thenReturn(Optional.of(incompleteUser));
+
+        // When
+        UserDetails details = userDetailsService.loadUserByUsername("incomplete@elp.edu.vn");
+
+        // Then
+        assertThat(details.isEnabled()).isFalse();
+        assertThat(details.isAccountNonLocked()).isFalse();
+        assertThat(details.getAuthorities()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("loadUserByUsername: User có nhiều role -> Ánh xạ đầy đủ tất cả GrantedAuthority")
+    void loadUserByUsername_userWithMultipleRoles_mapsAllGrantedAuthorities() {
+        // Given
+        User multiRoleUser = User.builder()
+                .id(UUID.randomUUID())
+                .email("multi@elp.edu.vn")
+                .password("hash")
+                .isActive(true)
+                .roles(Set.of(
+                        Role.builder().name(RoleName.ROLE_ADMIN).build(),
+                        Role.builder().name(RoleName.ROLE_TEACHER).build()
+                ))
+                .build();
+        when(userRepository.findByEmail("multi@elp.edu.vn")).thenReturn(Optional.of(multiRoleUser));
+
+        // When
+        UserDetails details = userDetailsService.loadUserByUsername("multi@elp.edu.vn");
+
+        // Then
+        assertThat(details.getAuthorities())
+                .extracting(GrantedAuthority::getAuthority)
+                .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_TEACHER");
     }
 }

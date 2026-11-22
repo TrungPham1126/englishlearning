@@ -240,19 +240,21 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
         StudentSkillProfile profile = getMyProfile(studentId);
 
-        switch (skillType.toUpperCase()) {
+        switch (skillType.trim().toUpperCase()) {
             case "LISTENING" -> profile.setListeningScore(addCappedScore(profile.getListeningScore(), scoreToAdd));
             case "SPEAKING" -> profile.setSpeakingScore(addCappedScore(profile.getSpeakingScore(), scoreToAdd));
             case "READING" -> profile.setReadingScore(addCappedScore(profile.getReadingScore(), scoreToAdd));
             case "WRITING" -> profile.setWritingScore(addCappedScore(profile.getWritingScore(), scoreToAdd));
             case "GRAMMAR" -> profile.setGrammarScore(addCappedScore(profile.getGrammarScore(), scoreToAdd));
             case "VOCABULARY" -> profile.setVocabularyScore(addCappedScore(profile.getVocabularyScore(), scoreToAdd));
+            case "PRONUNCIATION" -> profile.setPronunciationScore(addCappedScore(profile.getPronunciationScore(), scoreToAdd));
+            case "FLUENCY" -> profile.setFluencyScore(addCappedScore(profile.getFluencyScore(), scoreToAdd));
             default -> log.warn("Không nhận diện được loại kỹ năng: {}. Bỏ qua cập nhật điểm.", skillType);
         }
 
         profile.setAiRecommendedPath(generateRecommendedPath(profile));
         profileRepository.save(profile);
-        log.info("Đã cộng dồn thành công +{} điểm vào kỹ năng {} của học sinh {}", scoreToAdd, skillType.toUpperCase(),
+        log.info("Đã cộng dồn thành công +{} điểm vào kỹ năng {} của học sinh {}", scoreToAdd, skillType.trim().toUpperCase(),
                 studentId);
     }
 
@@ -266,6 +268,9 @@ public class AnalyticsServiceImpl implements AnalyticsService {
      */
     @Override
     public String generateRecommendedPath(StudentSkillProfile profile) {
+        if (profile == null) {
+            return "Hồ sơ năng lực đang ở giai đoạn khởi động. Hãy bắt đầu làm các bài tập trắc nghiệm Nghe - Đọc và luyện tập Từ vựng mỗi ngày để AI thu thập dữ liệu và đề xuất lộ trình tối ưu cho bạn.";
+        }
         double l = profile.getListeningScore() != null ? profile.getListeningScore() : 0.0;
         double s = profile.getSpeakingScore() != null ? profile.getSpeakingScore() : 0.0;
         double r = profile.getReadingScore() != null ? profile.getReadingScore() : 0.0;

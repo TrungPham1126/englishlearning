@@ -1,6 +1,7 @@
 package com.englishlearning.video.service.impl;
 
 import com.englishlearning.video.dto.R2BucketSnapshot;
+import com.englishlearning.video.dto.R2ObjectStream;
 import com.englishlearning.video.service.R2UsageTracker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,17 +12,27 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -29,9 +40,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -102,17 +115,15 @@ class R2StorageServiceImplTest {
     }
 
     @Test
-    @DisplayName("uploadHlsFolder upload đủ m3u8/ts, bỏ qua thư mục con và chịu lỗi từng file")
-    void should_UploadHlsFilesWithCorrectContentTypes_and_ContinueOnSingleFileError() throws IOException {
+    @DisplayName("uploadHlsFolder upload đủ ts/m3u8, bỏ qua thư mục con và đẩy master.m3u8 sau cùng")
+    void should_UploadHlsFilesWithCorrectContentTypes_and_UploadMasterLast() throws IOException {
         Path hlsDir = tempDir.resolve("hls");
         Files.createDirectories(hlsDir.resolve("nested_dir"));
         Files.writeString(hlsDir.resolve("master.m3u8"), "#EXTM3U");
+        Files.writeString(hlsDir.resolve("stream_360p.m3u8"), "#EXTM3U");
         Files.writeString(hlsDir.resolve("segment_000.ts"), "ts-data-0");
-        Files.writeString(hlsDir.resolve("segment_001.ts"), "ts-data-1");
 
         when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-                .thenReturn(PutObjectResponse.builder().build())
-                .thenThrow(new RuntimeException("Transient network glitch"))
                 .thenReturn(PutObjectResponse.builder().build());
 
         service.uploadHlsFolder("hls/abc", hlsDir);
@@ -123,17 +134,48 @@ class R2StorageServiceImplTest {
         List<PutObjectRequest> requests = captor.getAllValues();
         assertThat(requests)
                 .extracting(PutObjectRequest::key)
-                .containsExactlyInAnyOrder("hls/abc/master.m3u8", "hls/abc/segment_000.ts", "hls/abc/segment_001.ts");
+                .containsExactly(
+                        "hls/abc/segment_000.ts",
+                        "hls/abc/stream_360p.m3u8",
+                        "hls/abc/master.m3u8"
+                );
         assertThat(requests)
                 .filteredOn(r -> r.key().endsWith(".m3u8"))
-                .singleElement()
-                .extracting(PutObjectRequest::contentType)
-                .isEqualTo("application/vnd.apple.mpegurl");
+                .hasSize(2)
+                .allMatch(r -> "application/vnd.apple.mpegurl".equals(r.contentType()));
         assertThat(requests)
                 .filteredOn(r -> r.key().endsWith(".ts"))
-                .hasSize(2)
-                .allMatch(r -> "video/MP2T".equals(r.contentType()));
-        assertThat(r2UsageTracker.getPutOps()).isEqualTo(2L);
+                .singleElement()
+                .extracting(PutObjectRequest::contentType)
+                .isEqualTo("video/MP2T");
+        assertThat(r2UsageTracker.getPutOps()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("uploadHlsFolder dừng ngay khi một file lỗi, dọn object đã upload và ném IllegalStateException")
+    void should_ThrowAndCleanupUploadedObjects_when_SingleHlsFileUploadFails() throws IOException {
+        Path hlsDir = tempDir.resolve("hls-fail");
+        Files.createDirectories(hlsDir);
+        Files.writeString(hlsDir.resolve("master.m3u8"), "#EXTM3U");
+        Files.writeString(hlsDir.resolve("segment_000.ts"), "ts-data-0");
+        Files.writeString(hlsDir.resolve("segment_001.ts"), "ts-data-1");
+
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build())
+                .thenThrow(new RuntimeException("Transient network glitch"));
+        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+                .thenReturn(DeleteObjectResponse.builder().build());
+
+        assertThatThrownBy(() -> service.uploadHlsFolder("hls/abc", hlsDir))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("hls/abc/segment_001.ts");
+
+        verify(s3Client, times(2)).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+        ArgumentCaptor<DeleteObjectRequest> deleteCaptor = ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        verify(s3Client, times(1)).deleteObject(deleteCaptor.capture());
+        assertThat(deleteCaptor.getValue().key()).isEqualTo("hls/abc/segment_000.ts");
+        assertThat(r2UsageTracker.getPutOps()).isEqualTo(1L);
+        assertThat(r2UsageTracker.getDeleteOps()).isEqualTo(1L);
     }
 
     @Test
@@ -309,5 +351,128 @@ class R2StorageServiceImplTest {
         assertThat(service.extractKey("https://other.host.dev/documents/guide.pdf")).isEqualTo("documents/guide.pdf");
         assertThat(service.extractKey("/avatars/u1.png")).isEqualTo("avatars/u1.png");
         assertThat(service.extractKey("https://bad uri with spaces")).isNull();
+    }
+
+    @Test
+    @DisplayName("isConfigured & isManagedPublicUrl phân biệt R2 thật và URL ngoài hoặc dummy")
+    void should_IdentifyConfiguredManagedUrlsProperly() {
+        assertThat(service.isConfigured()).isTrue();
+        assertThat(service.isManagedPublicUrl("https://cdn.example.com/hls/v1/master.m3u8")).isTrue();
+        assertThat(service.isManagedPublicUrl("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8")).isFalse();
+        assertThat(service.isManagedPublicUrl(null)).isFalse();
+
+        ReflectionTestUtils.setField(service, "bucketName", "dummy_bucket");
+        assertThat(service.isConfigured()).isFalse();
+        assertThat(service.isManagedPublicUrl("https://cdn.example.com/hls/v1/master.m3u8")).isFalse();
+    }
+
+    @Test
+    @DisplayName("openObjectStream hỗ trợ full GET 200, byte-range 206, HEAD, 404 và 416")
+    void should_OpenObjectStreamForFullRangeHeadNotFoundAndInvalidRange() throws IOException {
+        byte[] fullBytes = "0123456789".getBytes(StandardCharsets.UTF_8);
+        ResponseInputStream<GetObjectResponse> fullResponse = new ResponseInputStream<>(
+                GetObjectResponse.builder().contentLength(10L).contentType("application/vnd.apple.mpegurl").build(),
+                AbortableInputStream.create(new ByteArrayInputStream(fullBytes))
+        );
+        ResponseInputStream<GetObjectResponse> rangeResponse = new ResponseInputStream<>(
+                GetObjectResponse.builder().contentLength(4L).contentRange("bytes 0-3/10").contentType("video/mp4").build(),
+                AbortableInputStream.create(new ByteArrayInputStream("0123".getBytes(StandardCharsets.UTF_8)))
+        );
+
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(fullResponse)
+                .thenReturn(rangeResponse)
+                .thenThrow(NoSuchKeyException.builder().message("missing").build())
+                .thenThrow(S3Exception.builder().statusCode(416).message("Range Not Satisfiable").build());
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(10L).contentType("video/mp4").build())
+                .thenReturn(HeadObjectResponse.builder().contentLength(10L).contentType("video/mp4").build());
+
+        // Full GET
+        Optional<R2ObjectStream> fullStream = service.openObjectStream("/hls/v1/master.m3u8", null, false);
+        assertThat(fullStream).isPresent();
+        assertThat(fullStream.get().partial()).isFalse();
+        assertThat(fullStream.get().contentLength()).isEqualTo(10L);
+        assertThat(fullStream.get().inputStream().readAllBytes()).isEqualTo(fullBytes);
+
+        // Partial Range GET
+        Optional<R2ObjectStream> partialStream = service.openObjectStream("raw/v1/v.mp4", "bytes=0-3", false);
+        assertThat(partialStream).isPresent();
+        assertThat(partialStream.get().partial()).isTrue();
+        assertThat(partialStream.get().contentRange()).isEqualTo("bytes 0-3/10");
+        assertThat(partialStream.get().totalContentLength()).isEqualTo(10L);
+        assertThat(new String(partialStream.get().inputStream().readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("0123");
+
+        // HEAD without Range
+        Optional<R2ObjectStream> headStream = service.openObjectStream("raw/v1/v.mp4", null, true);
+        assertThat(headStream).isPresent();
+        assertThat(headStream.get().inputStream()).isNull();
+        assertThat(headStream.get().totalContentLength()).isEqualTo(10L);
+
+        // 404 NoSuchKey
+        assertThat(service.openObjectStream("hls/v1/missing.ts", null, false)).isEmpty();
+
+        // 416 Range Not Satisfiable
+        Optional<R2ObjectStream> unsatisfiable = service.openObjectStream("raw/v1/v.mp4", "bytes=999-1000", false);
+        assertThat(unsatisfiable).isPresent();
+        assertThat(unsatisfiable.get().rangeNotSatisfiable()).isTrue();
+        assertThat(unsatisfiable.get().contentRange()).isEqualTo("bytes */10");
+    }
+
+    @Test
+    @DisplayName("uploadFile chuẩn hóa key có dấu '/' đầu & fallback khi publicUrl trống; openObjectStream xử lý HEAD+Range, S3 404/416/500")
+    void should_NormalizeUploadKeyAndHandleOpenStreamEdgeCases() throws IOException {
+        Path rawFile = tempDir.resolve("edge.mp4");
+        Files.writeString(rawFile, "bytes");
+        ReflectionTestUtils.setField(service, "publicUrl", "   ");
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+
+        String relativeUrl = service.uploadFile(" /raw/v1/edge.mp4 ", rawFile.toFile(), "video/mp4");
+        assertThat(relativeUrl).isEqualTo("/raw/v1/edge.mp4");
+
+        ArgumentCaptor<PutObjectRequest> putCaptor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(s3Client).putObject(putCaptor.capture(), any(RequestBody.class));
+        assertThat(putCaptor.getValue().key()).isEqualTo("raw/v1/edge.mp4");
+
+        ReflectionTestUtils.setField(service, "publicUrl", "https://cdn.example.com/");
+
+        // Key rỗng hoặc chỉ có '/' -> Optional.empty()
+        assertThat(service.openObjectStream("   ", null, false)).isEmpty();
+        assertThat(service.openObjectStream("/", null, false)).isEmpty();
+
+        // HEAD kèm Range -> gọi getObject, đóng stream và trả inputStream=null, partial=true, totalLength từ Content-Range
+        ResponseInputStream<GetObjectResponse> headRangeRes = new ResponseInputStream<>(
+                GetObjectResponse.builder().contentLength(4L).contentRange("bytes 0-3/25").contentType("video/mp4").build(),
+                AbortableInputStream.create(new ByteArrayInputStream("0123".getBytes(StandardCharsets.UTF_8)))
+        );
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(headRangeRes)
+                .thenThrow(S3Exception.builder().statusCode(404).message("Not Found").build())
+                .thenThrow(S3Exception.builder().statusCode(416).message("Unsatisfiable").build())
+                .thenThrow(S3Exception.builder().statusCode(503).message("Slow Down").build());
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(new RuntimeException("Head probe failed"));
+
+        Optional<R2ObjectStream> headWithRange = service.openObjectStream("raw/v1/edge.mp4", "bytes=0-3", true);
+        assertThat(headWithRange).isPresent();
+        assertThat(headWithRange.get().inputStream()).isNull();
+        assertThat(headWithRange.get().partial()).isTrue();
+        assertThat(headWithRange.get().contentLength()).isEqualTo(4L);
+        assertThat(headWithRange.get().totalContentLength()).isEqualTo(25L);
+
+        // S3Exception 404 -> Optional.empty()
+        assertThat(service.openObjectStream("raw/v1/missing.mp4", null, false)).isEmpty();
+
+        // S3Exception 416 khi headObject probe lỗi -> totalLength=-1 -> contentRange=null
+        Optional<R2ObjectStream> unknownLen416 = service.openObjectStream("raw/v1/edge.mp4", "bytes=50-60", false);
+        assertThat(unknownLen416).isPresent();
+        assertThat(unknownLen416.get().rangeNotSatisfiable()).isTrue();
+        assertThat(unknownLen416.get().totalContentLength()).isEqualTo(-1L);
+        assertThat(unknownLen416.get().contentRange()).isNull();
+
+        // S3Exception 503 -> rethrow
+        assertThatThrownBy(() -> service.openObjectStream("raw/v1/edge.mp4", null, false))
+                .isInstanceOf(S3Exception.class);
     }
 }

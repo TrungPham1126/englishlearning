@@ -2,6 +2,8 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { studentApi } from "@/features/student/api/studentApi";
+import { useAuthStore } from "@/store/useAuthStore";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type {
   DailyHomeworkOverviewResponse,
   SectionGroupDto,
@@ -76,6 +78,31 @@ export default function DailyHomeworkPage() {
         setData(res);
         if (!dayId && res.currentSelectedDay) {
           setSelectedDayId(res.currentSelectedDay.id);
+        }
+        if (
+          typeof res?.currentStreak === "number" &&
+          Number.isFinite(res.currentStreak) &&
+          res.currentStreak >= 0
+        ) {
+          const normalizedStreak = Math.floor(res.currentStreak);
+          try {
+            localStorage.setItem("elp_student_streak", String(normalizedStreak));
+          } catch {
+            // Ignore storage write errors
+          }
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser && currentUser.currentStreak !== normalizedStreak) {
+            useAuthStore.getState().updateUser({ currentStreak: normalizedStreak });
+          }
+          window.dispatchEvent(
+            new CustomEvent("student-streak-updated", {
+              detail: {
+                currentStreak: normalizedStreak,
+                hasHomeworkToday: res.hasHomeworkToday,
+                completedToday: res.completedToday,
+              },
+            }),
+          );
         }
       } catch (err) {
         console.error("Lỗi tải tiến trình bảng ngày:", err);
@@ -274,18 +301,43 @@ export default function DailyHomeworkPage() {
     data?.completedDays ?? days.filter((d) => d.isCompleted).length;
   const unlockedDaysCount = days.filter((d) => d.isUnlocked).length;
 
-  // Tính chuỗi ngày học liên tiếp (Streak)
+  // Chuỗi ngày có bài tập hoàn thành liên tiếp (ưu tiên số liệu chuẩn từ backend)
   const streakCount = (() => {
+    if (
+      typeof data?.currentStreak === "number" &&
+      Number.isFinite(data.currentStreak) &&
+      data.currentStreak >= 0
+    ) {
+      return Math.floor(data.currentStreak);
+    }
     let streak = 0;
-    const unlockedList = days.filter((d) => d.isUnlocked);
-    for (let i = unlockedList.length - 1; i >= 0; i--) {
-      if (unlockedList[i].isCompleted) {
+    const unlockedDesc = days
+      .filter((d) => d.isUnlocked)
+      .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
+    for (const day of unlockedDesc) {
+      if (day.isCompleted) {
         streak++;
-      } else if (i !== unlockedList.length - 1) {
+      } else if (day.isCurrentDay) {
+        // Hôm nay còn đang diễn ra -> không làm đứt chuỗi trước đó
+        continue;
+      } else {
         break;
       }
     }
-    return Math.max(streak, completedDaysCount);
+    return streak;
+  })();
+
+  const streakTooltipText = (() => {
+    if (data?.hasHomeworkToday === true && data?.completedToday === true) {
+      return "Đã hoàn thành 100% bài tập hôm nay! Chuỗi tiếp tục được duy trì.";
+    }
+    if (data?.hasHomeworkToday === true && data?.completedToday === false) {
+      return "Hoàn thành hết bài tập hôm nay để tăng chuỗi. Ngày không có bài tập sẽ không làm mất chuỗi.";
+    }
+    if (data?.hasHomeworkToday === false) {
+      return "Hôm nay không có bài tập ngày — chuỗi của bạn vẫn được giữ nguyên!";
+    }
+    return "Hoàn thành đủ bài tập mỗi ngày có lịch để tăng chuỗi. Ngày không có bài tập sẽ không làm mất chuỗi.";
   })();
 
   // Tiến độ hoàn thành bài tập trong ngày đang chọn
@@ -318,11 +370,30 @@ export default function DailyHomeworkPage() {
             <span className="text-xs font-bold tabular-nums px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               {completedDaysCount}/{totalDays} • {percentage}%
             </span>
-            {streakCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-bold tabular-nums px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300">
+            <Tooltip
+              position="bottom"
+              content={
+                <div className="text-center p-1 max-w-[260px] whitespace-normal">
+                  <p className="font-bold text-amber-400">
+                    Chuỗi bài tập ngày: {streakCount} ngày
+                  </p>
+                  <p className="text-slate-300 text-[10px] mt-0.5">
+                    {streakTooltipText}
+                  </p>
+                </div>
+              }
+            >
+              <span
+                data-testid="daily-homework-streak"
+                className={`inline-flex items-center gap-1 text-xs font-bold tabular-nums px-2 py-0.5 rounded-md cursor-help ${
+                  streakCount > 0
+                    ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                }`}
+              >
                 <Flame size={12} /> {streakCount}
               </span>
-            )}
+            </Tooltip>
           </div>
         </div>
 

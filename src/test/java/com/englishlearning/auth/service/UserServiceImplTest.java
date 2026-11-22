@@ -239,4 +239,89 @@ class UserServiceImplTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Lỗi lưu trữ file ảnh đại diện: Disk full");
     }
+
+    @Test
+    @DisplayName("uploadAndSaveAvatar: Từ chối SVG (image/svg+xml) kể cả khi có hoặc không có đuôi .svg để ngăn XSS")
+    void uploadAndSaveAvatar_svgContentType_throwsBadRequestException() {
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile svgWithExt = new MockMultipartFile(
+                "file", "xss.svg", "image/svg+xml", "<svg onload='alert(1)'/>".getBytes());
+        MockMultipartFile svgWithoutExt = new MockMultipartFile(
+                "file", "blob", "image/svg+xml", "<svg onload='alert(1)'/>".getBytes());
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, svgWithExt))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, svgWithoutExt))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("uploadAndSaveAvatar: Từ chối file đuôi nguy hiểm (.html) ngay cả khi giả mạo MIME image/png")
+    void uploadAndSaveAvatar_disallowedExtensionWithSpoofedImageMime_throwsBadRequestException() {
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile htmlFile = new MockMultipartFile(
+                "file", "shell.html", "image/png", "<script>alert(1)</script>".getBytes());
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, htmlFile))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("uploadAndSaveAvatar: Từ chối tên file chứa ký tự path traversal (../ hoặc dấu phân cách thư mục)")
+    void uploadAndSaveAvatar_pathTraversalFilename_throwsBadRequestException() {
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile traversalFile = new MockMultipartFile(
+                "file", "../../evil.png", "image/png", new byte[]{1, 2, 3});
+        MockMultipartFile nestedPathFile = new MockMultipartFile(
+                "file", "foo.bar/../../pwn", "image/png", new byte[]{1, 2, 3});
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, traversalFile))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên file ảnh không hợp lệ");
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, nestedPathFile))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên file ảnh không hợp lệ");
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("uploadAndSaveAvatar: Tên file null nhưng MIME ảnh hợp lệ -> Mặc định lưu thành .jpg")
+    void uploadAndSaveAvatar_nullFilenameWithValidImageMime_defaultsToJpg() {
+        // Given
+        UUID userId = UUID.randomUUID();
+        trackedUserIds.add(userId);
+        User user = User.builder().id(userId).email("nullname@elp.edu.vn").build();
+        MockMultipartFile file = new MockMultipartFile("file", null, "image/webp", new byte[]{1, 2, 3});
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        // When
+        String savedUrl = userService.uploadAndSaveAvatar(userId, file);
+
+        // Then
+        assertThat(savedUrl).startsWith("/uploads/avatars/avatar_" + userId + "_").endsWith(".jpg");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    @DisplayName("uploadAndSaveAvatar: Tên file null và Content-Type không hợp lệ -> Ném BadRequestException")
+    void uploadAndSaveAvatar_nullFilenameWithInvalidContentType_throwsBadRequestException() {
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", null, "application/pdf", new byte[]{1, 2, 3});
+
+        assertThatThrownBy(() -> userService.uploadAndSaveAvatar(userId, file))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chỉ chấp nhận các định dạng ảnh (.jpg, .jpeg, .png, .webp)");
+
+        verifyNoInteractions(userRepository);
+    }
 }

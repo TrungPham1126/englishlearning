@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
+import { notifyTeacherTaskStatus } from "@/utils/teacherTaskNotification";
 import type { DailyPlanItem, GlobalResourceItem } from "./dailyPlanTypes";
 
 export function useTeacherDailyPlan(classId: string | undefined) {
@@ -47,6 +48,19 @@ export function useTeacherDailyPlan(classId: string | undefined) {
     if (classId) {
       loadData();
     }
+  }, [classId]);
+
+  useEffect(() => {
+    const handleDailyPlanUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ classId?: string }>).detail;
+      if (!detail?.classId || !classId || detail.classId === classId) {
+        void loadData();
+      }
+    };
+    window.addEventListener("daily-plan-updated", handleDailyPlanUpdated);
+    return () => {
+      window.removeEventListener("daily-plan-updated", handleDailyPlanUpdated);
+    };
   }, [classId]);
 
   const loadData = async () => {
@@ -117,7 +131,7 @@ export function useTeacherDailyPlan(classId: string | undefined) {
           scheduledDate,
           estimatedMinutes: Number(estimatedMinutes),
         });
-        alert(`Đã cập nhật Ngày ${dayNumber}!`);
+        alert(`Đã cập nhật Day ${dayNumber}.`);
       } else {
         await teacherApi.createDailyPlan(classId!, {
           dayNumber: Number(dayNumber),
@@ -125,24 +139,24 @@ export function useTeacherDailyPlan(classId: string | undefined) {
           scheduledDate,
           estimatedMinutes: Number(estimatedMinutes),
         });
-        alert(`Đã tạo lịch học Ngày ${dayNumber}!`);
+        alert(`Đã tạo Day ${dayNumber}.`);
       }
       setShowModal(false);
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi lưu lộ trình");
+      alert(err.response?.data?.message || "Lưu lộ trình thất bại.");
     } finally {
       savingPlanRef.current = false;
     }
   };
 
   const handleDeletePlan = async (planId: string, dayNum: number) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa Day ${dayNum}?`)) return;
+    if (!window.confirm(`Xóa Day ${dayNum}?`)) return;
     try {
       await teacherApi.deleteDailyPlan(planId);
       loadData();
     } catch (err) {
-      alert("Lỗi khi xóa Ngày học");
+      alert("Xóa ngày học thất bại.");
     }
   };
 
@@ -168,7 +182,7 @@ export function useTeacherDailyPlan(classId: string | undefined) {
         (a) => a.id === selectedAssignmentId,
       );
       if (!selectedAssign) {
-        alert("Vui lòng chọn 1 bài tập!");
+        alert("Chưa chọn bài tập.");
         return;
       }
       finalTitle = selectedAssign.title;
@@ -176,27 +190,76 @@ export function useTeacherDailyPlan(classId: string | undefined) {
     }
 
     if (!finalTitle) {
-      alert("Vui lòng nhập tên tiêu đề hoặc chọn bài tập!");
+      alert("Thiếu tiêu đề hoặc bài tập.");
       return;
     }
 
+    const capturedPlanId = targetPlanId;
+    const capturedClassId = classId;
+    const capturedSectionName = itemSectionName || "Bài tập ngày";
+    const capturedTitle = finalTitle;
+    const capturedResourceType = selectedResourceType;
+    const capturedAssignId = assignId;
+    const currentPlan = plans.find((p) => p.id === capturedPlanId);
+    const capturedItemCount = currentPlan?.items?.length ?? 0;
+    const planLabel = currentPlan
+      ? `Day ${currentPlan.dayNumber}${currentPlan.scheduledDate ? ` (${currentPlan.scheduledDate})` : ""}`
+      : "lộ trình";
+
     addingItemRef.current = true;
+    setShowAddItemModal(false);
+    setItemTitle("");
+    setSelectedAssignmentId("");
+
+    notifyTeacherTaskStatus({
+      status: "PROCESSING",
+      title: `Đang gán "${capturedTitle}"`,
+      message: `Đang gán "${capturedTitle}" vào ${planLabel}...`,
+      classroomId: capturedClassId,
+      targetUrl: "/teacher/daily-plan",
+      referenceId: capturedAssignId || capturedPlanId,
+      taskKey: `plan-item:${capturedPlanId}:${capturedAssignId || capturedTitle}`,
+    });
+
     try {
-      const currentPlan = plans.find((p) => p.id === targetPlanId);
-      const currentItemCount = currentPlan?.items?.length ?? 0;
-      await teacherApi.addPlanItem(targetPlanId, {
-        sectionName: itemSectionName || "Bài tập ngày",
-        title: finalTitle,
-        itemType: selectedResourceType,
-        orderIndex: currentItemCount + 1,
-        assignmentId: assignId,
+      await teacherApi.addPlanItem(capturedPlanId, {
+        sectionName: capturedSectionName,
+        title: capturedTitle,
+        itemType: capturedResourceType,
+        orderIndex: capturedItemCount + 1,
+        assignmentId: capturedAssignId,
       });
-      setShowAddItemModal(false);
-      setItemTitle("");
-      setSelectedAssignmentId("");
-      loadData();
-    } catch (err) {
-      alert("Lỗi thêm bài tập vào Ngày học");
+
+      await loadData();
+      window.dispatchEvent(
+        new CustomEvent("daily-plan-updated", {
+          detail: { classId: capturedClassId, planId: capturedPlanId },
+        }),
+      );
+
+      notifyTeacherTaskStatus({
+        status: "SUCCESS",
+        title: "Đã gán vào lộ trình",
+        message: `Đã gán "${capturedTitle}" vào ${planLabel}.`,
+        classroomId: capturedClassId,
+        targetUrl: "/teacher/daily-plan",
+        referenceId: capturedAssignId || capturedPlanId,
+        taskKey: `plan-item:${capturedPlanId}:${capturedAssignId || capturedTitle}`,
+      });
+    } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Lỗi kết nối hoặc dữ liệu.";
+      notifyTeacherTaskStatus({
+        status: "ERROR",
+        title: "Gán bài tập thất bại",
+        message: `Lỗi gán "${capturedTitle}" vào ${planLabel}: ${errMsg}`,
+        classroomId: capturedClassId,
+        targetUrl: "/teacher/daily-plan",
+        referenceId: capturedAssignId || capturedPlanId,
+        taskKey: `plan-item:${capturedPlanId}:${capturedAssignId || capturedTitle}`,
+      });
     } finally {
       addingItemRef.current = false;
     }
@@ -237,17 +300,17 @@ export function useTeacherDailyPlan(classId: string | undefined) {
   const handleDeleteAssignment = async (assignmentId: string, itemTitle?: string) => {
     if (
       !window.confirm(
-        `Bạn có chắc chắn muốn xóa vĩnh viễn bài tập "${itemTitle || "này"}"?\n\nHành động này sẽ gỡ bài khỏi tất cả ngày học trong lộ trình và xóa dữ liệu liên quan.`
+        `Xóa vĩnh viễn "${itemTitle || "bài tập này"}"?\nSẽ gỡ khỏi mọi ngày học và xóa dữ liệu liên quan.`
       )
     ) {
       return;
     }
     try {
       await teacherApi.deleteAssignment(assignmentId);
-      alert("Đã xóa bài tập thành công!");
+      alert("Đã xóa bài tập.");
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi khi xóa bài tập");
+      alert(err.response?.data?.message || "Xóa bài tập thất bại.");
     }
   };
 
@@ -256,7 +319,7 @@ export function useTeacherDailyPlan(classId: string | undefined) {
       await teacherApi.deletePlanItem(itemId);
       loadData();
     } catch (err) {
-      alert("Lỗi xóa bài tập khỏi Ngày học");
+      alert("Xóa mục khỏi ngày học thất bại.");
     }
   };
 

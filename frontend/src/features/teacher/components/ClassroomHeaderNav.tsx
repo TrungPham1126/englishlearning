@@ -80,38 +80,38 @@ export default function ClassroomHeaderNav({
   const tabs = [
     {
       id: "plans",
-      label: "Lộ Trình & Giao Bài",
+      label: "Lộ trình",
       path: `/teacher/classrooms/${classId}/plans`,
       icon: Calendar,
-      desc: "Quản lý bài tập theo ngày & ma trận tiến độ",
+      desc: "Lộ trình ngày & bài tập",
     },
     {
       id: "students",
-      label: "Học Viên & Điểm Số",
+      label: "Học viên",
       path: `/teacher/classrooms/${classId}/students`,
       icon: Users,
-      desc: "Theo dõi thành tích, hồ sơ bài nộp & quota AI",
+      desc: "Tiến độ, điểm & quota AI",
     },
     {
       id: "grading",
-      label: "Chấm Bài & Đánh Giá",
+      label: "Chấm bài",
       path: `/teacher/classrooms/${classId}/grading`,
       icon: Award,
-      desc: "Chấm điểm & nhận xét bài làm Speaking, Viết luận",
+      desc: "Chấm Speaking & Viết luận",
     },
     {
       id: "exams",
-      label: "Bài Thi & Kiểm Tra",
+      label: "Bài thi",
       path: `/teacher/classrooms/${classId}/exams`,
       icon: ShieldCheck,
-      desc: "Soạn đề thi nhiều kỹ năng, AI sinh đề & chống gian lận",
+      desc: "Đề thi & chống gian lận",
     },
     {
       id: "details",
-      label: "Bài Giảng & Tài Liệu",
+      label: "Bài giảng",
       path: `/teacher/classrooms/${classId}`,
       icon: BookOpen,
-      desc: "Upload tài liệu PDF, video bài giảng & thông báo",
+      desc: "Tài liệu, video & thông báo",
     },
   ];
 
@@ -122,7 +122,7 @@ export default function ClassroomHeaderNav({
         <div className="flex items-start space-x-3.5">
           <Link
             to="/teacher/classrooms"
-            title="Quay lại danh sách lớp học"
+            title="Quay lại"
             className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300 shadow-sm transition-all hover:border-blue-600 hover:bg-blue-800 hover:text-white hover:shadow-xs"
           >
             <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
@@ -132,17 +132,17 @@ export default function ClassroomHeaderNav({
             <div className="flex flex-wrap items-center gap-2">
               <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400">
                 <GraduationCap className="mr-1 h-3.5 w-3.5" />
-                Không gian lớp học
+                Lớp học
               </span>
               <ChevronRight className="h-3 w-3 text-slate-400 dark:text-slate-600" />
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {classroom?.name || "Chi tiết lớp học"}
+                {classroom?.name || "Chi tiết"}
               </span>
             </div>
 
             <div className="mt-1 flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                {classroom?.name || (loading ? "Đang tải lớp học..." : "Lớp học")}
+                {classroom?.name || (loading ? "Đang tải..." : "Lớp học")}
               </h1>
 
               {classroom?.level && (
@@ -166,7 +166,7 @@ export default function ClassroomHeaderNav({
                   {classroom.status === "OPEN"
                     ? "Đang mở"
                     : classroom.status === "PLANNING"
-                      ? "Chuẩn bị mở"
+                      ? "Sắp mở"
                       : "Đã đóng"}
                 </span>
               )}

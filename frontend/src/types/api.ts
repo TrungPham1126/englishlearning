@@ -32,6 +32,7 @@ export interface UserSummaryDto {
   targetCefr?: string;
   currentLevel?: string;
   isActive?: boolean;
+  currentStreak?: number;
 }
 
 // com.englishlearning.auth.dto.AuthResponse

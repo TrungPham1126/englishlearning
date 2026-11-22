@@ -27,6 +27,8 @@ import {
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { StreakBadge } from "@/components/common/StreakBadge";
 import { NotificationBell } from "@/components/notification/NotificationBell";
+import { studentApi } from "@/features/student/api/studentApi";
+import type { StudentStreakResponse } from "@/features/student/types";
 
 // 1. Component Dropdown Hồ sơ học viên
 function StudentProfileMenu() {
@@ -244,8 +246,106 @@ function StudentProfileMenu() {
 export default function StudentLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated } = useAuthStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [streakInfo, setStreakInfo] = useState<StudentStreakResponse>(() => {
+    let initial = 0;
+    if (
+      typeof user?.currentStreak === "number" &&
+      Number.isFinite(user.currentStreak) &&
+      user.currentStreak >= 0
+    ) {
+      initial = Math.floor(user.currentStreak);
+    } else {
+      try {
+        const stored = localStorage.getItem("elp_student_streak");
+        if (stored && /^\d+$/.test(stored.trim())) {
+          initial = Number.parseInt(stored.trim(), 10);
+        }
+      } catch {
+        // Ignore storage read errors
+      }
+    }
+    return {
+      currentStreak: initial,
+      lastActiveDate: null,
+      hasHomeworkToday: false,
+      completedToday: false,
+      todayCompletedTasks: 0,
+      todayTotalTasks: 0,
+    };
+  });
   const isTakingTest = location.pathname.includes("/take");
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isCancelled = false;
+
+    const syncStreak = async () => {
+      if (typeof studentApi?.getMyStreak !== "function") return;
+      try {
+        const info = await studentApi.getMyStreak();
+        if (isCancelled || !info) return;
+        setStreakInfo(info);
+        try {
+          localStorage.setItem("elp_student_streak", String(info.currentStreak));
+        } catch {
+          // Ignore storage write errors
+        }
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && currentUser.currentStreak !== info.currentStreak) {
+          useAuthStore.getState().updateUser({ currentStreak: info.currentStreak });
+        }
+        window.dispatchEvent(new CustomEvent("student-streak-updated", { detail: info }));
+      } catch {
+        // Preserve previous streak if network fails
+      }
+    };
+
+    void syncStreak();
+
+    const handleProgressUpdated = () => {
+      void syncStreak();
+    };
+    const handleStreakUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<StudentStreakResponse>>).detail;
+      if (!detail || typeof detail !== "object") return;
+      setStreakInfo((prev) => ({
+        currentStreak:
+          typeof detail.currentStreak === "number" &&
+          Number.isFinite(detail.currentStreak) &&
+          detail.currentStreak >= 0
+            ? Math.floor(detail.currentStreak)
+            : prev.currentStreak,
+        lastActiveDate:
+          detail.lastActiveDate !== undefined ? detail.lastActiveDate : prev.lastActiveDate,
+        hasHomeworkToday:
+          typeof detail.hasHomeworkToday === "boolean"
+            ? detail.hasHomeworkToday
+            : prev.hasHomeworkToday,
+        completedToday:
+          typeof detail.completedToday === "boolean"
+            ? detail.completedToday
+            : prev.completedToday,
+        todayCompletedTasks:
+          typeof detail.todayCompletedTasks === "number"
+            ? detail.todayCompletedTasks
+            : prev.todayCompletedTasks,
+        todayTotalTasks:
+          typeof detail.todayTotalTasks === "number"
+            ? detail.todayTotalTasks
+            : prev.todayTotalTasks,
+      }));
+    };
+
+    window.addEventListener("student-progress-updated", handleProgressUpdated);
+    window.addEventListener("student-streak-updated", handleStreakUpdated);
+    return () => {
+      isCancelled = true;
+      window.removeEventListener("student-progress-updated", handleProgressUpdated);
+      window.removeEventListener("student-streak-updated", handleStreakUpdated);
+    };
+  }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -336,7 +436,13 @@ export default function StudentLayout() {
 
         {/* Right Controls: Streak + AI Quota + ThemeToggle + Bell + Profile */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
-          <StreakBadge />
+          <StreakBadge
+            initialStreak={streakInfo.currentStreak}
+            hasHomeworkToday={streakInfo.hasHomeworkToday}
+            completedToday={streakInfo.completedToday}
+            todayCompletedTasks={streakInfo.todayCompletedTasks}
+            todayTotalTasks={streakInfo.todayTotalTasks}
+          />
           <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
           <ThemeToggle />
           <NotificationBell />
@@ -355,7 +461,13 @@ export default function StudentLayout() {
           <div className="flex items-center justify-between pb-2 mb-1 border-b border-slate-100 dark:border-slate-800/80">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-400">Trạng thái học viên</span>
             <div className="flex items-center gap-2">
-              <StreakBadge />
+              <StreakBadge
+                initialStreak={streakInfo.currentStreak}
+                hasHomeworkToday={streakInfo.hasHomeworkToday}
+                completedToday={streakInfo.completedToday}
+                todayCompletedTasks={streakInfo.todayCompletedTasks}
+                todayTotalTasks={streakInfo.todayTotalTasks}
+              />
             </div>
           </div>
 

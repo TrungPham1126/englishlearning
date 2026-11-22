@@ -44,7 +44,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -118,6 +120,92 @@ class AiLabControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.data.overallBand").value(7.0));
+
+        JsonNode part2Node = objectMapper.readTree("{\"overallBand\":6.5,\"speakingMode\":\"PART_2\",\"overallScore\":72,\"isPassed\":true}");
+        when(aiLabService.evaluateSpeakingTopic(eq("Describe a journey"), any(), isNull(), eq("PART_2"), eq("where, who, why")))
+                .thenReturn(part2Node);
+
+        mockMvc.perform(multipart("/api/v1/ai/speaking/evaluate")
+                        .file(audio)
+                        .param("topic", "Describe a journey")
+                        .param("speakingMode", "PART_2")
+                        .param("keyPoints", "where, who, why")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.speakingMode").value("PART_2"))
+                .andExpect(jsonPath("$.data.overallScore").value(72));
+    }
+
+    @Test
+    @DisplayName("POST /speaking/evaluate: UUID hợp lệ + speakingMode/keyPoints gọi overload 5 tham số")
+    void evaluateSpeaking_validUuidAndModeAndKeyPoints_delegatesToFiveArgService() throws Exception {
+        UUID answerId = UUID.randomUUID();
+        MockMultipartFile audio = new MockMultipartFile("audio", "speak.wav", "audio/wav", "bytes".getBytes());
+        JsonNode responseNode = objectMapper.readTree("{\"overallBand\":6.5,\"speakingMode\":\"PART_2\"}");
+        when(aiLabService.evaluateSpeakingTopic(
+                eq("Travel"), any(), eq(answerId), eq("PART_2"), eq("where; when; why")))
+                .thenReturn(responseNode);
+
+        mockMvc.perform(multipart("/api/v1/ai/speaking/evaluate")
+                        .file(audio)
+                        .param("topic", "Travel")
+                        .param("studentAnswerId", " " + answerId + " ")
+                        .param("speakingMode", " PART_2 ")
+                        .param("keyPoints", " where; when; why ")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.overallBand").value(6.5))
+                .andExpect(jsonPath("$.data.speakingMode").value("PART_2"));
+
+        verify(aiLabService).evaluateSpeakingTopic(
+                eq("Travel"), any(), eq(answerId), eq("PART_2"), eq("where; when; why"));
+    }
+
+    @Test
+    @DisplayName("POST /speaking/evaluate: UUID sai & speakingMode/keyPoints='undefined'/'null' được chuẩn hóa về null và gọi overload 3 tham số")
+    void evaluateSpeaking_malformedUuidAndLiteralNullMode_sanitizesToNullAndUsesThreeArgService() throws Exception {
+        MockMultipartFile audio = new MockMultipartFile("audio", "speak.wav", "audio/wav", "bytes".getBytes());
+        when(aiLabService.evaluateSpeakingTopic(eq("Daily life"), any(), isNull()))
+                .thenReturn(objectMapper.readTree("{\"overallBand\":6.0}"));
+
+        mockMvc.perform(multipart("/api/v1/ai/speaking/evaluate")
+                        .file(audio)
+                        .param("topic", "Daily life")
+                        .param("studentAnswerId", "not-a-uuid")
+                        .param("speakingMode", "undefined")
+                        .param("keyPoints", "null")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.overallBand").value(6.0));
+
+        verify(aiLabService).evaluateSpeakingTopic(eq("Daily life"), any(), isNull());
+        verify(aiLabService, never()).evaluateSpeakingTopic(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /speaking/evaluate: cho phép không gửi file audio (optional)")
+    void evaluateSpeaking_withoutAudioFile_allowsOptionalAudioAndReturnsOk() throws Exception {
+        when(aiLabService.evaluateSpeakingTopic(eq("Hometown"), isNull(), isNull()))
+                .thenReturn(objectMapper.readTree("{\"overallBand\":5.5}"));
+
+        mockMvc.perform(multipart("/api/v1/ai/speaking/evaluate")
+                        .param("topic", "Hometown")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.overallBand").value(5.5));
+
+        verify(aiLabService).evaluateSpeakingTopic(eq("Hometown"), isNull(), isNull());
+    }
+
+    @Test
+    @DisplayName("POST /speaking/evaluate: ADMIN bị từ chối 403 Forbidden")
+    void evaluateSpeaking_adminRole_returnsForbidden() throws Exception {
+        mockMvc.perform(multipart("/api/v1/ai/speaking/evaluate")
+                        .param("topic", "Hobby")
+                        .with(user(userWithRole(UUID.randomUUID(), RoleName.ROLE_ADMIN))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(aiLabService);
     }
 
     @Test
@@ -142,6 +230,72 @@ class AiLabControllerTest {
                         .content("Essay")
                         .with(user(userWithRole(UUID.randomUUID(), RoleName.ROLE_ADMIN))))
                 .andExpect(status().isForbidden());
+
+        JsonNode task1Node = objectMapper.readTree("{\"overallBand\":7.0,\"writingTask\":\"TASK_1\"}");
+        when(aiLabService.evaluateWriting(eq("Bar Chart"), eq("The chart shows..."), eq(ansId), eq("TASK_1")))
+                .thenReturn(task1Node);
+        mockMvc.perform(post("/api/v1/ai/writing/evaluate")
+                        .param("topic", "Bar Chart")
+                        .param("studentAnswerId", ansId.toString())
+                        .param("writingTask", "TASK_1")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("The chart shows...")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.writingTask").value("TASK_1"))
+                .andExpect(jsonPath("$.data.overallBand").value(7.0));
+
+        JsonNode paragraphNode = objectMapper.readTree("{\"overallBand\":6.5,\"writingTask\":\"PARAGRAPH\"}");
+        when(aiLabService.evaluateWriting(eq("Daily Routine"), eq("I wake up early."), isNull(), eq("PARAGRAPH")))
+                .thenReturn(paragraphNode);
+        mockMvc.perform(post("/api/v1/ai/writing/evaluate")
+                        .param("topic", "Daily Routine")
+                        .param("writingTask", "PARAGRAPH")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("I wake up early.")
+                        .with(user(userWithRole(teacherId, RoleName.ROLE_TEACHER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.writingTask").value("PARAGRAPH"));
+
+        verify(aiLabService).evaluateWriting(eq("Bar Chart"), eq("The chart shows..."), eq(ansId), eq("TASK_1"));
+        verify(aiLabService).evaluateWriting(eq("Daily Routine"), eq("I wake up early."), isNull(), eq("PARAGRAPH"));
+    }
+
+    @Test
+    @DisplayName("POST /writing/evaluate: chưa đăng nhập trả 401; UUID lỗi & writingTask='undefined'/'null' chuẩn hóa về overload 3 tham số")
+    void evaluateWriting_unauthenticatedAndMalformedUuidWithLiteralNullTask_enforcesAuthAndSanitizes() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/writing/evaluate")
+                        .param("topic", "Tech")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("My essay"))
+                .andExpect(status().isUnauthorized());
+
+        when(aiLabService.evaluateWriting(eq("Tech"), eq("My essay"), isNull()))
+                .thenReturn(objectMapper.readTree("{\"overallBand\":6.0}"));
+
+        mockMvc.perform(post("/api/v1/ai/writing/evaluate")
+                        .param("topic", "Tech")
+                        .param("studentAnswerId", "bad-uuid")
+                        .param("writingTask", "undefined")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("My essay")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.overallBand").value(6.0));
+
+        mockMvc.perform(post("/api/v1/ai/writing/evaluate")
+                        .param("topic", "Tech")
+                        .param("studentAnswerId", "null")
+                        .param("writingTask", "null")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("My essay")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.overallBand").value(6.0));
+
+        verify(aiLabService, org.mockito.Mockito.times(2))
+                .evaluateWriting(eq("Tech"), eq("My essay"), isNull());
+        verify(aiLabService, never()).evaluateWriting(any(), any(), any(), any());
     }
 
     @Test

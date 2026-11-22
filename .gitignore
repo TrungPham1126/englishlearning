@@ -117,5 +117,17 @@ skills-lock.json
 tests/
 .agents/
 
+### Python AI (Writing Scorer - large datasets & binary weights) ###
+writing-scorer/data/*.jsonl
+writing-scorer/models/**/*.safetensors
+writing-scorer/models/**/*.pt
+writing-scorer/models/**/*.joblib
+writing-scorer/models/**/tokenizer.json
+
+### Scratch audio/temp artifacts in phonetics-service ###
+phonetics-service/-
+phonetics-service/*.mp3
+
+
 
 

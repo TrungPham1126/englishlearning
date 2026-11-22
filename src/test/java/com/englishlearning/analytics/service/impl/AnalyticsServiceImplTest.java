@@ -213,5 +213,57 @@ class AnalyticsServiceImplTest {
         assertThat(analyticsService.generateRecommendedPath(balanced))
                 .contains("phát triển tốt")
                 .contains("Từ vựng (Vocabulary)");
+
+        // Nhánh thang 10 có độ lệch lớn (strongest <= 10.0, >= 7.0 và weakest <= 4.0) & null safety
+        StudentSkillProfile unbalanced10 = StudentSkillProfile.builder()
+                .readingScore(8.5).speakingScore(3.0).listeningScore(3.5)
+                .writingScore(6.0).grammarScore(6.5).vocabularyScore(5.5)
+                .build();
+        assertThat(analyticsService.generateRecommendedPath(unbalanced10)).contains("mất cân đối lớn");
+        assertThat(analyticsService.generateRecommendedPath(null)).contains("giai đoạn khởi động");
+    }
+
+    @Test
+    @DisplayName("Đồng bộ Speaking/Writing khi không có AI eval, trộn 50/50 Vocabulary, cập nhật Pronunciation/Fluency và tra cứu theo Long userId")
+    void syncRealSkillScores_blendsVocabAndAiWithAttemptsAndHandlesLongUserId() {
+        when(profileRepository.findById(any(UUID.class))).thenReturn(Optional.of(profile));
+        when(profileRepository.save(any(StudentSkillProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 1. Khi chưa có AiEvaluation nhưng có bài tập Speaking (7.5 -> 75), Writing (6.0 -> 60), Vocabulary (9.0 -> 90)
+        Assignment speakingAss = Assignment.builder().skillType(SkillType.SPEAKING).build();
+        Assignment writingAss = Assignment.builder().skillType(SkillType.WRITING).build();
+        Assignment vocabAss = Assignment.builder().skillType(SkillType.VOCABULARY).build();
+        when(assignmentAttemptRepository.findCompletedAttemptsByStudentId(any(UUID.class))).thenReturn(List.of(
+                AssignmentAttempt.builder().assignment(speakingAss).totalScore(7.5).build(),
+                AssignmentAttempt.builder().assignment(writingAss).totalScore(6.0).build(),
+                AssignmentAttempt.builder().assignment(vocabAss).totalScore(9.0).build()
+        ));
+        when(aiEvaluationRepository.findByStudentId(any(UUID.class))).thenReturn(List.of());
+        // totalVocab = 10, mastered = 6 -> 60%. Kết hợp 50% với bài tập Vocab 90% -> 75.0
+        when(studentVocabularyProgressRepository.countByStudentId(any(UUID.class))).thenReturn(10L);
+        when(studentVocabularyProgressRepository.countMasteredByStudentId(any(UUID.class))).thenReturn(6L);
+
+        StudentSkillProfile res1 = analyticsService.getStudentAnalytics(42L);
+        assertThat(res1.getSpeakingScore()).isEqualTo(75.0);
+        assertThat(res1.getWritingScore()).isEqualTo(60.0);
+        assertThat(res1.getVocabularyScore()).isEqualTo(75.0);
+
+        // 2. Khi totalVocab = 0 (chỉ có điểm bài tập Vocab 90%) và có cả AI Writing (8.0 -> 80) + bài tập Writing (6.0 -> 60) -> TB = 70.0
+        when(studentVocabularyProgressRepository.countByStudentId(studentId)).thenReturn(0L);
+        when(studentVocabularyProgressRepository.countMasteredByStudentId(studentId)).thenReturn(0L);
+        when(aiEvaluationRepository.findByStudentId(studentId)).thenReturn(List.of(
+                AiEvaluation.builder().evalType(AiEvaluationType.WRITING).overallScore(8.0).build()
+        ));
+
+        StudentSkillProfile res2 = analyticsService.getMyProfile(studentId);
+        assertThat(res2.getWritingScore()).isEqualTo(70.0);
+        assertThat(res2.getVocabularyScore()).isEqualTo(90.0);
+
+        // 3. updateSkillScore hỗ trợ PRONUNCIATION, FLUENCY (có khoảng trắng) và chặn sàn 0.0
+        analyticsService.updateSkillScore(studentId, " pronunciation ", 45.0);
+        analyticsService.updateSkillScore(studentId, "fluency", 55.0);
+        analyticsService.updateSkillScore(studentId, "PRONUNCIATION", -100.0);
+        assertThat(profile.getPronunciationScore()).isEqualTo(0.0);
+        assertThat(profile.getFluencyScore()).isEqualTo(55.0);
     }
 }

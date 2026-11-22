@@ -93,6 +93,7 @@ public class CurriculumServiceImpl implements CurriculumService {
                         .word(v.getWord())
                         .meaning(v.getMeaning())
                         .ipa(v.getIpa())
+                        .audioUrl(v.getAudioUrl())
                         .exampleSentence(v.getExampleSentence())
                         .partOfSpeech(v.getPartOfSpeech())
                         .build())
@@ -150,19 +151,14 @@ public class CurriculumServiceImpl implements CurriculumService {
     // 4. Upload tài liệu
     @Transactional
     public DocumentResponse uploadLessonDocument(UUID lessonId, MultipartFile file, String fileTypeStr) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("File tài liệu không được để trống");
+        }
+        DocumentType fileType = parseDocumentType(fileTypeStr);
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài học"));
 
         String fileUrl = storageService.uploadFile(file);
-        if (fileTypeStr == null || fileTypeStr.isBlank()) {
-            throw new BadRequestException("Loại tài liệu không được để trống");
-        }
-        DocumentType fileType;
-        try {
-            fileType = DocumentType.valueOf(fileTypeStr.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new BadRequestException("Loại tài liệu không hợp lệ: " + fileTypeStr);
-        }
 
         LessonDocument document = LessonDocument.builder()
                 .lesson(lesson)
@@ -181,10 +177,111 @@ public class CurriculumServiceImpl implements CurriculumService {
     }
 
     @Transactional
+    public DocumentResponse updateDocument(UUID documentId, DocumentUpdateRequest request) {
+        if (request == null || request.getFileName() == null || request.getFileName().isBlank()) {
+            throw new BadRequestException("Tên tài liệu không được để trống");
+        }
+        LessonDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài liệu"));
+
+        doc.setFileName(request.getFileName().trim());
+        if (request.getFileType() != null && !request.getFileType().isBlank()) {
+            doc.setFileType(parseDocumentType(request.getFileType()));
+        }
+
+        return mapToDocumentResponse(documentRepository.save(doc));
+    }
+
+    @Transactional
+    public DocumentResponse replaceDocumentFile(UUID documentId, MultipartFile file, String fileName, String fileTypeStr) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("File tài liệu thay thế không được để trống");
+        }
+
+        LessonDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài liệu"));
+
+        String resolvedName = (fileName != null && !fileName.isBlank())
+                ? fileName.trim()
+                : (file.getOriginalFilename() != null && !file.getOriginalFilename().isBlank()
+                        ? file.getOriginalFilename()
+                        : doc.getFileName());
+
+        DocumentType resolvedType = (fileTypeStr != null && !fileTypeStr.isBlank())
+                ? parseDocumentType(fileTypeStr)
+                : inferDocumentTypeFromFilename(
+                        file.getOriginalFilename() != null ? file.getOriginalFilename() : resolvedName,
+                        doc.getFileType());
+
+        String oldUrl = doc.getStorageUrl();
+        String newUrl = storageService.uploadFile(file);
+
+        doc.setFileName(resolvedName);
+        doc.setStorageUrl(newUrl);
+        doc.setFileType(resolvedType);
+        doc.setFileSizeBytes(file.getSize());
+
+        LessonDocument saved = documentRepository.save(doc);
+
+        if (oldUrl != null && !oldUrl.isBlank() && !oldUrl.equals(newUrl)) {
+            try {
+                storageService.deleteFileByUrl(oldUrl);
+            } catch (Exception ex) {
+                log.warn("Không thể xóa file tài liệu cũ {}: {}", oldUrl, ex.getMessage());
+            }
+        }
+
+        return mapToDocumentResponse(saved);
+    }
+
+    @Transactional
     public void deleteDocument(UUID documentId) {
         LessonDocument doc = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài liệu"));
+        String storageUrl = doc.getStorageUrl();
         documentRepository.delete(doc);
+        if (storageUrl != null && !storageUrl.isBlank()) {
+            try {
+                storageService.deleteFileByUrl(storageUrl);
+            } catch (Exception ex) {
+                log.warn("Không thể xóa file tài liệu khỏi storage {}: {}", storageUrl, ex.getMessage());
+            }
+        }
+    }
+
+    private DocumentType parseDocumentType(String fileTypeStr) {
+        if (fileTypeStr == null || fileTypeStr.isBlank()) {
+            throw new BadRequestException("Loại tài liệu không được để trống");
+        }
+        try {
+            return DocumentType.valueOf(fileTypeStr.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Loại tài liệu không hợp lệ: " + fileTypeStr);
+        }
+    }
+
+    private DocumentType inferDocumentTypeFromFilename(String filename, DocumentType fallback) {
+        if (filename != null) {
+            String lower = filename.trim().toLowerCase();
+            if (lower.endsWith(".pdf")) {
+                return DocumentType.PDF;
+            }
+            if (lower.endsWith(".doc") || lower.endsWith(".docx") || lower.endsWith(".txt")) {
+                return DocumentType.DOCX;
+            }
+            if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) {
+                return DocumentType.PPTX;
+            }
+            if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                    || lower.endsWith(".webp") || lower.endsWith(".gif")) {
+                return DocumentType.IMAGE;
+            }
+            if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".m4a")
+                    || lower.endsWith(".ogg") || lower.endsWith(".aac")) {
+                return DocumentType.AUDIO;
+            }
+        }
+        return fallback != null ? fallback : DocumentType.PDF;
     }
 
     // 5. Quản lý Grammar Topic
@@ -195,6 +292,10 @@ public class CurriculumServiceImpl implements CurriculumService {
 
     @Transactional
     public GrammarTopicResponse addGrammarTopic(UUID lessonId, GrammarTopicRequest request) {
+        if (request == null || request.getTitle() == null || request.getTitle().isBlank()
+                || request.getRuleSummary() == null || request.getRuleSummary().isBlank()) {
+            throw new BadRequestException("Tiêu đề và tóm tắt ngữ pháp không được để trống");
+        }
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài học"));
 
@@ -205,6 +306,23 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .formula(request.getFormula())
                 .examples(request.getExamples())
                 .build();
+
+        return mapToGrammarResponse(grammarTopicRepository.save(topic));
+    }
+
+    @Transactional
+    public GrammarTopicResponse updateGrammarTopic(UUID topicId, GrammarTopicRequest request) {
+        if (request == null || request.getTitle() == null || request.getTitle().isBlank()
+                || request.getRuleSummary() == null || request.getRuleSummary().isBlank()) {
+            throw new BadRequestException("Tiêu đề và tóm tắt ngữ pháp không được để trống");
+        }
+        GrammarTopic topic = grammarTopicRepository.findById(topicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chủ điểm ngữ pháp"));
+
+        topic.setTitle(request.getTitle().trim());
+        topic.setRuleSummary(request.getRuleSummary().trim());
+        topic.setFormula(request.getFormula() != null ? request.getFormula().trim() : null);
+        topic.setExamples(request.getExamples() != null ? request.getExamples().trim() : null);
 
         return mapToGrammarResponse(grammarTopicRepository.save(topic));
     }
@@ -237,22 +355,25 @@ public class CurriculumServiceImpl implements CurriculumService {
         final int progressPercentage;
         final int watchedSeconds;
         final boolean hasVideo;
+        final Video video;
 
-        LessonProgressData(boolean completed, int progressPercentage, int watchedSeconds, boolean hasVideo) {
+        LessonProgressData(boolean completed, int progressPercentage, int watchedSeconds, boolean hasVideo, Video video) {
             this.completed = completed;
             this.progressPercentage = progressPercentage;
             this.watchedSeconds = watchedSeconds;
             this.hasVideo = hasVideo;
+            this.video = video;
         }
     }
 
     private LessonProgressData computeLessonProgress(UUID lessonId, UUID studentId) {
-        // 1. Kiểm tra Video của bài học (trả chính xác hasVideo ngay cả với teacher/guest)
+        // 1. Kiểm tra Video của bài học (trả chính xác hasVideo + video metadata ngay cả với teacher/guest)
         Optional<Video> videoOpt = (lessonId != null) ? videoRepository.findByLessonId(lessonId) : Optional.empty();
-        boolean hasVideo = videoOpt.isPresent();
+        Video lessonVideo = videoOpt.orElse(null);
+        boolean hasVideo = lessonVideo != null;
 
         if (studentId == null) {
-            return new LessonProgressData(false, 0, 0, hasVideo);
+            return new LessonProgressData(false, 0, 0, hasVideo, lessonVideo);
         }
 
         int watchedSeconds = 0;
@@ -260,16 +381,15 @@ public class CurriculumServiceImpl implements CurriculumService {
         boolean videoCompleted = false;
 
         if (hasVideo) {
-            Video video = videoOpt.get();
-            Optional<VideoWatchHistory> historyOpt = watchHistoryRepository.findByStudentIdAndVideoId(studentId, video.getId());
+            Optional<VideoWatchHistory> historyOpt = watchHistoryRepository.findByStudentIdAndVideoId(studentId, lessonVideo.getId());
             if (historyOpt.isPresent()) {
                 VideoWatchHistory history = historyOpt.get();
                 watchedSeconds = history.getWatchedSeconds() != null ? history.getWatchedSeconds() : 0;
                 videoPercent = history.getCompletionPercentage() != null ? history.getCompletionPercentage() : 0.0f;
                 videoCompleted = Boolean.TRUE.equals(history.getIsCompleted());
 
-                if (!videoCompleted && video.getDurationSeconds() != null && video.getDurationSeconds() > 0) {
-                    videoPercent = ((float) watchedSeconds / video.getDurationSeconds()) * 100.0f;
+                if (!videoCompleted && lessonVideo.getDurationSeconds() != null && lessonVideo.getDurationSeconds() > 0) {
+                    videoPercent = ((float) watchedSeconds / lessonVideo.getDurationSeconds()) * 100.0f;
                     if (videoPercent >= 80.0f) {
                         videoCompleted = true;
                     }
@@ -317,18 +437,19 @@ public class CurriculumServiceImpl implements CurriculumService {
             completed = true;
         }
 
-        return new LessonProgressData(completed, progressPercentage, watchedSeconds, hasVideo);
+        return new LessonProgressData(completed, progressPercentage, watchedSeconds, hasVideo, lessonVideo);
     }
 
     // Các hàm mapping
     private LessonResponse mapToLessonResponse(Lesson lesson, LessonProgressData progress) {
         UUID lessonId = lesson.getId();
-        boolean hasVideo = (progress != null)
-                ? progress.hasVideo
-                : (lessonId != null && videoRepository.findByLessonId(lessonId).isPresent());
-        int documentsCount = (lessonId != null)
-                ? documentRepository.findByLessonId(lessonId).size()
-                : 0;
+        Video lessonVideo = (progress != null)
+                ? progress.video
+                : (lessonId != null ? videoRepository.findByLessonId(lessonId).orElse(null) : null);
+        boolean hasVideo = (progress != null) ? progress.hasVideo : (lessonVideo != null);
+        List<LessonDocument> docs = (lessonId != null) ? documentRepository.findByLessonId(lessonId) : null;
+        List<VocabularyItem> vocabs = (lessonId != null) ? vocabularyRepository.findByLessonId(lessonId) : null;
+        List<GrammarTopic> grammars = (lessonId != null) ? grammarTopicRepository.findByLessonId(lessonId) : null;
 
         return LessonResponse.builder()
                 .id(lessonId)
@@ -344,7 +465,12 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .progressPercentage(progress != null ? progress.progressPercentage : 0)
                 .watchedSeconds(progress != null ? progress.watchedSeconds : 0)
                 .hasVideo(hasVideo)
-                .documentsCount(documentsCount)
+                .videoId(lessonVideo != null ? lessonVideo.getId() : null)
+                .videoStatus((lessonVideo != null && lessonVideo.getStatus() != null) ? lessonVideo.getStatus().name() : null)
+                .videoRejectionReason(lessonVideo != null ? lessonVideo.getRejectionReason() : null)
+                .documentsCount(docs != null ? docs.size() : 0)
+                .vocabulariesCount(vocabs != null ? vocabs.size() : 0)
+                .grammarTopicsCount(grammars != null ? grammars.size() : 0)
                 .build();
     }
 

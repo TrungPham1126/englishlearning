@@ -207,4 +207,59 @@ class ShadowingPracticeServiceTest {
                 sampleAnswerId, sampleAudio, "a.wav", sampleReference);
         assertThat(resilient.getOverallScore()).isEqualTo(90);
     }
+
+    @Test
+    @DisplayName("practiceShadowing: bỏ qua lưu DB nếu không tìm thấy StudentAnswer và vẫn trả kết quả")
+    void practiceShadowing_studentAnswerNotFoundInDb_skipsPersistenceAndReturnsResponse() {
+        UUID missingId = UUID.randomUUID();
+        when(entityManager.find(StudentAnswer.class, missingId)).thenReturn(null);
+        ShadowingEvaluationResponse expected = ShadowingEvaluationResponse.builder()
+                .overallScore(84)
+                .isPassed(true)
+                .evaluatedBy("PYTHON_ACOUSTIC_ENGINE")
+                .build();
+        when(aiEvaluationService.evaluateSpeech(eq(sampleAudio), eq("audio.wav"), eq(sampleReference)))
+                .thenReturn(expected);
+
+        ShadowingEvaluationResponse result = shadowingPracticeService.practiceShadowing(
+                missingId, sampleAudio, "audio.wav", sampleReference);
+
+        assertThat(result.getOverallScore()).isEqualTo(84);
+        verify(entityManager).find(StudentAnswer.class, missingId);
+        verify(entityManager, never()).merge(any());
+        verifyNoInteractions(aiEvaluationRepository, analyticsService);
+    }
+
+    @Test
+    @DisplayName("practiceShadowing: overallScore=null và KPI ngoài biên [0..100] được kẹp đúng về thang 10 và isCorrect=false")
+    void practiceShadowing_nullOverallScoreAndOutOfRangeKpi_clampsScoresAndMarksIncorrect() {
+        StudentAnswer studentAnswer = new StudentAnswer();
+        studentAnswer.setId(sampleAnswerId);
+        when(entityManager.find(StudentAnswer.class, sampleAnswerId)).thenReturn(studentAnswer);
+        when(aiEvaluationRepository.findByStudentAnswerId(sampleAnswerId)).thenReturn(Optional.empty());
+
+        ShadowingEvaluationResponse extremeResp = ShadowingEvaluationResponse.builder()
+                .overallScore(null)
+                .isPassed(false)
+                .evaluatedBy("RULE_BASED_OFFLINE_FALLBACK")
+                .kpi(ShadowingEvaluationResponse.KpiMetrics.builder()
+                        .pronunciation(120)
+                        .fluency(-10)
+                        .build())
+                .build();
+        when(aiEvaluationService.evaluateSpeech(eq(sampleAudio), eq("audio.wav"), eq(sampleReference)))
+                .thenReturn(extremeResp);
+
+        shadowingPracticeService.practiceShadowing(sampleAnswerId, sampleAudio, "audio.wav", sampleReference);
+
+        ArgumentCaptor<AiEvaluation> captor = ArgumentCaptor.forClass(AiEvaluation.class);
+        verify(aiEvaluationRepository).save(captor.capture());
+        AiEvaluation saved = captor.getValue();
+        assertThat(saved.getOverallScore()).isZero();
+        assertThat(saved.getPronunciationScore()).isEqualTo(10.0);
+        assertThat(saved.getFluencyScore()).isZero();
+        assertThat(studentAnswer.getEarnedPoints()).isZero();
+        assertThat(studentAnswer.getIsCorrect()).isFalse();
+        verifyNoInteractions(analyticsService);
+    }
 }

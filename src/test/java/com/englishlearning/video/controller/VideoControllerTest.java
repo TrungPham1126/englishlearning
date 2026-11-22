@@ -10,6 +10,7 @@ import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.common.config.SecurityConfig;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
 import com.englishlearning.common.exception.ResourceNotFoundException;
+import com.englishlearning.video.dto.R2ObjectStream;
 import com.englishlearning.video.dto.VideoUploadResponse;
 import com.englishlearning.video.dto.WatchProgressRequest;
 import com.englishlearning.video.entity.Video;
@@ -34,9 +35,12 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -167,13 +171,22 @@ class VideoControllerTest {
                         .header(HttpHeaders.RANGE, "bytes=0-4"))
                 .andExpect(status().isPartialContent())
                 .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=86400"))
                 .andExpect(content().contentType("video/mp4"))
                 .andExpect(content().string("01234"));
 
         // Request không có Range header -> vẫn trả 206
         mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId))
                 .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=86400"))
                 .andExpect(content().string("0123456789ABCDEF"));
+
+        // File cục bộ không còn nhưng rawStorageUrl là URL R2 -> 302 redirect
+        when(videoService.getVideoById(videoId))
+                .thenReturn(Video.builder().id(videoId).rawStorageUrl("https://cdn.example.com/raw/lecture.mp4").build());
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId))
+                .andExpect(status().isFound())
+                .andExpect(header().string(HttpHeaders.LOCATION, "https://cdn.example.com/raw/lecture.mp4"));
 
         // File vật lý không tồn tại -> 404
         when(videoService.getVideoById(videoId))
@@ -192,11 +205,13 @@ class VideoControllerTest {
 
         mockMvc.perform(get("/api/v1/videos/{id}/hls/master.m3u8", videoId))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=60"))
                 .andExpect(content().contentType("application/vnd.apple.mpegurl"))
                 .andExpect(content().string(containsString("#EXTM3U")));
 
         mockMvc.perform(get("/api/v1/videos/{id}/hls/segment_000.ts", videoId))
                 .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=86400"))
                 .andExpect(content().contentType("video/MP2T"));
 
         mockMvc.perform(get("/api/v1/videos/{id}/hls/notfound.m3u8", videoId))
@@ -275,5 +290,236 @@ class VideoControllerTest {
         mockMvc.perform(delete("/api/v1/videos/{id}", videoId).with(user(teacher)))
                 .andExpect(status().isOk());
         verify(videoService).deleteVideo(videoId);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/videos/my-uploads cho phép TEACHER lọc theo trạng thái, chặn STUDENT (403) và anonymous (401)")
+    void getMyUploadedVideos_enforcesRbacAndFiltersByStatus() throws Exception {
+        CustomUserDetails teacher = userWithRole(teacherId, RoleName.ROLE_TEACHER);
+        CustomUserDetails student = userWithRole(studentId, RoleName.ROLE_STUDENT);
+
+        Video pendingVideo = Video.builder()
+                .id(videoId)
+                .status(VideoStatus.PENDING_REVIEW)
+                .originalFileName("pending.mp4")
+                .build();
+        Video rejectedVideo = Video.builder()
+                .id(UUID.randomUUID())
+                .status(VideoStatus.REJECTED)
+                .rejectionReason("Âm thanh nhỏ")
+                .originalFileName("rejected.mp4")
+                .build();
+
+        when(videoService.getVideosByUploader(teacherId, null)).thenReturn(List.of(pendingVideo, rejectedVideo));
+        when(videoService.getVideosByUploader(teacherId, VideoStatus.REJECTED)).thenReturn(List.of(rejectedVideo));
+
+        mockMvc.perform(get("/api/v1/videos/my-uploads").with(user(teacher)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(videoId.toString()))
+                .andExpect(jsonPath("$.data[1].status").value("REJECTED"));
+
+        mockMvc.perform(get("/api/v1/videos/my-uploads")
+                        .param("status", "REJECTED")
+                        .with(user(teacher)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].rejectionReason").value("Âm thanh nhỏ"));
+
+        mockMvc.perform(get("/api/v1/videos/my-uploads").with(user(student)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/videos/my-uploads"))
+                .andExpect(status().isUnauthorized());
+
+        verify(videoService).getVideosByUploader(teacherId, null);
+        verify(videoService).getVideosByUploader(teacherId, VideoStatus.REJECTED);
+    }
+
+    @Test
+    @DisplayName("GET/HEAD /{id}/hls/{fileName} proxy stream từ R2 khi vắng file local và hỗ trợ Range 206")
+    void serveHlsFile_proxiesFromR2WhenLocalMissing_supportsRangeHeadAnd404() throws Exception {
+        String playlist = "#EXTM3U\n#EXT-X-VERSION:3\nstream_360p.m3u8\n";
+        when(videoService.openHlsStream(videoId, "master.m3u8", null, false))
+                .thenReturn(Optional.of(new R2ObjectStream(
+                        new ByteArrayInputStream(playlist.getBytes(StandardCharsets.UTF_8)),
+                        playlist.length(),
+                        playlist.length(),
+                        null,
+                        "application/vnd.apple.mpegurl",
+                        false,
+                        false)));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/hls/master.m3u8", videoId))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=60"))
+                .andExpect(content().contentType("application/vnd.apple.mpegurl"))
+                .andExpect(content().string(containsString("stream_360p.m3u8")));
+
+        when(videoService.openHlsStream(videoId, "stream_360p_000.ts", "bytes=0-3", false))
+                .thenReturn(Optional.of(new R2ObjectStream(
+                        new ByteArrayInputStream("abcd".getBytes(StandardCharsets.UTF_8)),
+                        4L,
+                        10L,
+                        "bytes 0-3/10",
+                        "video/MP2T",
+                        true,
+                        false)));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/hls/stream_360p_000.ts", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 0-3/10"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=86400"))
+                .andExpect(content().contentType("video/MP2T"))
+                .andExpect(content().string("abcd"));
+
+        when(videoService.openHlsStream(videoId, "stream_360p_000.ts", null, true))
+                .thenReturn(Optional.of(new R2ObjectStream(null, 1024L, 1024L, null, "video/MP2T", false, false)));
+
+        mockMvc.perform(head("/api/v1/videos/{id}/hls/stream_360p_000.ts", videoId)
+                        .header(HttpHeaders.ORIGIN, "http://localhost:5173"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, containsString("Content-Range")))
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "1024"));
+
+        when(videoService.openRawStream(
+                org.mockito.ArgumentMatchers.argThat(v -> v != null && videoId.equals(v.getId())),
+                org.mockito.ArgumentMatchers.isNull(),
+                eq(true)))
+                .thenReturn(Optional.of(new R2ObjectStream(null, 2048L, 2048L, null, "video/mp4", false, false)));
+        when(videoService.getVideoById(videoId))
+                .thenReturn(Video.builder().id(videoId).rawStorageUrl("https://pub-r2.example.dev/raw/" + videoId + "/lecture.mp4").build());
+
+        mockMvc.perform(head("/api/v1/videos/{id}/raw", videoId)
+                        .header(HttpHeaders.ORIGIN, "http://localhost:5173"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"))
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "2048"));
+
+        when(videoService.openHlsStream(videoId, "missing.ts", null, false)).thenReturn(Optional.empty());
+        mockMvc.perform(get("/api/v1/videos/{id}/hls/missing.ts", videoId))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /{id}/raw proxy stream R2 cho MP4 đã đẩy lên mây với HTTP Range 206 và 416")
+    void serveRawVideo_proxiesManagedR2StreamWithRangeAnd416() throws Exception {
+        Video r2Video = Video.builder()
+                .id(videoId)
+                .rawStorageUrl("https://pub-r2.example.dev/raw/" + videoId + "/lecture.mp4")
+                .build();
+        when(videoService.getVideoById(videoId)).thenReturn(r2Video);
+        when(videoService.openRawStream(r2Video, "bytes=0-3", false))
+                .thenReturn(Optional.of(new R2ObjectStream(
+                        new ByteArrayInputStream("1234".getBytes(StandardCharsets.UTF_8)),
+                        4L,
+                        10L,
+                        "bytes 0-3/10",
+                        "video/mp4",
+                        true,
+                        false)));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 0-3/10"))
+                .andExpect(content().contentType("video/mp4"))
+                .andExpect(content().string("1234"));
+
+        when(videoService.openRawStream(r2Video, "bytes=999-1000", false))
+                .thenReturn(Optional.of(R2ObjectStream.notSatisfiable(10L, "video/mp4")));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=999-1000"))
+                .andExpect(status().isRequestedRangeNotSatisfiable())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes */10"));
+    }
+
+    @Test
+    @DisplayName("Streaming file local (raw & HLS): hỗ trợ HEAD, fallback thư mục raw, Range 206 và trả 416 khi vượt kích thước/file rỗng")
+    void serveRawAndHlsLocalFiles_handlesHeadFallbackDirAndRange416() throws Exception {
+        // 1. File đặt trong uploadBaseDir/raw/ vẫn tìm thấy khi rawStorageUrl trỏ sang thư mục cũ khác
+        Path rawSubDir = tempDir.resolve("raw");
+        Files.createDirectories(rawSubDir);
+        Path movedRaw = rawSubDir.resolve("moved.mp4");
+        Files.write(movedRaw, "0123456789".getBytes(StandardCharsets.UTF_8));
+
+        Video movedVideo = Video.builder()
+                .id(videoId)
+                .rawStorageUrl("/old/missing/path/moved.mp4")
+                .build();
+        when(videoService.getVideoById(videoId)).thenReturn(movedVideo);
+
+        mockMvc.perform(head("/api/v1/videos/{id}/raw", videoId))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "10"));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=50-60"))
+                .andExpect(status().isRequestedRangeNotSatisfiable())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes */10"));
+
+        // File 0 byte -> 416
+        Path emptyRaw = rawSubDir.resolve("empty.mp4");
+        Files.write(emptyRaw, new byte[0]);
+        when(videoService.getVideoById(videoId))
+                .thenReturn(Video.builder().id(videoId).rawStorageUrl(emptyRaw.toString()).build());
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=0-1"))
+                .andExpect(status().isRequestedRangeNotSatisfiable())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes */0"));
+
+        // 2. Local HLS file với Range hợp lệ (206), HEAD và Range vượt giới hạn (416)
+        Path hlsDir = tempDir.resolve("hls").resolve(videoId.toString());
+        Files.createDirectories(hlsDir);
+        Files.writeString(hlsDir.resolve("stream_360p_000.ts"), "0123456789");
+
+        mockMvc.perform(get("/api/v1/videos/{id}/hls/stream_360p_000.ts", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=2-5"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 2-5/10"))
+                .andExpect(content().string("2345"));
+
+        mockMvc.perform(head("/api/v1/videos/{id}/hls/stream_360p_000.ts", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "4"));
+
+        mockMvc.perform(get("/api/v1/videos/{id}/hls/stream_360p_000.ts", videoId)
+                        .header(HttpHeaders.RANGE, "bytes=100-200"))
+                .andExpect(status().isRequestedRangeNotSatisfiable())
+                .andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes */10"));
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/review từ chối kèm lý do bởi ADMIN & GET /lesson/{lessonId} trả về video khi tồn tại")
+    void reviewRejectWithReasonAndGetVideoByLesson_returnsExpectedPayload() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        CustomUserDetails admin = userWithRole(adminId, RoleName.ROLE_ADMIN);
+        Video rejected = Video.builder()
+                .id(videoId)
+                .status(VideoStatus.REJECTED)
+                .rejectionReason("Hình ảnh bị mờ")
+                .build();
+        when(videoService.reviewVideo(videoId, adminId, false, "Hình ảnh bị mờ")).thenReturn(rejected);
+
+        mockMvc.perform(patch("/api/v1/videos/{id}/review", videoId)
+                        .param("approved", "false")
+                        .param("reason", "Hình ảnh bị mờ")
+                        .with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"))
+                .andExpect(jsonPath("$.data.rejectionReason").value("Hình ảnh bị mờ"));
+
+        Video lessonVideo = Video.builder().id(videoId).originalFileName("lesson1.mp4").build();
+        when(videoService.getVideoByLessonId(lessonId)).thenReturn(lessonVideo);
+
+        mockMvc.perform(get("/api/v1/videos/lesson/{lessonId}", lessonId).with(user(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(videoId.toString()))
+                .andExpect(jsonPath("$.data.originalFileName").value("lesson1.mp4"));
     }
 }

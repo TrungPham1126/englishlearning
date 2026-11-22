@@ -372,11 +372,40 @@ class CurriculumServiceImplTest {
         assertThat(curriculumService.getDocumentsByLesson(lessonId)).hasSize(1);
 
         when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(doc)).thenReturn(doc);
+
+        // updateDocument
+        DocumentUpdateRequest updateDocReq = new DocumentUpdateRequest();
+        updateDocReq.setFileName("  slides-v2.pptx ");
+        updateDocReq.setFileType("pptx");
+        DocumentResponse updatedDoc = curriculumService.updateDocument(docId, updateDocReq);
+        assertThat(updatedDoc.getFileName()).isEqualTo("slides-v2.pptx");
+        assertThat(updatedDoc.getFileType()).isEqualTo("PPTX");
+
+        // replaceDocumentFile uploads new file and deletes old URL
+        MockMultipartFile newFile = new MockMultipartFile("file", "handout.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", new byte[]{9, 8, 7});
+        when(storageService.uploadFile(newFile)).thenReturn("https://cdn.test/documents/handout.docx");
+        DocumentResponse replacedDoc = curriculumService.replaceDocumentFile(docId, newFile, null, null);
+        assertThat(replacedDoc.getFileName()).isEqualTo("handout.docx");
+        assertThat(replacedDoc.getFileType()).isEqualTo("DOCX");
+        assertThat(replacedDoc.getFileUrl()).isEqualTo("https://cdn.test/documents/handout.docx");
+        verify(storageService).deleteFileByUrl("https://cdn.test/documents/slides.pdf");
+
+        // deleteDocument removes entity and new stored file
         curriculumService.deleteDocument(docId);
         verify(documentRepository).delete(doc);
+        verify(storageService).deleteFileByUrl("https://cdn.test/documents/handout.docx");
+
+        MockMultipartFile emptyReplaceFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
+        assertThatThrownBy(() -> curriculumService.replaceDocumentFile(docId, emptyReplaceFile, null, null))
+                .isInstanceOf(BadRequestException.class);
 
         UUID missingDoc = UUID.randomUUID();
         when(documentRepository.findById(missingDoc)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> curriculumService.updateDocument(missingDoc, updateDocReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> curriculumService.replaceDocumentFile(missingDoc, newFile, null, null))
+                .isInstanceOf(ResourceNotFoundException.class);
         assertThatThrownBy(() -> curriculumService.deleteDocument(missingDoc))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
@@ -412,12 +441,287 @@ class CurriculumServiceImplTest {
         assertThat(curriculumService.getGrammarTopicsByLesson(lessonId)).hasSize(1);
 
         when(grammarTopicRepository.findById(added.getId())).thenReturn(Optional.of(topic));
+        GrammarTopicRequest updateTopicReq = new GrammarTopicRequest();
+        updateTopicReq.setTitle("  Present Perfect Continuous ");
+        updateTopicReq.setRuleSummary("  Ongoing duration from past to present ");
+        updateTopicReq.setFormula(" S + have/has + been + V-ing ");
+        updateTopicReq.setExamples(" It has been raining. ");
+        when(grammarTopicRepository.save(topic)).thenReturn(topic);
+        GrammarTopicResponse updatedTopic = curriculumService.updateGrammarTopic(added.getId(), updateTopicReq);
+        assertThat(updatedTopic.getTitle()).isEqualTo("Present Perfect Continuous");
+        assertThat(updatedTopic.getFormula()).isEqualTo("S + have/has + been + V-ing");
+        assertThat(updatedTopic.getExamples()).isEqualTo("It has been raining.");
+
         curriculumService.deleteGrammarTopic(added.getId());
         verify(grammarTopicRepository).delete(topic);
 
         UUID missingTopic = UUID.randomUUID();
         when(grammarTopicRepository.findById(missingTopic)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> curriculumService.updateGrammarTopic(missingTopic, updateTopicReq))
+                .isInstanceOf(ResourceNotFoundException.class);
         assertThatThrownBy(() -> curriculumService.deleteGrammarTopic(missingTopic))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getLessonDetail trả về audioUrl từ vựng & getLessonsByClass trả về videoId, videoStatus và đếm học liệu")
+    void lessonResponses_includeVideoMetadataAudioAndCounts() {
+        Classroom classroom = Classroom.builder().id(classId).build();
+        Lesson lesson = Lesson.builder().id(lessonId).classroom(classroom).title("Unit 5").orderIndex(5).build();
+        UUID videoId = UUID.randomUUID();
+        Video rejectedVideo = Video.builder()
+                .id(videoId)
+                .lesson(lesson)
+                .status(com.englishlearning.video.entity.VideoStatus.REJECTED)
+                .rejectionReason("Âm thanh nhỏ")
+                .build();
+
+        VocabularyItem vocab = VocabularyItem.builder()
+                .id(UUID.randomUUID())
+                .lesson(lesson)
+                .word("coherent")
+                .meaning("mạch lạc")
+                .ipa("/kəʊˈhɪə.rənt/")
+                .audioUrl("https://audio.test/coherent.mp3")
+                .build();
+        GrammarTopic grammar = GrammarTopic.builder()
+                .id(UUID.randomUUID())
+                .lesson(lesson)
+                .title("Conditionals")
+                .ruleSummary("If clause")
+                .build();
+
+        SecurityContextHolder.clearContext();
+        when(lessonRepository.findByClassroomIdOrderByOrderIndexAsc(classId)).thenReturn(List.of(lesson));
+        when(videoRepository.findByLessonId(lessonId)).thenReturn(Optional.of(rejectedVideo));
+        when(documentRepository.findByLessonId(lessonId)).thenReturn(Collections.emptyList());
+        when(vocabularyRepository.findByLessonId(lessonId)).thenReturn(List.of(vocab));
+        when(grammarTopicRepository.findByLessonId(lessonId)).thenReturn(List.of(grammar));
+
+        List<LessonResponse> list = curriculumService.getLessonsByClass(classId);
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).isHasVideo()).isTrue();
+        assertThat(list.get(0).getVideoId()).isEqualTo(videoId);
+        assertThat(list.get(0).getVideoStatus()).isEqualTo("REJECTED");
+        assertThat(list.get(0).getVideoRejectionReason()).isEqualTo("Âm thanh nhỏ");
+        assertThat(list.get(0).getVocabulariesCount()).isEqualTo(1);
+        assertThat(list.get(0).getGrammarTopicsCount()).isEqualTo(1);
+
+        when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(lesson));
+        LessonDetailResponse detail = curriculumService.getLessonDetail(lessonId);
+        assertThat(detail.getVocabularies()).hasSize(1);
+        assertThat(detail.getVocabularies().get(0).getAudioUrl()).isEqualTo("https://audio.test/coherent.mp3");
+    }
+
+    @Test
+    @DisplayName("uploadLessonDocument - File null hoặc rỗng ném BadRequestException và không gọi Storage")
+    void uploadLessonDocument_nullOrEmptyFile_throwsBadRequestWithoutUploading() {
+        MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
+
+        assertThatThrownBy(() -> curriculumService.uploadLessonDocument(lessonId, null, "PDF"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("File tài liệu không được để trống");
+        assertThatThrownBy(() -> curriculumService.uploadLessonDocument(lessonId, emptyFile, "PDF"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("File tài liệu không được để trống");
+
+        verifyNoInteractions(storageService, documentRepository);
+    }
+
+    @Test
+    @DisplayName("uploadLessonDocument - fileType không hợp lệ phải báo lỗi trước khi upload file lên Storage")
+    void uploadLessonDocument_invalidFileType_throwsBadRequestWithoutUploadingFile() {
+        MockMultipartFile file = new MockMultipartFile("file", "slides.pdf", "application/pdf", new byte[]{1, 2});
+
+        assertThatThrownBy(() -> curriculumService.uploadLessonDocument(lessonId, file, "INVALID_TYPE"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Loại tài liệu không hợp lệ: INVALID_TYPE");
+
+        verifyNoInteractions(storageService, documentRepository);
+    }
+
+    @Test
+    @DisplayName("uploadLessonDocument - Không tìm thấy bài học báo 404 và không gọi Storage")
+    void uploadLessonDocument_lessonNotFound_throwsResourceNotFoundWithoutUploading() {
+        UUID missingLesson = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "slides.pdf", "application/pdf", new byte[]{1, 2});
+        when(lessonRepository.findById(missingLesson)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> curriculumService.uploadLessonDocument(missingLesson, file, "PDF"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Không tìm thấy bài học");
+
+        verifyNoInteractions(storageService, documentRepository);
+    }
+
+    @Test
+    @DisplayName("updateDocument - Request null hoặc fileName rỗng ném BadRequestException")
+    void updateDocument_nullOrBlankFileName_throwsBadRequestException() {
+        UUID docId = UUID.randomUUID();
+        DocumentUpdateRequest blankName = new DocumentUpdateRequest();
+        blankName.setFileName("   ");
+
+        assertThatThrownBy(() -> curriculumService.updateDocument(docId, null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên tài liệu không được để trống");
+        assertThatThrownBy(() -> curriculumService.updateDocument(docId, blankName))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Tên tài liệu không được để trống");
+
+        verifyNoInteractions(documentRepository);
+    }
+
+    @Test
+    @DisplayName("updateDocument - Không truyền fileType thì giữ nguyên loại tài liệu cũ")
+    void updateDocument_blankFileType_preservesExistingFileType() {
+        UUID docId = UUID.randomUUID();
+        Lesson lesson = Lesson.builder().id(lessonId).build();
+        LessonDocument doc = LessonDocument.builder()
+                .id(docId)
+                .lesson(lesson)
+                .fileName("old.pdf")
+                .storageUrl("https://cdn.test/old.pdf")
+                .fileType(DocumentType.PPTX)
+                .build();
+        DocumentUpdateRequest req = new DocumentUpdateRequest();
+        req.setFileName("  renamed.pptx ");
+        req.setFileType("  ");
+
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(doc)).thenReturn(doc);
+
+        DocumentResponse updated = curriculumService.updateDocument(docId, req);
+
+        assertThat(updated.getFileName()).isEqualTo("renamed.pptx");
+        assertThat(updated.getFileType()).isEqualTo("PPTX");
+    }
+
+    @Test
+    @DisplayName("replaceDocumentFile - fileType không hợp lệ phải báo lỗi trước khi upload file mới")
+    void replaceDocumentFile_invalidFileType_throwsBadRequestWithoutUploading() {
+        UUID docId = UUID.randomUUID();
+        Lesson lesson = Lesson.builder().id(lessonId).build();
+        LessonDocument doc = LessonDocument.builder()
+                .id(docId)
+                .lesson(lesson)
+                .fileName("old.pdf")
+                .storageUrl("https://cdn.test/old.pdf")
+                .fileType(DocumentType.PDF)
+                .build();
+        MockMultipartFile newFile = new MockMultipartFile("file", "new.pdf", "application/pdf", new byte[]{1, 2});
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+
+        assertThatThrownBy(() -> curriculumService.replaceDocumentFile(docId, newFile, null, "EXE"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Loại tài liệu không hợp lệ: EXE");
+
+        verifyNoInteractions(storageService);
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("replaceDocumentFile - Tự suy đoán đúng DocumentType cho IMAGE, AUDIO, PPTX và fallback")
+    void replaceDocumentFile_infersImageAudioPptxAndFallbackTypes() {
+        UUID docId = UUID.randomUUID();
+        Lesson lesson = Lesson.builder().id(lessonId).build();
+        LessonDocument doc = LessonDocument.builder()
+                .id(docId)
+                .lesson(lesson)
+                .fileName("old.pdf")
+                .storageUrl("https://cdn.test/old.pdf")
+                .fileType(DocumentType.PDF)
+                .build();
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(doc)).thenReturn(doc);
+
+        MockMultipartFile imgFile = new MockMultipartFile("file", "diagram.webp", "image/webp", new byte[]{1});
+        when(storageService.uploadFile(imgFile)).thenReturn("https://cdn.test/diagram.webp");
+        assertThat(curriculumService.replaceDocumentFile(docId, imgFile, null, null).getFileType()).isEqualTo("IMAGE");
+
+        MockMultipartFile audioFile = new MockMultipartFile("file", "track.mp3", "audio/mpeg", new byte[]{1});
+        when(storageService.uploadFile(audioFile)).thenReturn("https://cdn.test/track.mp3");
+        assertThat(curriculumService.replaceDocumentFile(docId, audioFile, null, null).getFileType()).isEqualTo("AUDIO");
+
+        MockMultipartFile pptxFile = new MockMultipartFile("file", "slides.pptx", "application/vnd.ms-powerpoint", new byte[]{1});
+        when(storageService.uploadFile(pptxFile)).thenReturn("https://cdn.test/slides.pptx");
+        assertThat(curriculumService.replaceDocumentFile(docId, pptxFile, null, null).getFileType()).isEqualTo("PPTX");
+
+        MockMultipartFile unknownExtFile = new MockMultipartFile("file", "archive.bin", "application/octet-stream", new byte[]{1});
+        when(storageService.uploadFile(unknownExtFile)).thenReturn("https://cdn.test/archive.bin");
+        assertThat(curriculumService.replaceDocumentFile(docId, unknownExtFile, null, null).getFileType()).isEqualTo("PPTX");
+    }
+
+    @Test
+    @DisplayName("replaceDocumentFile - Xóa file cũ thất bại vẫn không làm hỏng transaction thay thế file")
+    void replaceDocumentFile_deleteOldFileThrowsException_stillReturnsUpdatedDocument() {
+        UUID docId = UUID.randomUUID();
+        Lesson lesson = Lesson.builder().id(lessonId).build();
+        LessonDocument doc = LessonDocument.builder()
+                .id(docId)
+                .lesson(lesson)
+                .fileName("old.pdf")
+                .storageUrl("https://cdn.test/old.pdf")
+                .fileType(DocumentType.PDF)
+                .build();
+        MockMultipartFile newFile = new MockMultipartFile("file", "new.pdf", "application/pdf", new byte[]{1, 2});
+
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(storageService.uploadFile(newFile)).thenReturn("https://cdn.test/new.pdf");
+        when(documentRepository.save(doc)).thenReturn(doc);
+        doThrow(new RuntimeException("S3 delete failed")).when(storageService).deleteFileByUrl("https://cdn.test/old.pdf");
+
+        DocumentResponse result = curriculumService.replaceDocumentFile(docId, newFile, null, null);
+
+        assertThat(result.getFileUrl()).isEqualTo("https://cdn.test/new.pdf");
+    }
+
+    @Test
+    @DisplayName("deleteDocument - Lỗi khi xóa file trên storage vẫn hoàn tất xóa bản ghi trong DB")
+    void deleteDocument_deleteStorageThrowsException_stillCompletesDeletion() {
+        UUID docId = UUID.randomUUID();
+        LessonDocument doc = LessonDocument.builder()
+                .id(docId)
+                .storageUrl("https://cdn.test/doc.pdf")
+                .build();
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        doThrow(new RuntimeException("Storage unavailable")).when(storageService).deleteFileByUrl("https://cdn.test/doc.pdf");
+
+        curriculumService.deleteDocument(docId);
+
+        verify(documentRepository).delete(doc);
+    }
+
+    @Test
+    @DisplayName("addGrammarTopic - Bài học không tồn tại ném ResourceNotFoundException")
+    void addGrammarTopic_lessonNotFound_throwsResourceNotFoundException() {
+        UUID missingLesson = UUID.randomUUID();
+        GrammarTopicRequest req = new GrammarTopicRequest();
+        req.setTitle("Modal Verbs");
+        req.setRuleSummary("Express necessity");
+        when(lessonRepository.findById(missingLesson)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> curriculumService.addGrammarTopic(missingLesson, req))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Không tìm thấy bài học");
+    }
+
+    @Test
+    @DisplayName("updateGrammarTopic - Title hoặc ruleSummary rỗng ném BadRequestException")
+    void updateGrammarTopic_blankTitleOrRuleSummary_throwsBadRequestException() {
+        UUID topicId = UUID.randomUUID();
+        GrammarTopicRequest blankTitle = new GrammarTopicRequest();
+        blankTitle.setTitle("   ");
+        blankTitle.setRuleSummary("Valid summary");
+
+        GrammarTopicRequest blankSummary = new GrammarTopicRequest();
+        blankSummary.setTitle("Valid title");
+        blankSummary.setRuleSummary(" ");
+
+        assertThatThrownBy(() -> curriculumService.updateGrammarTopic(topicId, blankTitle))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> curriculumService.updateGrammarTopic(topicId, blankSummary))
+                .isInstanceOf(BadRequestException.class);
+
+        verifyNoInteractions(grammarTopicRepository);
     }
 }

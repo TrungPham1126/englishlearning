@@ -51,8 +51,8 @@ export default function AiMonitoringPage() {
   const handleToggleKillSwitch = async () => {
     const isCurrentlyActive = stats?.systemKillSwitchActive;
     const confirmMsg = isCurrentlyActive
-      ? "Bạn có chắc muốn MỞ LẠI toàn bộ tính năng AI cho giáo viên và học viên?"
-      : "CẢNH BÁO KHẨN CẤP: Kích hoạt Kill-Switch sẽ NGẮT TOÀN BỘ request gọi AI (Gemini/Groq) từ học viên và giáo viên ngay lập tức để bảo vệ ngân sách!\n\nBạn có chắc muốn bật?";
+      ? "Mở lại toàn bộ dịch vụ AI?"
+      : "CẢNH BÁO: Bật Kill-Switch sẽ ngắt ngay toàn bộ AI (Gemini/Groq) của học viên và giáo viên. Xác nhận bật?";
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -61,7 +61,7 @@ export default function AiMonitoringPage() {
       await adminApi.toggleAiKillSwitch();
       await fetchData();
     } catch {
-      alert("Lỗi khi thay đổi trạng thái Kill-Switch.");
+      alert("Đổi trạng thái Kill-Switch thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -81,7 +81,7 @@ export default function AiMonitoringPage() {
       );
       await fetchData();
     } catch {
-      alert("Lỗi khi thay đổi trạng thái chặn.");
+      alert("Đổi trạng thái chặn thất bại.");
     } finally {
       setIsProcessing(false);
     }
@@ -101,7 +101,7 @@ export default function AiMonitoringPage() {
     return (
       <div className="flex flex-col items-center justify-center p-24 text-slate-500 dark:text-slate-400">
         <Loader2 className="animate-spin text-blue-700 dark:text-blue-400 mb-3" size={36} />
-        <p className="text-sm font-semibold">Đang tổng hợp dữ liệu giám sát AI...</p>
+        <p className="text-sm font-semibold">Đang tải...</p>
       </div>
     );
   }
@@ -110,21 +110,16 @@ export default function AiMonitoringPage() {
     <div className="max-w-7xl mx-auto space-y-6 pb-16 animate-in fade-in duration-300">
       {/* 1. Header & Kill-Switch Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-200 dark:border-slate-800/80 bg-transparent">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Giám Sát Chi Phí &amp; Hiệu Suất AI
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-              Gemini 2.5 Flash
-            </span>
-            <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-              Groq LLaMA 3.3
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Theo dõi chi phí theo thời gian thực, lưu lượng token tiêu thụ, kiểm soát giới hạn gọi AI và ngăn chặn hành vi spam hoặc vượt ngân sách.
-          </p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Giám sát AI &amp; Chi phí
+          </h1>
+          <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+            Gemini 2.5 Flash
+          </span>
+          <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+            Groq LLaMA 3.3
+          </span>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -132,7 +127,7 @@ export default function AiMonitoringPage() {
             onClick={fetchData}
             disabled={loading || isProcessing}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
-            title="Làm mới dữ liệu"
+            title="Làm mới"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             <span>Làm mới</span>
@@ -154,8 +149,8 @@ export default function AiMonitoringPage() {
                 <Power size={16} />
                 <span>
                   {stats?.systemKillSwitchActive
-                    ? "Mở Lại Toàn Bộ Dịch Vụ AI"
-                    : "Kích Hoạt Kill-Switch Khẩn Cấp"}
+                    ? "Mở lại AI"
+                    : "Bật Kill-Switch"}
                 </span>
               </>
             )}
@@ -169,10 +164,10 @@ export default function AiMonitoringPage() {
           <AlertOctagon size={28} className="text-rose-600 dark:text-rose-400 shrink-0" />
           <div className="flex-1">
             <h4 className="font-black text-sm uppercase tracking-wide">
-              Cảnh báo: Toàn bộ dịch vụ AI đang bị tạm dừng khẩn cấp!
+              AI đang tạm dừng (Kill-Switch bật)
             </h4>
             <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5">
-              Tất cả yêu cầu chấm bài nói (Speaking), tạo bài tập tự động từ giáo viên và học viên đều bị chặn với mã HTTP 429. Bấm nút Kill-Switch phía trên để khôi phục hoạt động.
+              Mọi request Speaking &amp; tạo bài bị chặn (HTTP 429). Bấm &quot;Mở lại AI&quot; để khôi phục.
             </p>
           </div>
         </div>

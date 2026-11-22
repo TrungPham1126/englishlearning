@@ -43,14 +43,14 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
               )
             }
             className="text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-blue-700 dark:text-blue-400 outline-none cursor-pointer"
-            title="Thay đổi dạng câu hỏi"
+            title="Đổi loại câu hỏi"
           >
-            <option value="MULTIPLE_CHOICE">Trắc nghiệm (MULTIPLE_CHOICE)</option>
-            <option value="FILL_IN_BLANK">Điền từ (FILL_IN_BLANK)</option>
-            <option value="MATCHING">Ghép cặp từ vựng (MATCHING)</option>
-            <option value="TRUE_FALSE">Đúng / Sai (TRUE_FALSE)</option>
-            <option value="ESSAY">Tự luận / Luận (ESSAY)</option>
-            <option value="AUDIO_RESPONSE">Nói / Ghi âm (AUDIO_RESPONSE)</option>
+            <option value="MULTIPLE_CHOICE">Trắc nghiệm</option>
+            <option value="FILL_IN_BLANK">Điền từ</option>
+            <option value="MATCHING">Ghép cặp</option>
+            <option value="TRUE_FALSE">Đúng / Sai</option>
+            <option value="ESSAY">Tự luận</option>
+            <option value="AUDIO_RESPONSE">Nói / Ghi âm</option>
           </select>
 
           {q.targetWord && (
@@ -63,7 +63,9 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
               IPA: {q.ipa}
             </span>
           )}
-          {assignmentType !== "LISTENING" && (assignmentType === "SPEAKING" || q.referenceAudioUrl || q.targetWord) && (
+          {assignmentType !== "LISTENING" &&
+            ((assignmentType === "SPEAKING" && speakingMode === "SHADOWING") ||
+              (assignmentType !== "SPEAKING" && (q.referenceAudioUrl || q.targetWord))) && (
             <button
               type="button"
               onClick={() => handlePreviewAudio(q)}
@@ -74,13 +76,13 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
                   ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 hover:bg-amber-500/20"
                   : "bg-blue-600/10 text-blue-800 dark:text-blue-300 border-blue-600/20 hover:bg-blue-600/20"
               }`}
-              title="Nghe thử phát âm mẫu"
+              title="Nghe thử"
             >
               <Volume2 className="h-3 w-3" />
               {playingPreviewId === q.id
                 ? "Đang phát..."
                 : q.referenceAudioUrl
-                ? "Nghe phát âm mẫu"
+                ? "Nghe mẫu"
                 : "Tạo & Nghe thử"}
             </button>
           )}
@@ -89,7 +91,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
           type="button"
           onClick={() => handleDeleteQuestion(q.id)}
           className="text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 p-1 transition"
-          title="Xóa câu này"
+          title="Xóa câu"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -98,39 +100,51 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
       <div>
         <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
           {assignmentType === "SPEAKING"
-            ? speakingMode === "QA"
-              ? "Câu hỏi phỏng vấn Speaking (Question Prompt in English):"
-              : "Câu văn mẫu luyện Shadowing (Target Sentence to Shadow):"
+            ? speakingMode === "PART_2"
+              ? "Cue Card (IELTS Part 2):"
+              : speakingMode === "PART_3"
+              ? "Câu hỏi thảo luận (Part 3):"
+              : speakingMode === "QA"
+              ? "Câu hỏi phỏng vấn (Part 1 / Q&A):"
+              : "Câu mẫu Shadowing:"
             : assignmentType === "WRITING"
             ? q.questionType === "FILL_IN_BLANK"
-              ? "Đề bài sắp xếp từ / hoàn thành câu (Writing Prompt):"
-              : "Đề bài viết đoạn văn / bài luận (Writing Prompt):"
-            : "Nội dung câu hỏi (Question Prompt):"}
+              ? "Đề bài sắp xếp / hoàn thành câu:"
+              : "Đề bài viết:"
+            : "Câu hỏi:"}
         </label>
         <textarea
-          rows={2}
+          rows={assignmentType === "SPEAKING" && speakingMode === "PART_2" ? 4 : 2}
           value={q.prompt}
           onChange={(e) =>
             handleUpdateQuestion(q.id, "prompt", e.target.value)
           }
           placeholder={
-            assignmentType === "SPEAKING" && speakingMode === "QA"
-              ? "Vd: What are the main benefits of learning foreign languages?"
+            assignmentType === "SPEAKING" && speakingMode === "PART_2"
+              ? "Vd: Describe a useful skill...\nYou should say:\n- ...\n- ..."
+              : assignmentType === "SPEAKING" && speakingMode === "PART_3"
+              ? "Vd: How has technology changed communication?"
+              : assignmentType === "SPEAKING" && speakingMode === "QA"
+              ? "Vd: What are the benefits of learning languages?"
               : assignmentType === "WRITING" && q.questionType === "FILL_IN_BLANK"
-              ? "Vd: Sắp xếp các từ sau thành câu hoàn chỉnh: always / to school / by bus / She / goes"
-              : "Nhập nội dung câu hỏi..."
+              ? "Vd: Sắp xếp: always / to school / by bus / She / goes"
+              : "Nhập câu hỏi..."
           }
           className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
         />
       </div>
 
-      {/* SPEAKING Q&A: Khung cấu hình Task Response */}
-      {assignmentType === "SPEAKING" && speakingMode === "QA" && (
+      {/* SPEAKING Q&A / PART 2 / PART 3: Khung cấu hình Task Response (không cần audio mẫu) */}
+      {assignmentType === "SPEAKING" && speakingMode !== "SHADOWING" && (
         <div className="space-y-3 pt-1">
           <div>
             <label className="block text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1.5">
               <Target className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-              Ý chính cần trả lời (AI đối chiếu chấm Task Response):
+              {speakingMode === "PART_2"
+                ? "Ý bắt buộc (Cue Card) & Tiêu chí AI:"
+                : speakingMode === "PART_3"
+                ? "Luận điểm (PEEL) & Tiêu chí AI:"
+                : "Ý chính cần trả lời (AI chấm):"}
             </label>
             <textarea
               rows={2}
@@ -138,14 +152,24 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
               onChange={(e) =>
                 handleUpdateQuestion(q.id, "correctAnswer", e.target.value)
               }
-              placeholder="Vd: Nêu ít nhất 2 lợi ích: mở rộng cơ hội việc làm, hiểu biết văn hóa thế giới..."
+              placeholder={
+                speakingMode === "PART_2"
+                  ? "Vd: Đủ 4 ý Cue Card; nói 1.5–2 phút..."
+                  : speakingMode === "PART_3"
+                  ? "Vd: Quan điểm rõ, so sánh, ví dụ cụ thể..."
+                  : "Vd: Nêu ít nhất 2 lợi ích: việc làm, văn hóa..."
+              }
               className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
             />
           </div>
 
           <div>
             <label className="block text-[11px] font-semibold text-blue-700 dark:text-blue-400 mb-1">
-              Gợi ý trả lời & Dàn ý / Từ vựng cho học sinh (Hint & Vocabulary):
+              {speakingMode === "PART_2"
+                ? "Gợi ý cấu trúc & Từ vựng C1/C2:"
+                : speakingMode === "PART_3"
+                ? "Gợi ý phản biện & Từ vựng:"
+                : "Gợi ý & Từ vựng:"}
             </label>
             <textarea
               rows={2}
@@ -153,7 +177,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
               onChange={(e) =>
                 handleUpdateQuestion(q.id, "explanation", e.target.value)
               }
-              placeholder="Vd: Từ vựng gợi ý: cognitive skills, global perspective, career advancement..."
+              placeholder="Vd: cognitive skills, global perspective..."
               className="w-full rounded-lg border border-blue-600/30 bg-blue-600/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-400 placeholder:text-slate-500"
             />
           </div>
@@ -164,7 +188,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
       {assignmentType === "SPEAKING" && speakingMode === "SHADOWING" && (
         <div className="space-y-2 pt-1">
           <label className="block text-[11px] font-semibold text-blue-800 dark:text-blue-300 mb-1">
-            Dịch nghĩa tiếng Việt & Ghi chú phát âm (Linking / Stress notes):
+            Dịch nghĩa &amp; Ghi chú phát âm:
           </label>
           <textarea
             rows={2}
@@ -172,7 +196,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
             onChange={(e) =>
               handleUpdateQuestion(q.id, "explanation", e.target.value)
             }
-            placeholder="Vd: Dịch nghĩa và lưu ý nối âm..."
+            placeholder="Dịch nghĩa, nối âm, trọng âm..."
             className="w-full rounded-lg border border-blue-600/30 bg-blue-50 dark:bg-slate-900/30 p-2.5 text-xs text-blue-900 dark:text-blue-200 outline-none focus:border-blue-400"
           />
         </div>
@@ -182,7 +206,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
       {assignmentType === "WRITING" && q.questionType === "ESSAY" && (
         <div className="space-y-2 pt-1">
           <label className="block text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
-            Bài mẫu tham khảo / Dàn ý & Tiêu chí chấm (AI đối chiếu chấm Task Response):
+            Bài mẫu / Dàn ý &amp; Tiêu chí AI:
           </label>
           <textarea
             rows={3}
@@ -190,7 +214,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
             onChange={(e) =>
               handleUpdateQuestion(q.id, "correctAnswer", e.target.value)
             }
-            placeholder="Vd: Đoạn văn mẫu, luận điểm 1, luận điểm 2, kết luận..."
+            placeholder="Dàn ý, luận điểm, đoạn mẫu..."
             className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-amber-400 placeholder:text-slate-500"
           />
         </div>
@@ -201,7 +225,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between">
             <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-              Các lựa chọn đáp án (nhấn nút chữ cái để đánh dấu đáp án đúng):
+              Lựa chọn (bấm chữ cái để chọn đáp án đúng):
             </label>
             {q.options.length < 6 && (
               <button
@@ -233,7 +257,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
                     onClick={() =>
                       handleUpdateQuestion(q.id, "correctAnswer", opt)
                     }
-                    title="Đặt làm đáp án đúng"
+                    title="Chọn làm đáp án đúng"
                     className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold transition shrink-0 cursor-pointer ${
                       isCorrect
                         ? "bg-emerald-500 text-slate-950 shadow-sm"
@@ -262,7 +286,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
                       }
                     }}
                     className="w-full bg-transparent text-xs text-slate-800 dark:text-slate-200 outline-none"
-                    placeholder={`Lựa chọn ${letter}...`}
+                    placeholder={`Phương án ${letter}`}
                   />
                 </div>
               );
@@ -275,7 +299,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
       {q.questionType === "MATCHING" && (
         <div className="space-y-1.5 pt-1">
           <label className="block text-[11px] font-semibold text-purple-600 dark:text-purple-400">
-            Nghĩa tiếng Việt hoặc cặp ghép tương ứng (Matching Target):
+            Nghĩa / cặp ghép đúng:
           </label>
           <input
             type="text"
@@ -283,7 +307,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
             onChange={(e) =>
               handleUpdateQuestion(q.id, "correctAnswer", e.target.value)
             }
-            placeholder="Nhập nghĩa tiếng Việt hoặc cặp ghép tương ứng..."
+            placeholder="Nhập nghĩa hoặc cặp ghép..."
             className="w-full rounded-lg border border-purple-500/30 bg-purple-500/10 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-purple-500 placeholder:text-slate-500"
           />
         </div>
@@ -294,8 +318,8 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
         <div className="space-y-1.5 pt-1">
           <label className="block text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
             {assignmentType === "WRITING"
-              ? "Câu hoàn chỉnh mẫu / Đáp án chính xác (Model Sentence):"
-              : "Đáp án chính xác cần điền (Correct word / phrase):"}
+              ? "Câu hoàn chỉnh mẫu:"
+              : "Đáp án đúng:"}
           </label>
           <input
             type="text"
@@ -305,8 +329,8 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
             }
             placeholder={
               assignmentType === "WRITING"
-                ? "Nhập câu tiếng Anh hoàn chỉnh mẫu (Vd: She always goes to school by bus.)..."
-                : "Nhập từ hoặc cụm từ đáp án chính xác..."
+                ? "Vd: She always goes to school by bus."
+                : "Nhập đáp án đúng..."
             }
             className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500 placeholder:text-slate-500"
           />
@@ -317,7 +341,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
       {q.questionType === "TRUE_FALSE" && (
         <div className="space-y-1.5 pt-1">
           <label className="block text-[11px] font-semibold text-sky-600 dark:text-sky-400">
-            Đáp án đúng (TRUE / FALSE / NOT GIVEN):
+            Đáp án đúng:
           </label>
           <div className="flex gap-2">
             {["TRUE", "FALSE", "NOT GIVEN"].map((val) => (
@@ -343,7 +367,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
         <div className="space-y-1 pt-1">
           <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
             <Lightbulb className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-            Giải thích chi tiết &amp; Gợi ý làm bài (Explanation):
+            Giải thích / Gợi ý:
           </label>
           <textarea
             rows={2}
@@ -351,7 +375,7 @@ export const QuestionEditorItem: React.FC<QuestionEditorItemProps> = ({
             onChange={(e) =>
               handleUpdateQuestion(q.id, "explanation", e.target.value)
             }
-            placeholder="Nhập giải thích chi tiết đáp án hoặc mẹo ghi nhớ cho học sinh..."
+            placeholder="Nhập giải thích (tùy chọn)..."
             className="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600 placeholder:text-slate-500 leading-relaxed"
           />
         </div>

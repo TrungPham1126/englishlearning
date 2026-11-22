@@ -121,16 +121,8 @@ public class ExerciseAudioServiceTest {
 
     @Test
     void testSynthesizeRawScriptToUrlForShadowingAndDialogueWithKokoro() {
-        boolean isPythonUp = false;
-        try (java.net.Socket s = new java.net.Socket()) {
-            s.connect(new java.net.InetSocketAddress("localhost", 8000), 1000);
-            isPythonUp = true;
-        } catch (Exception ignored) {}
-        org.junit.jupiter.api.Assumptions.assumeTrue(isPythonUp, "Kokoro-82M Python service on port 8000 is not running");
-
-        com.englishlearning.curriculum.service.DocumentStorageService mockStorage =
-                org.mockito.Mockito.mock(com.englishlearning.curriculum.service.DocumentStorageService.class);
-        org.mockito.Mockito.when(mockStorage.storeAudioFile(org.mockito.Mockito.any())).thenAnswer(inv -> {
+        DocumentStorageService mockStorage = Mockito.mock(DocumentStorageService.class);
+        Mockito.when(mockStorage.storeAudioFile(Mockito.any())).thenAnswer(inv -> {
             java.io.File file = inv.getArgument(0);
             Assertions.assertNotNull(file);
             Assertions.assertTrue(file.exists());
@@ -138,32 +130,66 @@ public class ExerciseAudioServiceTest {
             return "/api/v1/files/audio/" + file.getName();
         });
 
-        ExerciseAudioService service = new ExerciseAudioServiceImpl(
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
                 null,
                 null,
                 null,
                 null,
                 mockStorage,
-                new com.fasterxml.jackson.databind.ObjectMapper(),
-                java.util.Optional.empty(),
+                new ObjectMapper(),
+                Optional.empty(),
                 5000,
                 90000
         );
-        org.springframework.test.util.ReflectionTestUtils.setField(service, "pythonServiceBaseUrl", "http://localhost:8000");
+        ReflectionTestUtils.setField(service, "pythonServiceBaseUrl", "http://localhost:8000");
+        RestTemplate rt = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
+        MockRestServiceServer server = MockRestServiceServer.createServer(rt);
+
+        byte[] validWav = new byte[12000];
+        Arrays.fill(validWav, (byte) 7);
+        HttpHeaders wavHeaders = new HttpHeaders();
+        wavHeaders.set("X-Audio-Duration", "2.5");
 
         // Test 1: Speaking Shadowing Monologue Sentence
+        server.expect(requestTo("http://localhost:8000/tts"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.text")
+                        .value("Consistent pronunciation practice and phonemic awareness enhance oral fluency."))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.voice")
+                        .value("af_heart"))
+                .andRespond(withSuccess(validWav, MediaType.parseMediaType("audio/wav")).headers(wavHeaders));
+
         String shadowingUrl = service.synthesizeRawScriptToUrl(
                 "Consistent pronunciation practice and phonemic awareness enhance oral fluency.",
                 "af_heart",
                 1.0
         );
         Assertions.assertTrue(shadowingUrl.startsWith("/api/v1/files/audio/mono_"));
+        server.verify();
 
         // Test 2: Listening Multi-Speaker Dialogue (Friend A & Friend B)
-        String dialogueScript = "Friend A: Hi, have you prepared for the upcoming presentation?\n" +
-                "Friend B: Yes! I finished the slides last night.";
+        server.reset();
+        String base64Wav = Base64.getEncoder().encodeToString(validWav);
+        String dialogueJson = "{\"durationMs\": 3200, \"audioBase64\": \"" + base64Wav + "\", "
+                + "\"segments\": [{\"speaker\":\"Friend A\",\"voice\":\"af_heart\",\"text\":\"Hi, have you prepared for the upcoming presentation?\",\"startMs\":0,\"endMs\":1600},"
+                + "{\"speaker\":\"Friend B\",\"voice\":\"am_michael\",\"text\":\"Yes! I finished the slides last night.\",\"startMs\":1600,\"endMs\":3200}]}";
+        server.expect(requestTo("http://localhost:8000/tts/dialogue"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.turns[0].speaker")
+                        .value("Friend A"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.turns[0].voice")
+                        .value("af_heart"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.turns[1].speaker")
+                        .value("Friend B"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath("$.turns[1].voice")
+                        .value("am_michael"))
+                .andRespond(withSuccess(dialogueJson, MediaType.APPLICATION_JSON));
+
+        String dialogueScript = "Friend A: Hi, have you prepared for the upcoming presentation?\n"
+                + "Friend B: Yes! I finished the slides last night.";
         String dialogueUrl = service.synthesizeRawScriptToUrl(dialogueScript, "af_heart", 1.0);
         Assertions.assertTrue(dialogueUrl.startsWith("/api/v1/files/audio/dialogue_"));
+        server.verify();
     }
 
     @Test
@@ -336,6 +362,469 @@ public class ExerciseAudioServiceTest {
         service.generateAudiosForAssignmentAsync(listenPassageAss.getId(), AudioGeneratedBy.TEACHER);
         assertThat(listenPassageAss.getAudioUrl()).isEqualTo("/audio/passage.wav");
         assertThat(listenPassageAss.getListeningScript()).contains("solar power");
+    }
+
+    @Test
+    void nonShadowingSpeakingQuestions_skipAudioSynthesisAndClearCorruptedRubricTranscript() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+
+        UUID qaAssId = UUID.randomUUID();
+        Assignment qaAss = Assignment.builder()
+                .id(qaAssId)
+                .title("Hỏi - Đáp Q&A (B2)")
+                .description("[SPEAKING_QA] Luyện phỏng vấn")
+                .skillType(SkillType.SPEAKING)
+                .build();
+        UUID qaQId = UUID.randomUUID();
+        AssignmentQuestion qaQ = AssignmentQuestion.builder()
+                .id(qaQId)
+                .assignment(qaAss)
+                .skillType(SkillType.SPEAKING)
+                .questionType(QuestionType.AUDIO_RESPONSE)
+                .promptText("How can cities integrate more green spaces into urban areas?")
+                .correctAnswer("(1) lắp đặt mái xanh và vườn treo")
+                .transcript("(1) lắp đặt mái xanh và vườn treo")
+                .mediaUrl("/stale/qa.wav")
+                .build();
+
+        Mockito.when(questionRepo.findById(qaQId)).thenReturn(Optional.of(qaQ));
+        ExerciseAudioResponseDto res = service.generateOrGetAudioForQuestion(qaQId, AudioGeneratedBy.TEACHER, false, null);
+
+        assertThat(res.getStatus()).isEqualTo(AudioGenerationStatus.READY);
+        assertThat(res.getUrl()).isNull();
+        assertThat(qaQ.getMediaUrl()).isNull();
+        assertThat(qaQ.getTranscript()).isNull();
+        Mockito.verify(questionRepo).save(qaQ);
+        Mockito.verifyNoInteractions(storage);
+
+        UUID part2AssId = UUID.randomUUID();
+        Assignment part2Ass = Assignment.builder()
+                .id(part2AssId)
+                .title("IELTS Speaking Part 2")
+                .description("[SPEAKING_PART_2] Cue Card")
+                .skillType(SkillType.SPEAKING)
+                .build();
+        AssignmentQuestion part2Q = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .assignment(part2Ass)
+                .questionType(QuestionType.AUDIO_RESPONSE)
+                .promptText("Describe a book that you enjoyed reading recently.\nYou should say:\n- what it was")
+                .mediaUrl("/stale/p2.wav")
+                .build();
+
+        Mockito.when(assignmentRepo.findById(part2AssId)).thenReturn(Optional.of(part2Ass));
+        Mockito.when(questionRepo.findByAssignmentId(part2AssId)).thenReturn(List.of(part2Q));
+
+        service.generateAudiosForAssignmentAsync(part2AssId, AudioGeneratedBy.SYSTEM);
+        assertThat(part2Q.getMediaUrl()).isNull();
+        Mockito.verifyNoInteractions(storage);
+    }
+
+    @Test
+    void resolveSpeakingMode_whenExplicitTagsAndPromptHeuristics_detectsShadowingQaPart2Part3() {
+        Assignment plainAss = Assignment.builder().title("General Speaking").description("").build();
+        AssignmentQuestion plainQ = AssignmentQuestion.builder().promptText("Practice pronunciation.").build();
+
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, plainQ, "shadowing_mode")).isEqualTo("SHADOWING");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, plainQ, "part 2 cue card")).isEqualTo("PART_2");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, plainQ, "part 3 discussion")).isEqualTo("PART_3");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, plainQ, "part 1 qa")).isEqualTo("QA");
+
+        AssignmentQuestion readAloudQ = AssignmentQuestion.builder()
+                .promptText("Read aloud: Innovation inspires sustainable growth.")
+                .build();
+        assertThat(ExerciseAudioService.resolveSpeakingMode(
+                Assignment.builder().description("[SPEAKING_PART_2]").build(), readAloudQ, null))
+                .isEqualTo("SHADOWING");
+
+        assertThat(ExerciseAudioService.resolveSpeakingMode(
+                Assignment.builder().title("Test").description("[SPEAKING_PART_2] IELTS").build(), plainQ, null))
+                .isEqualTo("PART_2");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(
+                Assignment.builder().title("Phản biện").description("[SPEAKING_PART_3]").build(), plainQ, null))
+                .isEqualTo("PART_3");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(
+                Assignment.builder().title("Hỏi - Đáp").description("[SPEAKING_QA]").build(), plainQ, null))
+                .isEqualTo("QA");
+        assertThat(ExerciseAudioService.resolveSpeakingMode(
+                Assignment.builder().description("[SPEAKING_SHADOWING]").build(), plainQ, null))
+                .isEqualTo("SHADOWING");
+
+        AssignmentQuestion cueCardQ = AssignmentQuestion.builder()
+                .promptText("Describe a book.\nYou should say:\n- title")
+                .build();
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, cueCardQ, null)).isEqualTo("PART_2");
+
+        AssignmentQuestion part3PromptQ = AssignmentQuestion.builder()
+                .promptText("[PART 3] Discuss technology trends")
+                .build();
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, part3PromptQ, null)).isEqualTo("PART_3");
+
+        AssignmentQuestion questionMarkQ = AssignmentQuestion.builder()
+                .promptText("Do you enjoy reading novels?")
+                .transcript("")
+                .build();
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, questionMarkQ, null)).isEqualTo("QA");
+
+        AssignmentQuestion rubricAnswerQ = AssignmentQuestion.builder()
+                .promptText("Speak about your hometown.")
+                .correctAnswer("Gợi ý: nêu vị trí địa lý")
+                .build();
+        assertThat(ExerciseAudioService.resolveSpeakingMode(plainAss, rubricAnswerQ, null)).isEqualTo("QA");
+    }
+
+    @Test
+    void isCorruptedSpeakingPrompt_andReconstructEnglishPrompt_fixesVietnameseCorruptedPromptsAcrossModesAndTopics() {
+        assertThat(ExerciseAudioService.isCorruptedSpeakingPrompt(null)).isTrue();
+        assertThat(ExerciseAudioService.isCorruptedSpeakingPrompt(AssignmentQuestion.builder().promptText("   ").build())).isTrue();
+        assertThat(ExerciseAudioService.isCorruptedSpeakingPrompt(
+                AssignmentQuestion.builder().promptText("(1) nêu ý kiến cá nhân về môi trường").build())).isTrue();
+        assertThat(ExerciseAudioService.isCorruptedSpeakingPrompt(
+                AssignmentQuestion.builder().promptText("Gợi ý chấm điểm bài nói IELTS").build())).isTrue();
+        assertThat(ExerciseAudioService.isCorruptedSpeakingPrompt(
+                AssignmentQuestion.builder().promptText("Describe a memorable trip to the beach.").build())).isFalse();
+
+        Assignment validAss = Assignment.builder().title("Beach Trip").build();
+        AssignmentQuestion validQ = AssignmentQuestion.builder().promptText("Describe your favorite hobby.").build();
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(validAss, validQ, "QA"))
+                .isEqualTo("Describe your favorite hobby.");
+
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Chuyến đi bãi biển").build(), null, "PART_2"))
+                .contains("memorable trip to the beach");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Giáo viên yêu thích").build(), null, "PART_2"))
+                .contains("teacher you admire");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Cuốn sách hay").build(), null, "PART_2"))
+                .contains("interesting book");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Dự án mái xanh môi trường").build(), null, "PART_2"))
+                .contains("environmental initiative");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Kỹ năng giao tiếp").build(), null, "PART_2"))
+                .contains("useful skill");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Công viên thành phố").build(), null, "PART_2"))
+                .contains("park or public garden");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Chủ đề chung").build(), null, "PART_2"))
+                .contains("memorable experience");
+
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Mái xanh đô thị").build(), null, "PART_3"))
+                .contains("green roofs");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Công nghệ hiện đại").build(), null, "PART_3"))
+                .contains("modern technology");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Giáo dục tương lai").build(), null, "PART_3"))
+                .contains("education system");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Khác").build(), null, "PART_3"))
+                .contains("main advantages and challenges");
+
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Môi trường xanh").build(), null, "QA"))
+                .contains("green roofs and eco-friendly urban spaces");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Du lịch bãi biển").build(), null, "QA"))
+                .contains("visiting the beach");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Sở thích cá nhân").build(), null, "QA"))
+                .contains("free time");
+        assertThat(ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                Assignment.builder().title("Chung").build(), null, "QA"))
+                .contains("personal experience");
+    }
+
+    @Test
+    void cleanShadowingSentence_whenVietnameseInstructionsNumberedPrefixOrMultiline_extractsCleanEnglishSentence() {
+        assertThat(ExerciseAudioService.cleanShadowingSentence("Hãy nghe và nhại lại câu sau: Learning builds confidence."))
+                .isEqualTo("Learning builds confidence.");
+        assertThat(ExerciseAudioService.cleanShadowingSentence("Câu 3: Fluency develops over time."))
+                .isEqualTo("Fluency develops over time.");
+        assertThat(ExerciseAudioService.cleanShadowingSentence("1. Speak clearly and naturally."))
+                .isEqualTo("Speak clearly and naturally.");
+        assertThat(ExerciseAudioService.cleanShadowingSentence("Hãy nghe và lặp lại:\nSmall daily habits create lasting change."))
+                .isEqualTo("Small daily habits create lasting change.");
+    }
+
+    @Test
+    void generateOrGetAudioForQuestion_whenActiveCacheHashMatches_returnsCachedAudioWithoutCallingPython() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+        ReflectionTestUtils.setField(service, "pythonServiceBaseUrl", "http://kokoro.local");
+        RestTemplate rt = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
+        MockRestServiceServer server = MockRestServiceServer.createServer(rt);
+
+        UUID qId = UUID.randomUUID();
+        UUID audioId = UUID.randomUUID();
+        Assignment speakingAss = Assignment.builder().id(UUID.randomUUID()).skillType(SkillType.SPEAKING).build();
+        AssignmentQuestion question = AssignmentQuestion.builder()
+                .id(qId)
+                .assignment(speakingAss)
+                .promptText("Consistent practice builds fluency.")
+                .build();
+
+        byte[] validWav = new byte[2048];
+        Arrays.fill(validWav, (byte) 2);
+        HttpHeaders wavHeaders = new HttpHeaders();
+        wavHeaders.set("X-Audio-Duration", "1.4");
+        server.expect(requestTo("http://kokoro.local/tts"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(validWav, MediaType.parseMediaType("audio/wav")).headers(wavHeaders));
+
+        Mockito.when(questionRepo.findById(qId)).thenReturn(Optional.of(question));
+        Mockito.when(audioRepo.findByQuestionIdOrderByVersionDesc(qId)).thenReturn(Collections.emptyList());
+        Mockito.when(storage.storeAudioFile(Mockito.any())).thenReturn("/audio/cached_v1.wav");
+
+        java.util.concurrent.atomic.AtomicReference<ExerciseAudio> storedRef = new java.util.concurrent.atomic.AtomicReference<>();
+        Mockito.when(audioRepo.findByQuestionIdAndIsActiveTrue(qId)).thenAnswer(inv -> Optional.ofNullable(storedRef.get()));
+        Mockito.when(audioRepo.save(Mockito.any(ExerciseAudio.class))).thenAnswer(inv -> {
+            ExerciseAudio ea = inv.getArgument(0);
+            ea.setId(audioId);
+            storedRef.set(ea);
+            return ea;
+        });
+
+        ExerciseAudioResponseDto first = service.generateOrGetAudioForQuestion(qId, AudioGeneratedBy.TEACHER, false, "af_heart");
+        server.verify();
+
+        // Second call with identical text & voice must hit cache and NOT invoke Python or storage again
+        ExerciseAudioResponseDto cached = service.generateOrGetAudioForQuestion(qId, AudioGeneratedBy.STUDENT_REPAIR, false, "af_heart");
+
+        assertThat(cached.getId()).isEqualTo(first.getId());
+        assertThat(cached.getUrl()).isEqualTo("/audio/cached_v1.wav");
+        assertThat(cached.getVersion()).isEqualTo(1);
+        Mockito.verify(storage, Mockito.times(1)).storeAudioFile(Mockito.any());
+    }
+
+    @Test
+    void generateOrGetAudioForQuestion_whenScriptBlank_returnsNullWithoutCallingPython() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+
+        UUID qId = UUID.randomUUID();
+        Assignment listeningAss = Assignment.builder().id(UUID.randomUUID()).skillType(SkillType.LISTENING).build();
+        AssignmentQuestion blankQuestion = AssignmentQuestion.builder()
+                .id(qId)
+                .assignment(listeningAss)
+                .promptText("Listen and choose")
+                .transcript("   ")
+                .build();
+
+        Mockito.when(questionRepo.findById(qId)).thenReturn(Optional.of(blankQuestion));
+
+        ExerciseAudioResponseDto result = service.generateOrGetAudioForQuestion(qId, AudioGeneratedBy.TEACHER, false, null);
+
+        assertThat(result).isNull();
+        Mockito.verifyNoInteractions(audioRepo, storage);
+    }
+
+    @Test
+    void repairAudio_whenEnrolledStudentOrMissingClassroom_forcesRegenerationOrThrows404() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+        ReflectionTestUtils.setField(service, "pythonServiceBaseUrl", "http://kokoro.local");
+        RestTemplate rt = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
+        MockRestServiceServer server = MockRestServiceServer.createServer(rt);
+
+        UUID qMissingClassId = UUID.randomUUID();
+        AssignmentQuestion noClassQ = AssignmentQuestion.builder()
+                .id(qMissingClassId)
+                .assignment(Assignment.builder().id(UUID.randomUUID()).classroom(null).build())
+                .build();
+        Mockito.when(questionRepo.findById(qMissingClassId)).thenReturn(Optional.of(noClassQ));
+        assertThatThrownBy(() -> service.repairAudio(qMissingClassId, UUID.randomUUID(), true))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        UUID classId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID qId = UUID.randomUUID();
+        Assignment speakingAss = Assignment.builder()
+                .id(UUID.randomUUID())
+                .classroom(Classroom.builder().id(classId).build())
+                .skillType(SkillType.SPEAKING)
+                .build();
+        AssignmentQuestion question = AssignmentQuestion.builder()
+                .id(qId)
+                .assignment(speakingAss)
+                .promptText("Old text")
+                .build();
+
+        ExerciseAudio v1 = ExerciseAudio.builder().id(UUID.randomUUID()).questionId(qId).version(1).isActive(true).build();
+        Mockito.when(questionRepo.findById(qId)).thenReturn(Optional.of(question));
+        Mockito.when(classStudentRepo.existsByClassroomIdAndStudentId(classId, studentId)).thenReturn(true);
+        Mockito.when(audioRepo.findByQuestionIdOrderByVersionDesc(qId)).thenReturn(List.of(v1));
+
+        byte[] validWav = new byte[2048];
+        Arrays.fill(validWav, (byte) 3);
+        HttpHeaders wavHeaders = new HttpHeaders();
+        wavHeaders.set("X-Audio-Duration", "1.6");
+        server.expect(requestTo("http://kokoro.local/tts"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(validWav, MediaType.parseMediaType("audio/wav")).headers(wavHeaders));
+        Mockito.when(storage.storeAudioFile(Mockito.any())).thenReturn("/audio/repaired_v2.wav");
+        Mockito.when(audioRepo.save(Mockito.any(ExerciseAudio.class))).thenAnswer(inv -> {
+            ExerciseAudio ea = inv.getArgument(0);
+            if (ea.getId() == null) ea.setId(UUID.randomUUID());
+            return ea;
+        });
+
+        ExerciseAudioResponseDto repaired = service.repairAudio(
+                qId, studentId, true, "Shadow this: \"Custom repaired line.\"", "en-GB-RyanNeural");
+
+        server.verify();
+        assertThat(v1.getIsActive()).isFalse();
+        assertThat(repaired.getVersion()).isEqualTo(2);
+        assertThat(repaired.getUrl()).isEqualTo("/audio/repaired_v2.wav");
+        assertThat(repaired.getGeneratedBy()).isEqualTo(AudioGeneratedBy.STUDENT_REPAIR);
+        assertThat(question.getMediaUrl()).isEqualTo("/audio/repaired_v2.wav");
+        assertThat(question.getTranscript()).isEqualTo("Custom repaired line.");
+    }
+
+    @Test
+    void synthesizeRawScriptToUrl_whenTimeoutOrNaNSpeed_handlesSafelyAndMapsTimeoutMessage() throws Exception {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+        ReflectionTestUtils.setField(service, "pythonServiceBaseUrl", "http://kokoro.local");
+        RestTemplate rt = (RestTemplate) ReflectionTestUtils.getField(service, "restTemplate");
+        MockRestServiceServer server = MockRestServiceServer.createServer(rt);
+
+        byte[] validWav = new byte[2048];
+        Arrays.fill(validWav, (byte) 4);
+        HttpHeaders wavHeaders = new HttpHeaders();
+        wavHeaders.set("X-Audio-Duration", "1.2");
+        server.expect(requestTo("http://kokoro.local/tts"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(validWav, MediaType.parseMediaType("audio/wav")).headers(wavHeaders));
+        Mockito.when(storage.storeAudioFile(Mockito.any())).thenReturn("/audio/nan_clamped.wav");
+
+        assertThat(service.synthesizeRawScriptToUrl("Clean sentence", "af_heart", Double.NaN))
+                .isEqualTo("/audio/nan_clamped.wav");
+        server.verify();
+
+        server.reset();
+        server.expect(requestTo("http://kokoro.local/tts"))
+                .andRespond(request -> {
+                    throw new java.net.SocketTimeoutException("Read timed out");
+                });
+
+        assertThatThrownBy(() -> service.synthesizeRawScriptToUrl("Long passage", "af_heart", 1.0))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("thời gian xử lý quá lâu");
+    }
+
+    @Test
+    void getAudioStatus_whenActiveAudioHasSegmentsOrQuestionMissing_returnsParsedSegmentsOr404() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+
+        UUID missingId = UUID.randomUUID();
+        Mockito.when(questionRepo.findById(missingId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.getAudioStatus(missingId))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        UUID qId = UUID.randomUUID();
+        Assignment speakingAss = Assignment.builder().id(UUID.randomUUID()).skillType(SkillType.SPEAKING).build();
+        AssignmentQuestion q = AssignmentQuestion.builder().id(qId).assignment(speakingAss).build();
+        ExerciseAudio activeAudio = ExerciseAudio.builder()
+                .id(UUID.randomUUID())
+                .questionId(qId)
+                .exerciseType(ExerciseAudioType.SHADOWING)
+                .status(AudioGenerationStatus.READY)
+                .url("/audio/active.wav")
+                .durationMs(1800L)
+                .version(2)
+                .generatedBy(AudioGeneratedBy.TEACHER)
+                .segments("[{\"speaker\":\"Friend A\",\"voice\":\"af_heart\",\"text\":\"Hi\",\"startMs\":0,\"endMs\":900}]")
+                .build();
+
+        Mockito.when(questionRepo.findById(qId)).thenReturn(Optional.of(q));
+        Mockito.when(audioRepo.findByQuestionIdAndIsActiveTrue(qId)).thenReturn(Optional.of(activeAudio));
+
+        ExerciseAudioResponseDto status = service.getAudioStatus(qId);
+
+        assertThat(status.getStatus()).isEqualTo(AudioGenerationStatus.READY);
+        assertThat(status.getVersion()).isEqualTo(2);
+        assertThat(status.getSegments()).hasSize(1);
+        assertThat(status.getSegments().get(0).getSpeaker()).isEqualTo("Friend A");
+    }
+
+    @Test
+    void generateAudiosForAssignmentAsync_whenAssignmentMissingOrNullQuestions_exitsSafely() {
+        ExerciseAudioRepository audioRepo = Mockito.mock(ExerciseAudioRepository.class);
+        AssignmentQuestionRepository questionRepo = Mockito.mock(AssignmentQuestionRepository.class);
+        AssignmentRepository assignmentRepo = Mockito.mock(AssignmentRepository.class);
+        ClassStudentRepository classStudentRepo = Mockito.mock(ClassStudentRepository.class);
+        DocumentStorageService storage = Mockito.mock(DocumentStorageService.class);
+
+        ExerciseAudioServiceImpl service = new ExerciseAudioServiceImpl(
+                audioRepo, questionRepo, assignmentRepo, classStudentRepo,
+                storage, new ObjectMapper(), Optional.empty(), 1000, 5000
+        );
+
+        UUID missingAssId = UUID.randomUUID();
+        Mockito.when(assignmentRepo.findById(missingAssId)).thenReturn(Optional.empty());
+        service.generateAudiosForAssignmentAsync(missingAssId, AudioGeneratedBy.SYSTEM);
+
+        UUID speakingAssId = UUID.randomUUID();
+        Assignment speakingAss = Assignment.builder().id(speakingAssId).skillType(SkillType.SPEAKING).title("Shadow").build();
+        Mockito.when(assignmentRepo.findById(speakingAssId)).thenReturn(Optional.of(speakingAss));
+        Mockito.when(questionRepo.findByAssignmentId(speakingAssId)).thenReturn(null);
+        service.generateAudiosForAssignmentAsync(speakingAssId, AudioGeneratedBy.TEACHER);
+
+        Mockito.verifyNoInteractions(audioRepo, storage);
     }
 }
 

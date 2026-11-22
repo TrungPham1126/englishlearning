@@ -32,10 +32,10 @@ public class AuditLogServiceImpl implements AuditLogService {
 
         AuditLog auditLog = AuditLog.builder()
                 .user(user)
-                .action(action != null ? action.trim().toUpperCase() : "UNKNOWN_ACTION")
+                .action(action != null && !action.isBlank() ? action.trim().toUpperCase() : "UNKNOWN_ACTION")
                 .entityName(entityName)
                 .entityId(entityId)
-                .ipAddress(ipAddress != null ? ipAddress : "127.0.0.1")
+                .ipAddress(ipAddress != null && !ipAddress.isBlank() ? ipAddress.trim() : "127.0.0.1")
                 .metadataJson(metadataJson)
                 .build();
 

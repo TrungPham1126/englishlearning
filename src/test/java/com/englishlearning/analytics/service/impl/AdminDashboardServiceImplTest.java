@@ -149,4 +149,49 @@ class AdminDashboardServiceImplTest {
         assertThat(stats.getCompletionDistribution().getMedium()).isEqualTo(50.0);
         assertThat(stats.getCompletionDistribution().getLow()).isEqualTo(50.0);
     }
+
+    @Test
+    @DisplayName("Fallback Speaking/Writing sang AssignmentAttempt khi chưa có AiEvaluation, chặn sàn completionRate 0% và xử lý lớp 0 bài tập")
+    @SuppressWarnings("unchecked")
+    void getDashboardStats_fallsBackToAssignmentAttemptForSpeakingWritingAndHandlesEdgeDistribution() {
+        when(videoRepository.findByStatus(VideoStatus.PENDING_REVIEW)).thenReturn(Collections.emptyList());
+        when(classroomRepository.countByStatus(any(ClassStatus.class))).thenReturn(1L);
+        when(assignmentAttemptRepository.count()).thenReturn(5L);
+        when(assignmentAttemptRepository.countByStatus(AttemptStatus.SUBMITTED)).thenReturn(10L); // pending > total -> clamp 0.0%
+
+        when(assignmentAttemptRepository.findAverageScoreBySkillType(SkillType.LISTENING)).thenReturn(85.0);
+        when(assignmentAttemptRepository.findAverageScoreBySkillType(SkillType.READING)).thenReturn(null);
+        when(aiEvaluationRepository.findAverageScoreByEvalType(AiEvaluationType.SPEAKING)).thenReturn(null);
+        when(assignmentAttemptRepository.findAverageScoreBySkillType(SkillType.SPEAKING)).thenReturn(7.2); // -> 72.0
+        when(aiEvaluationRepository.findAverageScoreByEvalType(AiEvaluationType.WRITING)).thenReturn(null);
+        when(assignmentAttemptRepository.findAverageScoreBySkillType(SkillType.WRITING)).thenReturn(68.0); // -> 68.0
+
+        // getAverageFromProfile cho Reading ném lỗi -> fallback 0.0
+        when(entityManager.createQuery(contains("FROM StudentSkillProfile p"), eq(Double.class)))
+                .thenThrow(new RuntimeException("Profile query error"));
+
+        UUID s1 = UUID.randomUUID();
+        UUID s2 = UUID.randomUUID();
+        TypedQuery<UUID> activeStudentsQ = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("SELECT DISTINCT cs.student.id"), eq(UUID.class))).thenReturn(activeStudentsQ);
+        when(activeStudentsQ.getResultList()).thenReturn(List.of(s1, s2));
+
+        TypedQuery<Long> assignedCountQ = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("SELECT COUNT(a) FROM Assignment a"), eq(Long.class))).thenReturn(assignedCountQ);
+        when(assignedCountQ.setParameter(anyString(), any())).thenReturn(assignedCountQ);
+        when(assignedCountQ.getSingleResult()).thenReturn(0L); // lớp chưa giao bài tập
+
+        when(assignmentAttemptRepository.countCompletedDistinctAssignmentsByStudentId(s1)).thenReturn(1L); // -> 100.0% (high)
+        when(assignmentAttemptRepository.countCompletedDistinctAssignmentsByStudentId(s2)).thenReturn(0L); // -> 0.0% (low)
+
+        AdminDashboardStats stats = adminDashboardService.getDashboardStats();
+
+        assertThat(stats.getCompletionRate()).isEqualTo(0.0);
+        assertThat(stats.getAverageSkillScores().get("Listening")).isEqualTo(85.0);
+        assertThat(stats.getAverageSkillScores().get("Reading")).isEqualTo(0.0);
+        assertThat(stats.getAverageSkillScores().get("Speaking")).isEqualTo(72.0);
+        assertThat(stats.getAverageSkillScores().get("Writing")).isEqualTo(68.0);
+        assertThat(stats.getCompletionDistribution().getHigh()).isEqualTo(50.0);
+        assertThat(stats.getCompletionDistribution().getLow()).isEqualTo(50.0);
+    }
 }

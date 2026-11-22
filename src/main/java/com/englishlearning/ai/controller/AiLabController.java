@@ -32,7 +32,9 @@ public class AiLabController {
         public ResponseEntity<ApiResponse<JsonNode>> evaluateSpeaking(
                         @RequestParam("topic") String topic,
                         @RequestParam(value = "audio", required = false) MultipartFile audio,
-                        @RequestParam(value = "studentAnswerId", required = false) String studentAnswerIdStr) {
+                        @RequestParam(value = "studentAnswerId", required = false) String studentAnswerIdStr,
+                        @RequestParam(value = "speakingMode", required = false) String speakingMode,
+                        @RequestParam(value = "keyPoints", required = false) String keyPoints) {
                 UUID answerId = null;
                 if (studentAnswerIdStr != null && !studentAnswerIdStr.isBlank()
                                 && !"undefined".equalsIgnoreCase(studentAnswerIdStr)
@@ -42,8 +44,21 @@ public class AiLabController {
                         } catch (IllegalArgumentException ignored) {
                         }
                 }
-                return ResponseEntity.ok(ApiResponse.success(
-                                aiLabService.evaluateSpeakingTopic(topic, audio, answerId)));
+                String cleanSpeakingMode = (speakingMode != null && !speakingMode.isBlank()
+                                && !"undefined".equalsIgnoreCase(speakingMode.trim())
+                                && !"null".equalsIgnoreCase(speakingMode.trim()))
+                                ? speakingMode.trim()
+                                : null;
+                String cleanKeyPoints = (keyPoints != null && !keyPoints.isBlank()
+                                && !"undefined".equalsIgnoreCase(keyPoints.trim())
+                                && !"null".equalsIgnoreCase(keyPoints.trim()))
+                                ? keyPoints.trim()
+                                : null;
+                boolean hasModeOrRubric = cleanSpeakingMode != null || cleanKeyPoints != null;
+                JsonNode result = hasModeOrRubric
+                                ? aiLabService.evaluateSpeakingTopic(topic, audio, answerId, cleanSpeakingMode, cleanKeyPoints)
+                                : aiLabService.evaluateSpeakingTopic(topic, audio, answerId);
+                return ResponseEntity.ok(ApiResponse.success(result));
         }
 
         @PostMapping("/writing/evaluate")
@@ -51,7 +66,8 @@ public class AiLabController {
         public ResponseEntity<ApiResponse<JsonNode>> evaluateWriting(
                         @RequestParam("topic") String topic,
                         @RequestBody String essayText,
-                        @RequestParam(value = "studentAnswerId", required = false) String studentAnswerIdStr) {
+                        @RequestParam(value = "studentAnswerId", required = false) String studentAnswerIdStr,
+                        @RequestParam(value = "writingTask", required = false) String writingTask) {
                 UUID answerId = null;
                 if (studentAnswerIdStr != null && !studentAnswerIdStr.isBlank()
                                 && !"undefined".equalsIgnoreCase(studentAnswerIdStr)
@@ -61,8 +77,13 @@ public class AiLabController {
                         } catch (IllegalArgumentException ignored) {
                         }
                 }
-                return ResponseEntity.ok(ApiResponse.success(
-                                aiLabService.evaluateWriting(topic, essayText, answerId)));
+                boolean hasWritingTask = writingTask != null && !writingTask.isBlank()
+                                && !"undefined".equalsIgnoreCase(writingTask.trim())
+                                && !"null".equalsIgnoreCase(writingTask.trim());
+                JsonNode result = hasWritingTask
+                                ? aiLabService.evaluateWriting(topic, essayText, answerId, writingTask.trim())
+                                : aiLabService.evaluateWriting(topic, essayText, answerId);
+                return ResponseEntity.ok(ApiResponse.success(result));
         }
 
         @PostMapping("/exercise/generate-quiz")

@@ -339,6 +339,243 @@ describe("features/student/hooks — Suite 1: useAssignmentTakeSession & useExam
       expect(removedWinTypes).toContain(type);
     }
   });
+
+  it("useExamProctoring: cảnh báo chuyển tab (TAB_SWITCH) và thoát toàn màn hình (FULLSCREEN_EXIT) khi chưa chạm ngưỡng khóa, kèm dismissWarningAndResume", async () => {
+    vi.useFakeTimers();
+
+    let fullscreenElementMock: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElementMock,
+    });
+    const requestFullscreen = vi.fn().mockImplementation(async () => {
+      fullscreenElementMock = document.documentElement;
+    });
+    Object.defineProperty(document.documentElement, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+
+    vi.mocked(studentApi.recordExamViolation)
+      .mockResolvedValueOnce({
+        attemptId: "att-exam-warn",
+        assignmentId: "exam-1",
+        assignmentTitle: "Midterm",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        violationCount: 1,
+        maxViolations: 3,
+        isCheatingFlagged: false,
+      })
+      .mockResolvedValueOnce({
+        attemptId: "att-exam-warn",
+        assignmentId: "exam-1",
+        assignmentTitle: "Midterm",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        violationCount: 2,
+        maxViolations: 3,
+        isCheatingFlagged: false,
+      });
+
+    const onCheatingLockout = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useExamProctoring({
+        attemptId: "att-exam-warn",
+        active: true,
+        strictFullscreen: true,
+        maxViolations: 3,
+        initialViolationCount: 0,
+        onGetCurrentAnswers: () => [{ questionId: "q-1", textAnswer: "ans-1" }],
+        onCheatingLockout,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.enterFullscreen();
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    // 1. Chuyển tab (visibilitychange với document.hidden = true) -> Strike 1/3 -> hiển thị warningModal
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(studentApi.recordExamViolation).toHaveBeenCalledWith("att-exam-warn", {
+      eventType: "TAB_SWITCH",
+      reason: "Chuyển sang tab hoặc ứng dụng khác trong giờ thi.",
+      currentAnswers: [{ questionId: "q-1", textAnswer: "ans-1" }],
+    });
+    expect(result.current.violationCount).toBe(1);
+    expect(result.current.warningModal).toEqual({
+      count: 1,
+      max: 3,
+      reason: "Chuyển sang tab hoặc ứng dụng khác trong giờ thi.",
+    });
+    expect(onCheatingLockout).not.toHaveBeenCalled();
+
+    // Bấm đóng cảnh báo để quay lại toàn màn hình
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    await act(async () => {
+      await result.current.dismissWarningAndResume();
+    });
+    expect(result.current.warningModal).toBeNull();
+
+    // Chờ qua cooldown 1500ms rồi thoát fullscreen -> Strike 2/3 (FULLSCREEN_EXIT)
+    act(() => {
+      vi.advanceTimersByTime(1600);
+    });
+    fullscreenElementMock = null;
+    await act(async () => {
+      document.dispatchEvent(new Event("fullscreenchange"));
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(studentApi.recordExamViolation).toHaveBeenCalledWith("att-exam-warn", {
+      eventType: "FULLSCREEN_EXIT",
+      reason: "Thoát khỏi chế độ toàn màn hình khi đang làm bài thi.",
+      currentAnswers: [{ questionId: "q-1", textAnswer: "ans-1" }],
+    });
+    expect(result.current.violationCount).toBe(2);
+    expect(result.current.warningModal?.count).toBe(2);
+    expect(onCheatingLockout).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it("useAssignmentTakeSession: xử lý lỗi API khi nộp bài, chặn làm lại khi đã đạt hoặc hết lượt, và chuyển hướng nếu bài là EXAM", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const scrollToSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+    vi.mocked(studentApi.getMyAttempts).mockResolvedValue([
+      {
+        attemptId: "att-in-prog",
+        assignmentId: "asg-err",
+        assignmentTitle: "Vocabulary Drill",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        isExam: false,
+      },
+    ]);
+    vi.mocked(studentApi.getAttemptDetail).mockResolvedValue({
+      attemptId: "att-in-prog",
+      assignmentId: "asg-err",
+      assignmentTitle: "Vocabulary Drill",
+      attemptNumber: 1,
+      status: "IN_PROGRESS",
+      timeLimitMinutes: 15,
+      isExam: false,
+      questions: [
+        {
+          id: "sa-1",
+          questionId: "q-1",
+          promptText: "Meaning of 'Resilient'?",
+          questionType: "FILL_IN_BLANK",
+          correctAnswer: "kiên cường",
+          maxPoints: 10,
+        },
+      ],
+    });
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter initialEntries={["/student/assignments/asg-err/take"]}>
+        <Routes>
+          <Route
+            path="/student/assignments/:assignmentId/take"
+            element={<>{children}</>}
+          />
+          <Route
+            path="/student/exams/:assignmentId/take"
+            element={<div>Exam Route</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const { result, unmount } = renderHook(() => useAssignmentTakeSession(), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.phase).toBe("TESTING");
+    });
+
+    // 1. Kiểm tra đáp án tức thì (handleCheckInstantAnswer)
+    act(() => {
+      result.current.updateAnswer("q-1", { textAnswer: "Kiên cường" });
+    });
+    act(() => {
+      result.current.handleCheckInstantAnswer("q-1");
+    });
+    expect(result.current.checkedQuestions["q-1"]?.isCorrect).toBe(true);
+    expect(result.current.streakCount).toBe(1);
+
+    // 2. Nộp bài gặp lỗi API -> hiển thị alert lỗi và giữ nguyên phase TESTING, isSubmitting=false
+    vi.mocked(studentApi.submitAssignment).mockRejectedValueOnce({
+      response: { data: { message: "Máy chủ chấm điểm đang bảo trì" } },
+    });
+
+    await act(async () => {
+      await result.current.handleSubmitTest();
+    });
+    expect(alertSpy).toHaveBeenCalledWith("Máy chủ chấm điểm đang bảo trì");
+    expect(result.current.phase).toBe("TESTING");
+    expect(result.current.isSubmitting).toBe(false);
+
+    // 3. Nộp bài thành công -> chuyển sang phase REVIEW
+    vi.mocked(studentApi.submitAssignment).mockResolvedValueOnce({
+      attemptId: "att-in-prog",
+      assignmentId: "asg-err",
+      assignmentTitle: "Vocabulary Drill",
+      attemptNumber: 1,
+      status: "COMPLETED",
+      score: 9.0,
+    });
+    vi.mocked(studentApi.getAttemptDetail).mockResolvedValueOnce({
+      attemptId: "att-in-prog",
+      assignmentId: "asg-err",
+      assignmentTitle: "Vocabulary Drill",
+      attemptNumber: 1,
+      status: "COMPLETED",
+      score: 9.0,
+      maxAttempts: 2,
+      questions: [
+        {
+          id: "sa-1",
+          questionId: "q-1",
+          promptText: "Meaning of 'Resilient'?",
+          questionType: "FILL_IN_BLANK",
+          studentAnswer: "Kiên cường",
+          isCorrect: true,
+          earnedPoints: 10,
+          maxPoints: 10,
+        },
+      ],
+    });
+
+    await act(async () => {
+      await result.current.handleSubmitTest();
+    });
+    expect(result.current.phase).toBe("REVIEW");
+    expect(result.current.reviewStats).toEqual({
+      correctCount: 1,
+      totalQuestions: 1,
+    });
+    expect(scrollToSpy).toHaveBeenCalled();
+
+    unmount();
+  });
 });
 
 describe("features/student/hooks — Suite 2: Shadowing & Speaking Hooks + Memory Cleanup", () => {

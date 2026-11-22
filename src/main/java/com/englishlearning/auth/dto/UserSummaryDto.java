@@ -21,4 +21,5 @@ public class UserSummaryDto {
     private String targetCefr;
     private String currentLevel;
     private Boolean isActive;
+    private Integer currentStreak;
 }

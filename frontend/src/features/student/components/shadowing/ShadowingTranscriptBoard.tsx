@@ -33,10 +33,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
     const [isSlowMode, setIsSlowMode] = useState<boolean>(false); // Chế độ đọc chậm 0.6x
 
     const targetSentence = propTargetSentence || storeTargetSentence;
-    const evaluationResult =
-      propEvaluationResult !== undefined
-        ? propEvaluationResult
-        : storeEvaluationResult;
+    const evaluationResult = propEvaluationResult ?? storeEvaluationResult;
 
     // Ánh xạ thông tin từng từ (IPA, Điểm) từ wordRows nếu đã chấm
     const wordDetailMap = useMemo(() => {
@@ -104,6 +101,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
 
       return {
         word: displayWord,
+        wordKey: localSelectedWordKey,
         ipa: displayIpa,
         syllables: phonetics.syllables || displayWord,
         respelling: phonetics.googleRespelling || displayIpa,
@@ -213,7 +211,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
                     type="button"
                     onClick={() => {
                       setAccent("en");
-                      playGoogleTranslateAudio(activeWordData.word, {
+                      playGoogleTranslateAudio(activeWordData.wordKey, {
                         accent: "en",
                         slow: isSlowMode,
                         onStart: () => setIsPlayingWord(true),
@@ -232,7 +230,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
                     type="button"
                     onClick={() => {
                       setAccent("en-GB");
-                      playGoogleTranslateAudio(activeWordData.word, {
+                      playGoogleTranslateAudio(activeWordData.wordKey, {
                         accent: "en-GB",
                         slow: isSlowMode,
                         onStart: () => setIsPlayingWord(true),
@@ -259,7 +257,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
                     onChange={(e) => {
                       const newSlow = e.target.checked;
                       setIsSlowMode(newSlow);
-                      handlePlayAudio(activeWordData.word, newSlow);
+                      handlePlayAudio(activeWordData.wordKey, newSlow);
                     }}
                     className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                   />
@@ -269,7 +267,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
                 {/* Nút tròn phát âm thanh Google */}
                 <button
                   type="button"
-                  onClick={() => handlePlayAudio(activeWordData.word)}
+                  onClick={() => handlePlayAudio(activeWordData.wordKey)}
                   aria-label={`Phát âm từ ${activeWordData.word}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-blue-800 hover:bg-blue-700 active:bg-blue-900 text-white font-semibold transition shadow-xs cursor-pointer text-[11px]"
                 >
@@ -292,7 +290,7 @@ export const ShadowingTranscriptBoard = memo<ShadowingTranscriptBoardProps>(
                   isSlow={isSlowMode}
                   mouthShape={activeWordData.phonetics.mouthShape}
                   word={activeWordData.word}
-                  onPlay={() => handlePlayAudio(activeWordData.word)}
+                  onPlay={() => handlePlayAudio(activeWordData.wordKey)}
                   className="w-full max-w-[220px]"
                 />
               </div>

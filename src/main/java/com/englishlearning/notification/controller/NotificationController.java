@@ -83,6 +83,27 @@ public class NotificationController {
                 notificationService.getAvailableClassrooms(currentUserId)));
     }
 
+    @PostMapping("/self")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT')")
+    public ResponseEntity<ApiResponse<String>> notifySelf(
+            @RequestBody NotificationDto dto,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new UnauthorizedException("Vui lòng đăng nhập để thực hiện thao tác này");
+        }
+        try {
+            dto.setRecipientUserId(userDetails.getId());
+            if (dto.getActionType() == null || dto.getActionType().isBlank()) {
+                dto.setActionType("TEXT_ANNOUNCEMENT");
+            }
+            notificationService.dispatchNotification(dto);
+            return ResponseEntity.ok(ApiResponse.success("Đã tạo thông báo cá nhân", null));
+        } catch (Exception e) {
+            log.error("Lỗi khi tạo thông báo cá nhân: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(ApiResponse.error(500, "Lỗi khi tạo thông báo cá nhân: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/broadcast")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<String>> broadcastNotification(@RequestBody NotificationDto dto) {

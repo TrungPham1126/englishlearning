@@ -13,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -81,6 +83,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/disabled")
         public void disabled() {
             throw new DisabledException("Tài khoản đã bị khóa");
+        }
+
+        @GetMapping("/no-resource")
+        public void noResource() throws NoResourceFoundException {
+            throw new NoResourceFoundException(HttpMethod.GET, "uploads/videos/missing.mp4");
         }
 
         @GetMapping("/forbidden")
@@ -247,6 +254,15 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value("Validation failed"))
                 .andExpect(jsonPath("$.validationErrors.email").value("Email không đúng định dạng"))
                 .andExpect(jsonPath("$.validationErrors.name").value("Tên bắt buộc"));
+    }
+
+    @Test
+    @DisplayName("NoResourceFoundException -> HTTP 404 Not Found thay vì 500")
+    void handleNoResourceFound_returns404() throws Exception {
+        mockMvc.perform(get("/test/exceptions/no-resource"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"));
     }
 
     @Test

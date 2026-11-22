@@ -29,6 +29,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -41,8 +42,9 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -129,6 +131,9 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=mocked-refresh-token-value")))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Path=/api/v1/auth")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Strict")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=604800")))
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.message").value("Đăng nhập thành công"))
                 .andExpect(jsonPath("$.data.accessToken").value("mocked.access.jwt.token"))
@@ -221,6 +226,10 @@ class AuthControllerTest {
                         .cookie(new Cookie("refreshToken", "old-valid-cookie-token")))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=new-rotated-cookie-token")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Path=/api/v1/auth")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Strict")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=604800")))
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.message").value("Cấp mới token thành công"))
                 .andExpect(jsonPath("$.data.accessToken").value("new.access.token"));
@@ -356,5 +365,207 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Chỉ chấp nhận các định dạng file ảnh (JPEG, PNG, WEBP, GIF)"));
+    }
+
+    @Test
+    @DisplayName("POST /login sai thông tin đăng nhập (BadCredentialsException) -> Trả về HTTP 401 Unauthorized")
+    void login_badCredentials_returns401() throws Exception {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new BadCredentialsException("Bad credentials"));
+
+        String loginJson = """
+                {
+                  "email": "student@englishlearning.com",
+                  "password": "WrongPassword123!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
+    @DisplayName("POST /login tài khoản bị khóa (UnauthorizedException) -> Trả về HTTP 401 Unauthorized")
+    void login_accountLocked_returns401() throws Exception {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new UnauthorizedException("Tài khoản đã bị khóa hoặc vô hiệu hóa"));
+
+        String loginJson = """
+                {
+                  "email": "locked@englishlearning.com",
+                  "password": "Password123!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("Tài khoản đã bị khóa hoặc vô hiệu hóa"));
+    }
+
+    @Test
+    @DisplayName("POST /login email rỗng với password hợp lệ -> Trả về HTTP 400 và lỗi @NotBlank của email")
+    void login_blankEmailWithValidPassword_returns400() throws Exception {
+        String invalidLoginJson = """
+                {
+                  "email": "",
+                  "password": "Password123!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidLoginJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.email").value("Email không được để trống"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    @DisplayName("POST /login email sai định dạng với password hợp lệ -> Trả về HTTP 400 và lỗi @Email")
+    void login_invalidEmailFormatWithValidPassword_returns400() throws Exception {
+        String invalidLoginJson = """
+                {
+                  "email": "not-an-email",
+                  "password": "Password123!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidLoginJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.email").value("Email không đúng định dạng"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    @DisplayName("POST /login password rỗng với email hợp lệ -> Trả về HTTP 400 và lỗi @NotBlank của password")
+    void login_blankPasswordWithValidEmail_returns400() throws Exception {
+        String invalidLoginJson = """
+                {
+                  "email": "student@englishlearning.com",
+                  "password": "   "
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidLoginJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.validationErrors.password").value("Mật khẩu không được để trống"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    @DisplayName("POST /register khi chưa xác thực -> SecurityConfig chặn và trả về HTTP 401 Unauthorized")
+    void register_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("POST /refresh-token với cookie chỉ chứa khoảng trắng -> Trả về HTTP 401 và không gọi AuthService")
+    void refreshToken_blankCookie_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh-token")
+                        .with(csrf())
+                        .cookie(new Cookie("refreshToken", "   ")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("Cookie không chứa refreshToken hợp lệ"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    @DisplayName("POST /logout khi đã đăng nhập nhưng không gửi cookie -> Vẫn xóa cookie (Max-Age=0) và trả về 200 OK")
+    void logout_withoutCookie_clearsCookieAndReturns200() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(user(customStudentDetails))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.message").value("Đăng xuất thành công"));
+
+        verify(authService).logout(null);
+    }
+
+    @Test
+    @DisplayName("POST /logout khi chưa đăng nhập -> Trả về HTTP 401 Unauthorized")
+    void logout_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("PUT /me khi chưa đăng nhập -> Trả về HTTP 401 Unauthorized")
+    void updateProfile_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(put("/api/v1/auth/me")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\": \"Test\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("PUT /me khi principal không phải CustomUserDetails -> Trả về HTTP 401 Unauthorized")
+    @WithMockUser
+    void updateProfile_principalNotCustomUserDetails_returns401() throws Exception {
+        mockMvc.perform(put("/api/v1/auth/me")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\": \"Test\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("POST /me/avatar khi chưa đăng nhập -> Trả về HTTP 401 Unauthorized")
+    void uploadAvatar_unauthenticated_returns401() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/v1/auth/me/avatar")
+                        .file(file)
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("POST /me/avatar khi principal không phải CustomUserDetails -> Trả về HTTP 401 Unauthorized")
+    @WithMockUser
+    void uploadAvatar_principalNotCustomUserDetails_returns401() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/v1/auth/me/avatar")
+                        .file(file)
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 }

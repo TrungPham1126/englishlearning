@@ -37,7 +37,7 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
       <div className="w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-elevated space-y-4 text-slate-900 dark:text-slate-100">
         <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Gắn Bài Tập / Nội Dung vào Ngày Học
+            Thêm vào ngày học
           </h2>
           <button
             onClick={onClose}
@@ -49,7 +49,7 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
         <form onSubmit={onSave} className="space-y-4 text-xs">
           <div>
             <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
-              Loại nội dung:
+              Loại:
             </label>
             <select
               value={selectedResourceType}
@@ -58,18 +58,18 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
               }
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
             >
-              <option value="ASSIGNMENT">Bài Tập Từ Lớp Học (Assignment)</option>
-              <option value="DOCUMENT">Tài Liệu Đính Kèm (Document)</option>
+              <option value="ASSIGNMENT">Bài tập</option>
+              <option value="DOCUMENT">Tài liệu</option>
             </select>
           </div>
 
           <div>
             <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
-              Tên mục / Section:
+              Tên mục:
             </label>
             <input
               type="text"
-              placeholder="Ví dụ: Bài tập Listening, Tài liệu đính kèm..."
+              placeholder="VD: Bài tập Listening..."
               value={itemSectionName}
               onChange={(e) => setItemSectionName(e.target.value)}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
@@ -80,11 +80,11 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
           {selectedResourceType === "ASSIGNMENT" ? (
             <div>
               <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
-                Chọn Bài Tập Đã Tạo Trong Lớp:
+                Chọn bài tập:
               </label>
               {classAssignments.length === 0 ? (
                 <p className="text-amber-600 dark:text-amber-400 text-xs italic">
-                  Lớp này chưa có bài tập nào. Hãy vào mục Quản lý bài tập để tạo trước!
+                  Chưa có bài tập. Hãy tạo bài tập trước.
                 </p>
               ) : (
                 <select
@@ -103,11 +103,11 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
           ) : (
             <div>
               <label className="text-slate-700 dark:text-slate-300 font-semibold block mb-1">
-                Tiêu đề tài liệu:
+                Tên tài liệu:
               </label>
               <input
                 type="text"
-                placeholder="Ví dụ: File Audio Luyện Nghe IELTS"
+                placeholder="VD: Audio luyện nghe IELTS"
                 value={itemTitle}
                 onChange={(e) => setItemTitle(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-2.5 text-slate-900 dark:text-white outline-none focus:border-blue-600"
@@ -128,7 +128,7 @@ export const DailyPlanAddItemModal: React.FC<DailyPlanAddItemModalProps> = ({
               type="submit"
               className="rounded-lg bg-blue-800 px-5 py-2 font-semibold text-white hover:bg-blue-600 cursor-pointer shadow-sm"
             >
-              Gắn Vào Ngày Học
+              Thêm vào ngày
             </button>
           </div>
         </form>

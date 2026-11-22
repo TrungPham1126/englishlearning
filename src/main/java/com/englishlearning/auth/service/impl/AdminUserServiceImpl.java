@@ -70,6 +70,12 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public UserSummaryDto createUser(UserCreateByAdminRequest request) {
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new BadRequestException("Email không được để trống");
+        }
+        if (request.getRoles() == null || request.getRoles().isEmpty()) {
+            throw new BadRequestException("Phải phân bổ ít nhất 1 quyền");
+        }
         String normalizedEmail = request.getEmail().toLowerCase().trim();
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email đã tồn tại: " + request.getEmail());
@@ -83,7 +89,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
 
         User user = User.builder()
-                .email(request.getEmail().toLowerCase().trim())
+                .email(normalizedEmail)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
@@ -108,6 +114,15 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public UserSummaryDto updateUser(UUID userId, UserUpdateRequest request) {
+        if (Boolean.FALSE.equals(request.getIsActive()) && isCurrentAuthenticatedUser(userId)) {
+            throw new BadRequestException("Không thể tự khóa tài khoản của chính mình");
+        }
+        if (request.getRoles() != null && !request.getRoles().isEmpty()
+                && !request.getRoles().contains(RoleName.ROLE_ADMIN)
+                && isCurrentAuthenticatedUser(userId)) {
+            throw new BadRequestException("Không thể tự thu hồi quyền quản trị của chính mình");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + userId));
 
@@ -134,7 +149,10 @@ public class AdminUserServiceImpl implements AdminUserService {
                     studentRepository.save(Student.builder().user(user).currentLevel(null).targetCefr("B2").build());
                 }
             } else {
-                studentRepository.findById(userId).ifPresent(studentRepository::delete);
+                studentRepository.findById(userId).ifPresent(student -> {
+                    classStudentRepository.deleteByStudentId(userId);
+                    studentRepository.delete(student);
+                });
             }
 
             // ĐỒNG BỘ PROFILE TEACHER: Thêm mới nếu chưa có, xóa đi nếu bị hạ quyền
@@ -144,7 +162,13 @@ public class AdminUserServiceImpl implements AdminUserService {
                             .save(Teacher.builder().user(user).yearsOfExperience(0).specialization("General").build());
                 }
             } else {
-                teacherRepository.findById(userId).ifPresent(teacherRepository::delete);
+                teacherRepository.findById(userId).ifPresent(teacher -> {
+                    List<Classroom> assignedClasses = classroomRepository.findByTeacherId(userId);
+                    if (!assignedClasses.isEmpty()) {
+                        throw new BadRequestException("Không thể hạ quyền giảng viên đang phụ trách " + assignedClasses.size() + " lớp học. Vui lòng phân công giảng viên khác trước.");
+                    }
+                    teacherRepository.delete(teacher);
+                });
             }
         }
 
@@ -191,6 +215,9 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     private UserSummaryDto mapToUserSummaryDto(User user) {
+        List<String> roleNames = user.getRoles() != null
+                ? user.getRoles().stream().map(r -> r.getName().name()).toList()
+                : List.of();
         return UserSummaryDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -199,7 +226,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
                 .isActive(user.getIsActive() != null ? user.getIsActive() : true)
-                .roles(user.getRoles().stream().map(r -> r.getName().name()).toList())
+                .roles(roleNames)
                 .build();
     }
 

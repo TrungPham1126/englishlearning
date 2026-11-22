@@ -8,7 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import VideoPlayer, { normalizeStreamUrl } from "../components/VideoPlayer";
+import VideoPlayer, {
+  detectNetworkSpeedAndQuality,
+  normalizeStreamUrl,
+} from "../components/VideoPlayer";
 import {
   PasswordChangeForm,
   SkillCompetencyCard,
@@ -20,6 +23,7 @@ import ClassLessonsPage from "../pages/ClassLessonsPage";
 import ClassAssignmentsPage from "../pages/ClassAssignmentsPage";
 import DailyHomeworkPage from "../pages/DailyHomeworkPage";
 import ExamTakePage from "../pages/ExamTakePage";
+import AssignmentTakePage from "../pages/AssignmentTakePage";
 import { studentApi } from "../api/studentApi";
 import { axiosClient } from "@/lib/axiosClient";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -226,6 +230,145 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
       unmount();
       expect(removeSpy).toHaveBeenCalledWith("mousemove", mouseMoveHandler);
       expect(removeSpy).toHaveBeenCalledWith("mouseup", mouseUpHandler);
+    });
+
+    it("mặc định Tự động theo tốc độ mạng, cho phép chọn chất lượng và tải đệm liên tục kể cả khi bấm dừng", async () => {
+      const originalConnectionDesc = Object.getOwnPropertyDescriptor(
+        navigator,
+        "connection",
+      );
+      const originalFetch = globalThis.fetch;
+
+      const listeners: Record<string, Array<() => void>> = {};
+      const mockConnection = {
+        downlink: 1.6,
+        effectiveType: "4g",
+        addEventListener: vi.fn((evt: string, cb: () => void) => {
+          listeners[evt] = listeners[evt] || [];
+          listeners[evt].push(cb);
+        }),
+        removeEventListener: vi.fn(),
+      };
+      Object.defineProperty(navigator, "connection", {
+        configurable: true,
+        value: mockConnection,
+      });
+
+      expect(detectNetworkSpeedAndQuality().quality).toBe(480);
+
+      const chunkSize = 4 * 1024 * 1024;
+      const totalBytes = 10 * 1024 * 1024;
+      const rangeRequests: string[] = [];
+      let releaseNextChunk: (() => void) | null = null;
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = init?.headers as Record<string, string> | undefined;
+        const rangeHeader = headers?.Range ?? "";
+        rangeRequests.push(rangeHeader);
+        if (rangeRequests.length === 1) {
+          await new Promise<void>((resolve) => {
+            releaseNextChunk = resolve;
+          });
+        }
+        const match = rangeHeader.match(/bytes=(\d+)-(\d+)/);
+        const start = match ? Number(match[1]) : 0;
+        const end = match ? Math.min(Number(match[2]), totalBytes - 1) : chunkSize - 1;
+        const len = Math.max(0, end - start + 1);
+        return {
+          ok: true,
+          status: 206,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "content-range"
+                ? `bytes ${start}-${end}/${totalBytes}`
+                : null,
+          },
+          arrayBuffer: async () => new ArrayBuffer(len),
+        } as unknown as Response;
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      try {
+        const { container } = render(
+          <VideoPlayer
+            videoId="vid-raw-1"
+            streamUrl="/api/v1/videos/vid-raw-1/raw"
+            enableProgressSync={false}
+          />,
+        );
+
+        const videoEl = container.querySelector("video") as HTMLVideoElement;
+        Object.defineProperty(videoEl, "duration", {
+          configurable: true,
+          value: 100,
+        });
+        fireEvent.loadedMetadata(videoEl);
+
+        // Ban đầu để Tự động khớp tốc độ mạng (1.6 Mbps -> 480p)
+        const qualityBtn = screen.getByLabelText("Chất lượng phát");
+        expect(qualityBtn).toHaveTextContent("Tự động (480p)");
+
+        // Khi tốc độ mạng thay đổi lên 8.5 Mbps -> tự cập nhật sang 1080p
+        mockConnection.downlink = 8.5;
+        act(() => {
+          listeners.change?.forEach((cb) => cb());
+        });
+        expect(qualityBtn).toHaveTextContent("Tự động (1080p)");
+
+        // Mở menu chất lượng và chọn thủ công 720p, 480p, 360p rồi quay lại Tự động
+        fireEvent.click(qualityBtn);
+        expect(screen.getByText("1080p (FHD)")).toBeInTheDocument();
+        expect(screen.getByText("720p (HD)")).toBeInTheDocument();
+        expect(screen.getByText("480p")).toBeInTheDocument();
+        expect(screen.getByText("360p")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText("720p (HD)"));
+        expect(qualityBtn).toHaveTextContent("720p");
+
+        fireEvent.click(qualityBtn);
+        fireEvent.click(screen.getByText("360p"));
+        expect(qualityBtn).toHaveTextContent("360p");
+
+        fireEvent.click(qualityBtn);
+        fireEvent.click(screen.getByText(/Tự động \(/));
+        expect(qualityBtn).toHaveTextContent(/^Tự động \(/);
+
+        // Học sinh bấm vào video để phát rồi bấm tạm dừng
+        let isPaused = true;
+        Object.defineProperty(videoEl, "paused", {
+          configurable: true,
+          get: () => isPaused,
+        });
+        fireEvent.click(screen.getByLabelText("Phát"));
+        isPaused = false;
+        fireEvent.playing(videoEl);
+
+        await waitFor(() => {
+          expect(rangeRequests.length).toBe(1);
+        });
+
+        // Bấm tạm dừng ngay lập tức trước khi các chunk tiếp theo tải xong
+        fireEvent.click(screen.getByLabelText("Tạm dừng"));
+        isPaused = true;
+        fireEvent.pause(videoEl);
+
+        (releaseNextChunk as (() => void) | null)?.();
+
+        // Vẫn tiếp tục tải các chunk còn lại ngay cả khi đang tạm dừng cho tới 100%
+        await waitFor(() => {
+          expect(rangeRequests.length).toBeGreaterThanOrEqual(2);
+          const bufferedBar = container.querySelector(
+            ".bg-white\\/40",
+          ) as HTMLElement | null;
+          expect(bufferedBar?.style.width).toBe("100%");
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalConnectionDesc) {
+          Object.defineProperty(navigator, "connection", originalConnectionDesc);
+        } else {
+          delete (navigator as unknown as { connection?: unknown }).connection;
+        }
+      }
     });
   });
 
@@ -542,11 +685,14 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
         expect(screen.getByText("Midterm Proctored Test")).toBeInTheDocument();
       });
 
-      // 4. DailyHomeworkPage loads days and switches selected day
+      // 4. DailyHomeworkPage loads days, displays server streak and switches selected day
       const dayOverview1: DailyHomeworkOverviewResponse = {
         completionPercentage: 50,
         totalDays: 2,
         completedDays: 1,
+        currentStreak: 3,
+        hasHomeworkToday: true,
+        completedToday: false,
         days: [
           {
             id: "day-1",
@@ -580,7 +726,7 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
         },
       };
       vi.mocked(studentApi.getDailyHomeworkOverview).mockResolvedValue(dayOverview1);
-      render(
+      const dailyView = render(
         <MemoryRouter initialEntries={["/student/courses/cls-2/daily-plan"]}>
           <Routes>
             <Route path="/student/courses/:classId/daily-plan" element={<DailyHomeworkPage />} />
@@ -593,12 +739,67 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
           undefined,
         );
       });
+      expect(screen.getByTestId("daily-homework-streak")).toHaveTextContent("3");
       fireEvent.click(screen.getByTitle("Day 2"));
       await waitFor(() => {
         expect(studentApi.getDailyHomeworkOverview).toHaveBeenCalledWith(
           "cls-2",
           "day-2",
         );
+      });
+      dailyView.unmount();
+
+      // Fallback streak (khi API chưa trả currentStreak) không cộng dồn sai theo completedDaysCount nếu đã bỏ lỡ ngày quá khứ
+      const fallbackBrokenStreakOverview: DailyHomeworkOverviewResponse = {
+        completionPercentage: 67,
+        totalDays: 3,
+        completedDays: 2,
+        days: [
+          {
+            id: "d1",
+            dayNumber: 1,
+            title: "Day 1",
+            dateLabel: "10/11",
+            scheduledDate: "2026-11-10",
+            isUnlocked: true,
+            isCompleted: true,
+            isCurrentDay: false,
+          },
+          {
+            id: "d2",
+            dayNumber: 2,
+            title: "Day 2",
+            dateLabel: "11/11",
+            scheduledDate: "2026-11-11",
+            isUnlocked: true,
+            isCompleted: false,
+            isCurrentDay: false,
+          },
+          {
+            id: "d3",
+            dayNumber: 3,
+            title: "Day 3",
+            dateLabel: "12/11",
+            scheduledDate: "2026-11-12",
+            isUnlocked: true,
+            isCompleted: true,
+            isCurrentDay: true,
+          },
+        ],
+        currentSelectedDay: null,
+      };
+      vi.mocked(studentApi.getDailyHomeworkOverview).mockResolvedValueOnce(
+        fallbackBrokenStreakOverview,
+      );
+      render(
+        <MemoryRouter initialEntries={["/student/courses/cls-3/daily-plan"]}>
+          <Routes>
+            <Route path="/student/courses/:classId/daily-plan" element={<DailyHomeworkPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("daily-homework-streak")).toHaveTextContent("1");
       });
     });
 
@@ -793,6 +994,211 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
       });
 
       expect(studentApi.submitAssignment).toHaveBeenCalledTimes(1);
+    });
+
+    it("ExamTakePage hiển thị modal cảnh báo chuyển tab (Strike 1/3), cho phép tiếp tục thi và xử lý lỗi API khi nộp bài", async () => {
+      vi.useFakeTimers();
+
+      const activeExam: AttemptResponse = {
+        attemptId: "att-warn-1",
+        assignmentId: "asg-warn-1",
+        assignmentTitle: "Proctored Reading Exam",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 30,
+        strictFullscreen: false,
+        maxViolations: 3,
+        violationCount: 0,
+        questions: [
+          {
+            questionId: "q-read-1",
+            questionType: "MULTIPLE_CHOICE",
+            skillType: "READING",
+            promptText: "What is the main idea of paragraph 1?",
+            maxPoints: 5,
+            options: [
+              { id: "opt-a", optionLabel: "A", optionText: "Urbanization trends" },
+              { id: "opt-b", optionLabel: "B", optionText: "Marine biology" },
+            ],
+          } as any,
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(activeExam);
+      vi.mocked(studentApi.getAttemptDetail).mockResolvedValue(activeExam);
+      vi.mocked(studentApi.recordExamViolation).mockResolvedValue({
+        ...activeExam,
+        violationCount: 1,
+        maxViolations: 3,
+        isCheatingFlagged: false,
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/student/exams/asg-warn-1/take"]}>
+          <Routes>
+            <Route path="/student/exams/:assignmentId/take" element={<ExamTakePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu thi/i }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText("What is the main idea of paragraph 1?")).toBeInTheDocument();
+
+      // Vượt qua grace period 1200ms rồi chuyển tab -> hiển thị modal Cảnh báo 1/2
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText(/Cảnh báo 1\/2/i)).toBeInTheDocument();
+      expect(screen.getByText(/Rời khỏi màn hình thi/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Chuyển sang tab hoặc ứng dụng khác trong giờ thi\./i),
+      ).toBeInTheDocument();
+
+      // Đóng modal cảnh báo để tiếp tục thi
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        value: false,
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Tiếp tục thi/i }));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.queryByText(/Cảnh báo 1\/2/i)).not.toBeInTheDocument();
+
+      // Nộp bài thi gặp lỗi API -> hiển thị errorBanner
+      vi.mocked(studentApi.submitAssignment).mockRejectedValueOnce({
+        response: { data: { message: "Mất kết nối máy chủ khi nộp bài thi" } },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /^Nộp bài$/i }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(
+        screen.getByText("Mất kết nối máy chủ khi nộp bài thi"),
+      ).toBeInTheDocument();
+    });
+
+    it("AssignmentTakePage thực hiện trọn vẹn luồng bắt đầu làm bài, chọn đáp án, mở modal xác nhận nộp bài và xem kết quả REVIEW", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const inProgressAttempt: AttemptResponse = {
+        attemptId: "att-asg-10",
+        assignmentId: "asg-10",
+        assignmentTitle: "Unit 5 Grammar Quiz",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 20,
+        isExam: false,
+        questions: [
+          {
+            id: "sa-10",
+            questionId: "q-10",
+            questionType: "MULTIPLE_CHOICE",
+            promptText: "She _____ to London twice this year.",
+            maxPoints: 10,
+            options: [
+              { id: "opt-has", optionLabel: "A", optionText: "has been", isCorrect: true },
+              { id: "opt-was", optionLabel: "B", optionText: "was", isCorrect: false },
+            ],
+          },
+        ],
+      };
+
+      const completedAttempt: AttemptResponse = {
+        ...inProgressAttempt,
+        status: "COMPLETED",
+        score: 10,
+        questions: [
+          {
+            ...inProgressAttempt.questions![0],
+            selectedOptionId: "opt-has",
+            studentAnswer: "has been",
+            isCorrect: true,
+            earnedPoints: 10,
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(inProgressAttempt);
+      vi.mocked(studentApi.getAttemptDetail)
+        .mockResolvedValueOnce(inProgressAttempt)
+        .mockResolvedValueOnce(completedAttempt);
+      vi.mocked(studentApi.submitAssignment).mockResolvedValue(completedAttempt);
+
+      render(
+        <MemoryRouter initialEntries={["/student/assignments/asg-10/take"]}>
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Bắt đầu/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByText("She _____ to London twice this year."),
+        ).toBeInTheDocument();
+      });
+
+      // Chọn đáp án A
+      fireEvent.click(screen.getByText("has been").closest('[role="button"]')!);
+
+      // Mở modal xác nhận nộp bài từ TopBar/FooterNav và xác nhận nộp
+      fireEvent.click(screen.getAllByRole("button", { name: /Nộp bài/i })[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/Đã hoàn thành tất cả câu hỏi\./i)).toBeInTheDocument();
+      });
+
+      const confirmBtns = screen.getAllByRole("button", { name: /^Nộp bài$/i });
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(studentApi.submitAssignment).toHaveBeenCalledWith(
+          "asg-10",
+          "att-asg-10",
+          [
+            {
+              questionId: "q-10",
+              selectedOptionId: "opt-has",
+              textAnswer: undefined,
+              answerText: undefined,
+            },
+          ],
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(/ĐẠT CHUẨN/i)).toBeInTheDocument();
+      });
     });
   });
 });

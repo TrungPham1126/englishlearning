@@ -92,17 +92,17 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-                {mode === "EDIT" ? "Chỉnh Sửa Toàn Diện Bài Tập" : "Tạo & Gán Bài Tập Theo Ngày Học"}
+                {mode === "EDIT" ? "Sửa bài tập" : "Tạo bài tập"}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {mode === "EDIT"
-                  ? `Đang chỉnh sửa: ${form.title || "Bài tập"} (Bước ${form.step}/3)`
-                  : `Bước ${form.step} / 3: ${
+                  ? `${form.title || "Bài tập"} • Bước ${form.step}/3`
+                  : `Bước ${form.step}/3 • ${
                       form.step === 1
-                        ? "Chọn Loại & Nguồn Tạo"
+                        ? "Loại & Nguồn"
                         : form.step === 2
-                        ? "Biên Soạn Câu Hỏi (AI / Thủ Công)"
-                        : "Cấu Hình Ngày Học & Giao Lớp"
+                        ? "Câu hỏi"
+                        : "Lịch học & Giao bài"
                     }`}
               </p>
             </div>
@@ -118,9 +118,9 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
         {/* Stepper Progress Bar */}
         <div className="grid grid-cols-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/60 text-xs font-bold shrink-0">
           {[
-            { id: 1, title: "1. Nguồn Khởi Tạo", sub: "AI / Excel / Thủ công" },
-            { id: 2, title: "2. Biên Soạn & TTS", sub: `${form.questions.length} câu hỏi & Audio` },
-            { id: 3, title: "3. Lịch Học & Giao Bài", sub: "Gán vào lộ trình ngày" },
+            { id: 1, title: "1. Nguồn tạo", sub: "AI / Excel / Thủ công" },
+            { id: 2, title: "2. Câu hỏi & Audio", sub: `${form.questions.length} câu` },
+            { id: 3, title: "3. Lịch học & Giao bài", sub: "Gán ngày học" },
           ].map((st) => {
             const isActive = form.step === st.id;
             const isCompleted = form.step > st.id;
@@ -176,7 +176,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
                 <div>
-                  <p className="font-bold text-rose-200">Lỗi tạo bài tập từ AI:</p>
+                  <p className="font-bold text-rose-200">Lỗi AI:</p>
                   <p className="mt-0.5 text-rose-300 leading-relaxed">{form.aiError}</p>
                 </div>
               </div>
@@ -196,16 +196,16 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               {/* 1. Chọn Loại Bài Tập (Skill Cards) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
-                  1. Chọn Loại Bài Tập (Skill Type)
+                  1. Kỹ năng
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {[
-                    { id: "SPEAKING", label: "Speaking (Luyện Nói)", sub: "Hỗ trợ Shadowing AI", icon: Mic, color: "border-rose-500/30 text-rose-400 bg-rose-500/5" },
-                    { id: "VOCABULARY", label: "Vocabulary (Từ Vựng)", sub: "Từ vựng, Ngữ cảnh & Phát âm", icon: BookOpen, color: "border-amber-500/30 text-amber-400 bg-amber-500/5" },
-                    { id: "READING", label: "Reading (Đọc Hiểu)", sub: "Passage & Đa dạng câu hỏi", icon: FileText, color: "border-blue-500/30 text-blue-400 bg-blue-500/5" },
-                    { id: "LISTENING", label: "Listening (Nghe Hiểu)", sub: "Audio player & Tốc độ", icon: Headphones, color: "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" },
-                    { id: "WRITING", label: "Writing (Viết Tự Luận)", sub: "AI Chấm Task 1 & Task 2", icon: PenTool, color: "border-sky-500/30 text-sky-400 bg-sky-500/5" },
-                    { id: "GRAMMAR", label: "Grammar (Ngữ Pháp)", sub: "Điền từ & Trắc nghiệm", icon: CheckSquare, color: "border-blue-500/30 text-blue-400 bg-blue-600/5" },
+                    { id: "SPEAKING", label: "Speaking", sub: "Shadowing AI", icon: Mic, color: "border-rose-500/30 text-rose-400 bg-rose-500/5" },
+                    { id: "VOCABULARY", label: "Vocabulary", sub: "Từ vựng & phát âm", icon: BookOpen, color: "border-amber-500/30 text-amber-400 bg-amber-500/5" },
+                    { id: "READING", label: "Reading", sub: "Đọc hiểu", icon: FileText, color: "border-blue-500/30 text-blue-400 bg-blue-500/5" },
+                    { id: "LISTENING", label: "Listening", sub: "Audio & tốc độ", icon: Headphones, color: "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" },
+                    { id: "WRITING", label: "Writing", sub: "AI chấm Task 1 & 2", icon: PenTool, color: "border-sky-500/30 text-sky-400 bg-sky-500/5" },
+                    { id: "GRAMMAR", label: "Grammar", sub: "Điền từ & trắc nghiệm", icon: CheckSquare, color: "border-blue-500/30 text-blue-400 bg-blue-600/5" },
                   ].map((typeItem) => {
                     const IconComp = typeItem.icon;
                     const isSelected = form.assignmentType === typeItem.id;
@@ -222,10 +222,20 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                           form.setMainTranscript("");
                           form.setMainAudioUrl("");
                           if (typeItem.id === "SPEAKING") {
-                            form.setSpeakingMode(defaultSub === "SPEAKING_SHADOWING" ? "SHADOWING" : "QA");
+                            form.setSpeakingMode(
+                              defaultSub === "SPEAKING_PART_2"
+                                ? "PART_2"
+                                : defaultSub === "SPEAKING_PART_3"
+                                ? "PART_3"
+                                : defaultSub === "SPEAKING_SHADOWING"
+                                ? "SHADOWING"
+                                : "QA"
+                            );
                           }
                           if (typeItem.id === "WRITING") {
-                            form.setWritingTaskType(defaultSub === "WRITING_IELTS_TASK1" ? "TASK_1" : "TASK_2");
+                            form.setWritingTaskType(
+                              defaultSub === "WRITING_IELTS_TASK1" ? "TASK_1" : "TASK_2"
+                            );
                           }
                         }}
                         className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
@@ -256,7 +266,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                   <div className="flex items-center gap-2">
                     <ListChecks className="h-4 w-4 text-blue-700 dark:text-blue-400" />
                     <span className="font-bold text-xs text-blue-800 dark:text-blue-300 uppercase tracking-wider">
-                      1.1. Chọn Trình Độ &amp; Định Dạng ({form.assignmentType} • {form.aiLevel})
+                      1.1. Trình độ &amp; Định dạng ({form.assignmentType} • {form.aiLevel})
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -282,7 +292,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               {/* 2. Chọn Nguồn Tạo Bài Tập (Tabs) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
-                  2. Chọn Phương Thức Khởi Tạo
+                  2. Nguồn tạo
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <button
@@ -301,9 +311,9 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                           AI Auto
                         </span>
                       </div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">Tạo Bằng AI</div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">Tạo bằng AI</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                        AI tự động phân tích &amp; sinh bài tập chuẩn CEFR.
+                        Sinh bài tập chuẩn CEFR.
                       </div>
                     </div>
                   </button>
@@ -324,9 +334,9 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                           Smart Text
                         </span>
                       </div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">Dán Text Thô</div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">Dán văn bản</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                        Dán văn bản, đề thi Word/PDF, AI tự định dạng.
+                        Dán đề Word/PDF, AI chuẩn hóa.
                       </div>
                     </div>
                   </button>
@@ -349,7 +359,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                       </div>
                       <div className="font-bold text-sm text-slate-900 dark:text-white">Nhập Excel</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                        Nhập file Excel (.xlsx, .csv) đa dạng cấu trúc.
+                        Import file .xlsx, .csv.
                       </div>
                     </div>
                   </button>
@@ -370,9 +380,9 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                           Tự Do
                         </span>
                       </div>
-                      <div className="font-bold text-sm text-slate-900 dark:text-white">Thủ Công</div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">Thủ công</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                        Tự tạo câu hỏi, tải file audio cá nhân lên.
+                        Tự soạn câu hỏi &amp; tải audio.
                       </div>
                     </div>
                   </button>
@@ -418,11 +428,11 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                     <div className="flex items-center gap-2">
                       <Type className="h-4 w-4 text-sky-400" />
                       <span className="text-xs font-bold text-sky-200">
-                        Dán Đề Thi Thô / Bài Đọc / Kịch Bản Nghe
+                        Dán đề / bài đọc / script nghe
                       </span>
                     </div>
                     <span className="text-[11px] font-bold text-sky-300 bg-sky-500/20 px-2 py-0.5 rounded-md">
-                      Kỹ năng: {form.assignmentType}
+                      {form.assignmentType}
                     </span>
                   </div>
 
@@ -430,7 +440,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                     rows={6}
                     value={form.rawText}
                     onChange={(e) => form.setRawText(e.target.value)}
-                    placeholder={`Dán nội dung đề bài vào đây...\n• Ví dụ 1: Copy đề trắc nghiệm: "Câu 1: What is the main idea...? A. ... B. ... C. ... D. ... Đáp án: A. Giải thích: ..."\n• Ví dụ 2: Dán một đoạn văn bản hoặc kịch bản nghe, AI sẽ tự động phân tích và trích xuất câu hỏi chuẩn định dạng!`}
+                    placeholder={`Dán đề trắc nghiệm ("Câu 1: ... A. ... Đáp án: A"), đoạn văn hoặc script nghe...`}
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-sky-500 focus:outline-hidden font-mono leading-relaxed"
                   />
 
@@ -442,7 +452,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                       className="w-full sm:w-1/2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-extrabold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
                     >
                       <Zap className="h-4 w-4 text-slate-950" />
-                      <span>⚡ Phân Tích Nhanh (Regex Parser)</span>
+                      <span>Phân tích nhanh (Regex)</span>
                     </button>
 
                     <button
@@ -456,7 +466,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                       ) : (
                         <Bot className="h-4 w-4" />
                       )}
-                      <span>Gemini AI Tối Ưu &amp; Tạo Câu Hỏi</span>
+                      <span>AI chuẩn hóa câu hỏi</span>
                     </button>
                   </div>
                 </div>
@@ -467,18 +477,18 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                   <div className="flex items-center gap-2">
                     <Edit3 className="h-4 w-4 text-blue-400" />
                     <span className="text-xs font-bold text-blue-200">
-                      Soạn Bài Thủ Công Bằng Tay (Có Hỗ Trợ Tải File Audio Lên Từ Máy Tính)
+                      Soạn thủ công
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Bạn có thể tự tay tạo từng câu hỏi, nhập đáp án đúng, thêm giải thích chi tiết, hoặc tải lên file âm thanh (MP3, WAV) từ máy tính cho bài nghe/nói ở bước tiếp theo.
+                    Tự soạn câu hỏi, đáp án hoặc tải audio ở bước 2.
                   </p>
                   {form.assignmentType === "LISTENING" && (
                     <div className="rounded-lg bg-blue-50/60 dark:bg-slate-950/80 border border-blue-200 dark:border-blue-500/20 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                       <div>
-                        <span className="font-bold text-blue-800 dark:text-blue-300 block">Đính kèm File Audio Toàn Bài Nghe:</span>
+                        <span className="font-bold text-blue-800 dark:text-blue-300 block">Audio bài nghe:</span>
                         <span className="text-[11px] text-slate-600 dark:text-slate-400">
-                          {form.mainAudioUrl ? `Đã có file audio: ${form.mainAudioUrl.split("/").pop()}` : "Bạn có thể chọn file audio ngay bây giờ hoặc ở bước soạn câu hỏi."}
+                          {form.mainAudioUrl ? `File: ${form.mainAudioUrl.split("/").pop()}` : "Chọn ngay hoặc ở bước 2."}
                         </span>
                       </div>
                       <label className="px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs">
@@ -487,7 +497,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                         ) : (
                           <UploadCloud className="h-3.5 w-3.5" />
                         )}
-                        <span>{form.mainAudioUrl ? "Thay Đổi File Audio" : "Tải lên File Audio (.mp3, .wav)"}</span>
+                        <span>{form.mainAudioUrl ? "Đổi audio" : "Tải audio (.mp3, .wav)"}</span>
                         <input
                           type="file"
                           accept="audio/*"
@@ -596,12 +606,12 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                   form.handleGenerateAiQuestions();
                 } else if (form.creationSource === "TEXT_AI") {
                   if (!form.rawText.trim()) {
-                    alert("Vui lòng dán hoặc nhập nội dung văn bản thô!");
+                    alert("Chưa có nội dung văn bản.");
                     return;
                   }
                   form.handleQuickParseText();
                 } else if (form.creationSource === "EXCEL") {
-                  alert("Vui lòng chọn File Excel ở khung bên trên để hệ thống tự động nạp câu hỏi!");
+                  alert("Hãy chọn file Excel ở trên.");
                 } else {
                   if (form.questions.length === 0) {
                     form.handleAddBlankQuestion();
@@ -614,11 +624,11 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               {form.isGeneratingAi ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>AI Đang Phân Tích &amp; Tạo Câu Hỏi...</span>
+                  <span>Đang tạo...</span>
                 </>
               ) : (
                 <>
-                  <span>Tiếp Tục (Biên Soạn Câu Hỏi)</span>
+                  <span>Tiếp tục</span>
                   <ChevronRight className="h-4 w-4" />
                 </>
               )}
@@ -635,7 +645,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition cursor-pointer shadow-md disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" />
-                  <span>{form.isSaving ? "Đang Lưu..." : "Lưu Thay Đổi Ngay"}</span>
+                  <span>{form.isSaving ? "Đang lưu..." : "Lưu ngay"}</span>
                 </button>
               )}
               <button
@@ -643,7 +653,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                 onClick={form.handleGoToScheduleStep}
                 className="flex items-center gap-1.5 rounded-lg bg-blue-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-600 transition cursor-pointer"
               >
-                <span>{mode === "EDIT" ? "Tiếp Tục (Cấu Hình Giới Hạn Sai & Thời Gian)" : "Tiếp Tục (Cấu Hình Ngày & Giao Bài)"}</span>
+                <span>{mode === "EDIT" ? "Tiếp tục (Cấu hình)" : "Tiếp tục (Giao bài)"}</span>
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -659,12 +669,12 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               {form.isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>{mode === "EDIT" ? "Đang Cập Nhật Bài Tập..." : "Đang Gán & Lưu Lộ Trình..."}</span>
+                  <span>{mode === "EDIT" ? "Đang lưu..." : "Đang giao bài..."}</span>
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>{mode === "EDIT" ? "Lưu & Cập Nhật Mọi Thay Đổi" : "Xác Nhận & Gán Vào Lộ Trình"}</span>
+                  <span>{mode === "EDIT" ? "Lưu thay đổi" : "Xác nhận & Giao bài"}</span>
                 </>
               )}
             </button>

@@ -16,11 +16,15 @@ import com.englishlearning.assignment.repository.AssignmentQuestionRepository;
 
 import com.englishlearning.assignment.repository.AssignmentRepository;
 
+import com.englishlearning.assignment.service.ExerciseAudioService;
+
 import com.englishlearning.auth.entity.Student;
 
 import com.englishlearning.common.exception.BadRequestException;
 
 import com.englishlearning.common.exception.ResourceNotFoundException;
+
+import com.englishlearning.common.util.ScoreScaleUtils;
 
 import com.englishlearning.curriculum.entity.DailyPlanItem;
 
@@ -157,6 +161,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 assignmentId);
 
+        if (previousAttempts == null) {
+
+            previousAttempts = Collections.emptyList();
+
+        }
+
 
 
         // 1. NẾU ĐANG CÓ LẦN LÀM DỞ DANG (IN_PROGRESS) -> TRẢ VỀ TIẾP TỤC
@@ -180,6 +190,12 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (existingInProgress.isPresent()) {
 
             AssignmentAttempt current = existingInProgress.get();
+
+            if (current.getAnswers() == null) {
+
+                current.setAnswers(new ArrayList<>());
+
+            }
 
             boolean hasNewAnswers = false;
 
@@ -299,7 +315,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
             }
 
-            double scorePercent = (lastScore / 10.0) * 100.0;
+            double scorePercent = ScoreScaleUtils.normalizeToScale100(lastScore);
 
             double errorRate = Math.max(0.0, 100.0 - scorePercent);
 
@@ -310,12 +326,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             if (assignment.getMaxAllowedErrorPercent() != null) {
                 allowedErrorThreshold = assignment.getMaxAllowedErrorPercent();
             } else if (assignment.getPassScore() != null) {
-                double pScore = assignment.getPassScore() <= 10.0 ? assignment.getPassScore() * 10.0 : assignment.getPassScore();
+                double pScore = ScoreScaleUtils.normalizeToScale100(assignment.getPassScore());
                 allowedErrorThreshold = Math.max(0.0, 100.0 - pScore);
             }
 
             double highestScorePercent = completedAttempts.stream()
-                    .mapToDouble(a -> a.getTotalScore() != null ? (a.getTotalScore() <= 10.0 ? a.getTotalScore() * 10.0 : a.getTotalScore()) : 0.0)
+                    .mapToDouble(a -> ScoreScaleUtils.normalizeToScale100(a.getTotalScore()))
                     .max().orElse(0.0);
             double lowestErrorRate = Math.max(0.0, 100.0 - highestScorePercent);
 
@@ -365,6 +381,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
         attempt = attemptRepository.save(attempt);
+
+        if (attempt.getAnswers() == null) {
+
+            attempt.setAnswers(new ArrayList<>());
+
+        }
 
 
 
@@ -447,17 +469,49 @@ public class SubmissionServiceImpl implements SubmissionService {
     }
 
     private double resolveAiOrExistingManualScore(AssignmentQuestion question, StudentAnswer workingAns) {
-        double point = question.getPoints() != null ? question.getPoints() : 10.0;
+        double point = (question.getPoints() != null && question.getPoints() > 0) ? question.getPoints() : 1.0;
         if (workingAns == null) {
             return 0.0;
         }
+        if (question.getQuestionType() == QuestionType.ESSAY && workingAns.getId() != null) {
+            var evalOpt = aiEvaluationRepository.findByStudentAnswerId(workingAns.getId());
+            if (evalOpt.isPresent()) {
+                var eval = evalOpt.get();
+                double aiBand = eval.getOverallScore() != null ? eval.getOverallScore() : 0.0;
+                Double existingEarned = workingAns.getEarnedPoints();
+                boolean shouldConvertAiBand = existingEarned == null
+                        || existingEarned <= 0.0
+                        || existingEarned > 10.0
+                        || (aiBand > 0.0 && Math.abs(existingEarned - aiBand) < 0.01);
+                if (shouldConvertAiBand) {
+                    double converted10;
+                    if (aiBand > 10.0) {
+                        converted10 = ScoreScaleUtils.normalizeToScale10OrZero(aiBand);
+                    } else if ((eval.getEvalType() == null
+                            || eval.getEvalType() == com.englishlearning.ai.entity.AiEvaluationType.WRITING)
+                            && aiBand <= 9.0) {
+                        converted10 = ScoreScaleUtils.clampScale10((aiBand / 9.0) * 10.0);
+                    } else {
+                        converted10 = ScoreScaleUtils.clampScale10(aiBand);
+                    }
+                    workingAns.setEarnedPoints(converted10);
+                    workingAns.setIsCorrect(aiBand >= 5.0 || converted10 >= 5.0);
+                    return (converted10 / 10.0) * point;
+                }
+            }
+        }
         if (workingAns.getEarnedPoints() != null && workingAns.getEarnedPoints() > 0) {
-            return (workingAns.getEarnedPoints() / 10.0) * point;
+            double normalizedEarned = ScoreScaleUtils.normalizeToScale10OrZero(workingAns.getEarnedPoints());
+            if (workingAns.getEarnedPoints() > 10.0) {
+                workingAns.setEarnedPoints(normalizedEarned);
+            }
+            return (normalizedEarned / 10.0) * point;
         }
         if (workingAns.getId() != null) {
             var evalOpt = aiEvaluationRepository.findByStudentAnswerId(workingAns.getId());
             if (evalOpt.isPresent()) {
-                double aiScore = evalOpt.get().getOverallScore() != null ? evalOpt.get().getOverallScore() : 0.0;
+                double rawAiScore = evalOpt.get().getOverallScore() != null ? evalOpt.get().getOverallScore() : 0.0;
+                double aiScore = ScoreScaleUtils.normalizeToScale10OrZero(rawAiScore);
                 workingAns.setEarnedPoints(aiScore);
                 workingAns.setIsCorrect(aiScore >= 5.0);
                 return (aiScore / 10.0) * point;
@@ -473,16 +527,26 @@ public class SubmissionServiceImpl implements SubmissionService {
     private double scoreAndPersistAnswers(AssignmentAttempt attempt, Assignment assignment,
                                           List<AssignmentQuestion> questions,
                                           List<SubmissionRequest.AnswerDto> incomingAnswers) {
+        if (attempt.getAnswers() == null) {
+            attempt.setAnswers(new ArrayList<>());
+        }
         List<AssignmentQuestion> safeQuestions = questions != null ? questions : Collections.emptyList();
         List<SubmissionRequest.AnswerDto> safeAnswers = incomingAnswers != null ? incomingAnswers : Collections.emptyList();
         Map<UUID, AssignmentQuestion> questionMap = safeQuestions.stream()
-                .filter(q -> q.getId() != null)
+                .filter(q -> q != null && q.getId() != null)
                 .collect(Collectors.toMap(AssignmentQuestion::getId, q -> q, (q1, q2) -> q1));
         GradingResult gradingResult = gradingEngineService.evaluateSubmission(safeQuestions, safeAnswers);
+        Map<UUID, Boolean> correctnessMap = gradingResult != null && gradingResult.getCorrectnessPerQuestion() != null
+                ? gradingResult.getCorrectnessPerQuestion() : Collections.emptyMap();
+        Map<UUID, Double> earnedMap = gradingResult != null && gradingResult.getEarnedPointsPerQuestion() != null
+                ? gradingResult.getEarnedPointsPerQuestion() : Collections.emptyMap();
         double totalScore = 0.0;
         Set<UUID> handledQuestionIds = new HashSet<>();
 
         for (SubmissionRequest.AnswerDto ansReq : safeAnswers) {
+            if (ansReq == null || ansReq.getQuestionId() == null) {
+                continue;
+            }
             AssignmentQuestion question = questionMap.get(ansReq.getQuestionId());
             if (question == null) {
                 continue;
@@ -491,7 +555,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
             boolean persist = shouldPersistDetailedAnswer(assignment, question);
             StudentAnswer existingAns = attempt.getAnswers().stream()
-                    .filter(a -> a.getQuestion() != null && a.getQuestion().getId().equals(ansReq.getQuestionId()))
+                    .filter(a -> a.getQuestion() != null && ansReq.getQuestionId().equals(a.getQuestion().getId()))
                     .findFirst()
                     .orElse(null);
 
@@ -510,8 +574,8 @@ public class SubmissionServiceImpl implements SubmissionService {
             if (question.getQuestionType() == QuestionType.AUDIO_RESPONSE || question.getQuestionType() == QuestionType.ESSAY) {
                 totalScore += resolveAiOrExistingManualScore(question, workingAns);
             } else {
-                boolean isCorrect = Boolean.TRUE.equals(gradingResult.getCorrectnessPerQuestion().get(question.getId()));
-                Double earned = gradingResult.getEarnedPointsPerQuestion().get(question.getId());
+                boolean isCorrect = Boolean.TRUE.equals(correctnessMap.get(question.getId()));
+                Double earned = earnedMap.get(question.getId());
                 double point = earned != null ? earned : 0.0;
                 if (persist && workingAns != null) {
                     workingAns.setIsCorrect(isCorrect);
@@ -557,10 +621,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             });
         }
 
-        double maxPossible = safeQuestions.stream().mapToDouble(q -> q.getPoints() != null ? q.getPoints() : 1.0).sum();
+        double maxPossible = safeQuestions.stream()
+                .mapToDouble(q -> (q.getPoints() != null && q.getPoints() > 0) ? q.getPoints() : 1.0)
+                .sum();
         double finalScore = maxPossible > 0 ? (totalScore / maxPossible) * 10.0
                 : (safeQuestions.isEmpty() ? 0 : (totalScore / safeQuestions.size()) * 10.0);
-        return Math.round(finalScore * 10.0) / 10.0;
+        return ScoreScaleUtils.clampScale10(finalScore);
     }
 
     private String appendViolationLog(String existingJson, int index, String eventType, String reason) {
@@ -630,6 +696,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     public AttemptResponse submitAttempt(UUID studentId, UUID attemptId, SubmissionRequest request) {
 
+        if (request == null) {
+
+            throw new BadRequestException("Dữ liệu nộp bài không được để trống.");
+
+        }
+
         AssignmentAttempt attempt = attemptRepository.findByIdAndStudentId(attemptId, studentId)
 
                 .orElseThrow(() -> new ResourceNotFoundException("Attempt not found"));
@@ -651,7 +723,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
         Assignment assignment = attempt.getAssignment();
-        List<AssignmentQuestion> questions = questionRepository.findByAssignmentId(request.getAssignmentId());
+        UUID resolvedAssignmentId = request.getAssignmentId() != null
+                ? request.getAssignmentId()
+                : (assignment != null ? assignment.getId() : null);
+        List<AssignmentQuestion> rawQuestions = questionRepository.findByAssignmentId(resolvedAssignmentId);
+        List<AssignmentQuestion> questions = rawQuestions != null ? rawQuestions : Collections.emptyList();
         double finalScore = scoreAndPersistAnswers(attempt, assignment, questions, request.getAnswers());
 
         if (Boolean.TRUE.equals(request.getCheatingFlagged())) {
@@ -968,7 +1044,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     @Override
 
-    @Transactional(readOnly = true)
+    @Transactional
 
     public AttemptResponse getAttemptDetail(UUID attemptId, UUID studentId, boolean isTeacher) {
 
@@ -989,6 +1065,9 @@ public class SubmissionServiceImpl implements SubmissionService {
         Assignment assignmentWithQuestions = assignmentRepository.findByIdWithQuestions(assignmentId)
 
                 .orElse(attempt.getAssignment());
+
+        repairCorruptedNonShadowingSpeakingAssignment(assignmentWithQuestions);
+        boolean isNonShadowingSpeakingAssignment = ExerciseAudioService.isNonShadowingSpeakingAssignment(assignmentWithQuestions);
 
 
 
@@ -1034,7 +1113,12 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-                    Double earnedPoints = (ans != null && ans.getEarnedPoints() != null) ? ans.getEarnedPoints() : 0.0;
+                    Double rawEarnedPoints = (ans != null && ans.getEarnedPoints() != null) ? ans.getEarnedPoints() : 0.0;
+                    Double earnedPoints = (q.getQuestionType() == QuestionType.ESSAY || q.getQuestionType() == QuestionType.AUDIO_RESPONSE)
+                            && (q.getPoints() == null || q.getPoints() <= 10.0)
+                            && rawEarnedPoints > 10.0
+                            ? ScoreScaleUtils.normalizeToScale10OrZero(rawEarnedPoints)
+                            : rawEarnedPoints;
 
                     Boolean isCorrect = ans != null && Boolean.TRUE.equals(ans.getIsCorrect());
 
@@ -1098,17 +1182,17 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                                         .evalType(eval.getEvalType() != null ? eval.getEvalType().name() : null)
 
-                                        .overallScore(eval.getOverallScore())
+                                        .overallScore(ScoreScaleUtils.normalizeToScale10(eval.getOverallScore()))
 
-                                        .pronunciationScore(eval.getPronunciationScore())
+                                        .pronunciationScore(ScoreScaleUtils.normalizeToScale10(eval.getPronunciationScore()))
 
-                                        .fluencyScore(eval.getFluencyScore())
+                                        .fluencyScore(ScoreScaleUtils.normalizeToScale10(eval.getFluencyScore()))
 
-                                        .grammarScore(eval.getGrammarScore())
+                                        .grammarScore(ScoreScaleUtils.normalizeToScale10(eval.getGrammarScore()))
 
-                                        .vocabularyScore(eval.getVocabularyScore())
+                                        .vocabularyScore(ScoreScaleUtils.normalizeToScale10(eval.getVocabularyScore()))
 
-                                        .coherenceScore(eval.getCoherenceScore())
+                                        .coherenceScore(ScoreScaleUtils.normalizeToScale10(eval.getCoherenceScore()))
 
                                         .estimatedCefr(eval.getEstimatedCefr())
 
@@ -1129,6 +1213,9 @@ public class SubmissionServiceImpl implements SubmissionService {
                     }
 
 
+
+                    boolean suppressSampleAudioForQuestion = isNonShadowingSpeakingAssignment
+                            || ExerciseAudioService.isNonShadowingSpeakingQuestion(assignmentWithQuestions, q);
 
                     return AttemptResponse.QuestionResultDetail.builder()
 
@@ -1160,9 +1247,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             .audioUrl(ans != null ? ans.getAudioResponseUrl() : null)
 
-                            .mediaUrl(q.getMediaUrl())
+                            .mediaUrl(suppressSampleAudioForQuestion ? null : q.getMediaUrl())
 
-                            .transcript((revealAnswers || isAudioResponse) ? q.getTranscript() : null)
+                            .transcript((!suppressSampleAudioForQuestion && (revealAnswers || isAudioResponse)) ? q.getTranscript() : null)
 
                             .options(optionDetails)
 
@@ -1225,6 +1312,67 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     }
 
+    private void repairCorruptedNonShadowingSpeakingAssignment(Assignment assignment) {
+        if (assignment == null || !ExerciseAudioService.isNonShadowingSpeakingAssignment(assignment)) {
+            return;
+        }
+        String resolvedMode = ExerciseAudioService.resolveSpeakingMode(assignment, null, null);
+        boolean assignmentDirty = false;
+        String desc = assignment.getDescription();
+        if (desc != null && (desc.toLowerCase(java.util.Locale.ROOT).contains("- shadowing")
+                || desc.toUpperCase(java.util.Locale.ROOT).contains("[SPEAKING_SHADOWING]"))) {
+            String replacementLabel = switch (resolvedMode) {
+                case "PART_2" -> "Part 2 Cue Card";
+                case "PART_3" -> "Part 3 Discussion";
+                default -> "Q&A";
+            };
+            String repairedDesc = desc
+                    .replaceAll("(?i)-\\s*Shadowing", "- " + replacementLabel)
+                    .replaceAll("(?i)\\[SPEAKING_SHADOWING\\]", "[SPEAKING_" + resolvedMode + "]");
+            if (!repairedDesc.equals(desc)) {
+                assignment.setDescription(repairedDesc);
+                assignmentDirty = true;
+            }
+        }
+        if (assignmentDirty && assignmentRepository != null) {
+            assignmentRepository.save(assignment);
+        }
+
+        if (assignment.getQuestions() == null) {
+            return;
+        }
+        for (AssignmentQuestion q : assignment.getQuestions()) {
+            if (!ExerciseAudioService.isNonShadowingSpeakingQuestion(assignment, q)) {
+                continue;
+            }
+            boolean qDirty = false;
+            if (ExerciseAudioService.isCorruptedSpeakingPrompt(q)) {
+                String qMode = ExerciseAudioService.resolveSpeakingMode(assignment, q, null);
+                String recoveredPrompt = ExerciseAudioService.reconstructEnglishPromptForNonShadowingSpeaking(
+                        assignment, q, qMode);
+                if (recoveredPrompt != null && !recoveredPrompt.isBlank()) {
+                    if ((q.getCorrectAnswer() == null || q.getCorrectAnswer().isBlank())
+                            && q.getPromptText() != null && !q.getPromptText().isBlank()) {
+                        q.setCorrectAnswer(q.getPromptText().trim());
+                    }
+                    q.setPromptText(recoveredPrompt);
+                    qDirty = true;
+                }
+            }
+            if (q.getTranscript() != null && !q.getTranscript().isBlank()) {
+                q.setTranscript(null);
+                qDirty = true;
+            }
+            if (q.getMediaUrl() != null && !q.getMediaUrl().isBlank()) {
+                q.setMediaUrl(null);
+                qDirty = true;
+            }
+            if (qDirty && questionRepository != null) {
+                questionRepository.save(q);
+            }
+        }
+    }
+
 
 
     @Override
@@ -1273,11 +1421,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     .maxAttempts(a.getMaxAttempts())
 
-                    .passScore(a.getPassScore())
+                    .passScore(ScoreScaleUtils.normalizeToScale10(a.getPassScore()))
 
                     .attemptsCount(attemptsCount)
 
-                    .highestScore(highestScore != null ? highestScore : 0.0)
+                    .highestScore(ScoreScaleUtils.normalizeToScale10OrZero(highestScore))
 
                     .status(status)
 
@@ -1361,7 +1509,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             .attemptNumber(att.getAttemptNumber())
 
-                            .score(att.getTotalScore())
+                            .score(ScoreScaleUtils.normalizeToScale10(att.getTotalScore()))
 
                             .status(att.getStatus() != null ? att.getStatus().name() : null)
 
@@ -1474,14 +1622,14 @@ public class SubmissionServiceImpl implements SubmissionService {
                     .questionTypes(qTypes)
                     .attemptNumber(a.getAttemptNumber())
                     .status(a.getStatus().name())
-                    .score(a.getTotalScore())
+                    .score(ScoreScaleUtils.normalizeToScale10(a.getTotalScore()))
                     .teacherFeedback(a.getTeacherFeedback())
                     .submittedAt(a.getSubmittedAt() != null ? a.getSubmittedAt() : a.getStartedAt())
                     .dayNumber(plan != null ? plan.getDayNumber() : null)
                     .dayTitle(plan != null ? plan.getTitle() : null)
                     .scheduledDate(plan != null ? plan.getScheduledDate() : null)
                     .hasAiEvaluation(matchedEval != null || hasFeedback)
-                    .aiScore(matchedEval != null ? matchedEval.getOverallScore() : null)
+                    .aiScore(matchedEval != null ? ScoreScaleUtils.normalizeToScale10(matchedEval.getOverallScore()) : null)
                     .aiCefr(matchedEval != null ? matchedEval.getEstimatedCefr() : null)
                     .aiEvalType(matchedEval != null && matchedEval.getEvalType() != null
                             ? matchedEval.getEvalType().name() : null)
@@ -1507,7 +1655,13 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 .orElseThrow(() -> new ResourceNotFoundException("Not found"));
 
-
+        if (request == null || request.getFinalScore() == null
+                || !Double.isFinite(request.getFinalScore())
+                || request.getFinalScore() < 0.0
+                || request.getFinalScore() > 10.0) {
+            throw new BadRequestException("Điểm số phải nằm trong thang điểm từ 0 đến 10");
+        }
+        double validatedFinalScore = ScoreScaleUtils.clampScale10(request.getFinalScore());
 
         if (request.getAnswerScores() != null && !request.getAnswerScores().isEmpty()) {
 
@@ -1522,6 +1676,9 @@ public class SubmissionServiceImpl implements SubmissionService {
                     continue;
 
                 }
+                if (!Double.isFinite(score) || score < 0.0) {
+                    throw new BadRequestException("Điểm từng câu không được nhỏ hơn 0");
+                }
 
                 attempt.getAnswers().stream()
 
@@ -1531,14 +1688,22 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                         .ifPresent(ans -> {
 
-                            ans.setEarnedPoints(score);
-
                             double maxPt = (ans.getQuestion() != null && ans.getQuestion().getPoints() != null)
                                     ? ans.getQuestion().getPoints() : 10.0;
                             boolean isSubjective = ans.getQuestion() != null &&
                                     (ans.getQuestion().getQuestionType() == QuestionType.ESSAY
                                             || ans.getQuestion().getQuestionType() == QuestionType.AUDIO_RESPONSE);
-                            ans.setIsCorrect(isSubjective ? score >= 5.0 : score >= (maxPt * 0.5));
+                            if (isSubjective && score > 10.0) {
+                                throw new BadRequestException("Điểm câu tự luận/nói phải từ 0 đến 10");
+                            }
+                            if (!isSubjective && maxPt > 0 && score > maxPt) {
+                                throw new BadRequestException("Điểm câu hỏi không được vượt quá điểm tối đa (" + maxPt + ")");
+                            }
+                            double savedQuestionScore = isSubjective
+                                    ? ScoreScaleUtils.clampScale10(score)
+                                    : ScoreScaleUtils.roundOneDecimal(score);
+                            ans.setEarnedPoints(savedQuestionScore);
+                            ans.setIsCorrect(isSubjective ? savedQuestionScore >= 5.0 : savedQuestionScore >= (maxPt * 0.5));
 
                             answerRepository.save(ans);
 
@@ -1546,16 +1711,16 @@ public class SubmissionServiceImpl implements SubmissionService {
 
             }
 
-        } else if (request.getFinalScore() != null && attempt.getAnswers() != null && attempt.getAnswers().size() == 1) {
+        } else if (attempt.getAnswers() != null && attempt.getAnswers().size() == 1) {
 
             StudentAnswer singleAns = attempt.getAnswers().get(0);
 
             if (singleAns.getQuestion() != null && (singleAns.getQuestion().getQuestionType() == com.englishlearning.assignment.entity.QuestionType.ESSAY
                     || singleAns.getQuestion().getQuestionType() == com.englishlearning.assignment.entity.QuestionType.AUDIO_RESPONSE)) {
 
-                singleAns.setEarnedPoints(request.getFinalScore());
+                singleAns.setEarnedPoints(validatedFinalScore);
 
-                singleAns.setIsCorrect(request.getFinalScore() >= 5.0);
+                singleAns.setIsCorrect(validatedFinalScore >= 5.0);
 
                 answerRepository.save(singleAns);
 
@@ -1567,7 +1732,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         attempt.setTeacherFeedback(request.getFeedback());
 
-        attempt.setTotalScore(request.getFinalScore());
+        attempt.setTotalScore(validatedFinalScore);
 
         attempt.setStatus(AttemptStatus.COMPLETED);
 
@@ -1577,11 +1742,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         if (attempt.getAssignment() != null && attempt.getAssignment().getSkillType() != null
 
-                && attempt.getStudent() != null && request.getFinalScore() != null) {
+                && attempt.getStudent() != null) {
 
             String skillType = attempt.getAssignment().getSkillType().name();
 
-            double skillBoost = request.getFinalScore() * 0.05;
+            double skillBoost = validatedFinalScore * 0.05;
 
             analyticsService.updateSkillScore(attempt.getStudent().getId(), skillType, skillBoost);
 
@@ -1615,7 +1780,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     attempt.getAssignment().getTitle(),
 
-                    request.getFinalScore(),
+                    validatedFinalScore,
 
                     feedbackMsg);
 
@@ -1813,7 +1978,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 .attemptNumber(att.getAttemptNumber())
 
-                .score(att.getTotalScore())
+                .score(ScoreScaleUtils.normalizeToScale10(att.getTotalScore()))
 
                 .status(att.getStatus().name())
 
@@ -1823,7 +1988,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                 .timeLimitMinutes(att.getAssignment().getTimeLimitMinutes())
 
-                .passScore(att.getAssignment().getPassScore())
+                .passScore(ScoreScaleUtils.normalizeToScale10(att.getAssignment().getPassScore()))
 
                 .maxAllowedErrorPercent(att.getAssignment().getMaxAllowedErrorPercent())
 
@@ -1893,13 +2058,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
 
 
-        Double score = att.getTotalScore();
-
-        if (score == null) {
-
-            score = 0.0;
-
-        }
+        double score = ScoreScaleUtils.normalizeToScale10OrZero(att.getTotalScore());
 
         double scorePercent = (score / 10.0) * 100.0;
 

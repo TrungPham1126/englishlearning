@@ -10,6 +10,7 @@ import com.englishlearning.auth.service.JwtService;
 import com.englishlearning.common.config.SecurityConfig;
 import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
+import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.GlobalResourceResponse;
 import com.englishlearning.curriculum.service.GlobalResourceService;
 import jakarta.servlet.FilterChain;
@@ -152,5 +153,89 @@ class AdminResourceControllerTest {
                         .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Xóa thành công"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/admin/resources - Không truyền param type vẫn mặc định lấy DOC và trả về 200 OK")
+    void getResources_missingTypeParam_defaultsAndReturns200() throws Exception {
+        when(resourceService.getResourcesByType(null)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/admin/resources")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data").isArray());
+
+        verify(resourceService).getResourcesByType(null);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/resources/upload - STUDENT bị chặn 403 Forbidden")
+    void uploadResource_asStudent_returns403() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "deck.pdf", "application/pdf", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/v1/admin/resources/upload")
+                        .file(file)
+                        .param("type", "DOC")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(resourceService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/resources/upload - Chưa đăng nhập trả về 401 Unauthorized")
+    void uploadResource_unauthenticated_returns401() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "deck.pdf", "application/pdf", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/v1/admin/resources/upload")
+                        .file(file)
+                        .param("type", "DOC")
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(resourceService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/admin/resources/upload - File rỗng hoặc loại tài nguyên không hợp lệ trả về 400 Bad Request")
+    void uploadResource_emptyFileOrInvalidType_returns400() throws Exception {
+        MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
+        doThrow(new BadRequestException("File tài nguyên không được để trống"))
+                .when(resourceService).uploadResource(any(), eq("DOC"), eq(adminId));
+
+        mockMvc.perform(multipart("/api/v1/admin/resources/upload")
+                        .file(emptyFile)
+                        .param("type", "DOC")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN)))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/admin/resources/{id} - STUDENT bị chặn 403 Forbidden")
+    void deleteResource_asStudent_returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/resources/{id}", resourceId)
+                        .with(user(userWithRole(adminId, RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(resourceService);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/admin/resources/{id} - Không tìm thấy tài nguyên trả về 404 Not Found")
+    void deleteResource_notFound_returns404() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        doThrow(new ResourceNotFoundException("Not found"))
+                .when(resourceService).deleteResource(missingId);
+
+        mockMvc.perform(delete("/api/v1/admin/resources/{id}", missingId)
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN)))
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
     }
 }

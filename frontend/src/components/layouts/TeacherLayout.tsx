@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import {
   LayoutDashboard,
   BookOpen,
+  Video,
   LogOut,
   GraduationCap,
   Radio,
@@ -45,7 +46,7 @@ export default function TeacherLayout() {
         setImgError(false);
       }
     } catch {
-      alert("Không thể cập nhật ảnh đại diện!");
+      alert("Cập nhật ảnh thất bại.");
     } finally {
       e.target.value = "";
     }
@@ -102,24 +103,19 @@ export default function TeacherLayout() {
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800 shadow-xs text-white">
                 <GraduationCap className="h-5 w-5" />
               </div>
-              <div className="truncate">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
-                    ELP TEACHER
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
-                    <GraduationCap size={9} /> Giảng Viên
-                  </span>
-                </div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate">
-                  Không Gian Giảng Dạy &amp; Chấm Điểm
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100 truncate">
+                  ELP TEACHER
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-50 dark:bg-slate-900/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">
+                  <GraduationCap size={9} /> GV
                 </span>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(false)}
-              aria-label="Đóng thanh bên"
+              aria-label="Đóng menu"
               className="lg:hidden rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               <X size={18} />
@@ -127,23 +123,28 @@ export default function TeacherLayout() {
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1.5" aria-label="Điều hướng giảng viên">
+          <nav className="p-4 space-y-1.5" aria-label="Điều hướng">
             <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              Quản Lý Giảng Dạy
+              Quản lý
             </p>
             <NavLink to="/teacher/dashboard" className={navLinkClass}>
               <LayoutDashboard className="h-4 w-4 shrink-0" />
-              <span>Tổng quan (Dashboard)</span>
+              <span>Tổng quan</span>
             </NavLink>
 
             <NavLink to="/teacher/classrooms" className={navLinkClass}>
               <BookOpen className="h-4 w-4 shrink-0" />
-              <span>Lớp học phụ trách</span>
+              <span>Lớp học</span>
+            </NavLink>
+
+            <NavLink to="/teacher/videos" className={navLinkClass}>
+              <Video className="h-4 w-4 shrink-0" />
+              <span>Video của tôi</span>
             </NavLink>
 
             <NavLink to="/teacher/broadcast" className={navLinkClass}>
               <Radio className="h-4 w-4 shrink-0" />
-              <span>Phát thông báo</span>
+              <span>Thông báo</span>
             </NavLink>
           </nav>
         </div>
@@ -153,7 +154,7 @@ export default function TeacherLayout() {
           <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-white dark:bg-[#111827] p-2.5 shadow-2xs">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <label
-                title="Nhấp để đổi ảnh đại diện"
+                title="Đổi ảnh đại diện"
                 className="relative w-10 h-10 shrink-0 rounded-xl overflow-hidden cursor-pointer group shadow-sm"
               >
                 {user?.avatarUrl && !imgError ? (
@@ -210,7 +211,7 @@ export default function TeacherLayout() {
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              aria-label="Mở thanh điều hướng"
+              aria-label="Mở menu"
               className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] text-slate-600 dark:text-slate-300"
             >
               <Menu size={18} />
@@ -221,7 +222,7 @@ export default function TeacherLayout() {
                 className="text-blue-700 dark:text-blue-400"
               />
               <span className="text-xs font-bold text-blue-950 dark:text-blue-300">
-                Cổng Thông Tin Giảng Viên
+                Cổng giảng viên
               </span>
             </div>
           </div>

@@ -40,10 +40,15 @@ public class JwtServiceImpl implements JwtService {
 
     @Override
     public String generateAccessToken(UserDetails userDetails) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("UserDetails không được để trống");
+        }
         Map<String, Object> extraClaims = new HashMap<>();
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .toList();
+        List<String> roles = userDetails.getAuthorities() != null
+                ? userDetails.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority)
+                        .toList()
+                : List.of();
         extraClaims.put("roles", roles);
 
         if (userDetails instanceof CustomUserDetails customUser && customUser.getId() != null) {
@@ -53,27 +58,28 @@ public class JwtServiceImpl implements JwtService {
     }
 
     private String buildToken(Map<String, Object> extraClaims, String subject, long expiration) {
+        long now = System.currentTimeMillis();
         return Jwts.builder()
                 .claims(extraClaims)
                 .subject(subject)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .issuedAt(new Date(now))
+                .expiration(new Date(now + expiration))
                 .signWith(getSignInKey())
                 .compact();
     }
 
     @Override
     public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        if (token == null || token.isBlank() || userDetails == null) {
+            return false;
+        }
+        final Claims claims = extractAllClaims(token);
+        final String username = claims.getSubject();
+        final Date expiration = claims.getExpiration();
+        return username != null
+                && username.equals(userDetails.getUsername())
+                && expiration != null
+                && !expiration.before(new Date());
     }
 
     private Claims extractAllClaims(String token) {

@@ -12,6 +12,7 @@ import com.englishlearning.classroom.entity.ClassLevel;
 import com.englishlearning.classroom.entity.ClassStatus;
 import com.englishlearning.classroom.service.ClassroomService;
 import com.englishlearning.common.config.SecurityConfig;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.GlobalExceptionHandler;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import jakarta.servlet.FilterChain;
@@ -159,5 +160,65 @@ class StudentClassroomControllerTest {
                         .with(user("plainUser").roles("STUDENT"))
                         .with(csrf()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/student/classrooms/my-courses - ADMIN có quyền truy cập trả về 200 OK")
+    void getMyCourses_asAdmin_returns200() throws Exception {
+        UUID adminId = UUID.fromString("44444444-aaaa-bbbb-cccc-444444444444");
+        when(classroomService.getStudentCourses(adminId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/student/classrooms/my-courses")
+                        .with(user(userWithRole(adminId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    @DisplayName("GET /api/student/classrooms/my-courses - Học viên chưa ghi danh lớp nào trả về danh sách rỗng")
+    void getMyCourses_emptyCourses_returnsEmptyList() throws Exception {
+        when(classroomService.getStudentCourses(studentId)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/student/classrooms/my-courses")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @DisplayName("POST /api/student/classrooms/{id}/leave - TEACHER gọi endpoint rời lớp bị chặn 403 Forbidden")
+    void leaveClass_asTeacher_returns403() throws Exception {
+        mockMvc.perform(post("/api/student/classrooms/{id}/leave", classId)
+                        .with(user(userWithRole(teacherId, RoleName.ROLE_TEACHER)))
+                        .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+
+        verifyNoInteractions(classroomService);
+    }
+
+    @Test
+    @DisplayName("POST /api/student/classrooms/{id}/leave - Chưa đăng nhập trả về 401 Unauthorized")
+    void leaveClass_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/api/student/classrooms/{id}/leave", classId)
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("POST /api/student/classrooms/{id}/leave - Học viên đã rời lớp trước đó trả về 400 Bad Request")
+    void leaveClass_alreadyLeft_returns400() throws Exception {
+        doThrow(new BadRequestException("Học viên đã rời khỏi lớp học này rồi"))
+                .when(classroomService).leaveClass(classId, studentId);
+
+        mockMvc.perform(post("/api/student/classrooms/{id}/leave", classId)
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT)))
+                        .with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Học viên đã rời khỏi lớp học này rồi"));
     }
 }

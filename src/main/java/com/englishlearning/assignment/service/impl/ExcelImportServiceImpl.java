@@ -157,7 +157,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                         }
                     }
                 }
-                if (points <= 0.0) points = 1.0;
+                if (!Double.isFinite(points) || points <= 0.0) points = 1.0;
 
                 // Xử lý thông minh đáp án trắc nghiệm: Nếu giáo viên ghi A/B/C/D hoặc "Đáp án A", map về text của lựa chọn đó
                 String finalCorrectAnswer = rawCorrectAnswer.trim();
@@ -640,7 +640,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
             return QuestionType.MULTIPLE_CHOICE;
         }
         String clean = typeStr.trim().toUpperCase();
-        if (clean.contains("MATCH")) {
+        if (clean.contains("MATCH") || clean.contains("GHÉP")) {
             return QuestionType.MATCHING;
         }
         if (clean.contains("FILL") || clean.contains("ĐIỀN") || clean.contains("CLOZE") || clean.contains("BLANK")

@@ -7,6 +7,7 @@ import com.englishlearning.auth.entity.User;
 import com.englishlearning.classroom.entity.ClassStudent;
 import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
+import com.englishlearning.common.exception.BadRequestException;
 import com.englishlearning.common.exception.ForbiddenException;
 import com.englishlearning.common.exception.ResourceNotFoundException;
 import com.englishlearning.curriculum.dto.*;
@@ -63,6 +64,9 @@ class DailyStudyPlanServiceImplTest {
 
     @Mock
     private AssignmentRepository assignmentRepository;
+
+    @Mock
+    private UserStreakService userStreakService;
 
     @InjectMocks
     private DailyStudyPlanServiceImpl dailyStudyPlanService;
@@ -206,6 +210,13 @@ class DailyStudyPlanServiceImplTest {
         when(attemptRepository.countAttempts(assign1, studentId)).thenReturn(1);
         when(attemptRepository.countAttempts(assign2, studentId)).thenReturn(1);
         when(attemptRepository.countAttempts(assign3, studentId)).thenReturn(1);
+        when(userStreakService.getStreakSummary(studentId)).thenReturn(StudentStreakResponse.builder()
+                .currentStreak(4)
+                .hasHomeworkToday(true)
+                .completedToday(true)
+                .todayCompletedTasks(3)
+                .todayTotalTasks(3)
+                .build());
 
         // When
         DailyHomeworkOverviewResponse response = dailyStudyPlanService.getStudentDailyOverview(classroomId, studentId, planId);
@@ -214,6 +225,9 @@ class DailyStudyPlanServiceImplTest {
         assertThat(response).isNotNull();
         assertThat(response.getDays().get(0).getIsCompleted()).isTrue();
         assertThat(response.getCompletionPercentage()).isEqualTo(100);
+        assertThat(response.getCurrentStreak()).isEqualTo(4);
+        assertThat(response.getHasHomeworkToday()).isTrue();
+        assertThat(response.getCompletedToday()).isTrue();
 
         DayDetailDto currentDay = response.getCurrentSelectedDay();
         assertThat(currentDay).isNotNull();
@@ -489,5 +503,478 @@ class DailyStudyPlanServiceImplTest {
         assertThat(st.getDays().get(1).getDayNumber()).isEqualTo(2);
         assertThat(st.getDays().get(1).getRate()).isEqualTo(50);
         assertThat(st.getDays().get(1).getMinutes()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("createDailyPlan: Tự động tính max(dayNumber) + 1 khi dayNumber <= 0 hoặc null")
+    void createDailyPlan_whenDayNumberInvalid_calculatesNextFromExistingMax() {
+        UUID classId = UUID.randomUUID();
+        Classroom classroom = Classroom.builder().id(classId).build();
+        DailyStudyPlan day17 = DailyStudyPlan.builder()
+                .id(UUID.randomUUID())
+                .classroom(classroom)
+                .dayNumber(17)
+                .title("DAY 17")
+                .scheduledDate(LocalDate.of(2026, 5, 26))
+                .build();
+
+        CreateDailyPlanRequest req = new CreateDailyPlanRequest();
+        req.setClassroomId(classId);
+        req.setDayNumber(0);
+        req.setScheduledDate(LocalDate.of(2026, 5, 27));
+
+        when(entityManager.find(Classroom.class, classId)).thenReturn(classroom);
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classId))
+                .thenReturn(List.of(day17));
+        when(dailyStudyPlanRepository.save(any(DailyStudyPlan.class)))
+                .thenAnswer(inv -> {
+                    DailyStudyPlan p = inv.getArgument(0);
+                    p.setId(UUID.randomUUID());
+                    return p;
+                });
+
+        DailyStudyPlan created = dailyStudyPlanService.createDailyPlan(req);
+
+        assertThat(created.getDayNumber()).isEqualTo(18);
+        assertThat(created.getTitle()).isEqualTo("DAY 18");
+    }
+
+    @Test
+    @DisplayName("addPlanItem: Cập nhật tại chỗ thay vì nhân bản khi assignmentId đã tồn tại trong plan")
+    void addPlanItem_whenAssignmentAlreadyExistsInPlan_updatesExistingItemInPlace() {
+        UUID planId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID existingItemId = UUID.randomUUID();
+        Classroom classroom = Classroom.builder().id(UUID.randomUUID()).build();
+        Assignment assignment = Assignment.builder().id(assignmentId).title("Unit 1").build();
+        DailyStudyPlan plan = DailyStudyPlan.builder()
+                .id(planId)
+                .classroom(classroom)
+                .dayNumber(1)
+                .build();
+        DailyPlanItem existingItem = DailyPlanItem.builder()
+                .id(existingItemId)
+                .dailyPlan(plan)
+                .assignment(assignment)
+                .sectionName("Cũ")
+                .title("Tên cũ")
+                .itemType("ASSIGNMENT")
+                .orderIndex(1)
+                .build();
+
+        CreatePlanItemRequest req = new CreatePlanItemRequest();
+        req.setSectionName("Mới");
+        req.setTitle("Bài tập đã cập nhật");
+        req.setItemType("ASSIGNMENT");
+        req.setOrderIndex(3);
+        req.setAssignmentId(assignmentId);
+
+        when(dailyStudyPlanRepository.findById(planId)).thenReturn(Optional.of(plan));
+        when(entityManager.find(Assignment.class, assignmentId)).thenReturn(assignment);
+        when(dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(planId))
+                .thenReturn(List.of(existingItem));
+        when(dailyPlanItemRepository.save(any(DailyPlanItem.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        DailyPlanItem saved = dailyStudyPlanService.addPlanItem(planId, req);
+
+        assertThat(saved.getId()).isEqualTo(existingItemId);
+        assertThat(saved.getTitle()).isEqualTo("Bài tập đã cập nhật");
+        assertThat(saved.getSectionName()).isEqualTo("Mới");
+        verify(dailyPlanItemRepository).save(existingItem);
+    }
+
+    @Test
+    @DisplayName("getStudentDailyOverview_whenPlanHasNullScheduledDate_handlesSafelyWithoutNpe")
+    void getStudentDailyOverview_whenPlanHasNullScheduledDate_handlesSafelyWithoutNpe() {
+        // Given
+        UUID classroomId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classroomId, studentId)).thenReturn(true);
+
+        DailyStudyPlan nullDateUnlockedPlan = DailyStudyPlan.builder()
+                .id(planId)
+                .dayNumber(1)
+                .title("DAY 1 Flexible")
+                .scheduledDate(null)
+                .estimatedMinutes(20)
+                .isUnlocked(true)
+                .build();
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId))
+                .thenReturn(List.of(nullDateUnlockedPlan));
+        when(dailyPlanItemRepository.findByClassroomIdWithDailyPlanAndAssignment(classroomId))
+                .thenReturn(Collections.emptyList());
+        when(dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(planId))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        DailyHomeworkOverviewResponse response = dailyStudyPlanService.getStudentDailyOverview(classroomId, studentId, null);
+
+        // Then
+        assertThat(response.getTotalDays()).isEqualTo(1);
+        assertThat(response.getCompletedDays()).isZero();
+        assertThat(response.getDays()).hasSize(1);
+        assertThat(response.getDays().get(0).getDateLabel()).isEmpty();
+        assertThat(response.getDays().get(0).getIsCurrentDay()).isFalse();
+        assertThat(response.getDays().get(0).getIsUnlocked()).isTrue();
+        assertThat(response.getCurrentSelectedDay()).isNotNull();
+        assertThat(response.getCurrentSelectedDay().getFullHeaderLabel()).isEqualTo("DAY 1 Flexible");
+    }
+
+    @Test
+    @DisplayName("getStudentDailyOverview_whenAllPlansInFutureLocked_returnsZeroTotalDays100PercentAndFallsBackToFirstPlan")
+    void getStudentDailyOverview_whenAllPlansInFutureLocked_returnsZeroTotalDays100PercentAndFallsBackToFirstPlan() {
+        // Given
+        UUID classroomId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        when(classStudentRepository.existsByClassroomIdAndStudentId(classroomId, studentId)).thenReturn(true);
+
+        DailyStudyPlan futureLockedPlan = DailyStudyPlan.builder()
+                .id(planId)
+                .dayNumber(10)
+                .title("DAY 10 Future")
+                .scheduledDate(LocalDate.now().plusDays(5))
+                .estimatedMinutes(30)
+                .isUnlocked(false)
+                .build();
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId))
+                .thenReturn(List.of(futureLockedPlan));
+        when(dailyPlanItemRepository.findByClassroomIdWithDailyPlanAndAssignment(classroomId))
+                .thenReturn(Collections.emptyList());
+        when(dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(planId))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        DailyHomeworkOverviewResponse response = dailyStudyPlanService.getStudentDailyOverview(classroomId, studentId, null);
+
+        // Then
+        assertThat(response.getTotalDays()).isZero();
+        assertThat(response.getCompletedDays()).isZero();
+        assertThat(response.getCompletionPercentage()).isEqualTo(100);
+        assertThat(response.getCurrentSelectedDay()).isNotNull();
+        assertThat(response.getCurrentSelectedDay().getId()).isEqualTo(planId);
+        assertThat(response.getDays().get(0).getIsUnlocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("getStudentDailyOverview_whenSelectedDayIdNotFound_fallsBackToUnlockedOrFirstPlan")
+    void getStudentDailyOverview_whenSelectedDayIdNotFound_fallsBackToUnlockedOrFirstPlan() {
+        // Given
+        UUID classroomId = UUID.randomUUID();
+        UUID pastPlanId = UUID.randomUUID();
+        UUID futurePlanId = UUID.randomUUID();
+        UUID unknownSelectedId = UUID.randomUUID();
+
+        DailyStudyPlan futurePlan = DailyStudyPlan.builder()
+                .id(futurePlanId)
+                .dayNumber(2)
+                .title("DAY 2")
+                .scheduledDate(LocalDate.now().plusDays(2))
+                .isUnlocked(false)
+                .build();
+        DailyStudyPlan pastPlan = DailyStudyPlan.builder()
+                .id(pastPlanId)
+                .dayNumber(1)
+                .title("DAY 1")
+                .scheduledDate(LocalDate.now().minusDays(1))
+                .isUnlocked(true)
+                .build();
+
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId))
+                .thenReturn(List.of(futurePlan, pastPlan));
+        when(dailyPlanItemRepository.findByClassroomIdWithDailyPlanAndAssignment(classroomId))
+                .thenReturn(Collections.emptyList());
+        when(dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(any()))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        DailyHomeworkOverviewResponse response = dailyStudyPlanService.getStudentDailyOverview(classroomId, null, unknownSelectedId);
+
+        // Then
+        assertThat(response.getCurrentSelectedDay()).isNotNull();
+        assertThat(response.getCurrentSelectedDay().getId()).isEqualTo(pastPlanId);
+        verify(classStudentRepository, never()).existsByClassroomIdAndStudentId(any(), any());
+        verifyNoInteractions(userStreakService, attemptRepository);
+    }
+
+    @Test
+    @DisplayName("createDailyPlan_whenScheduledDateNull_throwsBadRequestException")
+    void createDailyPlan_whenScheduledDateNull_throwsBadRequestException() {
+        // Given
+        CreateDailyPlanRequest req = new CreateDailyPlanRequest();
+        req.setClassroomId(UUID.randomUUID());
+        req.setDayNumber(1);
+        req.setScheduledDate(null);
+
+        // When / Then
+        assertThatThrownBy(() -> dailyStudyPlanService.createDailyPlan(req))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(dailyStudyPlanRepository);
+    }
+
+    @Test
+    @DisplayName("createDailyPlan_whenDayNumberNullAndNoExistingPlans_assignsDay1AndDefaultTitle")
+    void createDailyPlan_whenDayNumberNullAndNoExistingPlans_assignsDay1AndDefaultTitle() {
+        // Given
+        UUID classId = UUID.randomUUID();
+        Classroom classroom = Classroom.builder().id(classId).build();
+        CreateDailyPlanRequest req = new CreateDailyPlanRequest();
+        req.setClassroomId(classId);
+        req.setDayNumber(null);
+        req.setTitle(null);
+        req.setScheduledDate(LocalDate.now());
+
+        when(entityManager.find(Classroom.class, classId)).thenReturn(classroom);
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classId))
+                .thenReturn(Collections.emptyList());
+        when(dailyStudyPlanRepository.save(any(DailyStudyPlan.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        DailyStudyPlan saved = dailyStudyPlanService.createDailyPlan(req);
+
+        // Then
+        assertThat(saved.getDayNumber()).isEqualTo(1);
+        assertThat(saved.getTitle()).isEqualTo("DAY 1");
+        assertThat(saved.getIsUnlocked()).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateDailyPlan_whenDayNumberInvalid_throwsBadRequestException")
+    void updateDailyPlan_whenDayNumberInvalid_throwsBadRequestException() {
+        // Given
+        UUID planId = UUID.randomUUID();
+        UpdateDailyPlanRequest req = new UpdateDailyPlanRequest();
+        req.setDayNumber(0);
+
+        // When / Then
+        assertThatThrownBy(() -> dailyStudyPlanService.updateDailyPlan(planId, req))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(dailyStudyPlanRepository);
+    }
+
+    @Test
+    @DisplayName("updateDailyPlan_whenOptionalFieldsNull_preservesExistingValues")
+    void updateDailyPlan_whenOptionalFieldsNull_preservesExistingValues() {
+        // Given
+        UUID planId = UUID.randomUUID();
+        LocalDate originalDate = LocalDate.of(2026, 10, 20);
+        DailyStudyPlan existing = DailyStudyPlan.builder()
+                .id(planId)
+                .dayNumber(4)
+                .title("Original Title")
+                .scheduledDate(originalDate)
+                .estimatedMinutes(35)
+                .isUnlocked(false)
+                .build();
+
+        UpdateDailyPlanRequest req = new UpdateDailyPlanRequest();
+        when(dailyStudyPlanRepository.findById(planId)).thenReturn(Optional.of(existing));
+        when(dailyStudyPlanRepository.save(any(DailyStudyPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        DailyStudyPlan updated = dailyStudyPlanService.updateDailyPlan(planId, req);
+
+        // Then
+        assertThat(updated.getTitle()).isEqualTo("Original Title");
+        assertThat(updated.getDayNumber()).isEqualTo(4);
+        assertThat(updated.getScheduledDate()).isEqualTo(originalDate);
+        assertThat(updated.getEstimatedMinutes()).isEqualTo(35);
+        assertThat(updated.getIsUnlocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("addPlanItem_whenPlanNotFound_throwsResourceNotFoundException")
+    void addPlanItem_whenPlanNotFound_throwsResourceNotFoundException() {
+        // Given
+        UUID missingPlanId = UUID.randomUUID();
+        CreatePlanItemRequest req = new CreatePlanItemRequest();
+        req.setSectionName("CORE");
+        req.setTitle("Warmup");
+        req.setItemType("VOCABULARY");
+        req.setOrderIndex(1);
+
+        when(dailyStudyPlanRepository.findById(missingPlanId)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> dailyStudyPlanService.addPlanItem(missingPlanId, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(dailyPlanItemRepository);
+    }
+
+    @Test
+    @DisplayName("addPlanItem_whenNoAssignmentId_createsStandaloneItemWithOrderIndex")
+    void addPlanItem_whenNoAssignmentId_createsStandaloneItemWithOrderIndex() {
+        // Given
+        UUID planId = UUID.randomUUID();
+        DailyStudyPlan plan = DailyStudyPlan.builder().id(planId).build();
+        CreatePlanItemRequest req = new CreatePlanItemRequest();
+        req.setSectionName("VOCAB");
+        req.setTitle("Flashcards");
+        req.setItemType("VOCABULARY");
+        req.setOrderIndex(2);
+        req.setAssignmentId(null);
+
+        when(dailyStudyPlanRepository.findById(planId)).thenReturn(Optional.of(plan));
+        when(dailyPlanItemRepository.save(any(DailyPlanItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        DailyPlanItem saved = dailyStudyPlanService.addPlanItem(planId, req);
+
+        // Then
+        assertThat(saved.getDailyPlan()).isEqualTo(plan);
+        assertThat(saved.getAssignment()).isNull();
+        assertThat(saved.getOrderIndex()).isEqualTo(2);
+        assertThat(saved.getTitle()).isEqualTo("Flashcards");
+    }
+
+    @Test
+    @DisplayName("markDayAsCompleted_whenPlanNotFound_throwsResourceNotFoundException")
+    void markDayAsCompleted_whenPlanNotFound_throwsResourceNotFoundException() {
+        // Given
+        UUID studentId = UUID.randomUUID();
+        UUID missingPlanId = UUID.randomUUID();
+        when(dailyStudyPlanRepository.findById(missingPlanId)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> dailyStudyPlanService.markDayAsCompleted(studentId, missingPlanId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(progressRepository);
+    }
+
+    @Test
+    @DisplayName("markDayAsCompleted_whenProgressAlreadyExists_updatesExistingProgressRecord")
+    void markDayAsCompleted_whenProgressAlreadyExists_updatesExistingProgressRecord() {
+        // Given
+        UUID studentId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID progressId = UUID.randomUUID();
+        List<DailyPlanItem> items = List.of(
+                DailyPlanItem.builder().id(UUID.randomUUID()).build(),
+                DailyPlanItem.builder().id(UUID.randomUUID()).build()
+        );
+        DailyStudyPlan plan = DailyStudyPlan.builder().id(planId).items(items).build();
+        StudentDailyProgress existingProgress = StudentDailyProgress.builder()
+                .id(progressId)
+                .dailyPlan(plan)
+                .isCompleted(false)
+                .completedItemsCount(1)
+                .totalItemsCount(2)
+                .build();
+
+        when(dailyStudyPlanRepository.findById(planId)).thenReturn(Optional.of(plan));
+        when(progressRepository.findByStudentIdAndDailyPlanId(studentId, planId))
+                .thenReturn(Optional.of(existingProgress));
+
+        // When
+        dailyStudyPlanService.markDayAsCompleted(studentId, planId);
+
+        // Then
+        ArgumentCaptor<StudentDailyProgress> captor = ArgumentCaptor.forClass(StudentDailyProgress.class);
+        verify(progressRepository).save(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(progressId);
+        assertThat(captor.getValue().getIsCompleted()).isTrue();
+        assertThat(captor.getValue().getCompletedItemsCount()).isEqualTo(2);
+        assertThat(captor.getValue().getTotalItemsCount()).isEqualTo(2);
+        assertThat(captor.getValue().getCompletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("getAssignmentsByDailyPlan_whenPlanNotFound_throwsResourceNotFoundException")
+    void getAssignmentsByDailyPlan_whenPlanNotFound_throwsResourceNotFoundException() {
+        // Given
+        UUID missingPlanId = UUID.randomUUID();
+        when(dailyStudyPlanRepository.findById(missingPlanId)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> dailyStudyPlanService.getAssignmentsByDailyPlan(missingPlanId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(dailyPlanItemRepository, assignmentRepository);
+    }
+
+    @Test
+    @DisplayName("getDailyProgressStatsMatrix_whenZeroPlansOrNullUserEnrollment_handlesSafely")
+    @SuppressWarnings("unchecked")
+    void getDailyProgressStatsMatrix_whenZeroPlansOrNullUserEnrollment_handlesSafely() {
+        // Given
+        UUID classId = UUID.randomUUID();
+        UUID validStudentId = UUID.randomUUID();
+        TypedQuery<ClassStudent> enrollmentQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM ClassStudent cs"), eq(ClassStudent.class)))
+                .thenReturn(enrollmentQuery);
+        when(enrollmentQuery.setParameter("classId", classId)).thenReturn(enrollmentQuery);
+
+        ClassStudent nullUserEnrollment = ClassStudent.builder()
+                .student(Student.builder().id(UUID.randomUUID()).user(null).build())
+                .isActive(true)
+                .build();
+        ClassStudent validEnrollment = ClassStudent.builder()
+                .student(Student.builder()
+                        .id(validStudentId)
+                        .user(User.builder().id(validStudentId).email("student@test.com").build())
+                        .build())
+                .isActive(true)
+                .build();
+        when(enrollmentQuery.getResultList()).thenReturn(List.of(nullUserEnrollment, validEnrollment));
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classId)).thenReturn(Collections.emptyList());
+
+        TypedQuery<AssignmentAttempt> attemptQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM AssignmentAttempt a"), eq(AssignmentAttempt.class)))
+                .thenReturn(attemptQuery);
+        when(attemptQuery.setParameter(eq("studentIds"), any())).thenReturn(attemptQuery);
+        when(attemptQuery.getResultList()).thenReturn(Collections.emptyList());
+
+        // When
+        List<DailyProgressStatResponse> stats = dailyStudyPlanService.getDailyProgressStatsMatrix(classId);
+
+        // Then
+        assertThat(stats).hasSize(1);
+        assertThat(stats.get(0).getStudentId()).isEqualTo(validStudentId.toString());
+        assertThat(stats.get(0).getOverallRate()).isZero();
+        assertThat(stats.get(0).getDays()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getDailyProgressStatsMatrix_whenStudentHasFullNameAndNonAssignmentItemProgress_computesAccurately")
+    @SuppressWarnings("unchecked")
+    void getDailyProgressStatsMatrix_whenStudentHasFullNameAndNonAssignmentItemProgress_computesAccurately() {
+        // Given
+        UUID classId = UUID.randomUUID();
+        UUID studentId = UUID.randomUUID();
+        UUID day1Id = UUID.randomUUID();
+
+        TypedQuery<ClassStudent> enrollmentQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM ClassStudent cs"), eq(ClassStudent.class)))
+                .thenReturn(enrollmentQuery);
+        when(enrollmentQuery.setParameter("classId", classId)).thenReturn(enrollmentQuery);
+
+        User user = User.builder().id(studentId).email("an@test.com").firstName("Nguyen").lastName("An").build();
+        Student student = Student.builder().id(studentId).user(user).build();
+        when(enrollmentQuery.getResultList()).thenReturn(List.of(ClassStudent.builder().student(student).isActive(true).build()));
+
+        DailyPlanItem readingItem = DailyPlanItem.builder().assignment(null).build();
+        DailyStudyPlan day1 = DailyStudyPlan.builder().id(day1Id).dayNumber(1).items(List.of(readingItem)).build();
+        when(dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classId)).thenReturn(List.of(day1));
+
+        TypedQuery<AssignmentAttempt> attemptQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(contains("FROM AssignmentAttempt a"), eq(AssignmentAttempt.class)))
+                .thenReturn(attemptQuery);
+        when(attemptQuery.setParameter("studentIds", List.of(studentId))).thenReturn(attemptQuery);
+        when(attemptQuery.getResultList()).thenReturn(Collections.emptyList());
+
+        when(progressRepository.findByStudentIdAndDailyPlanId(studentId, day1Id))
+                .thenReturn(Optional.of(StudentDailyProgress.builder().isCompleted(false).completedItemsCount(1).build()));
+
+        // When
+        List<DailyProgressStatResponse> stats = dailyStudyPlanService.getDailyProgressStatsMatrix(classId);
+
+        // Then
+        assertThat(stats).hasSize(1);
+        assertThat(stats.get(0).getStudentName()).isEqualTo("Nguyen An");
+        assertThat(stats.get(0).getOverallRate()).isEqualTo(100);
+        assertThat(stats.get(0).getDays().get(0).getRate()).isEqualTo(100);
+        assertThat(stats.get(0).getDays().get(0).getMinutes()).isEqualTo(15);
     }
 }

@@ -219,6 +219,11 @@ export default function ExamTakePage() {
           attempt.attemptId,
           buildPayloadAnswers(),
         );
+        window.dispatchEvent(
+          new CustomEvent("student-progress-updated", {
+            detail: { assignmentId: targetId, attemptId: attempt.attemptId },
+          }),
+        );
         const detail = await studentApi.getAttemptDetail(res.attemptId || attempt.attemptId);
         await exitFullscreenSafely();
         hydrateAttempt(detail);

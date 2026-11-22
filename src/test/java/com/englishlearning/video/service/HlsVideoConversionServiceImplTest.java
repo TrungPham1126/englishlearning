@@ -106,4 +106,29 @@ class HlsVideoConversionServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(videoRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("completeHlsConversion xóa rejectionReason cũ và requestVideoTranscoding lan truyền lỗi khi RabbitMQ publisher thất bại")
+    void should_ClearRejectionReasonOnCompleteAndPropagatePublisherException() {
+        Video rejectedVideo = Video.builder()
+                .id(videoId)
+                .status(VideoStatus.REJECTED)
+                .rejectionReason("FFmpeg timeout trước đó")
+                .build();
+        when(videoRepository.findById(videoId)).thenReturn(Optional.of(rejectedVideo));
+        when(videoRepository.save(any(Video.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Video ready = hlsVideoConversionService.completeHlsConversion(
+                videoId, "/api/v1/videos/" + videoId + "/hls/master.m3u8", "/raw/v.mp4");
+        assertThat(ready.getStatus()).isEqualTo(VideoStatus.READY);
+        assertThat(ready.getRejectionReason()).isNull();
+
+        doThrow(new RuntimeException("RabbitMQ connection refused"))
+                .when(rabbitMqEventPublisher).publishVideoTranscodeEvent(videoId);
+
+        assertThatThrownBy(() -> hlsVideoConversionService.requestVideoTranscoding(videoId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("RabbitMQ connection refused");
+        assertThat(rejectedVideo.getStatus()).isEqualTo(VideoStatus.PROCESSING);
+    }
 }

@@ -88,7 +88,7 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
         }
 
         String normalizedVoice = ExerciseAudioService.normalizeKokoroVoice(preferredVoice);
-        double clampedSpeed = Math.max(0.5, Math.min(2.0, speed));
+        double clampedSpeed = Double.isFinite(speed) ? Math.max(0.5, Math.min(2.0, speed)) : 1.0;
 
         List<ExerciseAudioService.DialogueTurnParseResult> parsedTurns = ExerciseAudioService.parseDialogueScript(rawScript);
         boolean isDialogue = parsedTurns.size() >= 2;
@@ -149,6 +149,29 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy câu hỏi với id: " + questionId));
 
             Assignment assignment = question.getAssignment();
+            if (ExerciseAudioService.isNonShadowingSpeakingQuestion(assignment, question)) {
+                log.debug("Bỏ qua sinh audio mẫu cho Speaking Q&A / Part 2 / Part 3 question {}", questionId);
+                boolean dirty = false;
+                if (question.getMediaUrl() != null && !question.getMediaUrl().isBlank()) {
+                    question.setMediaUrl(null);
+                    dirty = true;
+                }
+                if (question.getTranscript() != null && !question.getTranscript().isBlank()
+                        && (question.getTranscript().equals(question.getCorrectAnswer())
+                            || ExerciseAudioService.isGradingRubricOrMetaText(question.getTranscript()))) {
+                    question.setTranscript(null);
+                    dirty = true;
+                }
+                if (dirty) {
+                    assignmentQuestionRepository.save(question);
+                }
+                return ExerciseAudioResponseDto.builder()
+                        .questionId(questionId)
+                        .status(AudioGenerationStatus.READY)
+                        .url(null)
+                        .build();
+            }
+
             ExerciseAudioType exerciseType = (assignment != null && assignment.getSkillType() == SkillType.LISTENING)
                     ? ExerciseAudioType.LISTENING
                     : ExerciseAudioType.SHADOWING;
@@ -349,12 +372,44 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
             return;
         }
 
+        if (assignment != null && ExerciseAudioService.isNonShadowingSpeakingAssignment(assignment)) {
+            log.info("Bài tập Speaking Q&A / Part 2 / Part 3 (ID={}) không dùng audio mẫu -> bỏ qua sinh TTS.", assignmentId);
+            List<AssignmentQuestion> nonShadowQs = assignmentQuestionRepository.findByAssignmentId(assignmentId);
+            if (nonShadowQs != null) {
+                for (AssignmentQuestion q : nonShadowQs) {
+                    if (ExerciseAudioService.isNonShadowingSpeakingQuestion(assignment, q)) {
+                        boolean dirty = false;
+                        if (q.getMediaUrl() != null && !q.getMediaUrl().isBlank()) {
+                            q.setMediaUrl(null);
+                            dirty = true;
+                        }
+                        if (q.getTranscript() != null && !q.getTranscript().isBlank()
+                                && (q.getTranscript().equals(q.getCorrectAnswer())
+                                    || ExerciseAudioService.isGradingRubricOrMetaText(q.getTranscript()))) {
+                            q.setTranscript(null);
+                            dirty = true;
+                        }
+                        if (dirty) {
+                            assignmentQuestionRepository.save(q);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
         List<AssignmentQuestion> questions = assignmentQuestionRepository.findByAssignmentId(assignmentId);
-        for (AssignmentQuestion q : questions) {
-            try {
-                generateOrGetAudioForQuestion(q.getId(), generatedBy, false, null);
-            } catch (Exception ex) {
-                log.warn("Không thể sinh audio chạy ngầm cho question {}: {}", q.getId(), ex.getMessage());
+        if (questions != null) {
+            for (AssignmentQuestion q : questions) {
+                if (ExerciseAudioService.isNonShadowingSpeakingQuestion(assignment, q)) {
+                    log.debug("Bỏ qua sinh audio chạy ngầm cho câu hỏi Speaking Q&A / Part 2 / Part 3: {}", q.getId());
+                    continue;
+                }
+                try {
+                    generateOrGetAudioForQuestion(q.getId(), generatedBy, false, null);
+                } catch (Exception ex) {
+                    log.warn("Không thể sinh audio chạy ngầm cho question {}: {}", q.getId(), ex.getMessage());
+                }
             }
         }
         log.info("Hoàn tất job sinh audio chạy ngầm cho bài tập ID: {}", assignmentId);
@@ -607,6 +662,9 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
 
     private void deactivateOldAudios(UUID questionId) {
         List<ExerciseAudio> audios = exerciseAudioRepository.findByQuestionIdOrderByVersionDesc(questionId);
+        if (audios == null) {
+            return;
+        }
         for (ExerciseAudio a : audios) {
             if (Boolean.TRUE.equals(a.getIsActive())) {
                 a.setIsActive(false);
@@ -617,7 +675,9 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
 
     private int getNextVersion(UUID questionId) {
         List<ExerciseAudio> audios = exerciseAudioRepository.findByQuestionIdOrderByVersionDesc(questionId);
-        if (audios.isEmpty()) return 1;
+        if (audios == null || audios.isEmpty() || audios.get(0) == null || audios.get(0).getVersion() == null) {
+            return 1;
+        }
         return audios.get(0).getVersion() + 1;
     }
 
@@ -709,11 +769,15 @@ public class ExerciseAudioServiceImpl implements ExerciseAudioService {
     }
 
     private boolean isTimeoutException(Throwable t) {
-        if (t == null) return false;
-        String msg = t.getMessage() != null ? t.getMessage().toLowerCase() : "";
-        if (msg.contains("timed out") || msg.contains("timeout") || msg.contains("sockettimeoutexception")) {
-            return true;
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Throwable current = t;
+        while (current != null && visited.add(current)) {
+            String msg = current.getMessage() != null ? current.getMessage().toLowerCase() : "";
+            if (msg.contains("timed out") || msg.contains("timeout") || msg.contains("sockettimeoutexception")) {
+                return true;
+            }
+            current = current.getCause();
         }
-        return isTimeoutException(t.getCause());
+        return false;
     }
 }

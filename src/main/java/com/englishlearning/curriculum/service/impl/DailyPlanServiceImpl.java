@@ -49,7 +49,7 @@ public class DailyPlanServiceImpl implements DailyPlanService {
 
         List<DailyStudyPlan> plans = dailyStudyPlanRepository.findByClassroomIdOrderByDayNumberDesc(classroomId);
 
-        if (plans.isEmpty()) {
+        if (plans == null || plans.isEmpty()) {
             return DailyHomeworkOverviewResponse.builder()
                     .completionPercentage(100)
                     .totalDays(0)
@@ -126,8 +126,10 @@ public class DailyPlanServiceImpl implements DailyPlanService {
 
         List<DailyPlanItem> items = dailyPlanItemRepository.findByDailyPlanIdOrderByOrderIndexAsc(plan.getId());
 
+        List<DailyPlanItem> safeItems = items != null ? items : Collections.emptyList();
+
         Map<String, List<TaskItemDto>> grouped = new LinkedHashMap<>();
-        for (DailyPlanItem item : items) {
+        for (DailyPlanItem item : safeItems) {
             TaskItemDto taskDto = TaskItemDto.builder()
                     .id(item.getId())
                     .title(item.getTitle())

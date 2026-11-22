@@ -87,4 +87,47 @@ class TtsAudioServiceImplTest {
         assertThatThrownBy(() -> ttsAudioService.synthesizeTtsAudioBytes(null, "af_heart"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("synthesizeTtsAudio_whenTextIsNull_throwsIllegalArgumentException")
+    void synthesizeTtsAudio_whenTextIsNull_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> ttsAudioService.synthesizeTtsAudio(null, "af_heart"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được để trống");
+
+        verifyNoInteractions(exerciseAudioService);
+    }
+
+    @Test
+    @DisplayName("synthesizeTtsAudio_whenExerciseAudioServiceThrows_propagatesException")
+    void synthesizeTtsAudio_whenExerciseAudioServiceThrows_propagatesException() {
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Failure test", "af_heart", 1.0))
+                .thenThrow(new IllegalStateException("TTS engine unavailable"));
+
+        assertThatThrownBy(() -> ttsAudioService.synthesizeTtsAudio("Failure test", null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("TTS engine unavailable");
+    }
+
+    @Test
+    @DisplayName("synthesizeTtsAudioBytes_whenTextIsBlank_throwsIllegalArgumentException")
+    void synthesizeTtsAudioBytes_whenTextIsBlank_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> ttsAudioService.synthesizeTtsAudioBytes("   ", "af_heart"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verifyNoInteractions(exerciseAudioService);
+    }
+
+    @Test
+    @DisplayName("synthesizeTtsAudioBytes_whenLegacyVoiceProvided_normalizesVoiceAndReturnsUtf8Bytes")
+    void synthesizeTtsAudioBytes_whenLegacyVoiceProvided_normalizesVoiceAndReturnsUtf8Bytes() {
+        String expectedUrl = "https://cdn.example.com/uk-emma.wav";
+        when(exerciseAudioService.synthesizeRawScriptToUrl("Good morning", "bf_emma", 1.0))
+                .thenReturn(expectedUrl);
+
+        byte[] result = ttsAudioService.synthesizeTtsAudioBytes("Good morning", "en-GB-SoniaNeural");
+
+        assertThat(new String(result, StandardCharsets.UTF_8)).isEqualTo(expectedUrl);
+        verify(exerciseAudioService).synthesizeRawScriptToUrl("Good morning", "bf_emma", 1.0);
+    }
 }

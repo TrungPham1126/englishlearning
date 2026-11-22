@@ -39,7 +39,8 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
             ByteArrayResource fileResource = new ByteArrayResource(audioFile.getBytes()) {
                 @Override
                 public String getFilename() {
-                    return audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename() : "audio.wav";
+                    String originalName = audioFile.getOriginalFilename();
+                    return (originalName != null && !originalName.isBlank()) ? originalName : "audio.wav";
                 }
             };
 

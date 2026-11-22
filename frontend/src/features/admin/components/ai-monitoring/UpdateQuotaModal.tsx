@@ -37,14 +37,14 @@ export const UpdateQuotaModal: React.FC<UpdateQuotaModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isNaN(limit) || limit < 0) {
-      setError("Hạn ngạch phải là số nguyên dương.");
+      setError("Quota phải >= 0.");
       return;
     }
     try {
       await onSave(targetUser.studentId, limit, targetUser.isBlocked);
       onClose();
     } catch {
-      setError("Có lỗi xảy ra khi cập nhật hạn ngạch.");
+      setError("Cập nhật Quota thất bại.");
     }
   };
 
@@ -58,7 +58,7 @@ export const UpdateQuotaModal: React.FC<UpdateQuotaModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Điều Chỉnh Hạn Ngạch AI Quota
+                Cập nhật Quota AI
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {targetUser.studentName || targetUser.email}
@@ -76,7 +76,7 @@ export const UpdateQuotaModal: React.FC<UpdateQuotaModalProps> = ({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Giới hạn lượt gọi AI / ngày (Daily Limit):
+              Giới hạn / ngày:
             </label>
             <input
               type="number"
@@ -86,9 +86,6 @@ export const UpdateQuotaModal: React.FC<UpdateQuotaModalProps> = ({
               className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3.5 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-600"
               required
             />
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Áp dụng cho các tính năng sinh đề thi (Teacher) hoặc chấm bài nói (Student).
-            </p>
           </div>
 
           {error && (
@@ -112,7 +109,7 @@ export const UpdateQuotaModal: React.FC<UpdateQuotaModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
             >
               {isProcessing && <Loader2 size={14} className="animate-spin" />}
-              <span>Lưu Hạn Ngạch</span>
+              <span>Lưu</span>
             </button>
           </div>
         </form>

@@ -158,4 +158,26 @@ describe("utils/notificationAction - resolveNotificationAction()", () => {
     );
     expect(sysMsg.badgeText).toBe("HỆ THỐNG");
   });
+
+  it("routes teacher daily plan assignment success & error notifications without misclassifying as student assignment", () => {
+    const successNotif = resolveNotificationAction(
+      baseItem({
+        title: "Gán bài tập vào lộ trình thành công",
+        content: 'Đã tạo "Unit 1 Quiz" và gán vào Ngày 5 (2026-11-20).',
+        notificationType: "ANNOUNCEMENT",
+      }),
+    );
+    expect(successNotif.actionType).toBe("TEXT_ANNOUNCEMENT");
+    expect(successNotif.badgeText).toBe("ĐÃ GÁN LỘ TRÌNH");
+
+    const errorNotif = resolveNotificationAction(
+      baseItem({
+        title: "Lỗi gán bài tập vào lộ trình - Cần gán lại",
+        content: 'Không thể gán "Unit 1 Quiz" vào lộ trình: Lỗi kết nối. Vui lòng gán lại.',
+        notificationType: "SYSTEM_ALERT",
+      }),
+    );
+    expect(errorNotif.actionType).toBe("TEXT_ANNOUNCEMENT");
+    expect(errorNotif.badgeText).toBe("LỖI GÁN BÀI - CẦN GÁN LẠI");
+  });
 });

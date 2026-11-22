@@ -3,6 +3,7 @@ package com.englishlearning.video.controller;
 import com.englishlearning.auth.service.CustomUserDetails;
 import com.englishlearning.common.dto.ApiResponse;
 import com.englishlearning.common.exception.BadRequestException;
+import com.englishlearning.video.dto.R2ObjectStream;
 import com.englishlearning.video.dto.VideoUploadResponse;
 import com.englishlearning.video.dto.WatchProgressRequest;
 import com.englishlearning.video.entity.Video;
@@ -13,9 +14,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRange;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,10 +29,15 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -89,38 +97,79 @@ public class VideoController {
     }
 
     @GetMapping("/{id}/raw")
-    public ResponseEntity<ResourceRegion> serveRawVideo(
+    public ResponseEntity<Resource> serveRawVideo(
             @PathVariable UUID id,
-            @RequestHeader(required = false) HttpHeaders headers) {
+            @RequestHeader(required = false) HttpHeaders headers,
+            HttpMethod httpMethod) {
         Video video = videoService.getVideoById(id);
         if (video == null || video.getRawStorageUrl() == null) {
             return ResponseEntity.notFound().build();
         }
-        File file = resolveRawVideoFile(video.getRawStorageUrl());
-        if (file == null || !file.exists()) {
-            return ResponseEntity.notFound().build();
+        String rawUrl = video.getRawStorageUrl();
+        boolean isHead = HttpMethod.HEAD.equals(httpMethod);
+        File file = resolveRawVideoFile(rawUrl);
+        if (file != null && file.exists()) {
+            long contentLength = file.length();
+            HttpRange range = (headers != null && !headers.getRange().isEmpty()) ? headers.getRange().get(0) : null;
+
+            long start = 0;
+            long end = Math.min(CHUNK_SIZE, contentLength) - 1;
+            if (range != null && contentLength > 0) {
+                try {
+                    start = range.getRangeStart(contentLength);
+                    end = Math.min(range.getRangeEnd(contentLength), start + CHUNK_SIZE - 1);
+                } catch (IllegalArgumentException ex) {
+                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                            .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                            .header(HttpHeaders.CONTENT_RANGE, "bytes */" + contentLength)
+                            .build();
+                }
+            }
+            if (contentLength == 0 || start < 0 || start >= contentLength || end < start) {
+                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + contentLength)
+                        .build();
+            }
+            long length = end - start + 1;
+
+            ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + contentLength)
+                    .contentType(MediaType.valueOf("video/mp4"))
+                    .contentLength(length);
+            if (isHead) {
+                return builder.build();
+            }
+            try {
+                InputStream rawStream = Files.newInputStream(file.toPath());
+                rawStream.skipNBytes(start);
+                return builder.body(new SizedInputStreamResource(new BoundedInputStream(rawStream, length), length));
+            } catch (IOException ex) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
         }
 
-        FileSystemResource resource = new FileSystemResource(file);
-        long contentLength = file.length();
-        HttpRange range = (headers != null && !headers.getRange().isEmpty()) ? headers.getRange().get(0) : null;
-
-        ResourceRegion region;
-        if (range != null) {
-            long start = range.getRangeStart(contentLength);
-            long end = range.getRangeEnd(contentLength);
-            long rangeLength = Math.min(CHUNK_SIZE, end - start + 1);
-            region = new ResourceRegion(resource, start, rangeLength);
-        } else {
-            long rangeLength = Math.min(CHUNK_SIZE, contentLength);
-            region = new ResourceRegion(resource, 0, rangeLength);
+        String rangeHeader = headers != null ? headers.getFirst(HttpHeaders.RANGE) : null;
+        Optional<R2ObjectStream> r2Stream = videoService.openRawStream(video, rangeHeader, isHead);
+        if (r2Stream.isPresent()) {
+            return buildR2StreamResponse(
+                    r2Stream.get(),
+                    "video/mp4",
+                    "public, max-age=86400",
+                    "video-" + id + ".mp4",
+                    isHead);
         }
 
-        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
-                .contentType(MediaType.valueOf("video/mp4"))
-                .body(region);
+        if ((rawUrl.startsWith("http://") || rawUrl.startsWith("https://"))
+                && !rawUrl.contains("/api/v1/videos/" + id + "/raw")) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(rawUrl))
+                    .build();
+        }
+        return ResponseEntity.notFound().build();
     }
 
     @PostMapping("/{id}/progress")
@@ -136,7 +185,9 @@ public class VideoController {
     @GetMapping("/{id}/hls/{fileName:.+}")
     public ResponseEntity<Resource> serveHlsFile(
             @PathVariable UUID id,
-            @PathVariable String fileName) {
+            @PathVariable String fileName,
+            @RequestHeader(required = false) HttpHeaders headers,
+            HttpMethod httpMethod) {
         if (fileName == null || fileName.isBlank() || fileName.contains("..")
                 || fileName.contains("/") || fileName.contains("\\")) {
             return ResponseEntity.badRequest().build();
@@ -146,15 +197,173 @@ public class VideoController {
         if (!filePath.startsWith(hlsDir)) {
             return ResponseEntity.badRequest().build();
         }
-        File file = filePath.toFile();
-        if (!file.exists() || !file.isFile())
-            return ResponseEntity.notFound().build();
 
         String contentType = fileName.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/MP2T";
-        return ResponseEntity.ok()
+        String cacheControl = fileName.endsWith(".m3u8") ? "public, max-age=60" : "public, max-age=86400";
+        boolean isHead = HttpMethod.HEAD.equals(httpMethod);
+        String rangeHeader = headers != null ? headers.getFirst(HttpHeaders.RANGE) : null;
+
+        File file = filePath.toFile();
+        if (file.exists() && file.isFile()) {
+            if (rangeHeader != null && !rangeHeader.isBlank()) {
+                return buildLocalRangeResponse(file, rangeHeader, contentType, cacheControl, fileName, isHead);
+            }
+            ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CACHE_CONTROL, cacheControl)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .contentLength(file.length());
+            return isHead ? builder.build() : builder.body(new FileSystemResource(file));
+        }
+
+        return videoService.openHlsStream(id, fileName, rangeHeader, isHead)
+                .map(stream -> buildR2StreamResponse(stream, contentType, cacheControl, fileName, isHead))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private ResponseEntity<Resource> buildR2StreamResponse(
+            R2ObjectStream stream,
+            String contentType,
+            String cacheControl,
+            String fileName,
+            boolean isHead) {
+        if (stream.rangeNotSatisfiable()) {
+            stream.closeQuietly();
+            ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes");
+            if (stream.contentRange() != null && !stream.contentRange().isBlank()) {
+                builder.header(HttpHeaders.CONTENT_RANGE, stream.contentRange());
+            }
+            return builder.build();
+        }
+
+        HttpStatus status = stream.partial() ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK;
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(status)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CACHE_CONTROL, cacheControl)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .contentType(MediaType.parseMediaType(contentType));
+        if (stream.contentLength() >= 0) {
+            builder.contentLength(stream.contentLength());
+        }
+        if (stream.partial() && stream.contentRange() != null && !stream.contentRange().isBlank()) {
+            builder.header(HttpHeaders.CONTENT_RANGE, stream.contentRange());
+        }
+        if (isHead || stream.inputStream() == null) {
+            stream.closeQuietly();
+            return builder.build();
+        }
+        return builder.body(new SizedInputStreamResource(stream.inputStream(), stream.contentLength()));
+    }
+
+    private ResponseEntity<Resource> buildLocalRangeResponse(
+            File file,
+            String rangeHeader,
+            String contentType,
+            String cacheControl,
+            String fileName,
+            boolean isHead) {
+        long fileLength = file.length();
+        List<HttpRange> ranges;
+        try {
+            ranges = HttpRange.parseRanges(rangeHeader);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLength)
+                    .build();
+        }
+        if (ranges.isEmpty() || fileLength == 0) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLength)
+                    .build();
+        }
+        HttpRange range = ranges.get(0);
+        long start;
+        long end;
+        try {
+            start = range.getRangeStart(fileLength);
+            end = range.getRangeEnd(fileLength);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLength)
+                    .build();
+        }
+        if (start >= fileLength || end < start) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileLength)
+                    .build();
+        }
+        long length = end - start + 1;
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CACHE_CONTROL, cacheControl)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileLength)
                 .contentType(MediaType.parseMediaType(contentType))
-                .body(new FileSystemResource(file));
+                .contentLength(length);
+        if (isHead) {
+            return builder.build();
+        }
+        try {
+            InputStream rawStream = Files.newInputStream(file.toPath());
+            rawStream.skipNBytes(start);
+            return builder.body(new SizedInputStreamResource(new BoundedInputStream(rawStream, length), length));
+        } catch (IOException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private static final class SizedInputStreamResource extends InputStreamResource {
+        private final long contentLength;
+
+        private SizedInputStreamResource(InputStream inputStream, long contentLength) {
+            super(inputStream);
+            this.contentLength = contentLength;
+        }
+
+        @Override
+        public long contentLength() throws IOException {
+            return contentLength >= 0 ? contentLength : super.contentLength();
+        }
+    }
+
+    private static final class BoundedInputStream extends FilterInputStream {
+        private long remaining;
+
+        private BoundedInputStream(InputStream in, long limit) {
+            super(in);
+            this.remaining = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            int value = super.read();
+            if (value >= 0) {
+                remaining--;
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            int toRead = (int) Math.min(len, remaining);
+            int read = super.read(b, off, toRead);
+            if (read > 0) {
+                remaining -= read;
+            }
+            return read;
+        }
     }
 
     @GetMapping("/lesson/{lessonId}")
@@ -190,6 +399,15 @@ public class VideoController {
     public ResponseEntity<ApiResponse<Void>> deleteVideo(@PathVariable UUID id) {
         videoService.deleteVideo(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa video thành công", null));
+    }
+
+    @GetMapping("/my-uploads")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<ApiResponse<List<Video>>> getMyUploadedVideos(
+            @RequestParam(required = false) VideoStatus status,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách video đã tải lên thành công",
+                videoService.getVideosByUploader(userDetails.getId(), status)));
     }
 
     @GetMapping

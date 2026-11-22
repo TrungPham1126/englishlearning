@@ -157,4 +157,45 @@ class AdminAiMonitoringControllerTest {
                 .andExpect(jsonPath("$.message").value("Đã mở lại hoạt động AI toàn hệ thống"))
                 .andExpect(jsonPath("$.data").value(false));
     }
+
+    @Test
+    @DisplayName("RBAC /quotas, PUT /quotas/{id} & /kill-switch/toggle: chặn 401 chưa đăng nhập, 403 STUDENT và 403 TEACHER trên endpoint chỉ ADMIN")
+    void adminOnlyEndpointsAndQuotas_enforceRbacForUnauthenticatedStudentAndTeacher() throws Exception {
+        UpdateQuotaRequest req = new UpdateQuotaRequest();
+        req.setDailyLimit(30);
+        req.setIsBlocked(false);
+
+        mockMvc.perform(get("/api/v1/admin/ai-monitoring/quotas"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/admin/ai-monitoring/quotas/{studentId}", studentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/admin/ai-monitoring/kill-switch/toggle"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/admin/ai-monitoring/quotas")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/admin/ai-monitoring/quotas/{studentId}", studentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req))
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/ai-monitoring/kill-switch/toggle")
+                        .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        UUID teacherId = UUID.randomUUID();
+        mockMvc.perform(put("/api/v1/admin/ai-monitoring/quotas/{studentId}", studentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req))
+                        .with(user(userWithRole(teacherId, RoleName.ROLE_TEACHER))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/ai-monitoring/kill-switch/toggle")
+                        .with(user(userWithRole(teacherId, RoleName.ROLE_TEACHER))))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(monitoringService);
+    }
 }

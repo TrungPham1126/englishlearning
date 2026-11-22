@@ -40,6 +40,11 @@ public interface AdminDatabaseService {
     byte[] exportClassroomReportExcel(ClassroomDetailedReportDto report);
 
     /**
+     * Xuất file Excel (.xlsx) báo cáo tổng hợp toàn trung tâm (4 sheet).
+     */
+    byte[] exportCenterOverviewExcel();
+
+    /**
      * Lấy báo cáo lưu trữ và ước tính chi tiêu Cloudflare R2.
      */
     R2CostReportDto getR2CostReport();

@@ -37,10 +37,13 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
     public void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             JsonNode rootNode = objectMapper.readTree(message.getPayload());
-            if (rootNode.has("referenceText")) {
+            if (rootNode != null && rootNode.hasNonNull("referenceText")) {
                 String refText = rootNode.get("referenceText").asText();
-                sessionReferenceTextMap.put(session.getId(), refText);
-                log.info("[WebSocket] Cập nhật referenceText cho session {}: '{}'", session.getId(), refText);
+                if (!refText.isBlank()) {
+                    String trimmed = refText.trim();
+                    sessionReferenceTextMap.put(session.getId(), trimmed);
+                    log.info("[WebSocket] Cập nhật referenceText cho session {}: '{}'", session.getId(), trimmed);
+                }
             }
         } catch (Exception ex) {
             log.warn("[WebSocket] Không thể parse TextMessage metadata: {}", ex.getMessage());
@@ -76,6 +79,9 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
     }
 
     public void setReferenceTextForSession(String sessionId, String referenceText) {
-        sessionReferenceTextMap.put(sessionId, referenceText);
+        if (sessionId == null || referenceText == null || referenceText.isBlank()) {
+            return;
+        }
+        sessionReferenceTextMap.put(sessionId, referenceText.trim());
     }
 }

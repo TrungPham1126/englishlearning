@@ -53,22 +53,26 @@ export default defineConfig({
     port: 5173,
     allowedHosts: true,
     cors: true,
-    hmr: {
-      clientPort: 443,
-    },
+    hmr: process.env.VITE_HMR_CLIENT_PORT
+      ? { clientPort: Number(process.env.VITE_HMR_CLIENT_PORT) }
+      : undefined,
     proxy: {
       "/api": {
-        target: "http://localhost:8080",
+        target: "http://127.0.0.1:8080",
         changeOrigin: true,
         secure: false,
+        timeout: 0,
+        proxyTimeout: 0,
       },
       "/uploads": {
-        target: "http://localhost:8080",
+        target: "http://127.0.0.1:8080",
         changeOrigin: true,
         secure: false,
+        timeout: 0,
+        proxyTimeout: 0,
       },
       "/ws": {
-        target: "http://localhost:8080",
+        target: "http://127.0.0.1:8080",
         changeOrigin: true,
         ws: true,
       },

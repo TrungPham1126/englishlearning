@@ -399,4 +399,222 @@ class GradingEngineServiceTest {
         assertThat(emptyRes.isRequiresAiGrading()).isFalse();
     }
 
+    @Test
+    @DisplayName("evaluateSubmission_whenMcqAnsweredByOptionLabelOrUnanswered_gradesCorrectly")
+    void evaluateSubmission_whenMcqAnsweredByOptionLabelOrUnanswered_gradesCorrectly() {
+        UUID qLabelId = UUID.randomUUID();
+        UUID qUnansweredId = UUID.randomUUID();
+        UUID qWrongOptId = UUID.randomUUID();
+        UUID optWrongId = UUID.randomUUID();
+
+        List<AssignmentQuestion> questions = List.of(
+                AssignmentQuestion.builder().id(qLabelId).questionType(QuestionType.MULTIPLE_CHOICE).points(2.0)
+                        .options(List.of(
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("First").isCorrect(false).build(),
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("Second").isCorrect(true).build()
+                        )).build(),
+                AssignmentQuestion.builder().id(qUnansweredId).questionType(QuestionType.MULTIPLE_CHOICE).points(2.0)
+                        .options(List.of(
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Only").isCorrect(true).build()
+                        )).build(),
+                AssignmentQuestion.builder().id(qWrongOptId).questionType(QuestionType.MULTIPLE_CHOICE).points(2.0)
+                        .options(List.of(
+                                QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Correct").isCorrect(true).build(),
+                                QuestionOption.builder().id(optWrongId).optionLabel("B").optionText("Wrong").isCorrect(false).build()
+                        )).build()
+        );
+
+        List<SubmissionRequest.AnswerDto> answers = List.of(
+                SubmissionRequest.AnswerDto.builder().questionId(qLabelId).textAnswer("  b  ").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(qWrongOptId).selectedOptionId(optWrongId).build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(questions, answers);
+
+        assertThat(result.getCorrectnessPerQuestion().get(qLabelId)).isTrue();
+        assertThat(result.getEarnedPointsPerQuestion().get(qLabelId)).isEqualTo(2.0);
+        assertThat(result.getCorrectnessPerQuestion().get(qUnansweredId)).isFalse();
+        assertThat(result.getEarnedPointsPerQuestion().get(qUnansweredId)).isZero();
+        assertThat(result.getCorrectnessPerQuestion().get(qWrongOptId)).isFalse();
+        assertThat(result.getTotalScore()).isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenTrueFalseMatchedByOptionTextCaseInsensitive_gradesCorrectly")
+    void evaluateSubmission_whenTrueFalseMatchedByOptionTextCaseInsensitive_gradesCorrectly() {
+        UUID qTfId = UUID.randomUUID();
+        AssignmentQuestion tfQuestion = AssignmentQuestion.builder()
+                .id(qTfId)
+                .questionType(QuestionType.TRUE_FALSE)
+                .correctAnswer(null)
+                .points(1.5)
+                .options(List.of(
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("True").isCorrect(true).build(),
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("False").isCorrect(false).build()
+                ))
+                .build();
+
+        GradingResult correctRes = gradingEngineService.evaluateSubmission(
+                List.of(tfQuestion),
+                List.of(SubmissionRequest.AnswerDto.builder().questionId(qTfId).textAnswer("  TRUE ").build())
+        );
+        GradingResult wrongRes = gradingEngineService.evaluateSubmission(
+                List.of(tfQuestion),
+                List.of(SubmissionRequest.AnswerDto.builder().questionId(qTfId).textAnswer("False").build())
+        );
+
+        assertThat(correctRes.getCorrectnessPerQuestion().get(qTfId)).isTrue();
+        assertThat(correctRes.getEarnedPointsPerQuestion().get(qTfId)).isEqualTo(1.5);
+        assertThat(wrongRes.getCorrectnessPerQuestion().get(qTfId)).isFalse();
+        assertThat(wrongRes.getEarnedPointsPerQuestion().get(qTfId)).isZero();
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenFillInBlankHasMultipleVariantsPipeAndSlashWithBlankSegments_gradesCorrectly")
+    void evaluateSubmission_whenFillInBlankHasMultipleVariantsPipeAndSlashWithBlankSegments_gradesCorrectly() {
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        AssignmentQuestion q1 = AssignmentQuestion.builder()
+                .id(q1Id)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .correctAnswer("don't | do not / ")
+                .points(2.0)
+                .build();
+        AssignmentQuestion q2 = AssignmentQuestion.builder()
+                .id(q2Id)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .correctAnswer("don't | do not / ")
+                .points(2.0)
+                .build();
+
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                List.of(q1, q2),
+                List.of(
+                        SubmissionRequest.AnswerDto.builder().questionId(q1Id).textAnswer("  Do   not ").build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(q2Id).textAnswer("will not").build()
+                )
+        );
+
+        assertThat(result.getCorrectnessPerQuestion().get(q1Id)).isTrue();
+        assertThat(result.getEarnedPointsPerQuestion().get(q1Id)).isEqualTo(2.0);
+        assertThat(result.getCorrectnessPerQuestion().get(q2Id)).isFalse();
+        assertThat(result.getTotalScore()).isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenMultiPairMatchingAllMatchedByLabelOrIdOrMalformed_computesFullAndZeroScores")
+    void evaluateSubmission_whenMultiPairMatchingAllMatchedByLabelOrIdOrMalformed_computesFullAndZeroScores() {
+        UUID qAllMatchId = UUID.randomUUID();
+        UUID qNonJsonId = UUID.randomUUID();
+        UUID optBId = UUID.randomUUID();
+
+        AssignmentQuestion multiQ1 = AssignmentQuestion.builder()
+                .id(qAllMatchId)
+                .questionType(QuestionType.MATCHING)
+                .points(4.0)
+                .options(List.of(
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Sun").matchText("Mặt trời").build(),
+                        QuestionOption.builder().id(optBId).optionLabel("B").optionText("Moon").matchText("Mặt trăng").build()
+                ))
+                .build();
+
+        AssignmentQuestion multiQ2 = AssignmentQuestion.builder()
+                .id(qNonJsonId)
+                .questionType(QuestionType.MATCHING)
+                .points(2.0)
+                .options(List.of(
+                        QuestionOption.builder().optionLabel("A").optionText("One").matchText("Một").build(),
+                        QuestionOption.builder().optionLabel("B").optionText("Two").matchText("Hai").build()
+                ))
+                .build();
+
+        String labelAndUuidJson = "{\"A\":\"Mặt trời\",\"" + optBId + "\":\"Mặt trăng\"}";
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                List.of(multiQ1, multiQ2),
+                List.of(
+                        SubmissionRequest.AnswerDto.builder().questionId(qAllMatchId).textAnswer(labelAndUuidJson).build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(qNonJsonId).textAnswer("plain text").build()
+                )
+        );
+
+        assertThat(result.getEarnedPointsPerQuestion().get(qAllMatchId)).isEqualTo(4.0);
+        assertThat(result.getCorrectnessPerQuestion().get(qAllMatchId)).isTrue();
+        assertThat(result.getEarnedPointsPerQuestion().get(qNonJsonId)).isZero();
+        assertThat(result.getCorrectnessPerQuestion().get(qNonJsonId)).isFalse();
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenMatching1To1UsesJsonPeerUuidOrUnicodeNfdOrOptionMatchText_gradesCorrectly")
+    void evaluateSubmission_whenMatching1To1UsesJsonPeerUuidOrUnicodeNfdOrOptionMatchText_gradesCorrectly() {
+        UUID q1Id = UUID.randomUUID();
+        UUID q2Id = UUID.randomUUID();
+        UUID q3Id = UUID.randomUUID();
+        UUID q4Id = UUID.randomUUID();
+
+        String expectedNfc = "Sức bật";
+        String submittedNfd = java.text.Normalizer.normalize("sức bật", java.text.Normalizer.Form.NFD);
+        String eloquentNfd = java.text.Normalizer.normalize("Hùng biện", java.text.Normalizer.Form.NFD);
+
+        AssignmentQuestion q1 = AssignmentQuestion.builder()
+                .id(q1Id).questionType(QuestionType.MATCHING).promptText("Resilience")
+                .correctAnswer(expectedNfc).points(1.0).options(List.of()).build();
+        AssignmentQuestion q2 = AssignmentQuestion.builder()
+                .id(q2Id).questionType(QuestionType.MATCHING).promptText("Bounce back")
+                .correctAnswer(expectedNfc).points(1.0).options(List.of()).build();
+        AssignmentQuestion q3 = AssignmentQuestion.builder()
+                .id(q3Id).questionType(QuestionType.MATCHING).promptText("Adapt")
+                .correctAnswer(submittedNfd).points(1.0).options(List.of()).build();
+        AssignmentQuestion q4 = AssignmentQuestion.builder()
+                .id(q4Id).questionType(QuestionType.MATCHING).promptText("Eloquent")
+                .correctAnswer("").points(1.0)
+                .options(List.of(QuestionOption.builder().id(UUID.randomUUID()).optionText("Eloquent").matchText("Hùng biện").isCorrect(true).build()))
+                .build();
+
+        List<SubmissionRequest.AnswerDto> answers = List.of(
+                SubmissionRequest.AnswerDto.builder().questionId(q1Id).textAnswer("{\"" + q1Id + "\":\"" + q2Id + "\"}").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(q2Id).textAnswer("{\"" + q2Id + "\":\"" + q2Id + "\"}").build(),
+                SubmissionRequest.AnswerDto.builder().questionId(q3Id).selectedOptionId(q1Id).build(),
+                SubmissionRequest.AnswerDto.builder().questionId(q4Id).textAnswer(eloquentNfd).build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(List.of(q1, q2, q3, q4), answers);
+
+        assertThat(result.getCorrectnessPerQuestion().get(q1Id)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(q2Id)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(q3Id)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(q4Id)).isTrue();
+        assertThat(result.getScaledScore()).isEqualTo(10.0);
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenMixedObjectiveEssayAndAudioResponse_gradesObjectiveAndFlagsBothSubjectiveForAi")
+    void evaluateSubmission_whenMixedObjectiveEssayAndAudioResponse_gradesObjectiveAndFlagsBothSubjectiveForAi() {
+        UUID mcqId = UUID.randomUUID();
+        UUID mcqCorrectOpt = UUID.randomUUID();
+        UUID essayId = UUID.randomUUID();
+        UUID audioId = UUID.randomUUID();
+
+        List<AssignmentQuestion> questions = List.of(
+                AssignmentQuestion.builder().id(mcqId).questionType(QuestionType.MULTIPLE_CHOICE).points(2.0)
+                        .options(List.of(QuestionOption.builder().id(mcqCorrectOpt).isCorrect(true).build())).build(),
+                AssignmentQuestion.builder().id(essayId).questionType(QuestionType.ESSAY).points(4.0).build(),
+                AssignmentQuestion.builder().id(audioId).questionType(QuestionType.AUDIO_RESPONSE).points(4.0).build()
+        );
+
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                questions,
+                List.of(
+                        SubmissionRequest.AnswerDto.builder().questionId(mcqId).selectedOptionId(mcqCorrectOpt).build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(essayId).textAnswer("My essay").build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(audioId).textAnswer("/audio/ans.wav").build()
+                )
+        );
+
+        assertThat(result.getTotalScore()).isEqualTo(2.0);
+        assertThat(result.getMaxPossibleScore()).isEqualTo(10.0);
+        assertThat(result.getScaledScore()).isEqualTo(2.0);
+        assertThat(result.isRequiresAiGrading()).isTrue();
+        assertThat(result.getAiGradedQuestionIds()).containsExactly(essayId, audioId);
+    }
+
 }

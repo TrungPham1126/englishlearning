@@ -51,6 +51,41 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
   onDeleteAssignment,
 }) => {
   const [expandedDays, setExpandedDays] = React.useState<Set<string>>(new Set());
+  const hasAutoExpandedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!hasAutoExpandedRef.current && plans.length > 0) {
+      hasAutoExpandedRef.current = true;
+      const latestPlan = plans[plans.length - 1];
+      if (latestPlan?.id) {
+        setExpandedDays((prev) => {
+          if (prev.size > 0) return prev;
+          const next = new Set(prev);
+          next.add(latestPlan.id);
+          return next;
+        });
+      }
+    }
+  }, [plans]);
+
+  React.useEffect(() => {
+    const handleDailyPlanUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ planId?: string }>).detail;
+      const targetPlanId = detail?.planId;
+      if (targetPlanId) {
+        setExpandedDays((prev) => {
+          const next = new Set(prev);
+          next.add(targetPlanId);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("daily-plan-updated", handleDailyPlanUpdated);
+    return () => {
+      window.removeEventListener("daily-plan-updated", handleDailyPlanUpdated);
+    };
+  }, []);
+
   const toggleDay = (id: string) =>
     setExpandedDays((prev) => {
       const next = new Set(prev);
@@ -70,7 +105,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
           assignmentId: it.assignmentId || it.assignment?.id,
           assignment: a,
           title: a?.title || it.title,
-          sectionName: it.sectionName || (a?.skillType ? `Kỹ năng ${a.skillType}` : "Bài tập ngày"),
+          sectionName: it.sectionName || a?.skillType || "Bài tập",
           itemType: it.itemType || a?.skillType || "ASSIGNMENT",
           raw: a || it,
         });
@@ -91,7 +126,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
             assignmentId: ca.id,
             assignment: ca,
             title: ca.title,
-            sectionName: `Kỹ năng ${ca.skillType || "Bài tập"}`,
+            sectionName: ca.skillType || "Bài tập",
             itemType: ca.skillType || "ASSIGNMENT",
             raw: ca,
           });
@@ -124,31 +159,31 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
             <Calendar className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
-            Lịch Học & Nhiệm Vụ ({plans.length} ngày)
+            Lộ trình ({plans.length} ngày)
           </h2>
           <div className="flex items-center space-x-2">
             <button
               onClick={onCreateAssignment}
               className="flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shadow-xs"
             >
-              <Plus className="h-4 w-4 mr-1" /> Tạo Bài Tập Mới (AI / Tài Liệu)
+              <Plus className="h-4 w-4 mr-1" /> Tạo bài tập (AI)
             </button>
             <button
               onClick={onCreateDay}
               className="flex items-center px-3 py-1.5 rounded-lg bg-blue-800 hover:bg-blue-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
             >
-              <Plus className="h-4 w-4 mr-1" /> Thêm Ngày Mới
+              <Plus className="h-4 w-4 mr-1" /> Thêm ngày
             </button>
           </div>
         </div>
 
         {loading ? (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-500">
-            Đang tải lộ trình học tập...
+            Đang tải...
           </div>
         ) : plans.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-center text-slate-500">
-            Chưa có lịch học hàng ngày nào. Bấm nút <b>Thêm Ngày Mới</b> để bắt đầu tạo lộ trình!
+            Chưa có ngày học. Nhấn <b>Thêm ngày</b> để tạo.
           </div>
         ) : (
           <div className="space-y-4">
@@ -194,14 +229,14 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                     <div className="flex items-center space-x-1 pl-2">
                       <button
                         onClick={() => onEditDay(p)}
-                        title="Sửa thông tin Day"
+                        title="Sửa ngày"
                         className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white transition rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
                         <Edit3 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => onDeleteDay(p.id, p.dayNumber)}
-                        title="Xóa Day"
+                        title="Xóa ngày"
                         className="p-1 text-rose-500 dark:text-rose-400 hover:text-rose-600 transition rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -218,7 +253,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                     if (resolvedItems.length === 0) {
                       return (
                         <p className="text-xs text-slate-500 italic py-1">
-                          Chưa có bài tập nào được gắn vào ngày này.
+                          Chưa có bài tập.
                         </p>
                       );
                     }
@@ -247,7 +282,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                                 type="button"
                                 onClick={() => onViewAssignment?.(item.assignment || item.assignmentId || item.raw)}
                                 className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition p-1 cursor-pointer"
-                                title="Xem đề bài & câu hỏi"
+                                title="Xem đề"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                               </button>
@@ -255,7 +290,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                                 type="button"
                                 onClick={() => onEditAssignment?.(item.assignment || item.assignmentId || item.raw)}
                                 className="text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition p-1 cursor-pointer"
-                                title="Chỉnh sửa toàn diện bài tập này"
+                                title="Sửa bài"
                               >
                                 <Edit3 className="h-3.5 w-3.5" />
                               </button>
@@ -263,7 +298,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                                 type="button"
                                 onClick={() => onDeleteAssignment?.(item.assignmentId || item.id, item.title)}
                                 className="text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition p-1 cursor-pointer"
-                                title="Xóa vĩnh viễn bài tập này"
+                                title="Xóa bài"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -274,7 +309,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                               type="button"
                               onClick={() => onDeleteItem(item.id)}
                               className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition p-1 cursor-pointer"
-                              title="Gỡ khỏi ngày này"
+                              title="Gỡ khỏi ngày"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -288,7 +323,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                     onClick={() => onOpenAddItem(p.id)}
                     className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-blue-600 transition cursor-pointer"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Thêm bài tập / tài liệu vào Day {p.dayNumber}
+                    <Plus className="h-3.5 w-3.5" /> Thêm vào Day {p.dayNumber}
                   </button>
                 </div>
                 )}
@@ -302,14 +337,14 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
       <div className="lg:col-span-4 space-y-4">
         <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
           <BookOpen className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
-          Kho Tài Liệu Chung
+          Tài liệu chung
         </h2>
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-3 shadow-sm">
           <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
             {globalResources.length === 0 ? (
               <div className="py-8 text-center text-slate-500">
                 <Archive className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-xs">Chưa có tài liệu nào trong kho.</p>
+                <p className="text-xs">Chưa có tài liệu.</p>
               </div>
             ) : (
               globalResources.map((res) => (
@@ -339,7 +374,7 @@ export const DailyPlanTimeline: React.FC<DailyPlanTimelineProps> = ({
                         className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 font-semibold text-[11px] flex items-center"
                       >
                         <Download className="h-3 w-3 mr-1" />
-                        Xem / Tải về
+                        Tải về
                       </a>
                     )}
                   </div>

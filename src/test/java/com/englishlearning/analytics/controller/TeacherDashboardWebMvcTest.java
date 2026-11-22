@@ -148,5 +148,13 @@ class TeacherDashboardWebMvcTest {
                 .andExpect(jsonPath("$.data.tasks[0].title").value("Chấm bài: Bài tập"))
                 .andExpect(jsonPath("$.data.tasks[0].className").value("Lớp học"))
                 .andExpect(jsonPath("$.data.skills.length()").value(4));
+
+        // Khi không có bài chờ chấm -> trả về task gợi ý AI Quiz Lab và cho phép ROLE_ADMIN truy cập
+        when(pendingAttemptsQ.getResultList()).thenReturn(Collections.emptyList());
+        mockMvc.perform(get("/api/v1/teacher/dashboard/stats")
+                        .with(user(userWithRole(teacherId, RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks[0].id").value("default-1"))
+                .andExpect(jsonPath("$.data.tasks[0].type").value("AI_REVIEW"));
     }
 }

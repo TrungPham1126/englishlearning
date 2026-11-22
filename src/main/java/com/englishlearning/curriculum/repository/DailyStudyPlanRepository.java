@@ -29,6 +29,16 @@ public interface DailyStudyPlanRepository extends JpaRepository<DailyStudyPlan, 
     @Query("SELECT DISTINCT p FROM DailyStudyPlan p LEFT JOIN FETCH p.items WHERE p.classroom.id IN :classroomIds")
     List<DailyStudyPlan> findByClassroomIdsWithItems(@Param("classroomIds") List<UUID> classroomIds);
 
+    @Query("SELECT DISTINCT p FROM DailyStudyPlan p " +
+           "LEFT JOIN FETCH p.items i " +
+           "LEFT JOIN FETCH i.assignment " +
+           "WHERE p.classroom.id IN :classroomIds " +
+           "AND p.scheduledDate <= :upToDate " +
+           "ORDER BY p.scheduledDate DESC")
+    List<DailyStudyPlan> findByClassroomIdsWithItemsUpToDate(
+            @Param("classroomIds") Collection<UUID> classroomIds,
+            @Param("upToDate") LocalDate upToDate);
+
     @Modifying
     @Query("DELETE FROM DailyStudyPlan p WHERE p.id IN :ids")
     int deleteByIdIn(@Param("ids") Collection<UUID> ids);

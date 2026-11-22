@@ -13,7 +13,20 @@ public interface AiLabService {
 
     JsonNode evaluateSpeakingTopic(String questionTopic, MultipartFile audioFile, UUID studentAnswerId);
 
+    default JsonNode evaluateSpeakingTopic(
+            String questionTopic,
+            MultipartFile audioFile,
+            UUID studentAnswerId,
+            String speakingMode,
+            String keyPoints) {
+        return evaluateSpeakingTopic(questionTopic, audioFile, studentAnswerId);
+    }
+
     JsonNode evaluateWriting(String topic, String essayText, UUID studentAnswerId);
+
+    default JsonNode evaluateWriting(String topic, String essayText, UUID studentAnswerId, String writingTask) {
+        return evaluateWriting(topic, essayText, studentAnswerId);
+    }
 
     AiGeneratedExercise generateQuizFromContent(String lessonContent, String targetCefr, int questionCount,
             UUID teacherId, UUID lessonId);

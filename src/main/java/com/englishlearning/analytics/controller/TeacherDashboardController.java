@@ -8,6 +8,7 @@ import com.englishlearning.classroom.entity.Classroom;
 import com.englishlearning.classroom.repository.ClassStudentRepository;
 import com.englishlearning.classroom.repository.ClassroomRepository;
 import com.englishlearning.common.dto.ApiResponse;
+import com.englishlearning.common.util.ScoreScaleUtils;
 import com.englishlearning.submission.entity.AttemptStatus;
 import com.englishlearning.submission.repository.AssignmentAttemptRepository;
 import jakarta.persistence.EntityManager;
@@ -136,15 +137,14 @@ public class TeacherDashboardController {
                     .setParameter("tId", teacherId)
                     .getSingleResult();
 
-            double listening = Math.round(((Number) skillAverages[0]).doubleValue() * 10.0) / 10.0;
-            double reading = Math.round(((Number) skillAverages[1]).doubleValue() * 10.0) / 10.0;
-            double writing = Math.round(((Number) skillAverages[2]).doubleValue() * 10.0) / 10.0;
-            double speaking = Math.round(((Number) skillAverages[3]).doubleValue() * 10.0) / 10.0;
-
-            double lScore = Math.min(10.0, listening);
-            double rScore = Math.min(10.0, reading);
-            double wScore = Math.min(10.0, writing);
-            double sScore = Math.min(10.0, speaking);
+            double lScore = ScoreScaleUtils.normalizeToScale10OrZero(
+                    skillAverages != null && skillAverages.length > 0 && skillAverages[0] instanceof Number n ? n.doubleValue() : null);
+            double rScore = ScoreScaleUtils.normalizeToScale10OrZero(
+                    skillAverages != null && skillAverages.length > 1 && skillAverages[1] instanceof Number n ? n.doubleValue() : null);
+            double wScore = ScoreScaleUtils.normalizeToScale10OrZero(
+                    skillAverages != null && skillAverages.length > 2 && skillAverages[2] instanceof Number n ? n.doubleValue() : null);
+            double sScore = ScoreScaleUtils.normalizeToScale10OrZero(
+                    skillAverages != null && skillAverages.length > 3 && skillAverages[3] instanceof Number n ? n.doubleValue() : null);
 
             skills.add(TeacherDashboardResponse.SkillAnalysis.builder()
                     .skill("Listening (Nghe)")

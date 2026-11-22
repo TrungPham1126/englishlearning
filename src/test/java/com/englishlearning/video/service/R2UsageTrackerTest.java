@@ -96,4 +96,18 @@ class R2UsageTrackerTest {
         assertThat(tracker.getDeleteOps()).isEqualTo(expected);
         assertThat(tracker.getGetOps()).isEqualTo(expected);
     }
+
+    @Test
+    @DisplayName("Các bộ đếm PUT, LIST, DELETE, GET hoàn toàn độc lập và giữ nguyên mốc trackingSince")
+    void should_KeepCountersIsolatedAndPreserveTrackingSinceTimestamp() {
+        R2UsageTracker tracker = new R2UsageTracker();
+        Instant initialSince = tracker.getTrackingSince();
+
+        tracker.recordGet();
+        assertThat(tracker.getGetOps()).isEqualTo(1L);
+        assertThat(tracker.getPutOps()).isZero();
+        assertThat(tracker.getListOps()).isZero();
+        assertThat(tracker.getDeleteOps()).isZero();
+        assertThat(tracker.getTrackingSince()).isEqualTo(initialSince);
+    }
 }

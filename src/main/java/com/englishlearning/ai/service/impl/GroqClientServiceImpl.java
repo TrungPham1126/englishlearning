@@ -43,7 +43,8 @@ public class GroqClientServiceImpl implements GroqClientService {
     @Override
     public String transcribeAudio(MultipartFile audioFile) {
         try {
-            String filename = audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename() : "audio.wav";
+            String rawName = audioFile.getOriginalFilename();
+            String filename = (rawName != null && !rawName.isBlank()) ? rawName : "audio.wav";
             return transcribeAudio(audioFile.getBytes(), filename);
         } catch (Exception e) {
             log.error("Groq Whisper Transcription Failed: ", e);
@@ -169,7 +170,11 @@ public class GroqClientServiceImpl implements GroqClientService {
                     String.class);
 
             JsonNode root = objectMapper.readTree(response.getBody());
-            String text = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new IllegalStateException("Groq API trả về danh sách choices rỗng.");
+            }
+            String text = choices.get(0).path("message").path("content").asText();
 
             // Bóc tách token usage thực tế từ Groq API
             JsonNode usage = root.path("usage");

@@ -98,6 +98,10 @@ class AnalyticsControllerTest {
                         .with(user(userWithRole(teacherId, RoleName.ROLE_TEACHER))))
                 .andExpect(status().isForbidden());
 
+        mockMvc.perform(get("/api/v1/analytics/student/me")
+                        .with(user(userWithRole(UUID.randomUUID(), RoleName.ROLE_ADMIN))))
+                .andExpect(status().isForbidden());
+
         mockMvc.perform(get("/api/v1/analytics/my-profile")
                         .with(user(userWithRole(studentId, RoleName.ROLE_STUDENT))))
                 .andExpect(status().isOk())

@@ -36,8 +36,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -218,5 +217,110 @@ class TeacherGradingControllerTest {
                 .andExpect(jsonPath("$.message").value("Graded successfully"))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.score").value(9.0));
+    }
+
+    @Test
+    @DisplayName("POST grade từ chối finalScore ngoài khoảng [0.0, 10.0] với HTTP 400")
+    void gradeSubmission_rejectsOutOfRangeFinalScore() throws Exception {
+        CustomUserDetails teacher = createUserWithRole(RoleName.ROLE_TEACHER);
+        UUID attemptId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/teacher/submissions/{attemptId}/grade", attemptId)
+                        .with(user(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"finalScore\":85.0,\"feedback\":\"Legacy 0-100 scale\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.finalScore").exists());
+
+        mockMvc.perform(post("/api/v1/teacher/submissions/{attemptId}/grade", attemptId)
+                        .with(user(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"finalScore\":-1.0,\"feedback\":\"Negative score\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.finalScore").exists());
+    }
+
+    @Test
+    @DisplayName("getSubmissions_whenStudentRole_returns403")
+    void getSubmissions_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/teacher/assignments/{assignmentId}/submissions", UUID.randomUUID())
+                        .with(user(createUserWithRole(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("getSubmissionDetail_whenStudentRole_returns403")
+    void getSubmissionDetail_whenStudentRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/teacher/submissions/{attemptId}", UUID.randomUUID())
+                        .with(user(createUserWithRole(RoleName.ROLE_STUDENT))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(submissionService);
+    }
+
+    @Test
+    @DisplayName("getSubmissions_whenAdminRole_returns200")
+    void getSubmissions_whenAdminRole_returns200() throws Exception {
+        UUID assignmentId = UUID.randomUUID();
+        SubmissionSummaryResponse item = SubmissionSummaryResponse.builder()
+                .attemptId(UUID.randomUUID())
+                .studentId(studentId)
+                .studentName("Tran Minh")
+                .status("COMPLETED")
+                .score(8.5)
+                .build();
+        when(submissionService.getTeacherSubmissions(assignmentId)).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/teacher/assignments/{assignmentId}/submissions", assignmentId)
+                        .with(user(createUserWithRole(RoleName.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].studentName").value("Tran Minh"))
+                .andExpect(jsonPath("$.data[0].score").value(8.5));
+    }
+
+    @Test
+    @DisplayName("gradeSubmission_whenAdminRole_returns200")
+    void gradeSubmission_whenAdminRole_returns200() throws Exception {
+        UUID attemptId = UUID.randomUUID();
+        AttemptResponse graded = AttemptResponse.builder()
+                .attemptId(attemptId)
+                .status("COMPLETED")
+                .score(8.0)
+                .teacherFeedback("Well structured")
+                .build();
+        when(submissionService.gradeSubmission(eq(attemptId), any(TeacherGradeRequest.class))).thenReturn(graded);
+
+        mockMvc.perform(post("/api/v1/teacher/submissions/{attemptId}/grade", attemptId)
+                        .with(user(createUserWithRole(RoleName.ROLE_ADMIN)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"finalScore\":8.0,\"feedback\":\"Well structured\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.score").value(8.0))
+                .andExpect(jsonPath("$.data.teacherFeedback").value("Well structured"));
+    }
+
+    @Test
+    @DisplayName("gradeSubmission_whenAttemptNotFound_returns404")
+    void gradeSubmission_whenAttemptNotFound_returns404() throws Exception {
+        UUID missingAttemptId = UUID.randomUUID();
+        when(submissionService.gradeSubmission(eq(missingAttemptId), any(TeacherGradeRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Attempt not found"));
+
+        mockMvc.perform(post("/api/v1/teacher/submissions/{attemptId}/grade", missingAttemptId)
+                        .with(user(createUserWithRole(RoleName.ROLE_TEACHER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"finalScore\":7.5,\"feedback\":\"Review\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("getStudentClassroomSubmissions_whenUnauthenticated_returns401")
+    void getStudentClassroomSubmissions_whenUnauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/teacher/classrooms/{classId}/students/{studentId}/submissions", classId, studentId))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(submissionService);
     }
 }

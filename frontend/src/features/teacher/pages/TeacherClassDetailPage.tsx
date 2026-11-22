@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Plus,
   BookOpen,
@@ -15,12 +15,17 @@ import {
   Inbox,
   FileCode,
   Calendar,
+  Eye,
+  PlayCircle,
+  BookA,
+  BookOpenCheck,
 } from "lucide-react";
 import { teacherApi, type LessonItem } from "../api/teacherApi";
 import ClassroomHeaderNav from "../components/ClassroomHeaderNav";
 
 export default function TeacherClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
 
   // Điều khiển sub-tab: "lessons" | "announcements"
   const [activeSubTab, setActiveSubTab] = useState<"lessons" | "announcements">("lessons");
@@ -39,6 +44,7 @@ export default function TeacherClassDetailPage() {
   // Quản lý upload file & video
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [dragOverLessonId, setDragOverLessonId] = useState<string | null>(null);
   const [uploadTypeLabel, setUploadTypeLabel] = useState<"VIDEO_HLS" | "DOCUMENT">("VIDEO_HLS");
   const [uploadFeedback, setUploadFeedback] = useState<{
@@ -80,7 +86,7 @@ export default function TeacherClassDetailPage() {
       }
     } catch (err: any) {
       console.error("Lỗi khi tải danh sách bài học:", err);
-      setLessonsError("Không thể tải danh sách bài giảng. Vui lòng thử lại sau.");
+      setLessonsError("Tải bài giảng thất bại.");
       setLessons([]);
     } finally {
       setLessonsLoading(false);
@@ -121,6 +127,75 @@ export default function TeacherClassDetailPage() {
     videoInputRef.current?.click();
   };
 
+  const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
+
+  const uploadAssetToLesson = async (
+    lessonId: string,
+    file: File,
+    kind: "VIDEO_HLS" | "DOCUMENT",
+  ) => {
+    if (file.size <= 0) {
+      setUploadFeedback({
+        type: "error",
+        message: `File "${file.name}" đang bị rỗng, vui lòng chọn file hợp lệ.`,
+      });
+      return;
+    }
+
+    if (kind === "VIDEO_HLS" && file.size > MAX_VIDEO_SIZE_BYTES) {
+      setUploadFeedback({
+        type: "error",
+        message: `Video "${file.name}" vượt quá giới hạn tối đa 500MB.`,
+      });
+      return;
+    }
+
+    try {
+      setSelectedLessonId(lessonId);
+      setUploadTypeLabel(kind);
+      setIsUploading(true);
+      setUploadProgress(0);
+      setUploadFeedback(null);
+
+      if (kind === "VIDEO_HLS") {
+        await teacherApi.uploadLessonVideo(lessonId, file, (percent) => {
+          setUploadProgress(percent);
+        });
+        setUploadFeedback({
+          type: "success",
+          message: `Đã tải video "${file.name}". Đang mã hóa HLS.`,
+        });
+      } else {
+        await teacherApi.uploadLessonDocument(lessonId, file);
+        setUploadFeedback({
+          type: "success",
+          message: `Đã tải tài liệu "${file.name}".`,
+        });
+      }
+      await loadLessons();
+    } catch (err: any) {
+      console.error(
+        kind === "VIDEO_HLS" ? "Lỗi upload video:" : "Lỗi upload tài liệu:",
+        err,
+      );
+      const serverMessage = err?.response?.data?.message;
+      const networkFallback =
+        !err?.response
+          ? `Không thể kết nối máy chủ khi tải "${file.name}". Hãy kiểm tra backend đang chạy, đăng nhập lại hoặc thử file ≤ 500MB.`
+          : `Tải ${kind === "VIDEO_HLS" ? "video" : "tài liệu"} "${file.name}" thất bại.`;
+      setUploadFeedback({
+        type: "error",
+        message: serverMessage || networkFallback,
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setSelectedLessonId(null);
+      if (docInputRef.current) docInputRef.current.value = "";
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
   // Xử lý kéo thả trực tiếp file Video HLS hoặc Tài liệu vào thẻ bài giảng
   const handleLessonDrop = async (e: React.DragEvent<HTMLDivElement>, lessonId: string) => {
     e.preventDefault();
@@ -128,96 +203,23 @@ export default function TeacherClassDetailPage() {
     const file = e.dataTransfer.files?.[0];
     if (!file || isUploading) return;
 
-    const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name);
-    setSelectedLessonId(lessonId);
-    setUploadTypeLabel(isVideo ? "VIDEO_HLS" : "DOCUMENT");
-    setUploadFeedback(null);
-
-    try {
-      setIsUploading(true);
-      if (isVideo) {
-        await teacherApi.uploadLessonVideo(lessonId, file);
-        setUploadFeedback({
-          type: "success",
-          message: `Đã tải lên video bài giảng: "${file.name}". Hệ thống đang xử lý mã hóa HLS (.m3u8).`,
-        });
-      } else {
-        await teacherApi.uploadLessonDocument(lessonId, file);
-        setUploadFeedback({
-          type: "success",
-          message: `Đã upload thành công tài liệu: "${file.name}"`,
-        });
-      }
-      await loadLessons();
-    } catch (err: any) {
-      setUploadFeedback({
-        type: "error",
-        message:
-          err.response?.data?.message ||
-          `Không thể tải lên tệp "${file.name}". Vui lòng thử lại.`,
-      });
-    } finally {
-      setIsUploading(false);
-      setSelectedLessonId(null);
-    }
+    const isVideo =
+      file.type.startsWith("video/") || /\.(mp4|mov|mkv|webm|avi)$/i.test(file.name);
+    await uploadAssetToLesson(lessonId, file, isVideo ? "VIDEO_HLS" : "DOCUMENT");
   };
 
   // Xử lý upload tài liệu
   const handleDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedLessonId) return;
-
-    try {
-      setIsUploading(true);
-      setUploadFeedback(null);
-      await teacherApi.uploadLessonDocument(selectedLessonId, file);
-      setUploadFeedback({
-        type: "success",
-        message: `Đã upload thành công tài liệu: "${file.name}"`,
-      });
-      await loadLessons();
-    } catch (err: any) {
-      console.error("Lỗi upload tài liệu:", err);
-      setUploadFeedback({
-        type: "error",
-        message:
-          err.response?.data?.message ||
-          `Không thể upload "${file.name}". Vui lòng kiểm tra dung lượng hoặc định dạng file.`,
-      });
-    } finally {
-      setIsUploading(false);
-      setSelectedLessonId(null);
-      if (docInputRef.current) docInputRef.current.value = "";
-    }
+    await uploadAssetToLesson(selectedLessonId, file, "DOCUMENT");
   };
 
   // Xử lý upload video
   const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedLessonId) return;
-
-    try {
-      setIsUploading(true);
-      setUploadFeedback(null);
-      await teacherApi.uploadLessonVideo(selectedLessonId, file);
-      setUploadFeedback({
-        type: "success",
-        message: `Đã tải lên video bài giảng: "${file.name}". Hệ thống đang xử lý mã hóa.`,
-      });
-      await loadLessons();
-    } catch (err: any) {
-      console.error("Lỗi upload video:", err);
-      setUploadFeedback({
-        type: "error",
-        message:
-          err.response?.data?.message ||
-          `Không thể tải lên video "${file.name}". Vui lòng thử lại.`,
-      });
-    } finally {
-      setIsUploading(false);
-      setSelectedLessonId(null);
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }
+    await uploadAssetToLesson(selectedLessonId, file, "VIDEO_HLS");
   };
 
   // Thêm bài giảng mới
@@ -239,12 +241,12 @@ export default function TeacherClassDetailPage() {
       setLessonObjectives("");
       setUploadFeedback({
         type: "success",
-        message: "Đã tạo bài giảng mới thành công!",
+        message: "Đã tạo bài giảng.",
       });
       await loadLessons();
     } catch (err: any) {
       console.error("Lỗi tạo bài giảng:", err);
-      alert(err.response?.data?.message || "Không thể tạo bài giảng. Vui lòng kiểm tra lại kết nối.");
+      alert(err.response?.data?.message || "Tạo bài giảng thất bại.");
     } finally {
       setIsCreatingLesson(false);
     }
@@ -252,7 +254,7 @@ export default function TeacherClassDetailPage() {
 
   // Xóa bài giảng
   const handleDeleteLesson = async (lessonId: string, title: string) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa bài giảng "${title}" không?`)) {
+    if (!window.confirm(`Xóa bài giảng "${title}"?`)) {
       return;
     }
 
@@ -260,12 +262,12 @@ export default function TeacherClassDetailPage() {
       await teacherApi.deleteLesson(lessonId);
       setUploadFeedback({
         type: "success",
-        message: `Đã xóa bài giảng "${title}" thành công.`,
+        message: `Đã xóa bài giảng "${title}".`,
       });
       await loadLessons();
     } catch (err: any) {
       console.error("Lỗi xóa bài giảng:", err);
-      alert(err.response?.data?.message || "Không thể xóa bài giảng.");
+      alert(err.response?.data?.message || "Xóa bài giảng thất bại.");
     }
   };
 
@@ -288,7 +290,7 @@ export default function TeacherClassDetailPage() {
       setAnnContent("");
       setAnnFeedback({
         type: "success",
-        message: "Đã phát thông báo thành công đến toàn bộ học viên trong lớp!",
+        message: "Đã gửi thông báo lớp.",
       });
       await loadAnnouncements();
     } catch (err: any) {
@@ -298,7 +300,7 @@ export default function TeacherClassDetailPage() {
         message:
           err.response?.data?.message ||
           err.message ||
-          "Không thể gửi thông báo tới lớp. Vui lòng thử lại sau.",
+          "Gửi thông báo thất bại.",
       });
     } finally {
       setSendingAnn(false);
@@ -312,7 +314,7 @@ export default function TeacherClassDetailPage() {
         type="file"
         ref={docInputRef}
         onChange={handleDocFileChange}
-        accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
+        accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.ogg"
         className="hidden"
       />
       <input
@@ -338,7 +340,7 @@ export default function TeacherClassDetailPage() {
               }`}
             >
               <BookOpen className="h-3.5 w-3.5" />
-              <span>Bài Giảng ({lessons.length})</span>
+              <span>Bài giảng ({lessons.length})</span>
             </button>
 
             <button
@@ -350,7 +352,7 @@ export default function TeacherClassDetailPage() {
               }`}
             >
               <Bell className="h-3.5 w-3.5" />
-              <span>Thông Báo ({announcements.length})</span>
+              <span>Thông báo ({announcements.length})</span>
             </button>
           </div>
         }
@@ -390,33 +392,42 @@ export default function TeacherClassDetailPage() {
               <Loader2 className="h-4 w-4 animate-spin text-blue-700 dark:text-blue-400" />
               <span>
                 {uploadTypeLabel === "VIDEO_HLS"
-                  ? "Đang tải lên Video & Khởi chạy tiến trình mã hóa HLS (.m3u8)..."
-                  : "Đang tải lên Tài liệu bài giảng (PDF/Word) vào kho lưu trữ đám mây..."}
+                  ? uploadProgress > 0 && uploadProgress < 100
+                    ? `Đang tải video (${uploadProgress}%)...`
+                    : "Đang tải video & mã hóa HLS..."
+                  : "Đang tải tài liệu..."}
               </span>
             </div>
             <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 text-[10px] font-bold uppercase tracking-wider">
-              Async Pipeline
+              {uploadTypeLabel === "VIDEO_HLS" && uploadProgress > 0
+                ? `${uploadProgress}%`
+                : "Đang xử lý"}
             </span>
           </div>
           <div className="h-2 w-full rounded-full bg-blue-100 dark:bg-slate-800 overflow-hidden">
-            <div className="h-full w-2/3 rounded-full bg-brand-600 animate-pulse" />
+            <div
+              className={`h-full rounded-full bg-brand-600 transition-all duration-200 ${
+                uploadProgress > 0 ? "" : "w-2/3 animate-pulse"
+              }`}
+              style={uploadProgress > 0 ? { width: `${uploadProgress}%` } : undefined}
+            />
           </div>
           <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-600 dark:text-slate-400 pt-0.5">
             <div className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-              <span>1. Kiểm tra định dạng &amp; tải lên</span>
+              <span>1. Tải lên</span>
             </div>
             <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300">
               <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
               <span>
                 {uploadTypeLabel === "VIDEO_HLS"
-                  ? "2. Phân mảnh HLS Adaptive Stream"
-                  : "2. Đồng bộ kho học liệu số"}
+                  ? "2. Mã hóa HLS"
+                  : "2. Lưu trữ"}
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
               <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-700" />
-              <span>3. Gắn vào bài giảng &amp; kiểm duyệt</span>
+              <span>3. Hoàn tất</span>
             </div>
           </div>
         </div>
@@ -428,21 +439,16 @@ export default function TeacherClassDetailPage() {
       {activeSubTab === "lessons" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-                <BookOpen className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
-                Khung Chương Trình & Tài Liệu Bài Giảng
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Các bài giảng chính thống kèm giáo án số, video bài giảng HLS và tài liệu PDF (Hỗ trợ Kéo &amp; Thả trực tiếp)
-              </p>
-            </div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+              <BookOpen className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
+              Bài giảng &amp; Tài liệu
+            </h2>
             <button
               onClick={() => setShowLessonModal(true)}
               className="inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-600 transition cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              <span>Tạo Bài Giảng Mới</span>
+              <span>Tạo bài giảng</span>
             </button>
           </div>
 
@@ -450,7 +456,7 @@ export default function TeacherClassDetailPage() {
           {lessonsLoading && (
             <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-12 text-slate-400">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
-              <p className="text-xs">Đang tải danh mục bài giảng của lớp...</p>
+              <p className="text-xs">Đang tải...</p>
             </div>
           )}
 
@@ -464,7 +470,7 @@ export default function TeacherClassDetailPage() {
                   onClick={loadLessons}
                   className="mt-2 text-blue-700 dark:text-blue-400 underline hover:text-blue-600"
                 >
-                  Thử tải lại
+                  Thử lại
                 </button>
               </div>
             </div>
@@ -476,16 +482,13 @@ export default function TeacherClassDetailPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-[#162033] text-slate-400 mb-3">
                 <BookOpen className="h-6 w-6" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Chưa có bài giảng nào</h3>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-                Lớp học này chưa có khung bài giảng. Hãy nhấn "Tạo Bài Giảng Mới" để thiết lập nội dung và tải lên tài liệu học tập.
-              </p>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Chưa có bài giảng</h3>
               <button
                 onClick={() => setShowLessonModal(true)}
-                className="mt-4 inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition"
+                className="mt-3 inline-flex items-center space-x-2 rounded-xl bg-blue-800 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 transition"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Soạn bài học đầu tiên</span>
+                <span>Tạo bài giảng</span>
               </button>
             </div>
           )}
@@ -518,9 +521,13 @@ export default function TeacherClassDetailPage() {
                           #{lesson.orderIndex || idx + 1}
                         </span>
                         <div>
-                          <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/teacher/classrooms/${classId}/lessons/${lesson.id}`)}
+                            className="text-left font-bold text-slate-900 dark:text-white hover:text-blue-700 dark:hover:text-blue-400 text-sm sm:text-base transition cursor-pointer"
+                          >
                             {lesson.title}
-                          </h3>
+                          </button>
                           {lesson.objectives && (
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
                               {lesson.objectives}
@@ -531,30 +538,90 @@ export default function TeacherClassDetailPage() {
 
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         {lesson.hasVideo ? (
-                          <span className="flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                          <span
+                            className={`flex items-center rounded-lg px-2.5 py-1 font-bold border ${
+                              lesson.videoStatus === "APPROVED"
+                                ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                                : lesson.videoStatus === "REJECTED"
+                                  ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
+                                  : lesson.videoStatus === "PROCESSING" || lesson.videoStatus === "DRAFT"
+                                    ? "bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/20"
+                                    : lesson.videoStatus === "PENDING_REVIEW" || lesson.videoStatus === "READY"
+                                      ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
+                                      : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                            }`}
+                          >
                             <Video className="h-3.5 w-3.5 mr-1.5" />
-                            Đã có Video HLS
+                            {lesson.videoStatus === "APPROVED"
+                              ? "Video đã duyệt"
+                              : lesson.videoStatus === "REJECTED"
+                                ? "Video bị từ chối"
+                                : lesson.videoStatus === "PROCESSING" || lesson.videoStatus === "DRAFT"
+                                  ? "Đang xử lý HLS"
+                                  : lesson.videoStatus === "PENDING_REVIEW" || lesson.videoStatus === "READY"
+                                    ? "Video chờ duyệt"
+                                    : "Có Video HLS"}
                           </span>
                         ) : (
                           <span className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-slate-500 dark:text-slate-400 font-medium">
-                            Chưa có Video
+                            Chưa có video
                           </span>
                         )}
 
-                        <span className="flex items-center rounded-lg bg-blue-50 dark:bg-blue-600/10 px-2.5 py-1 font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/20">
+                        <span className="flex items-center rounded-lg bg-blue-50 dark:bg-blue-600/10 px-2.5 py-1 font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/20 tabular-nums">
                           <FileText className="h-3.5 w-3.5 mr-1.5" />
                           {lesson.documentsCount || 0} tài liệu
                         </span>
 
+                        {typeof lesson.vocabulariesCount === "number" && (
+                          <span className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                            <BookA className="h-3.5 w-3.5 mr-1 text-blue-700 dark:text-blue-400" />
+                            {lesson.vocabulariesCount} từ vựng
+                          </span>
+                        )}
+
+                        {typeof lesson.grammarTopicsCount === "number" && (
+                          <span className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                            <BookOpenCheck className="h-3.5 w-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+                            {lesson.grammarTopicsCount} ngữ pháp
+                          </span>
+                        )}
+
+                        {lesson.hasVideo && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/teacher/classrooms/${classId}/lessons/${lesson.id}`)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-700 dark:text-emerald-300 transition cursor-pointer"
+                          >
+                            <PlayCircle className="h-3.5 w-3.5" />
+                            <span>Xem video</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/teacher/classrooms/${classId}/lessons/${lesson.id}`)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-800 hover:bg-blue-700 px-3 py-1 font-semibold text-white shadow-xs transition cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Xem &amp; Chỉnh sửa</span>
+                        </button>
+
                         <button
                           onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
-                          title="Xóa bài học này"
+                          title="Xóa bài giảng"
                           className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition ml-1 cursor-pointer"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
+
+                    {lesson.videoStatus === "REJECTED" && lesson.videoRejectionReason && (
+                      <div className="rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/20 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+                        <strong>Video bị từ chối:</strong> {lesson.videoRejectionReason}
+                      </div>
+                    )}
 
                     {/* Interactive Drag & Drop Upload Zones for Document & HLS Video */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
@@ -574,15 +641,15 @@ export default function TeacherClassDetailPage() {
                           </div>
                           <div>
                             <div className="text-xs font-bold text-slate-900 dark:text-white">
-                              Tải Lên Tài Liệu (PDF / Word / Slide)
+                              Tải tài liệu
                             </div>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                              Kéo thả file hoặc bấm để chọn từ máy tính
+                              Kéo thả PDF, Word, Slide
                             </div>
                           </div>
                         </div>
                         <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-600/30">
-                          Chọn File
+                          Chọn file
                         </span>
                       </button>
 
@@ -602,15 +669,15 @@ export default function TeacherClassDetailPage() {
                           </div>
                           <div>
                             <div className="text-xs font-bold text-slate-900 dark:text-white">
-                              Upload Video Bài Giảng (HLS Adaptive)
+                              Tải video (HLS)
                             </div>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                              Kéo thả MP4/MOV • Tự động băm luồng HLS
+                              MP4, MOV • Mã hóa HLS
                             </div>
                           </div>
                         </div>
                         <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-md bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">
-                          Upload HLS
+                          Chọn video
                         </span>
                       </button>
                     </div>
@@ -629,15 +696,10 @@ export default function TeacherClassDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5 space-y-4">
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-5 space-y-4 shadow-sm">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
-                  <Send className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
-                  Phát Thông Báo Mới
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Thông báo sẽ được gửi tức thì đến chuông thông báo cá nhân của toàn bộ học viên lớp.
-                </p>
-              </div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
+                <Send className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
+                Gửi thông báo
+              </h2>
 
               {annFeedback && (
                 <div
@@ -659,11 +721,11 @@ export default function TeacherClassDetailPage() {
               <form onSubmit={handleSendAnnouncement} className="space-y-3">
                 <div>
                   <label className="text-xs text-slate-700 dark:text-slate-300 block mb-1 font-medium">
-                    Tiêu đề thông báo:
+                    Tiêu đề:
                   </label>
                   <input
                     type="text"
-                    placeholder="Ví dụ: Lịch nộp bài kiểm tra Speaking Tuần 3"
+                    placeholder="Nhập tiêu đề..."
                     value={annTitle}
                     onChange={(e) => setAnnTitle(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600 transition"
@@ -672,11 +734,11 @@ export default function TeacherClassDetailPage() {
                 </div>
                 <div>
                   <label className="text-xs text-slate-700 dark:text-slate-300 block mb-1 font-medium">
-                    Nội dung thông báo:
+                    Nội dung:
                   </label>
                   <textarea
                     rows={4}
-                    placeholder="Nhập chi tiết nội dung cần dặn dò, lưu ý hoặc dời lịch..."
+                    placeholder="Nhập nội dung..."
                     value={annContent}
                     onChange={(e) => setAnnContent(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600 transition"
@@ -691,12 +753,12 @@ export default function TeacherClassDetailPage() {
                   {sendingAnn ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Đang phát thông báo...</span>
+                      <span>Đang gửi...</span>
                     </>
                   ) : (
                     <>
                       <Send className="h-3.5 w-3.5" />
-                      <span>Gửi thông báo tới cả lớp</span>
+                      <span>Gửi thông báo</span>
                     </>
                   )}
                 </button>
@@ -708,7 +770,7 @@ export default function TeacherClassDetailPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
                 <Bell className="h-4 w-4 mr-2 text-blue-700 dark:text-blue-400" />
-                Lịch Sử Thông Báo ({announcements.length})
+                Thông báo đã gửi ({announcements.length})
               </h2>
               <button
                 onClick={loadAnnouncements}
@@ -721,14 +783,14 @@ export default function TeacherClassDetailPage() {
             {annLoading && (
               <div className="flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-slate-400">
                 <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-                <span className="text-xs">Đang tải lịch sử thông báo...</span>
+                <span className="text-xs">Đang tải...</span>
               </div>
             )}
 
             {!annLoading && announcements.length === 0 && (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-10 text-center">
                 <Inbox className="h-8 w-8 text-slate-400 mb-2" />
-                <p className="text-xs text-slate-500 dark:text-slate-400">Chưa có thông báo nào được phát trong lớp này.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Chưa có thông báo.</p>
               </div>
             )}
 
@@ -766,7 +828,7 @@ export default function TeacherClassDetailPage() {
       {showLessonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111827] p-6 shadow-elevated space-y-4">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">Soạn Bài Giảng Mới</h2>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Tạo bài giảng</h2>
             <form onSubmit={handleCreateLesson} className="space-y-3.5 text-xs">
               <div>
                 <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
@@ -774,7 +836,7 @@ export default function TeacherClassDetailPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Ví dụ: Unit 3: Conditionals & Mixed Sentences"
+                  placeholder="VD: Unit 3: Conditionals"
                   value={lessonTitle}
                   onChange={(e) => setLessonTitle(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600"
@@ -784,11 +846,11 @@ export default function TeacherClassDetailPage() {
 
               <div>
                 <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
-                  Mục tiêu bài giảng (Objectives):
+                  Mục tiêu:
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="Mô tả kỹ năng, từ vựng hoặc điểm ngữ pháp trọng tâm..."
+                  placeholder="Kỹ năng, từ vựng, ngữ pháp..."
                   value={lessonObjectives}
                   onChange={(e) => setLessonObjectives(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0b1120] p-2.5 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-600"
@@ -814,7 +876,7 @@ export default function TeacherClassDetailPage() {
                       <span>Đang lưu...</span>
                     </>
                   ) : (
-                    <span>Lưu Bài Giảng</span>
+                    <span>Lưu</span>
                   )}
                 </button>
               </div>
