@@ -1380,5 +1380,30 @@ describe("Teacher Module - Components, Modals & Pages", () => {
       });
       expect(screen.getByDisplayValue("goes")).toBeInTheDocument();
     });
+
+    it("Writing essay mode defaults count to 1 and restricts Số đề options to [1, 2, 3, 5]", async () => {
+      render(
+        <CreateAssignmentModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classId="c-1"
+          initialSkillType="WRITING"
+        />,
+      );
+
+      // Chuyển CEFR sang C1 và chọn Discursive Academic Essay
+      fireEvent.click(screen.getByRole("button", { name: /^C1$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Discursive Academic Essay/i }));
+
+      const countLabel = screen.getByText(/Số đề:/i);
+      const countSelect = countLabel.parentElement?.querySelector("select") as HTMLSelectElement;
+      expect(countSelect).toBeTruthy();
+      expect(countSelect.value).toBe("1");
+
+      const optionValues = Array.from(countSelect.options).map((opt) => opt.value);
+      expect(optionValues).toEqual(["1", "2", "3", "5"]);
+      expect(optionValues).not.toContain("10");
+      expect(optionValues).not.toContain("15");
+    });
   });
 });

@@ -41,6 +41,12 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
   scheduledDate,
   setScheduledDate,
 }) => {
+  const isEssayWritingFormat =
+    assignmentType === "WRITING" &&
+    !["WORD_ARRANGEMENT", "UNSCRAMBLE", "WORD_ORDER", "KEYWORD", "SENTENCE"].some((kw) =>
+      (selectedSubFormat || "").toUpperCase().includes(kw)
+    );
+
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -77,17 +83,28 @@ export const AiExerciseGeneratorPanel: React.FC<AiExerciseGeneratorPanelProps> =
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1">
-            Số câu:
+            {isEssayWritingFormat ? "Số đề:" : "Số câu:"}
           </label>
           <select
             value={aiQuestionCount}
             onChange={(e) => setAiQuestionCount(Number(e.target.value))}
             className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-600"
           >
-            <option value={3}>3 câu</option>
-            <option value={5}>5 câu</option>
-            <option value={10}>10 câu</option>
-            <option value={15}>15 câu</option>
+            {isEssayWritingFormat ? (
+              <>
+                <option value={1}>1 đề (Khuyên dùng)</option>
+                <option value={2}>2 đề</option>
+                <option value={3}>3 đề</option>
+                <option value={5}>5 đề</option>
+              </>
+            ) : (
+              <>
+                <option value={3}>3 câu</option>
+                <option value={5}>5 câu</option>
+                <option value={10}>10 câu</option>
+                <option value={15}>15 câu</option>
+              </>
+            )}
           </select>
         </div>
       </div>

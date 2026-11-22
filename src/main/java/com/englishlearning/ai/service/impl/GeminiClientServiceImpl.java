@@ -22,7 +22,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -55,6 +57,17 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         return generateWithSystemInstruction(systemInstruction, userPrompt, temperature, null, null);
     }
 
+    private Map<String, Object> buildGenerationConfig(double temperature, int maxOutputTokens) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("temperature", Math.max(0.0, Math.min(1.5, temperature)));
+        config.put("response_mime_type", "application/json");
+        config.put("maxOutputTokens", maxOutputTokens);
+        if (geminiModel != null && geminiModel.toLowerCase(Locale.ROOT).contains("gemini-2.5")) {
+            config.put("thinkingConfig", Map.of("thinkingBudget", 0));
+        }
+        return config;
+    }
+
     @Override
     public String generateWithSystemInstruction(String systemInstruction, String userPrompt, double temperature,
             UUID explicitUserId, Boolean explicitIsTeacher) {
@@ -75,10 +88,7 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         Map<String, Object> body = Map.of(
                 "systemInstruction", sysInstructionMap,
                 "contents", List.of(userContentMap),
-                "generationConfig", Map.of(
-                        "temperature", Math.max(0.0, Math.min(1.5, temperature)),
-                        "response_mime_type", "application/json",
-                        "maxOutputTokens", 8192));
+                "generationConfig", buildGenerationConfig(temperature, 16384));
 
         int promptLength = (systemInstruction != null ? systemInstruction.length() : 0)
                 + (userPrompt != null ? userPrompt.length() : 0);
@@ -110,10 +120,7 @@ public class GeminiClientServiceImpl implements GeminiClientService {
         Map<String, Object> body = Map.of(
                 "systemInstruction", sysInstructionMap,
                 "contents", List.of(userContentMap),
-                "generationConfig", Map.of(
-                        "temperature", 0.1,
-                        "response_mime_type", "application/json",
-                        "maxOutputTokens", 8192));
+                "generationConfig", buildGenerationConfig(0.1, 8192));
 
         int promptLength = safeSystem.length()
                 + safeUser.length()
@@ -133,7 +140,19 @@ public class GeminiClientServiceImpl implements GeminiClientService {
             if (!parts.isArray() || parts.isEmpty()) {
                 throw new IllegalStateException("Gemini API không trả về nội dung candidates/parts hợp lệ.");
             }
-            String text = parts.get(0).path("text").asText();
+            String text = null;
+            for (JsonNode part : parts) {
+                if (!part.path("thought").asBoolean(false)) {
+                    String candidateText = part.path("text").asText("");
+                    if (!candidateText.isBlank()) {
+                        text = candidateText;
+                        break;
+                    }
+                }
+            }
+            if (text == null) {
+                text = parts.get(0).path("text").asText("");
+            }
 
             // Bóc tách usageMetadata từ Gemini
             JsonNode usage = root.path("usageMetadata");

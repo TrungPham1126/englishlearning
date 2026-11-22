@@ -18,11 +18,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,6 +33,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class GroqClientServiceImpl implements GroqClientService {
+
+    private static final String GROQ_FALLBACK_CHAT_MODEL = "llama-3.3-70b-versatile";
 
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
@@ -138,6 +143,30 @@ public class GroqClientServiceImpl implements GroqClientService {
         return chatCompletionJson(systemInstruction, userPrompt, temperature, null, null);
     }
 
+    private Map<String, Object> buildChatRequestBody(
+            String model,
+            String systemInstruction,
+            String userPrompt,
+            double safeTemp,
+            boolean useJsonObjectFormat) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("messages", List.of(
+                Map.of("role", "system", "content", systemInstruction != null ? systemInstruction : ""),
+                Map.of("role", "user", "content", userPrompt != null ? userPrompt : "")));
+        body.put("temperature", safeTemp);
+        if (model != null && model.toLowerCase(Locale.ROOT).contains("gpt-oss")) {
+            body.put("max_completion_tokens", 16384);
+            body.put("reasoning_effort", "low");
+        } else {
+            body.put("max_tokens", 8192);
+        }
+        if (useJsonObjectFormat) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+        return body;
+    }
+
     /**
      * Gọi Groq LLaMA 3.3 70B với thông tin định danh người gọi cụ thể
      */
@@ -154,20 +183,36 @@ public class GroqClientServiceImpl implements GroqClientService {
             headers.setBearerAuth(appProperties.getGroq().getApiKey());
 
             double safeTemp = Math.max(0.0, Math.min(1.5, temperature));
-            Map<String, Object> body = Map.of(
-                    "model", appProperties.getGroq().getChatModel(),
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemInstruction),
-                            Map.of("role", "user", "content", userPrompt)),
-                    "temperature", safeTemp,
-                    "max_tokens", 8192,
-                    "response_format", Map.of("type", "json_object"));
-
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
-            ResponseEntity<String> response = restTemplate.postForEntity(
-                    appProperties.getGroq().getChatUrl(),
-                    requestEntity,
-                    String.class);
+            String primaryModel = appProperties.getGroq().getChatModel();
+            ResponseEntity<String> response;
+            try {
+                Map<String, Object> body = buildChatRequestBody(
+                        primaryModel, systemInstruction, userPrompt, safeTemp, true);
+                response = restTemplate.postForEntity(
+                        appProperties.getGroq().getChatUrl(),
+                        new HttpEntity<>(body, headers),
+                        String.class);
+            } catch (HttpStatusCodeException httpEx) {
+                String respBody = httpEx.getResponseBodyAsString();
+                boolean isJsonValidateFailed = respBody != null
+                        && respBody.toLowerCase(Locale.ROOT).contains("json_validate_failed");
+                String fallbackModel = GROQ_FALLBACK_CHAT_MODEL.equalsIgnoreCase(primaryModel)
+                        ? primaryModel
+                        : GROQ_FALLBACK_CHAT_MODEL;
+                boolean retryUseJsonFormat = !isJsonValidateFailed;
+                log.warn("Groq model {} trả về HTTP {} ({}). Thử fallback sang model {} (json_format={})...",
+                        primaryModel,
+                        httpEx.getStatusCode(),
+                        isJsonValidateFailed ? "json_validate_failed" : httpEx.getMessage(),
+                        fallbackModel,
+                        retryUseJsonFormat);
+                Map<String, Object> fallbackBody = buildChatRequestBody(
+                        fallbackModel, systemInstruction, userPrompt, safeTemp, retryUseJsonFormat);
+                response = restTemplate.postForEntity(
+                        appProperties.getGroq().getChatUrl(),
+                        new HttpEntity<>(fallbackBody, headers),
+                        String.class);
+            }
 
             JsonNode root = objectMapper.readTree(response.getBody());
             JsonNode choices = root.path("choices");

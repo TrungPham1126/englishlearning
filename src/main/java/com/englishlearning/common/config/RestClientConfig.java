@@ -14,7 +14,7 @@ public class RestClientConfig {
     public RestTemplate restTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000); // 10 giây kết nối
-        factory.setReadTimeout(60000);    // 60 giây đọc phản hồi
+        factory.setReadTimeout(40000);    // 40 giây đọc phản hồi để chuỗi fallback không chạm timeout 120s của frontend
         return new RestTemplate(factory);
     }
 }

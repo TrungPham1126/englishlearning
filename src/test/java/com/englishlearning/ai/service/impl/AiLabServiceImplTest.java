@@ -2073,4 +2073,151 @@ class AiLabServiceImplTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Đánh giá Reading câu trả lời ngắn thất bại");
     }
+
+    @Test
+    @DisplayName("generateQuizFromContent: Groq HTTP 200 nhưng JSON thiếu questions/pairs -> tự động fallback sang Gemini")
+    void generateQuizFromContent_fallsBackToGeminiWhenGroqReturnsUnusableJson() {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.mockito.Mockito.lenient()
+                .when(aiGeneratedExerciseRepository.save(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        String unusableGroq = "{\"note\":\"no questions generated\"}";
+        String validGemini = "{\"questions\":[{\"id\":\"1\",\"question\":\"Fallback question?\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":\"A\",\"explanation\":\"Ok\"}]}";
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenReturn(unusableGroq);
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenReturn(unusableGroq);
+
+        org.mockito.Mockito.lenient()
+                .when(geminiClientService.generateWithSystemInstruction(anyString(), anyString(), anyDouble()))
+                .thenReturn(validGemini);
+        org.mockito.Mockito.lenient()
+                .when(geminiClientService.generateWithSystemInstruction(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenReturn(validGemini);
+
+        com.englishlearning.ai.entity.AiGeneratedExercise result = service.generateQuizFromContent(
+                "Renewable Energy", "B2", 1, teacherId, null, "GRAMMAR_MCQ", "GRAMMAR");
+
+        assertThat(result.getRawResponseJson()).contains("Fallback question?");
+    }
+
+    @Test
+    @DisplayName("extractAndNormalizeQuizJson: phục hồi JSON có text thừa, key alias 'exercises' và mảng bị cắt cụt")
+    void extractAndNormalizeQuizJson_recoversWrapperAliasesAndTruncatedArrays() throws Exception {
+        String withAliasAndProse = "Here is your quiz:\n```json\n{\"exercises\":[{\"id\":\"1\",\"question\":\"Q1\"}]}\n```\nHope this helps!";
+        String normalizedAlias = service.extractAndNormalizeQuizJson(withAliasAndProse);
+        assertThat(normalizedAlias).isNotNull();
+        JsonNode aliasRoot = new ObjectMapper().readTree(normalizedAlias);
+        assertThat(aliasRoot.path("questions").size()).isEqualTo(1);
+        assertThat(aliasRoot.path("questions").get(0).path("question").asText()).isEqualTo("Q1");
+
+        String truncated = "{\"readingPassage\":\"Climate passage.\",\"questions\":[{\"id\":\"1\",\"question\":\"Complete item\"},{\"id\":\"2\",\"question\":\"Cut off halfw";
+        String salvaged = service.extractAndNormalizeQuizJson(truncated);
+        assertThat(salvaged).isNotNull();
+        JsonNode salvagedRoot = new ObjectMapper().readTree(salvaged);
+        assertThat(salvagedRoot.path("readingPassage").asText()).isEqualTo("Climate passage.");
+        assertThat(salvagedRoot.path("questions").size()).isEqualTo(1);
+        assertThat(salvagedRoot.path("questions").get(0).path("question").asText()).isEqualTo("Complete item");
+
+        assertThat(service.extractAndNormalizeQuizJson("{\"questions\":[]}")).isNull();
+    }
+
+    @Test
+    @DisplayName("generateQuizFromContent: WRITING_DISCURSIVE_ESSAY count=5 dùng hướng dẫn súc tích để tránh timeout")
+    void generateQuizFromContent_writingDiscursiveEssayCount5_usesConcisePromptAndSucceeds() {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.mockito.Mockito.lenient()
+                .when(aiGeneratedExerciseRepository.save(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        java.util.concurrent.atomic.AtomicReference<String> capturedUserPrompt = new java.util.concurrent.atomic.AtomicReference<>();
+        String fivePromptsJson = "{\"questions\":["
+                + "{\"id\":\"1\",\"prompt\":\"Discuss urban transport.\",\"correctAnswer\":\"Intro & stance\",\"explanation\":\"Topic + outline\"},"
+                + "{\"id\":\"2\",\"prompt\":\"Discuss remote work.\",\"correctAnswer\":\"Intro & stance\",\"explanation\":\"Topic + outline\"},"
+                + "{\"id\":\"3\",\"prompt\":\"Discuss AI regulation.\",\"correctAnswer\":\"Intro & stance\",\"explanation\":\"Topic + outline\"},"
+                + "{\"id\":\"4\",\"prompt\":\"Discuss green tax.\",\"correctAnswer\":\"Intro & stance\",\"explanation\":\"Topic + outline\"},"
+                + "{\"id\":\"5\",\"prompt\":\"Discuss aging population.\",\"correctAnswer\":\"Intro & stance\",\"explanation\":\"Topic + outline\"}"
+                + "]}";
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenAnswer(inv -> {
+                    capturedUserPrompt.set(inv.getArgument(1));
+                    return fivePromptsJson;
+                });
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenAnswer(inv -> {
+                    capturedUserPrompt.set(inv.getArgument(1));
+                    return fivePromptsJson;
+                });
+
+        com.englishlearning.ai.entity.AiGeneratedExercise result = service.generateQuizFromContent(
+                "Technology and Society", "C1", 5, teacherId, null, "WRITING_DISCURSIVE_ESSAY", "WRITING");
+
+        assertThat(result.getRawResponseJson()).contains("Discuss urban transport.");
+        assertThat(capturedUserPrompt.get()).isNotNull();
+        assertThat(capturedUserPrompt.get()).contains("5");
+    }
+
+    @Test
+    @DisplayName("generateQuizFromContent: ResponseStatusException 429 được ném thẳng ra ngoài, không fallback sang Gemini")
+    void generateQuizFromContent_propagates429ResponseStatusExceptionWithoutGeminiFallback() {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.springframework.web.server.ResponseStatusException rateLimitEx =
+                new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                        "Bạn đã vượt quá giới hạn tạo bài tập AI (tối đa 5 lần/phút). Vui lòng thử lại sau.");
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenThrow(rateLimitEx);
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenThrow(rateLimitEx);
+
+        assertThatThrownBy(() -> service.generateQuizFromContent(
+                "Topic", "B2", 3, teacherId, null, "GRAMMAR_MCQ", "GRAMMAR"))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("tối đa 5 lần/phút");
+
+        org.mockito.Mockito.verifyNoInteractions(geminiClientService);
+    }
+
+    @Test
+    @DisplayName("generateQuizFromContent: SPEAKING_SHADOWING ngắt mạch Kokoro TTS ngay sau lỗi đầu tiên")
+    void generateQuizFromContent_speakingShadowingCircuitBreaksKokoroTtsOnFirstFailure() {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.mockito.Mockito.lenient()
+                .when(aiGeneratedExerciseRepository.save(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        String shadowingJson = "{\"questions\":["
+                + "{\"id\":\"1\",\"prompt\":\"First sentence to shadow.\",\"correctAnswer\":\"First sentence to shadow.\"},"
+                + "{\"id\":\"2\",\"prompt\":\"Second sentence to shadow.\",\"correctAnswer\":\"Second sentence to shadow.\"},"
+                + "{\"id\":\"3\",\"prompt\":\"Third sentence to shadow.\",\"correctAnswer\":\"Third sentence to shadow.\"}"
+                + "]}";
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenReturn(shadowingJson);
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenReturn(shadowingJson);
+
+        org.mockito.Mockito.lenient()
+                .when(exerciseAudioService.synthesizeRawScriptToUrl(anyString(), anyString(), anyDouble()))
+                .thenThrow(new RuntimeException("Kokoro TTS unavailable"));
+
+        com.englishlearning.ai.entity.AiGeneratedExercise result = service.generateQuizFromContent(
+                "Travel", "B1", 3, teacherId, null, "SPEAKING_SHADOWING", "SPEAKING");
+
+        assertThat(result.getRawResponseJson()).contains("First sentence to shadow.");
+        org.mockito.Mockito.verify(exerciseAudioService, org.mockito.Mockito.times(1))
+                .synthesizeRawScriptToUrl(anyString(), anyString(), anyDouble());
+    }
 }

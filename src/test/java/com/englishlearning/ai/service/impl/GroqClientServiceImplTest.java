@@ -204,4 +204,39 @@ class GroqClientServiceImplTest {
         verify(aiMonitoringService).checkRateLimitAndQuota(adminId, true);
         verify(aiMonitoringService).recordTokenUsage(eq(adminId), eq("TEACHER"), anyLong(), anyLong(), eq("GROQ"));
     }
+
+    @Test
+    @DisplayName("openai/gpt-oss gửi reasoning_effort=low, max_completion_tokens=16384 và fallback sang llama-3.3 khi gặp 400 json_validate_failed")
+    @SuppressWarnings("unchecked")
+    void chatCompletionJson_configuresGptOssAndFallsBackOnJsonValidateFailed() {
+        UUID teacherId = UUID.randomUUID();
+        byte[] errBody = "{\"error\":{\"code\":\"json_validate_failed\"}}"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        org.springframework.web.client.HttpClientErrorException badReq =
+                new org.springframework.web.client.HttpClientErrorException(
+                        HttpStatus.BAD_REQUEST, "Bad Request", errBody, java.nio.charset.StandardCharsets.UTF_8);
+
+        when(restTemplate.postForEntity(eq("https://api.groq.com/chat"), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(badReq)
+                .thenReturn(ResponseEntity.ok("{\"choices\":[{\"message\":{\"content\":\"```json\\n{\\\"questions\\\":[{\\\"prompt\\\":\\\"OK\\\"}]}\\n```\"}}]}"));
+
+        String res = service.chatCompletionJson("Sys", "Prompt", 0.3, teacherId, true);
+
+        assertThat(res).isEqualTo("{\"questions\":[{\"prompt\":\"OK\"}]}");
+        verify(aiMonitoringService, times(1)).checkRateLimitAndQuota(teacherId, true);
+
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate, times(2)).postForEntity(eq("https://api.groq.com/chat"), captor.capture(), eq(String.class));
+
+        Map<String, Object> firstBody = captor.getAllValues().get(0).getBody();
+        assertThat(firstBody.get("model")).isEqualTo("openai/gpt-oss-120b");
+        assertThat(firstBody.get("reasoning_effort")).isEqualTo("low");
+        assertThat(firstBody.get("max_completion_tokens")).isEqualTo(16384);
+        assertThat(firstBody).containsKey("response_format");
+
+        Map<String, Object> secondBody = captor.getAllValues().get(1).getBody();
+        assertThat(secondBody.get("model")).isEqualTo("llama-3.3-70b-versatile");
+        assertThat(secondBody.get("max_tokens")).isEqualTo(8192);
+        assertThat(secondBody).doesNotContainKey("response_format");
+    }
 }

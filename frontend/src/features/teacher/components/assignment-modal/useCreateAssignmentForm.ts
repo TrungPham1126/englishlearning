@@ -338,6 +338,26 @@ export function useCreateAssignmentForm({
     }
   }, [isOpen, mode, initialData, initialDate, initialSkillType, initialPlanId]);
 
+  const prevAssignmentTypeRef = useRef<string>(assignmentType);
+  useEffect(() => {
+    const prevSkill = prevAssignmentTypeRef.current;
+    if (prevSkill === assignmentType) return;
+    prevAssignmentTypeRef.current = assignmentType;
+    if (mode === "EDIT") return;
+
+    if (assignmentType === "WRITING") {
+      const upperFmt = String(selectedSubFormat || "").toUpperCase();
+      const isEssayFmt = !["WORD_ARRANGEMENT", "UNSCRAMBLE", "WORD_ORDER", "KEYWORD", "SENTENCE"].some((kw) =>
+        upperFmt.includes(kw)
+      );
+      if (isEssayFmt) {
+        setAiQuestionCount(1);
+      }
+    } else if (aiQuestionCount < 3) {
+      setAiQuestionCount(5);
+    }
+  }, [assignmentType, mode, selectedSubFormat, aiQuestionCount]);
+
   useEffect(() => {
     if (mode === "EDIT") return;
     const subs = SUB_PARTS_CONFIG[assignmentType] || [];
@@ -381,6 +401,15 @@ export function useCreateAssignmentForm({
       if (code === "WRITING_IELTS_TASK1") setWritingTaskType("TASK_1");
       if (code === "WRITING_IELTS_TASK2" || code === "WRITING_DISCURSIVE_ESSAY") {
         setWritingTaskType("TASK_2");
+      }
+      const upperCode = code.toUpperCase();
+      const isEssayWriting = !["WORD_ARRANGEMENT", "UNSCRAMBLE", "WORD_ORDER", "KEYWORD", "SENTENCE"].some((kw) =>
+        upperCode.includes(kw)
+      );
+      if (isEssayWriting && aiQuestionCount > 5) {
+        setAiQuestionCount(1);
+      } else if (!isEssayWriting && aiQuestionCount < 3) {
+        setAiQuestionCount(5);
       }
     }
     updateTopicSuggestion(assignmentType, lvl, code);
@@ -855,11 +884,18 @@ export function useCreateAssignmentForm({
       setStep(2);
     } catch (err: any) {
       console.error("AI Generation error:", err);
-      const errMsg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Lỗi gọi AI tạo bài tập.";
+      const isTimeoutError =
+        err?.code === "ECONNABORTED" ||
+        String(err?.message || "").toLowerCase().includes("timeout");
+      const errMsg = isTimeoutError
+        ? "Quá thời gian chờ phản hồi từ AI (timeout). Vui lòng thử lại hoặc giảm số câu/đề."
+        : err?.response?.status === 429
+        ? err?.response?.data?.message ||
+          "Bạn thao tác AI quá nhanh hoặc đã hết hạn mức. Vui lòng đợi 1 phút rồi thử lại."
+        : err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Lỗi gọi AI tạo bài tập.";
       setAiError(errMsg);
       alert(`Lỗi AI:\n${errMsg}`);
     } finally {

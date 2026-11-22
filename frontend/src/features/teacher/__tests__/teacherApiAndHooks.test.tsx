@@ -1339,5 +1339,57 @@ describe("Teacher Module - teacherApi & Custom Hooks", () => {
         window.removeEventListener("teacher-task-toast", onToast);
       }
     });
+
+    it("useCreateAssignmentForm switches aiQuestionCount to 1 for WRITING and shows friendly Vietnamese timeout message on ECONNABORTED", async () => {
+      vi.spyOn(teacherApi, "getGlobalResources").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      vi.spyOn(teacherApi, "getDailyPlans").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      vi.spyOn(teacherApi, "generateAiQuiz").mockRejectedValue({
+        code: "ECONNABORTED",
+        message: "timeout of 120000ms exceeded",
+      });
+
+      const { result } = renderHook(() =>
+        useCreateAssignmentForm({
+          isOpen: true,
+          mode: "CREATE",
+          classId: "c-1",
+          initialSkillType: "READING",
+          onClose: vi.fn(),
+          onSuccess: vi.fn(),
+        }),
+      );
+
+      expect(result.current.aiQuestionCount).toBe(5);
+
+      act(() => {
+        result.current.setAssignmentType("WRITING");
+      });
+      await waitFor(() => {
+        expect(result.current.aiQuestionCount).toBe(1);
+      });
+
+      act(() => {
+        result.current.setAssignmentType("READING");
+      });
+      await waitFor(() => {
+        expect(result.current.aiQuestionCount).toBe(5);
+      });
+
+      act(() => {
+        result.current.setAiTopic("Climate Change and Renewable Policy");
+      });
+
+      await act(async () => {
+        await result.current.handleGenerateAiQuestions();
+      });
+
+      expect(result.current.aiError).toBe(
+        "Quá thời gian chờ phản hồi từ AI (timeout). Vui lòng thử lại hoặc giảm số câu/đề.",
+      );
+    });
   });
 });

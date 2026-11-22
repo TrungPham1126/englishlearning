@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
@@ -79,6 +80,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleQuotaExceeded(QuotaExceededException ex,
             HttpServletRequest request) {
         return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex,
+            HttpServletRequest request) {
+        HttpStatus resolved = HttpStatus.resolve(ex.getStatusCode().value());
+        HttpStatus status = resolved != null ? resolved : HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = (ex.getReason() != null && !ex.getReason().isBlank()) ? ex.getReason() : ex.getMessage();
+        return buildErrorResponse(status, message, request.getRequestURI(), null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -207,4 +207,33 @@ class GeminiClientServiceImplTest {
         assertThat(genCfg2.get("temperature")).isEqualTo(1.5);
         verify(aiMonitoringService, times(2)).recordTokenUsage(isNull(), eq("STUDENT"), anyLong(), anyLong(), eq("GEMINI"));
     }
+
+    @Test
+    @DisplayName("gemini-2.5 tắt thinkingBudget=0, đặt maxOutputTokens=16384 và bỏ qua part có thought=true")
+    @SuppressWarnings("unchecked")
+    void generateWithSystemInstruction_disablesThinkingBudgetAndSkipsThoughtParts() {
+        UUID teacherId = UUID.randomUUID();
+        String thoughtPlusJsonResponse = """
+                {
+                  "candidates": [{
+                    "content": {
+                      "parts": [
+                        { "thought": true, "text": "Let me think step by step..." },
+                        { "text": "```json\\n{\\"questions\\":[{\\"prompt\\":\\"Final JSON\\"}]}\\n```" }
+                      ]
+                    }
+                  }]
+                }
+                """;
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        when(restTemplate.postForEntity(anyString(), captor.capture(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok(thoughtPlusJsonResponse));
+
+        String result = service.generateWithSystemInstruction("Sys", "Prompt", 0.3, teacherId, true);
+
+        assertThat(result).isEqualTo("{\"questions\":[{\"prompt\":\"Final JSON\"}]}");
+        Map<String, Object> genCfg = (Map<String, Object>) captor.getValue().getBody().get("generationConfig");
+        assertThat(genCfg.get("maxOutputTokens")).isEqualTo(16384);
+        assertThat((Map<String, Object>) genCfg.get("thinkingConfig")).containsEntry("thinkingBudget", 0);
+    }
 }

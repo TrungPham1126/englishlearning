@@ -110,6 +110,13 @@ class GlobalExceptionHandlerTest {
             throw new QuotaExceededException("Đã vượt hạn mức sử dụng AI hôm nay");
         }
 
+        @GetMapping("/rate-limited")
+        public void rateLimited() {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                    "Bạn đang thao tác quá nhanh (tối đa 5 lần/phút). Vui lòng đợi giây lát.");
+        }
+
         @GetMapping("/generic")
         public void generic() {
             throw new IllegalStateException("Unexpected internal state error");
@@ -273,5 +280,15 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.status").value(500))
                 .andExpect(jsonPath("$.error").value("Internal Server Error"))
                 .andExpect(jsonPath("$.message").value("Unexpected internal state error"));
+    }
+
+    @Test
+    @DisplayName("ResponseStatusException 429 Too Many Requests giữ nguyên status và message rate limit")
+    void handleResponseStatusException_returns429RateLimit() throws Exception {
+        mockMvc.perform(get("/test/exceptions/rate-limited"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.error").value("Too Many Requests"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("tối đa 5 lần/phút")));
     }
 }

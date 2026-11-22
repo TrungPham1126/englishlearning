@@ -2305,7 +2305,16 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-        int count = questionCount > 0 ? questionCount : 5;
+        int rawCount = questionCount > 0 ? questionCount : 5;
+
+        boolean isEssayWriting = "WRITING".equals(effectiveSkill)
+                && !effectiveType.contains("WORD_ARRANGEMENT")
+                && !effectiveType.contains("UNSCRAMBLE")
+                && !effectiveType.contains("WORD_ORDER")
+                && !effectiveType.contains("KEYWORD")
+                && !effectiveType.contains("SENTENCE");
+
+        int count = Math.min(rawCount, isEssayWriting ? 10 : 20);
 
         String cefr = (targetCefr != null && !targetCefr.isBlank()) ? targetCefr.trim().toUpperCase() : "B2";
 
@@ -4158,6 +4167,12 @@ public class AiLabServiceImpl implements AiLabService {
                         : effectiveType.contains("MAP")
                         ? "Focus strictly on Map Comparison / Floor Plan redevelopment across two time periods."
                         : "Vary across Data Charts (Bar Chart, Line Graph, Pie Chart, Table), Process Diagrams, and Map Comparisons.";
+                String task1ExplanationSpec = (count > 1)
+                        ? "4 concise bullet points in Vietnamese (Introduction, Overview, Body 1, Body 2 + key vocabulary)."
+                        : "Recommended 4-paragraph structure (Introduction, Overview, Body 1, Body 2), key vocabulary (trend/data comparison, process sequencing/passive, or spatial map verbs), and grouping advice in Vietnamese.";
+                String task1AnswerSpec = (count > 1)
+                        ? "Clear Overview + 1 concise Body paragraph highlighting key data/stages (approx 80-110 words)."
+                        : "Band 8.5+ model response with clear Overview and accurate comparisons/stages.";
 
                 systemInstruction = """
 
@@ -4167,9 +4182,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     - "prompt": Full authentic IELTS Academic Task 1 question. Include explicit visual/chart/process/map data points, categories, stages, or spatial layout details plus time periods, and end with: "Summarise the information by selecting and reporting the main features, and make comparisons where relevant. Write at least 150 words."
 
-                    - "explanation": Recommended 4-paragraph structure (Introduction, Overview, Body 1, Body 2), key vocabulary (trend/data comparison, process sequencing/passive, or spatial map verbs), and grouping advice in Vietnamese.
+                    - "explanation": %s
 
-                    - "correctAnswer": Band 8.5+ model response with clear Overview and accurate comparisons/stages.
+                    - "correctAnswer": %s
 
                     - "questionType": "ESSAY".
 
@@ -4181,7 +4196,7 @@ public class AiLabServiceImpl implements AiLabService {
 
                     Return strictly valid JSON with an array 'questions'.
 
-                    """.formatted(count, task1Focus);
+                    """.formatted(count, task1Focus, task1ExplanationSpec, task1AnswerSpec);
 
             } else if (effectiveType.contains("DISCURSIVE") || effectiveType.contains("TASK_2") || effectiveType.contains("TASK2")) {
 
@@ -4190,6 +4205,12 @@ public class AiLabServiceImpl implements AiLabService {
                 String essayStyleDesc = effectiveType.contains("DISCURSIVE")
                         ? "C1 Discursive Academic Essay exploring multi-dimensional societal, scientific, or ethical perspectives using formal academic argumentation"
                         : "authentic IELTS Writing Task 2 essay (Opinion, Discussion Both Views, Advantages/Disadvantages Outweigh, Problem/Solution, or Two-Part Question)";
+                String essayExplanationSpec = (count > 1)
+                        ? "5 concise Vietnamese bullet points: 1. Dạng đề & luận điểm, 2. Ý hai chiều ngắn gọn, 3. Dàn ý 4 đoạn, 4. Collocations C1 tiêu biểu, 5. Tiêu chí chấm (TR, CC, LR, GRA)."
+                        : "5-step scaffolding guide in Vietnamese: 1. Phân tích đề bài & dạng câu hỏi, 2. Brainstorming 2 chiều, 3. Dàn ý 4 đoạn (Intro, Body 1, Body 2, Conclusion), 4. Từ vựng & Collocations học thuật C1, 5. Tiêu chuẩn 4 tiêu chí chấm (TR, CC, LR, GRA).";
+                String essayAnswerSpec = (count > 1)
+                        ? "Clear Thesis Statement + 1 concise Band 8.5+ Body paragraph demonstrating C1 argumentation (approx 90-120 words)."
+                        : "Band 8.5+ model essay with clear thesis statement, nuanced analysis, and well-developed arguments.";
 
                 systemInstruction = """
 
@@ -4199,9 +4220,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     - "prompt": Full authentic academic essay prompt with a controversial statement or multi-dimensional issue, followed by a clear question (e.g. "To what extent do you agree or disagree?", "Discuss both views and give your opinion", or a C1 discursive evaluation prompt). Conclude with: "Give reasons for your answer and include any relevant examples from your own knowledge or experience. Write at least 250 words."
 
-                    - "explanation": 5-step scaffolding guide in Vietnamese: 1. Phân tích đề bài & dạng câu hỏi, 2. Brainstorming 2 chiều, 3. Dàn ý 4 đoạn (Intro, Body 1, Body 2, Conclusion), 4. Từ vựng & Collocations học thuật C1, 5. Tiêu chuẩn 4 tiêu chí chấm (TR, CC, LR, GRA).
+                    - "explanation": %s
 
-                    - "correctAnswer": Band 8.5+ model essay with clear thesis statement, nuanced analysis, and well-developed arguments.
+                    - "correctAnswer": %s
 
                     - "questionType": "ESSAY".
 
@@ -4213,7 +4234,7 @@ public class AiLabServiceImpl implements AiLabService {
 
                     Return strictly valid JSON with an array 'questions'.
 
-                    """.formatted(count, essayStyleDesc);
+                    """.formatted(count, essayStyleDesc, essayExplanationSpec, essayAnswerSpec);
 
             } else if (effectiveType.contains("SHORT_EMAIL") || effectiveType.contains("EMAIL")) {
 
@@ -4222,6 +4243,9 @@ public class AiLabServiceImpl implements AiLabService {
                 int minWords = 40;
 
                 int maxWords = ("B1".equalsIgnoreCase(cefr) || "B2".equalsIgnoreCase(cefr)) ? 100 : 80;
+                String emailExplanationSpec = (count > 1)
+                        ? "3 concise Vietnamese points: 1. Lời chào mở đầu, 2. Trả lời đủ 3 ý gợi ý, 3. Kết thư & mẫu câu hữu ích."
+                        : "Practical email structure guide in Vietnamese: 1. Lời chào mở đầu (Hi/Dear...), 2. Thân bài trả lời đủ 3 ý gợi ý, 3. Kết thư & ký tên (Best regards/See you...), kèm mẫu câu giao tiếp hữu ích.";
 
                 systemInstruction = """
 
@@ -4231,9 +4255,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     - "prompt": Clear communicative context telling the learner who to write to and 3 specific bullet points they must cover (e.g. greeting/reason, details such as time/place/activity, closing question/suggestion). Explicitly end with: "Write an email/message of %d–%d words."
 
-                    - "explanation": Practical email structure guide in Vietnamese: 1. Lời chào mở đầu (Hi/Dear...), 2. Thân bài trả lời đủ 3 ý gợi ý, 3. Kết thư & ký tên (Best regards/See you...), kèm mẫu câu giao tiếp hữu ích.
+                    - "explanation": %s
 
-                    - "correctAnswer": Natural model email (%d–%d words) covering all bullet points at CEFR %s level.
+                    - "correctAnswer": %s
 
                     - "questionType": "ESSAY".
 
@@ -4245,7 +4269,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     Return strictly valid JSON with an array 'questions'.
 
-                    """.formatted(cefr, count, minWords, maxWords, minWords, maxWords, minWords, maxWords, cefr, minWords, maxWords);
+                    """.formatted(cefr, count, minWords, maxWords, minWords, maxWords, emailExplanationSpec,
+                            (count > 1 ? "Concise natural model email" : "Natural model email") + String.format(" (%d–%d words) covering all bullet points at CEFR %s level.", minWords, maxWords, cefr),
+                            minWords, maxWords);
 
             } else {
 
@@ -4268,8 +4294,9 @@ public class AiLabServiceImpl implements AiLabService {
                         : effectiveType.contains("PROBLEM_SOLUTION") ? "Problem & Solution Paragraph (Thực trạng và Giải pháp)"
 
                         : "Guided Academic Paragraph (Viết một đoạn văn hoàn chỉnh theo gợi ý)";
-
-
+                String paragraphExplanationSpec = (count > 1)
+                        ? "Concise cohesion tips in Vietnamese (Topic sentence, 2-3 supporting points, Concluding sentence + key linking words)."
+                        : "Cohesion guidance in Vietnamese: Topic sentence formulation, 2-3 supporting arguments, concluding sentence, and a list of useful linking words (e.g. Firstly, In addition, However, For instance, Therefore, In conclusion).";
 
                 systemInstruction = """
 
@@ -4279,9 +4306,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     - "prompt": A clear, engaging prompt asking the learner to write ONE single cohesive paragraph (%d–%d words). Provide 2-3 guiding questions or bullet points to help structure their ideas (1. Topic sentence, 2. Supporting details & examples, 3. Concluding sentence). Explicitly state: "Viết 01 đoạn văn hoàn chỉnh (%d–%d từ) về chủ đề trên."
 
-                    - "explanation": Cohesion guidance in Vietnamese: Topic sentence formulation, 2-3 supporting arguments, concluding sentence, and a list of useful linking words (e.g. Firstly, In addition, However, For instance, Therefore, In conclusion).
+                    - "explanation": %s
 
-                    - "correctAnswer": High-scoring model single paragraph (%d–%d words) demonstrating good cohesion and appropriate CEFR %s vocabulary.
+                    - "correctAnswer": %s
 
                     - "questionType": "ESSAY".
 
@@ -4293,7 +4320,9 @@ public class AiLabServiceImpl implements AiLabService {
 
                     Return strictly valid JSON with an array 'questions'.
 
-                    """.formatted(cefr, count, formatDesc, minWords, maxWords, minWords, maxWords, minWords, maxWords, cefr, minWords, maxWords);
+                    """.formatted(cefr, count, formatDesc, minWords, maxWords, minWords, maxWords, paragraphExplanationSpec,
+                            (count > 1 ? "Concise high-scoring model single paragraph" : "High-scoring model single paragraph") + String.format(" (%d–%d words) demonstrating good cohesion and appropriate CEFR %s vocabulary.", minWords, maxWords, cefr),
+                            minWords, maxWords);
 
             }
 
@@ -4403,11 +4432,15 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-        // 1. Thử gọi Groq LLaMA 3.3 tốc độ cao (nhiệt độ 0.3 tuân thủ nghiêm ngặt kỹ năng và cấu trúc JSON)
+        // 1. Thử gọi Groq tốc độ cao (nhiệt độ 0.3 tuân thủ nghiêm ngặt kỹ năng và cấu trúc JSON)
 
         try {
 
             rawJson = groqClientService.chatCompletionJson(systemInstruction, userPrompt, 0.3, teacherId, true);
+
+        } catch (org.springframework.web.server.ResponseStatusException rse) {
+
+            throw rse;
 
         } catch (Exception e) {
 
@@ -4419,13 +4452,35 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-        // 2. Dự phòng sang Gemini nếu Groq thất bại (nhiệt độ 0.3)
+        // 2. Xác thực & phục hồi JSON; nếu Groq lỗi HOẶC trả JSON rỗng/hỏng/thiếu câu hỏi -> fallback sang Gemini
 
-        if (rawJson == null || rawJson.isBlank() || rawJson.trim().equals("{}")) {
+        String normalizedJson = extractAndNormalizeQuizJson(rawJson);
+
+        if (normalizedJson == null) {
+
+            if (rawJson != null && !rawJson.isBlank() && lastError == null) {
+
+                log.warn("Groq trả về cấu trúc JSON bài tập chưa hợp lệ (len={}), thử fallback sang Gemini...", rawJson.length());
+
+                lastError = new IllegalStateException("Groq trả về cấu trúc JSON chưa có câu hỏi hợp lệ.");
+
+            }
 
             try {
 
-                rawJson = geminiClientService.generateWithSystemInstruction(systemInstruction, userPrompt, 0.3, teacherId, true);
+                String geminiRaw = geminiClientService.generateWithSystemInstruction(systemInstruction, userPrompt, 0.3, teacherId, true);
+
+                normalizedJson = extractAndNormalizeQuizJson(geminiRaw);
+
+                if (normalizedJson == null && geminiRaw != null && !geminiRaw.isBlank()) {
+
+                    lastError = new IllegalStateException("Gemini trả về cấu trúc JSON chưa có câu hỏi hợp lệ.");
+
+                }
+
+            } catch (org.springframework.web.server.ResponseStatusException rse) {
+
+                throw rse;
 
             } catch (Exception e) {
 
@@ -4447,69 +4502,9 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-        // 3. Làm sạch chuỗi JSON nếu có markdown code fencing
+        // 3. Nếu không hợp lệ: cập nhật trạng thái REJECTED và BÁO LỖI (KHÔNG MOCK)
 
-        if (rawJson != null) {
-
-            rawJson = rawJson.trim();
-
-            if (rawJson.startsWith("```json")) {
-
-                rawJson = rawJson.substring(7);
-
-            } else if (rawJson.startsWith("```")) {
-
-                rawJson = rawJson.substring(3);
-
-            }
-
-            if (rawJson.endsWith("```")) {
-
-                rawJson = rawJson.substring(0, rawJson.length() - 3);
-
-            }
-
-            rawJson = rawJson.trim();
-
-        }
-
-
-
-        // 4. Kiểm tra cấu trúc JSON hợp lệ và có câu hỏi hoặc cặp ghép pairs
-
-        boolean isValid = false;
-
-        if (rawJson != null && !rawJson.isBlank() && !rawJson.trim().equals("{}")) {
-
-            try {
-
-                JsonNode root = objectMapper.readTree(rawJson);
-
-                boolean hasQuestions = root.has("questions") && root.get("questions").isArray() && root.get("questions").size() > 0;
-
-                boolean hasPairs = root.has("pairs") && root.get("pairs").isArray() && root.get("pairs").size() > 0;
-
-                if (hasQuestions || hasPairs) {
-
-                    isValid = true;
-
-                }
-
-            } catch (Exception e) {
-
-                log.error("Failed to parse AI JSON response: {}", e.getMessage());
-
-                lastError = e;
-
-            }
-
-        }
-
-
-
-        // 5. Nếu không hợp lệ: cập nhật trạng thái REJECTED và BÁO LỖI (KHÔNG MOCK)
-
-        if (!isValid) {
+        if (normalizedJson == null) {
 
             exercise.setStatus(GenerationStatus.REJECTED);
 
@@ -4520,6 +4515,8 @@ public class AiLabServiceImpl implements AiLabService {
             throw new BadRequestException("Không thể tạo bài tập từ AI: " + reason);
 
         }
+
+        rawJson = normalizedJson;
 
 
 
@@ -4713,6 +4710,10 @@ public class AiLabServiceImpl implements AiLabService {
 
                     boolean hasEnriched = false;
 
+                    long dictDeadlineMs = System.currentTimeMillis() + 10_000L;
+
+                    int dictFailureCount = 0;
+
                     for (JsonNode qItem : questionsNode) {
 
                         if (qItem.isObject()) {
@@ -4827,7 +4828,7 @@ public class AiLabServiceImpl implements AiLabService {
 
 
 
-                                    if (ipa == null || ipa.isBlank()) {
+                                    if ((ipa == null || ipa.isBlank()) && dictFailureCount < 2 && System.currentTimeMillis() < dictDeadlineMs) {
 
                                         try {
 
@@ -4842,6 +4843,8 @@ public class AiLabServiceImpl implements AiLabService {
                                             }
 
                                         } catch (Exception ex) {
+
+                                            dictFailureCount++;
 
                                             log.debug("Dictionary fallback lookup skipped for {}: {}", cleanWord, ex.getMessage());
 
@@ -4907,6 +4910,10 @@ public class AiLabServiceImpl implements AiLabService {
 
                     boolean hasEnriched = false;
 
+                    long ttsDeadlineMs = System.currentTimeMillis() + 20_000L;
+
+                    boolean ttsAvailable = true;
+
                     for (JsonNode qItem : questionsNode) {
 
                         if (qItem.isObject()) {
@@ -4937,21 +4944,27 @@ public class AiLabServiceImpl implements AiLabService {
 
                                 hasEnriched = true;
 
-                                try {
+                                if (ttsAvailable && System.currentTimeMillis() < ttsDeadlineMs) {
 
-                                    String kokoroUrl = exerciseAudioService.synthesizeRawScriptToUrl(cleanSentence, "af_heart", 1.0);
+                                    try {
 
-                                    if (kokoroUrl != null && !kokoroUrl.isBlank()) {
+                                        String kokoroUrl = exerciseAudioService.synthesizeRawScriptToUrl(cleanSentence, "af_heart", 1.0);
 
-                                        qObj.put("audioUrl", kokoroUrl);
+                                        if (kokoroUrl != null && !kokoroUrl.isBlank()) {
 
-                                        qObj.put("mediaUrl", kokoroUrl);
+                                            qObj.put("audioUrl", kokoroUrl);
+
+                                            qObj.put("mediaUrl", kokoroUrl);
+
+                                        }
+
+                                    } catch (Exception ttsEx) {
+
+                                        ttsAvailable = false;
+
+                                        log.warn("Không thể tạo trước Kokoro audio cho câu Shadowing '{}': {}", cleanSentence, ttsEx.getMessage());
 
                                     }
-
-                                } catch (Exception ttsEx) {
-
-                                    log.warn("Không thể tạo trước Kokoro audio cho câu Shadowing '{}': {}", cleanSentence, ttsEx.getMessage());
 
                                 }
 
@@ -6001,6 +6014,215 @@ public class AiLabServiceImpl implements AiLabService {
             log.warn("Lỗi hậu kiểm JSON bài tập AI ({}): {}", effectiveType, ex.getMessage());
             return rawJson;
         }
+    }
+
+    /**
+     * Làm sạch, phục hồi JSON bị bọc markdown / văn bản thừa / cắt cụt giữa chừng,
+     * đồng thời chuẩn hóa các key alias ("items", "exercises", "tasks", ...) về "questions" hoặc "pairs".
+     * Trả về {@code null} nếu không trích xuất được câu hỏi hoặc cặp ghép hợp lệ nào.
+     */
+    String extractAndNormalizeQuizJson(String rawResponse) {
+        if (rawResponse == null || rawResponse.isBlank()) {
+            return null;
+        }
+        String cleaned = rawResponse.trim();
+        if (cleaned.startsWith("```json")) {
+            cleaned = cleaned.substring(7).trim();
+        } else if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(3).trim();
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3).trim();
+        } else {
+            int fenceIdx = cleaned.lastIndexOf("```");
+            if (fenceIdx > 0 && fenceIdx > cleaned.length() - 10) {
+                cleaned = cleaned.substring(0, fenceIdx).trim();
+            }
+        }
+
+        JsonNode parsed = tryParseJsonNode(cleaned);
+        if (parsed == null) {
+            int firstBrace = cleaned.indexOf('{');
+            int lastBrace = cleaned.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                parsed = tryParseJsonNode(cleaned.substring(firstBrace, lastBrace + 1));
+            }
+        }
+        if (parsed == null) {
+            int firstBracket = cleaned.indexOf('[');
+            int lastBracket = cleaned.lastIndexOf(']');
+            if (firstBracket >= 0 && lastBracket > firstBracket) {
+                parsed = tryParseJsonNode(cleaned.substring(firstBracket, lastBracket + 1));
+            }
+        }
+        if (parsed == null) {
+            parsed = salvageTruncatedQuestionsJson(cleaned);
+        }
+        if (parsed == null) {
+            return null;
+        }
+
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode normalized;
+            if (parsed.isArray()) {
+                normalized = objectMapper.createObjectNode();
+                boolean looksLikePairs = !parsed.isEmpty()
+                        && parsed.get(0).isObject()
+                        && parsed.get(0).has("left")
+                        && parsed.get(0).has("right");
+                normalized.set(looksLikePairs ? "pairs" : "questions", parsed);
+            } else if (parsed.isObject()) {
+                normalized = (com.fasterxml.jackson.databind.node.ObjectNode) parsed.deepCopy();
+                boolean hasQuestions = normalized.has("questions") && normalized.get("questions").isArray()
+                        && !normalized.get("questions").isEmpty();
+                boolean hasPairs = normalized.has("pairs") && normalized.get("pairs").isArray()
+                        && !normalized.get("pairs").isEmpty();
+
+                if (!hasQuestions && !hasPairs) {
+                    String[] aliases = {"items", "exercises", "tasks", "prompts", "quiz", "data"};
+                    for (String alias : aliases) {
+                        JsonNode aliasNode = normalized.get(alias);
+                        if (aliasNode == null || aliasNode.isNull()) {
+                            continue;
+                        }
+                        if (aliasNode.isArray() && !aliasNode.isEmpty()) {
+                            normalized.set("questions", aliasNode);
+                            hasQuestions = true;
+                            break;
+                        }
+                        if ("data".equals(alias) && aliasNode.isObject()) {
+                            if (aliasNode.has("questions") && aliasNode.get("questions").isArray()
+                                    && !aliasNode.get("questions").isEmpty()) {
+                                normalized.set("questions", aliasNode.get("questions"));
+                                hasQuestions = true;
+                                break;
+                            }
+                            if (aliasNode.has("pairs") && aliasNode.get("pairs").isArray()
+                                    && !aliasNode.get("pairs").isEmpty()) {
+                                normalized.set("pairs", aliasNode.get("pairs"));
+                                hasPairs = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!hasQuestions && !hasPairs
+                        && (normalized.has("question") || normalized.has("prompt") || normalized.has("word"))) {
+                    com.fasterxml.jackson.databind.node.ArrayNode singleArr = objectMapper.createArrayNode();
+                    singleArr.add(normalized.deepCopy());
+                    normalized = objectMapper.createObjectNode();
+                    normalized.set("questions", singleArr);
+                }
+            } else {
+                return null;
+            }
+
+            boolean validQuestions = normalized.has("questions") && normalized.get("questions").isArray()
+                    && !normalized.get("questions").isEmpty();
+            boolean validPairs = normalized.has("pairs") && normalized.get("pairs").isArray()
+                    && !normalized.get("pairs").isEmpty();
+            if (!validQuestions && !validPairs) {
+                return null;
+            }
+            return objectMapper.writeValueAsString(normalized);
+        } catch (Exception ex) {
+            log.warn("Không thể chuẩn hóa JSON bài tập AI: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private JsonNode tryParseJsonNode(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(candidate);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private JsonNode salvageTruncatedQuestionsJson(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        String targetKey = "questions";
+        int keyIdx = candidate.indexOf("\"questions\"");
+        if (keyIdx < 0) {
+            keyIdx = candidate.indexOf("\"pairs\"");
+            if (keyIdx >= 0) {
+                targetKey = "pairs";
+            }
+        }
+        int arrayStart = keyIdx >= 0 ? candidate.indexOf('[', keyIdx) : candidate.indexOf('[');
+        if (arrayStart < 0) {
+            return null;
+        }
+
+        com.fasterxml.jackson.databind.node.ArrayNode recovered = objectMapper.createArrayNode();
+        boolean inString = false;
+        boolean escaped = false;
+        int depth = 0;
+        int objStart = -1;
+
+        for (int i = arrayStart + 1; i < candidate.length(); i++) {
+            char c = candidate.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inString) {
+                if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+            } else if (c == '{') {
+                if (depth == 0) {
+                    objStart = i;
+                }
+                depth++;
+            } else if (c == '}') {
+                if (depth > 0) {
+                    depth--;
+                    if (depth == 0 && objStart >= 0) {
+                        JsonNode itemNode = tryParseJsonNode(candidate.substring(objStart, i + 1));
+                        if (itemNode != null && itemNode.isObject()) {
+                            recovered.add(itemNode);
+                        }
+                        objStart = -1;
+                    }
+                }
+            } else if (c == ']' && depth == 0) {
+                break;
+            }
+        }
+
+        if (recovered.isEmpty()) {
+            return null;
+        }
+
+        com.fasterxml.jackson.databind.node.ObjectNode root = objectMapper.createObjectNode();
+        root.set(targetKey, recovered);
+
+        String prefix = candidate.substring(0, arrayStart);
+        for (String passageKey : new String[]{"readingPassage", "listeningPassage"}) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("\"" + passageKey + "\"\\s*:\\s*(\"(?:[^\"\\\\]|\\\\.)*\")")
+                    .matcher(prefix);
+            if (matcher.find()) {
+                JsonNode textNode = tryParseJsonNode(matcher.group(1));
+                if (textNode != null && textNode.isTextual()) {
+                    root.put(passageKey, textNode.asText());
+                }
+            }
+        }
+        return root;
     }
 
 }
