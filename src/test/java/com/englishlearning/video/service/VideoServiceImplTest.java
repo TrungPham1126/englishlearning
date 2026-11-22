@@ -620,4 +620,36 @@ class VideoServiceImplTest {
         assertThat(existingHistory.getWatchedSeconds()).isEqualTo(150);
         assertThat(existingHistory.getCompletionPercentage()).isEqualTo(100.0f);
     }
+
+    @Test
+    @DisplayName("getVideoById tự chữa lành bitdash HLS chết sang mux fallback, xóa raw storage.englishlearning.com giả lập và gỡ /raw cũ")
+    void getVideoById_healsDeprecatedBitdashHlsAndPlaceholderStorageUrls() {
+        UUID demoId = UUID.randomUUID();
+        Video demoVideo = Video.builder()
+                .id(demoId)
+                .status(VideoStatus.APPROVED)
+                .rawStorageUrl("https://storage.englishlearning.com/raw/ielts_speaking_part2.mp4")
+                .hlsPlaylistUrl("https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8")
+                .build();
+        when(videoRepository.findById(demoId)).thenReturn(Optional.of(demoVideo));
+
+        Video healedDemo = videoService.getVideoById(demoId);
+        assertThat(healedDemo.getHlsPlaylistUrl()).isEqualTo("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8");
+        assertThat(healedDemo.getRawStorageUrl()).isNull();
+        verify(videoRepository).save(demoVideo);
+
+        UUID staleRawId = UUID.randomUUID();
+        Video stalePlaceholderRawVideo = Video.builder()
+                .id(staleRawId)
+                .status(VideoStatus.APPROVED)
+                .rawStorageUrl("https://storage.englishlearning.com/raw/missing.mp4")
+                .hlsPlaylistUrl("/api/v1/videos/" + staleRawId + "/raw")
+                .build();
+        when(videoRepository.findById(staleRawId)).thenReturn(Optional.of(stalePlaceholderRawVideo));
+
+        Video healedStale = videoService.getVideoById(staleRawId);
+        assertThat(healedStale.getRawStorageUrl()).isNull();
+        assertThat(healedStale.getHlsPlaylistUrl()).isNull();
+        verify(videoRepository).save(stalePlaceholderRawVideo);
+    }
 }

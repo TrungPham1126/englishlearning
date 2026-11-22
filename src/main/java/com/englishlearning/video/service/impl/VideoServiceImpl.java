@@ -48,6 +48,10 @@ import java.util.concurrent.Executor;
 @Slf4j
 public class VideoServiceImpl implements VideoService {
 
+    private static final String DEPRECATED_BITDASH_HOST = "bitdash-a.akamaihd.net";
+    private static final String PLACEHOLDER_DEMO_STORAGE_HOST = "storage.englishlearning.com";
+    private static final String FALLBACK_DEMO_HLS_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+
     private final VideoRepository videoRepository;
     private final VideoWatchHistoryRepository watchHistoryRepository;
     private final RabbitTemplate rabbitTemplate;
@@ -217,6 +221,14 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    public static boolean isPlaceholderStorageUrl(String url) {
+        return url != null && url.toLowerCase().contains(PLACEHOLDER_DEMO_STORAGE_HOST);
+    }
+
+    private boolean isDeprecatedExternalDemoHlsUrl(String url) {
+        return url != null && url.toLowerCase().contains(DEPRECATED_BITDASH_HOST);
+    }
+
     private void normalizePlaybackUrl(Video video) {
         if (video == null) {
             return;
@@ -225,25 +237,45 @@ public class VideoServiceImpl implements VideoService {
 
         String hls = video.getHlsPlaylistUrl();
         boolean updated = false;
+
+        if (isPlaceholderStorageUrl(video.getRawStorageUrl())) {
+            log.info("[VIDEO_PIPELINE] Xóa URL storage giả lập cho video ID {}: {}",
+                    video.getId(), video.getRawStorageUrl());
+            video.setRawStorageUrl(null);
+            updated = true;
+            if (video.getId() != null && hls != null && hls.equals("/api/v1/videos/" + video.getId() + "/raw")) {
+                hls = null;
+                video.setHlsPlaylistUrl(null);
+            }
+        }
+
         if (hls != null && !hls.isBlank()) {
-            String normalizedLocalhost = stripLocalhostPrefix(hls);
-            if (normalizedLocalhost != null) {
-                String normalized = (normalizedLocalhost.contains("/api/v1/videos/") && normalizedLocalhost.contains("/hls/"))
-                        ? normalizedLocalhost
-                        : "/api/v1/videos/" + video.getId() + "/raw";
-                log.info("[VIDEO_PIPELINE] Chuẩn hóa URL từ localhost sang relative URL cho video ID {}: {} -> {}",
-                        video.getId(), hls, normalized);
-                hls = normalized;
-                video.setHlsPlaylistUrl(normalized);
+            if (isDeprecatedExternalDemoHlsUrl(hls)) {
+                log.info("[VIDEO_PIPELINE] Thay thế URL HLS demo đã ngừng hoạt động cho video ID {}: {} -> {}",
+                        video.getId(), hls, FALLBACK_DEMO_HLS_URL);
+                hls = FALLBACK_DEMO_HLS_URL;
+                video.setHlsPlaylistUrl(FALLBACK_DEMO_HLS_URL);
                 updated = true;
-            } else if (isManagedR2Url(hls) && video.getId() != null) {
-                String normalized = rewriteManagedR2PlaybackUrl(video.getId(), hls);
-                if (!hls.equals(normalized)) {
-                    log.info("[VIDEO_PIPELINE] Chuẩn hóa URL R2 sang proxy backend cho video ID {}: {} -> {}",
+            } else {
+                String normalizedLocalhost = stripLocalhostPrefix(hls);
+                if (normalizedLocalhost != null) {
+                    String normalized = (normalizedLocalhost.contains("/api/v1/videos/") && normalizedLocalhost.contains("/hls/"))
+                            ? normalizedLocalhost
+                            : "/api/v1/videos/" + video.getId() + "/raw";
+                    log.info("[VIDEO_PIPELINE] Chuẩn hóa URL từ localhost sang relative URL cho video ID {}: {} -> {}",
                             video.getId(), hls, normalized);
                     hls = normalized;
                     video.setHlsPlaylistUrl(normalized);
                     updated = true;
+                } else if (isManagedR2Url(hls) && video.getId() != null) {
+                    String normalized = rewriteManagedR2PlaybackUrl(video.getId(), hls);
+                    if (!hls.equals(normalized)) {
+                        log.info("[VIDEO_PIPELINE] Chuẩn hóa URL R2 sang proxy backend cho video ID {}: {} -> {}",
+                                video.getId(), hls, normalized);
+                        hls = normalized;
+                        video.setHlsPlaylistUrl(normalized);
+                        updated = true;
+                    }
                 }
             }
         } else if (video.getRawStorageUrl() != null

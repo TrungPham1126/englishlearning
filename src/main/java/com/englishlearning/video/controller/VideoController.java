@@ -10,6 +10,7 @@ import com.englishlearning.video.entity.Video;
 import com.englishlearning.video.entity.VideoStatus;
 import com.englishlearning.video.entity.VideoWatchHistory;
 import com.englishlearning.video.service.VideoService;
+import com.englishlearning.video.service.impl.VideoServiceImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -164,7 +165,8 @@ public class VideoController {
         }
 
         if ((rawUrl.startsWith("http://") || rawUrl.startsWith("https://"))
-                && !rawUrl.contains("/api/v1/videos/" + id + "/raw")) {
+                && !rawUrl.contains("/api/v1/videos/" + id + "/raw")
+                && !VideoServiceImpl.isPlaceholderStorageUrl(rawUrl)) {
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(rawUrl))
                     .build();

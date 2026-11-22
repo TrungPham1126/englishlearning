@@ -158,9 +158,24 @@ function formatTime(seconds: number): string {
   return `${pad(m)}:${pad(s)}`;
 }
 
+const DEPRECATED_DEMO_HLS_HOST = "bitdash-a.akamaihd.net";
+const PLACEHOLDER_VIDEO_HOSTS = ["storage.englishlearning.com"];
+const FALLBACK_DEMO_HLS_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+
+export function isPlaceholderVideoUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const lower = url.trim().toLowerCase();
+  return PLACEHOLDER_VIDEO_HOSTS.some((host) => lower.includes(host));
+}
+
 export function normalizeStreamUrl(url: string): string {
   if (!url) return "";
-  return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1):8080/, "");
+  const trimmed = url.trim();
+  if (!trimmed || isPlaceholderVideoUrl(trimmed)) return "";
+  if (trimmed.toLowerCase().includes(DEPRECATED_DEMO_HLS_HOST)) {
+    return FALLBACK_DEMO_HLS_URL;
+  }
+  return trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1):8080/, "");
 }
 
 function isSameOriginUrl(url: string): boolean {
@@ -196,9 +211,17 @@ export function resolveVideoSources(video?: VideoSourceFields | null): ResolvedV
     return { isProcessing: false, streamUrl: "", rawUrl: undefined };
   }
   const isProcessing = video.status === "PROCESSING" || video.status === "DRAFT";
-  const proxyRawUrl = video.id ? `/api/v1/videos/${video.id}/raw` : "";
-  const rawUrl = video.rawStorageUrl || video.videoUrl || proxyRawUrl || undefined;
-  const streamUrl = video.hlsPlaylistUrl || video.rawStorageUrl || video.videoUrl || "";
+  const cleanHls = normalizeStreamUrl(video.hlsPlaylistUrl || "");
+  const rawCandidate = video.rawStorageUrl || video.videoUrl || "";
+  const hasPlaceholderRawOnly = isPlaceholderVideoUrl(rawCandidate) && !cleanHls;
+  const cleanRaw = normalizeStreamUrl(rawCandidate);
+  const isExternalHlsOnly = Boolean(cleanHls) && !isSameOriginUrl(cleanHls) && !cleanRaw;
+  const proxyRawUrl =
+    video.id && !hasPlaceholderRawOnly && !isExternalHlsOnly
+      ? `/api/v1/videos/${video.id}/raw`
+      : "";
+  const rawUrl = cleanRaw || proxyRawUrl || undefined;
+  const streamUrl = cleanHls || cleanRaw || "";
   return { isProcessing, streamUrl, rawUrl };
 }
 
@@ -220,12 +243,17 @@ export function buildCandidateStreamUrls(
     }
   };
 
-  pushUnique(streamUrl);
+  const normalizedStream = normalizeStreamUrl(streamUrl);
   const normalizedRaw = rawUrl ? normalizeStreamUrl(rawUrl) : "";
+
+  pushUnique(normalizedStream);
   if (normalizedRaw && isSameOriginUrl(normalizedRaw)) {
     pushUnique(normalizedRaw);
   }
-  if (videoId) {
+  if (
+    videoId &&
+    (!normalizedStream || isSameOriginUrl(normalizedStream) || Boolean(normalizedRaw))
+  ) {
     pushUnique(`/api/v1/videos/${videoId}/raw`);
   }
   if (normalizedRaw) {
@@ -740,7 +768,16 @@ export default function VideoPlayer({
             headers: { Range: `bytes=${offset}-${end}` },
             signal: controller.signal,
             credentials: "same-origin",
+            redirect: "manual",
           });
+
+          if (
+            response &&
+            (response.type === "opaqueredirect" ||
+              (response.status >= 300 && response.status < 400))
+          ) {
+            break;
+          }
 
           if (!response || (!response.ok && response.status !== 206)) {
             if (response && [401, 403, 404, 410, 416].includes(response.status)) {

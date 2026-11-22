@@ -408,4 +408,79 @@ describe("VideoPlayer HLS recovery, spinner safety, CORS & lazyLoad", () => {
     });
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
   });
+
+  it("replaces deprecated bitdash HLS URL, strips placeholder storage.englishlearning.com URLs, and stops background prefetch on redirect", async () => {
+    expect(
+      normalizeStreamUrl("https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8"),
+    ).toBe("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8");
+    expect(
+      normalizeStreamUrl("https://storage.englishlearning.com/raw/ielts_speaking_part2.mp4"),
+    ).toBe("");
+
+    expect(
+      resolveVideoSources({
+        id: "70707070-0000-0000-0000-000000000003",
+        status: "APPROVED",
+        hlsPlaylistUrl: "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+        rawStorageUrl: "https://storage.englishlearning.com/raw/ielts_speaking_part2.mp4",
+      }),
+    ).toEqual({
+      isProcessing: false,
+      streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      rawUrl: undefined,
+    });
+
+    expect(
+      resolveVideoSources({
+        id: "vid-placeholder-only",
+        status: "APPROVED",
+        rawStorageUrl: "https://storage.englishlearning.com/raw/missing.mp4",
+      }),
+    ).toEqual({
+      isProcessing: false,
+      streamUrl: "",
+      rawUrl: undefined,
+    });
+
+    expect(
+      buildCandidateStreamUrls(
+        "70707070-0000-0000-0000-000000000003",
+        "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+        "https://storage.englishlearning.com/raw/ielts_speaking_part2.mp4",
+      ),
+    ).toEqual(["https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"]);
+
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      type: "opaqueredirect",
+      status: 0,
+      ok: false,
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      render(
+        <VideoPlayer
+          videoId="vid-redirect"
+          streamUrl="/api/v1/videos/vid-redirect/raw"
+          enableProgressSync={false}
+        />,
+      );
+
+      fireEvent.click(screen.getByLabelText("Phát"));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/videos/vid-redirect/raw",
+        expect.objectContaining({
+          redirect: "manual",
+        }),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

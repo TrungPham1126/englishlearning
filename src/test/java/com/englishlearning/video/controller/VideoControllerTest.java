@@ -522,4 +522,17 @@ class VideoControllerTest {
                 .andExpect(jsonPath("$.data.id").value(videoId.toString()))
                 .andExpect(jsonPath("$.data.originalFileName").value("lesson1.mp4"));
     }
+
+    @Test
+    @DisplayName("GET /{id}/raw trả 404 Not Found thay vì 302 redirect khi rawStorageUrl thuộc domain giả lập storage.englishlearning.com")
+    void serveRawVideo_returns404WhenRawStorageUrlIsPlaceholderDomain() throws Exception {
+        Video placeholderVideo = Video.builder()
+                .id(videoId)
+                .rawStorageUrl("https://storage.englishlearning.com/raw/ielts_speaking_part2.mp4")
+                .build();
+        when(videoService.getVideoById(videoId)).thenReturn(placeholderVideo);
+
+        mockMvc.perform(get("/api/v1/videos/{id}/raw", videoId))
+                .andExpect(status().isNotFound());
+    }
 }
