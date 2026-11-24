@@ -232,11 +232,18 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                                 : "QA"
                             );
                           }
+                          let nextWritingTask = form.writingTaskType;
                           if (typeItem.id === "WRITING") {
-                            form.setWritingTaskType(
-                              defaultSub === "WRITING_IELTS_TASK1" ? "TASK_1" : "TASK_2"
-                            );
+                            nextWritingTask =
+                              defaultSub === "WRITING_IELTS_TASK1" ? "TASK_1" : "TASK_2";
+                            form.setWritingTaskType(nextWritingTask);
                           }
+                          form.updateTopicSuggestion(
+                            typeItem.id,
+                            form.aiLevel,
+                            defaultSub,
+                            nextWritingTask
+                          );
                         }}
                         className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
@@ -403,7 +410,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
                   handleSelectSubFormat={form.handleSelectSubFormat}
                   currentLevelFormats={form.currentLevelFormats}
                   readingPassageIelts={form.readingPassageIelts}
-                  setReadingPassageIelts={form.setReadingPassageIelts}
+                  setReadingPassageIelts={form.handleSelectReadingPassage}
                   selectedPlanId={form.selectedPlanId}
                   setSelectedPlanId={form.setSelectedPlanId}
                   dailyPlans={form.dailyPlans}
@@ -579,6 +586,7 @@ export const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               setTargetStudents={form.setTargetStudents}
               status={form.status}
               setStatus={form.setStatus}
+              assignmentType={form.assignmentType}
             />
           )}
         </div>

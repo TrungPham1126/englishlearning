@@ -286,6 +286,54 @@ describe("Teacher Module - Components, Modals & Pages", () => {
 
       expect(screen.queryByText("Where does the speaker work?")).not.toBeInTheDocument();
     });
+
+    it("renders AssignmentDetailsModal MCQ options sorted A, B, C, D left-to-right top-to-bottom even when API returns D, C, B, A", async () => {
+      const { container } = render(
+        <AssignmentDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          assignment={{
+            id: "a-101",
+            title: "Grammar Check",
+            skillType: "GRAMMAR",
+            questions: [
+              {
+                id: "q-101",
+                questionType: "MULTIPLE_CHOICE",
+                promptText: "Pick the right tense.",
+                correctAnswer: "B",
+                options: [
+                  { id: "o-d", optionLabel: "D", optionText: "had gone", isCorrect: false },
+                  { id: "o-c", optionLabel: "C", optionText: "is going", isCorrect: false },
+                  { id: "o-b", optionLabel: "B", optionText: "went", isCorrect: true },
+                  { id: "o-a", optionLabel: "A", optionText: "goes", isCorrect: false },
+                ],
+              },
+            ],
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Pick the right tense.")).toBeInTheDocument();
+      });
+
+      const grid = container.querySelector(
+        ".grid.grid-cols-1.sm\\:grid-cols-2.grid-flow-row",
+      );
+      expect(grid).toBeTruthy();
+      const optionTexts = Array.from(grid!.children).map((el) =>
+        el.textContent?.replace(/\s+/g, " ").trim(),
+      );
+      expect(optionTexts).toEqual([
+        "Agoes",
+        "Bwent",
+        "Cis going",
+        "Dhad gone",
+      ]);
+    });
   });
 
   // =========================================================================
@@ -1404,6 +1452,47 @@ describe("Teacher Module - Components, Modals & Pages", () => {
       expect(optionValues).toEqual(["1", "2", "3", "5"]);
       expect(optionValues).not.toContain("10");
       expect(optionValues).not.toContain("15");
+    });
+
+    it("AssignmentBasicInfoForm renders IELTS Writing Band selector only when assignmentType === 'WRITING'", async () => {
+      const { AssignmentBasicInfoForm } = await import(
+        "../components/assignment-modal/AssignmentBasicInfoForm"
+      );
+      const baseProps = {
+        title: "Sample",
+        setTitle: vi.fn(),
+        description: "",
+        setDescription: vi.fn(),
+        difficulty: "MEDIUM" as const,
+        setDifficulty: vi.fn(),
+        selectedPlanId: "",
+        setSelectedPlanId: vi.fn(),
+        dailyPlans: [],
+        scheduledDate: "2026-11-22",
+        setScheduledDate: vi.fn(),
+        dueDate: "2026-11-30",
+        setDueDate: vi.fn(),
+        estimatedMinutes: 30,
+        setEstimatedMinutes: vi.fn(),
+        timeLimitMinutes: 30,
+        setTimeLimitMinutes: vi.fn(),
+        maxAllowedErrorPercent: 20,
+        setMaxAllowedErrorPercent: vi.fn(),
+        maxAttempts: 3,
+        setMaxAttempts: vi.fn(),
+        targetStudents: "ALL" as const,
+        setTargetStudents: vi.fn(),
+        status: "PUBLISHED" as const,
+        setStatus: vi.fn(),
+      };
+
+      const { rerender } = render(
+        <AssignmentBasicInfoForm {...baseProps} assignmentType="GRAMMAR" />,
+      );
+      expect(screen.queryByText(/Chuẩn Band IELTS Writing:/i)).not.toBeInTheDocument();
+
+      rerender(<AssignmentBasicInfoForm {...baseProps} assignmentType="WRITING" />);
+      expect(screen.getByText(/Chuẩn Band IELTS Writing:/i)).toBeInTheDocument();
     });
   });
 });

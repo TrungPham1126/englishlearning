@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import type { ShadowingEvaluationResponse } from "@/features/student/types";
 import { Zap, CheckCircle2, XCircle, Mic, Layers } from "lucide-react";
+import { AiCoachingCard } from "./speaking/AiCoachingCard";
 
 interface Props {
   readonly data: ShadowingEvaluationResponse;
@@ -278,6 +279,9 @@ export default function ShadowingEvaluationView({ data }: Props) {
           </div>
         ))}
       </div>
+
+      {/* 3.5. Lời khuyên cá nhân hóa từ AI Coach dựa trên dữ liệu Python */}
+      <AiCoachingCard coaching={data.aiCoaching} />
 
       {/* 4. Bảng Chi Tiết (Word & Phonemes Breakdown) */}
       <div className="rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 md:p-8 shadow-sm space-y-6">

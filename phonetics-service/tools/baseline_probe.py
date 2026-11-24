@@ -1,6 +1,12 @@
 """
-Read-only diagnostic probe for measuring the current phonetics-service baseline
-on SpeechOcean762 (Apache 2.0) and LibriSpeech clean/validation (CC BY 4.0).
+Công cụ chẩn đoán chỉ đọc (read-only) dùng để đo hiệu năng nền (baseline) hiện tại của phonetics-service
+trên bộ SpeechOcean762 (Apache 2.0) và LibriSpeech clean/validation (CC BY 4.0).
+
+Tác dụng:
+  - Gọi trực tiếp endpoint `/api/v1/audio/evaluate-phonetics` qua FastAPI `TestClient` trước khi hiệu chuẩn.
+  - Đo độ tương quan (`r`, `rho`) và sai số (`MAE`, `RMSE`) giữa điểm máy chấm và điểm chuyên gia trên SpeechOcean762.
+  - Kiểm tra phân phối điểm và tỷ lệ đạt chuẩn (`isPassed`) đối với giọng người bản ngữ trên LibriSpeech.
+  - Xuất kết quả baseline ra `cache/baseline_probe.json` để làm mốc đối chiếu Before-vs-After.
 """
 import io
 import json
@@ -15,9 +21,11 @@ import scipy.stats as stats
 import soundfile as sf
 from fastapi.testclient import TestClient
 
+# Tắt log mức INFO/DEBUG của service và httpx để màn hình chỉ hiển thị tiến độ và bảng tổng kết
 logging.getLogger("phonetics-service").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.ERROR)
 
+# Thêm thư mục gốc phonetics-service vào sys.path trước khi import ứng dụng FastAPI
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -25,6 +33,7 @@ from app.main import app  # noqa: E402
 
 
 def _wav_bytes_from_parquet_audio(audio_dict: dict) -> bytes:
+    """Giải mã âm thanh từ cột `audio` của Parquet, chuẩn hóa về mono 16 kHz và đóng gói thành byte WAV PCM-16."""
     raw_bytes = audio_dict.get("bytes")
     if not raw_bytes:
         raise ValueError("Missing audio bytes")
@@ -43,6 +52,12 @@ def _wav_bytes_from_parquet_audio(audio_dict: dict) -> bytes:
 
 
 def probe_speechocean(client: TestClient, parquet_path: Path, n_samples: int = 60, seed: int = 42):
+    """
+    Chạy thăm dò baseline trên một tập mẫu ngẫu nhiên (cố định theo `seed`) từ file Parquet SpeechOcean762.
+
+    Quy đổi nhãn điểm chuyên gia từ thang 0..10 sang 0..100 (`* 10.0`), đối chiếu cả cấp câu
+    (Overall, Pronunciation/Accuracy, Fluency, Prosody) và cấp từ (`word_pairs`) khi độ dài khớp nhau.
+    """
     table = pq.read_table(str(parquet_path))
     rows = table.to_pylist()
     rng = np.random.default_rng(seed)
@@ -70,6 +85,7 @@ def probe_speechocean(client: TestClient, parquet_path: Path, n_samples: int = 6
                 continue
             body = res.json()
             kpi = body.get("kpi", {})
+            # Quy đổi nhãn chuyên gia từ thang 0..10 của SpeechOcean762 sang thang 0..100 để so khớp với API
             rec = {
                 "idx": int(idx),
                 "text": script,
@@ -86,6 +102,7 @@ def probe_speechocean(client: TestClient, parquet_path: Path, n_samples: int = 6
             }
             records.append(rec)
 
+            # Nếu số lượng từ API trả về khớp với danh sách từ nhãn gốc thì gom thêm cặp điểm cấp từ
             pred_words = body.get("words", [])
             gt_words = row.get("words", [])
             if len(pred_words) == len(gt_words):
@@ -104,6 +121,7 @@ def probe_speechocean(client: TestClient, parquet_path: Path, n_samples: int = 6
             print("  Sample error:", e, flush=True)
 
     summary = {"ok": len(records), "total": len(indices), "errors": len(errors), "elapsed_sec": round(elapsed, 2), "metrics": {}}
+    # Chỉ tính các chỉ số tương quan và sai số khi thu được tối thiểu 5 câu hợp lệ
     if len(records) >= 5:
         for h_key, p_key, label in [
             ("human_tot", "pred_overall", "Overall Score"),
@@ -133,6 +151,12 @@ def probe_speechocean(client: TestClient, parquet_path: Path, n_samples: int = 6
 
 
 def probe_librispeech(client: TestClient, parquet_path: Path, n_samples: int = 30, seed: int = 42):
+    """
+    Chạy thăm dò baseline trên tập mẫu người bản ngữ LibriSpeech clean/validation.
+
+    Vì LibriSpeech không có nhãn điểm chấm người học, hàm thống kê trung bình `overallScore`,
+    `pronunciationScore`, `completeness` và tỷ lệ đạt chuẩn (`isPassed`) để làm mốc kiểm chứng giọng bản ngữ.
+    """
     table = pq.read_table(str(parquet_path))
     rows = table.to_pylist()
     rng = np.random.default_rng(seed)
@@ -189,6 +213,7 @@ def probe_librispeech(client: TestClient, parquet_path: Path, n_samples: int = 3
 
 
 if __name__ == "__main__":
+    # Khởi tạo TestClient chạy trực tiếp ứng dụng FastAPI trong tiến trình để đo baseline và ghi file JSON
     client = TestClient(app)
     so_test = ROOT / "cache" / "datasets" / "speechocean762" / "data" / "test-00000-of-00001.parquet"
     ls_val = ROOT / "cache" / "datasets" / "librispeech" / "clean" / "validation" / "0000.parquet"

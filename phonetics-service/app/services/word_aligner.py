@@ -1,3 +1,15 @@
+"""
+Module kiểm tra khớp nội dung câu mẫu và gióng hàng cấp độ từ / âm vị (`word_aligner.py`).
+
+Nhiệm vụ chính:
+1. Giải mã thô chuỗi âm vị trực tiếp từ Wav2Vec 2.0 CTC (`decode_raw_speech`).
+2. Đo độ tương đồng giữa chuỗi âm vị kỳ vọng (G2P) và chuỗi âm vị thực tế người dùng phát ra (`compute_phoneme_similarity`).
+3. Cổng xác thực nội dung câu mẫu (`verify_speech_content`): phát hiện nói lạc đề/sai kịch bản để tránh ảo giác forced alignment.
+4. Phân tích độ bao phủ từng từ và đếm số từ mở đầu đã đọc (`analyze_word_coverage`, `detect_spoken_prefix_count`).
+5. Gióng hàng chuỗi từ qua quy hoạch động Needleman-Wunsch (`SpeechEvidenceDetector`, `WordSequenceAligner`)
+   để phát hiện từ bỏ sót (`NOT_SPOKEN`), đọc thay thế (`SUBSTITUTION`) hoặc khớp chuẩn (`MATCH`).
+"""
+
 import logging
 import re
 from dataclasses import dataclass
@@ -22,8 +34,8 @@ logger = logging.getLogger("phonetics-service")
 
 def decode_raw_speech(audio: np.ndarray) -> List[str]:
     """
-    Decodes raw acoustic audio directly into a sequence of phonemes using Wav2Vec2 CTC greedy decoding.
-    Deduplicates consecutive identical frames and strips '<pad>' tokens.
+    Giải mã trực tiếp sóng âm thô thành chuỗi ký hiệu âm vị IPA bằng CTC greedy decoding (Wav2Vec 2.0).
+    Chọn token có xác suất cao nhất tại mỗi khung, gộp các khung trùng liên tiếp và loại bỏ `<pad>`.
     """
     if audio is None or len(audio) < 400:
         return []
@@ -36,6 +48,7 @@ def decode_raw_speech(audio: np.ndarray) -> List[str]:
     vocab = tokenizer.get_vocab()
     rev_vocab = {v: k for k, v in vocab.items()}
 
+    # Chuẩn hóa sóng âm theo zero-mean, unit-variance trước khi đưa vào mạng Wav2Vec 2.0
     norm_audio = (audio - np.mean(audio)) / np.sqrt(np.var(audio) + 1e-7)
     audio_tensor = torch.from_numpy(norm_audio).float().unsqueeze(0).to(forced_aligner.model_mgr.device)
 
@@ -43,6 +56,7 @@ def decode_raw_speech(audio: np.ndarray) -> List[str]:
         logits = model(audio_tensor).logits
         preds = torch.argmax(logits[0], dim=-1).cpu().numpy()
 
+    # Khử lặp liên tiếp theo quy tắc gộp chuỗi của CTC và bỏ token trống `<pad>`
     emitted = []
     for p in preds:
         sym = rev_vocab.get(p, "")
@@ -54,9 +68,10 @@ def decode_raw_speech(audio: np.ndarray) -> List[str]:
 
 def compute_phoneme_similarity(expected_tokens: List[str], emitted_tokens: List[str]) -> float:
     """
-    Computes Levenshtein-based sequence similarity between expected target tokens and emitted acoustic tokens,
-    incorporating universal allophonic and vowel-variation tolerances.
-    Returns a normalized similarity score in [0.0, 1.0].
+    Tính độ tương đồng chuỗi dựa trên khoảng cách Levenshtein có trọng số giữa
+    chuỗi âm vị kỳ vọng (từ script mẫu) và chuỗi âm vị thực tế phát ra từ Wav2Vec 2.0,
+    có xét dung sai cho các tha âm vị (`UNIVERSAL_ALLOPHONES`) và trường âm nguyên âm (`ː`).
+    Trả về điểm chuẩn hóa trong khoảng [0.0, 1.0].
     """
     if not expected_tokens or not emitted_tokens:
         return 0.0
@@ -66,6 +81,7 @@ def compute_phoneme_similarity(expected_tokens: List[str], emitted_tokens: List[
     N = len(expected_tokens)
     M = len(emitted_tokens)
 
+    # Khởi tạo bảng quy hoạch động khoảng cách chỉnh sửa (edit distance)
     dp = np.zeros((N + 1, M + 1), dtype=np.float32)
     for i in range(N + 1):
         dp[i, 0] = float(i)
@@ -78,11 +94,11 @@ def compute_phoneme_similarity(expected_tokens: List[str], emitted_tokens: List[
         for j in range(1, M + 1):
             t2 = emitted_tokens[j - 1]
             if t1 == t2:
-                cost = 0.0
+                cost = 0.0  # Khớp chính xác
             elif t2 in alts or t1.strip("ː") == t2.strip("ː"):
-                cost = 0.35
+                cost = 0.35  # Thuộc nhóm tha âm vị gần âm hoặc chỉ khác dấu kéo dài (ː)
             else:
-                cost = 1.0
+                cost = 1.0  # Khác âm hoàn toàn
             dp[i, j] = min(
                 dp[i - 1, j] + 1.0,
                 dp[i, j - 1] + 1.0,
@@ -99,28 +115,30 @@ def verify_speech_content(
     expected_words: List[str]
 ) -> Tuple[bool, str, float, List[str], str]:
     """
-    ASR Content Verification Gate:
-    Validates whether the user's speech corresponds to the target lesson script,
-    preventing forced alignment hallucinations when an entirely different word or sentence is spoken.
+    Cổng xác thực nội dung nói (ASR Content Verification Gate):
+    Kiểm tra xem lời nói thực tế của người dùng có khớp với từ/câu mẫu bài học hay không,
+    nhằm ngăn chặn hiện tượng gióng hàng cưỡng bức bị "ảo giác" khi người học đọc một câu hoàn toàn khác.
 
-    Returns:
-        is_valid: bool (True if speech matches target or prefix)
-        reason: str ('VALID', 'LENGTH_RATIO_EXCEEDED', 'LOW_SIMILARITY', 'EMPTY_SPEECH')
-        similarity: float [0.0, 1.0]
-        emitted_tokens: List[str]
-        spoken_repr: str (human-readable IPA approximation of spoken speech)
+    Giá trị trả về:
+        is_valid: bool (True nếu khớp câu mẫu hoặc đọc đúng phần mở đầu hợp lệ)
+        reason: str ('VALID', 'VALID_PREFIX', 'LENGTH_RATIO_EXCEEDED', 'LOW_SIMILARITY', 'EMPTY_SPEECH')
+        similarity: float trong [0.0, 1.0]
+        emitted_tokens: List[str] chuỗi âm vị decode được từ audio
+        spoken_repr: str chuỗi biểu diễn IPA tóm tắt của lời nói ghi nhận được
     """
     if not expected_words or len(audio) == 0:
         return False, "EMPTY_SPEECH", 0.0, [], ""
 
     from app.services.aligner import forced_aligner
 
+    # Giải mã chuỗi âm vị thực tế từ file âm thanh
     emitted = decode_raw_speech(audio)
     if not emitted:
         return False, "EMPTY_SPEECH", 0.0, [], ""
 
     spoken_repr = "/" + "".join(emitted[:18]) + ("..." if len(emitted) > 18 else "") + "/"
 
+    # Chuyển từ/câu mẫu sang chuỗi âm vị IPA kỳ vọng
     clean_script = " ".join(expected_words)
     word_phonemes = forced_aligner.g2p.convert_text(clean_script)
     if not word_phonemes:
@@ -142,8 +160,9 @@ def verify_speech_content(
         N, "".join(expected_tokens), M, "".join(emitted[:20]), sim, ratio
     )
 
-    # 1. Single-word target verification
+    # 1. Kiểm tra trường hợp mục tiêu chỉ có 1 từ đơn
     if len(expected_words) == 1:
+        # Nếu nói quá dài (vượt > 2.2 lần số âm vị kỳ vọng) -> khả năng đọc cả câu khác thay vì 1 từ
         if M >= 6 and ratio > 2.2:
             logger.warning(
                 "[ASR Verification Gate] REJECTED: Single word '%s' spoken with abnormal length ratio %.2f (emitted %d tokens)",
@@ -151,6 +170,7 @@ def verify_speech_content(
             )
             return False, "LENGTH_RATIO_EXCEEDED", sim, emitted, spoken_repr
 
+        # Nếu độ tương đồng âm vị quá thấp -> đọc nhầm sang từ khác
         if sim < 0.35 and M >= 5:
             logger.warning(
                 "[ASR Verification Gate] REJECTED: Single word '%s' mismatch (similarity: %.2f < 0.35)",
@@ -160,11 +180,12 @@ def verify_speech_content(
 
         return True, "VALID", sim, emitted, spoken_repr
 
-    # 2. Multi-word sentence target verification
+    # 2. Kiểm tra trường hợp mục tiêu là câu gồm nhiều từ
     else:
         if sim >= 0.30:
             return True, "VALID", sim, emitted, spoken_repr
 
+        # Nếu chưa khớp toàn câu (có thể người học mới đọc nửa câu), kiểm tra khớp theo tiền tố từ đầu câu
         curr_tokens = []
         for w_text, ph_list in word_phonemes:
             curr_tokens.extend([forced_aligner.ACOUSTIC_TOKEN_FALLBACK.get(p.token, p.token) for p in ph_list])
@@ -185,10 +206,13 @@ def analyze_word_coverage(
     emitted_tokens: Optional[List[str]] = None,
 ) -> Tuple[int, List[float]]:
     """
-    Computes Needleman-Wunsch alignment between target script phonemes and
-    Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
-    Returns:
-        (spoken_prefix_len, per_word_match_ratios)
+    Thực hiện gióng hàng toàn cục Needleman-Wunsch giữa chuỗi âm vị của câu mẫu
+    và chuỗi âm vị decode tham lam trực tiếp từ Wav2Vec 2.0 (tái sử dụng được `emitted_tokens`).
+
+    Trả về:
+        (spoken_prefix_len, per_word_match_ratios):
+        - spoken_prefix_len: Số lượng từ liên tiếp từ đầu câu thực sự được đọc.
+        - per_word_match_ratios: Tỷ lệ âm vị khớp (0.0 - 1.0) cho từng từ trong câu mẫu.
     """
     if not expected_words or len(audio) == 0:
         return 0, [0.0 for _ in expected_words]
@@ -204,6 +228,7 @@ def analyze_word_coverage(
     if not word_phonemes:
         return 0, [0.0 for _ in expected_words]
 
+    # Trải phẳng chuỗi âm vị kỳ vọng kèm chỉ số từ tương ứng (`token_to_word`)
     expected_tokens = []
     token_to_word = []
     for w_idx, (w_text, ph_list) in enumerate(word_phonemes):
@@ -214,6 +239,7 @@ def analyze_word_coverage(
     N = len(expected_tokens)
     M = len(emitted)
 
+    # Khởi tạo bảng điểm Needleman-Wunsch (bỏ âm kỳ vọng phạt -1.0, dư âm thực tế phạt -0.5)
     dp = np.zeros((N + 1, M + 1), dtype=np.float32)
     for i in range(N + 1):
         dp[i, 0] = -1.0 * i
@@ -237,6 +263,7 @@ def analyze_word_coverage(
                 dp[i, j - 1] - 0.5
             )
 
+    # Truy vết ngược để đếm số âm vị khớp thành công của từng từ
     i, j = N, M
     matched_per_word = {}
     total_per_word = {}
@@ -270,6 +297,7 @@ def analyze_word_coverage(
         for w_idx in range(len(word_phonemes))
     ]
 
+    # Xác định độ dài đoạn tiền tố liên tiếp được đọc (cho phép bỏ qua 1 từ ngắn yếu nếu từ kế tiếp đạt >= 0.40)
     spoken_prefix_len = 0
     for w_idx in range(len(word_phonemes)):
         ratio = per_word_ratios[w_idx]
@@ -291,15 +319,16 @@ def detect_spoken_prefix_count(
     emitted_tokens: Optional[List[str]] = None,
 ) -> int:
     """
-    Computes Needleman-Wunsch alignment between target script phonemes and
-    Wav2Vec2 greedy decoded phonemes directly from acoustic logits.
-    Returns the number of sequential words from the beginning that were actually spoken.
+    Hàm tiện ích trả về số lượng từ liên tiếp tính từ đầu câu thực sự được người dùng đọc
+    dựa trên phép gióng hàng Needleman-Wunsch âm vị học.
     """
     spoken_prefix_len, _ = analyze_word_coverage(audio, expected_words, emitted_tokens=emitted_tokens)
     return spoken_prefix_len
 
 
 class WordAlignmentStatus(str, Enum):
+    """Trạng thái gióng hàng ở cấp độ từ."""
+
     MATCH = "MATCH"
     NOT_SPOKEN = "NOT_SPOKEN"
     SUBSTITUTION = "SUBSTITUTION"
@@ -307,6 +336,8 @@ class WordAlignmentStatus(str, Enum):
 
 @dataclass
 class DetectedWord:
+    """Thông tin một từ được bộ ASR nhận diện kèm mốc thời gian ước lượng."""
+
     word: str
     start: float
     end: float
@@ -315,6 +346,8 @@ class DetectedWord:
 
 @dataclass
 class AlignedWordEvidence:
+    """Kết quả đối chiếu giữa một từ kỳ vọng và bằng chứng từ ASR."""
+
     expected_word: str
     detected_word: Optional[str]
     status: WordAlignmentStatus
@@ -325,39 +358,41 @@ class AlignedWordEvidence:
 
 class SpeechEvidenceDetector:
     """
-    Detects actual spoken words and acoustic time boundaries.
-    Acts as a fail-safe gate: Evidence must exist before pronunciation scoring.
+    Bộ phát hiện các từ thực tế đã được nói bằng thư viện `speech_recognition` (Google ASR).
+    Đóng vai trò cổng kiểm tra dự phòng để xác minh bằng chứng từ vựng trước khi chấm điểm.
     """
 
     def __init__(self):
+        """Khởi tạo bộ nhận diện ASR nếu thư viện `speech_recognition` khả dụng."""
         self.recognizer = sr.Recognizer() if HAS_SR else None
 
     def detect_spoken_words(self, audio: np.ndarray, sample_rate: int = settings.SAMPLE_RATE) -> List[DetectedWord]:
         """
-        Runs speech recognition / energy segmentation to extract candidate spoken words.
+        Chạy nhận diện giọng nói trên file WAV tạm để trích xuất danh sách các từ ứng viên đã nói
+        kèm mốc thời gian phân bổ đều theo tổng thời lượng âm thanh.
         """
         if not HAS_SR or len(audio) == 0:
             return []
 
-        # 1. Export temporary WAV and recognize
+        # 1. Xuất ra file WAV tạm thời và gọi nhận diện giọng nói
         with preprocessor.export_temp_wav(audio) as wav_path:
             try:
                 with sr.AudioFile(wav_path) as source:
                     audio_data = self.recognizer.record(source)
 
-                # Use Google Speech Recognition API (built-in, lightweight)
+                # Gọi Google Speech Recognition API (tích hợp sẵn, gọn nhẹ)
                 transcript = self.recognizer.recognize_google(audio_data, language="en-US")
                 logger.info("[ASR Evidence] Detected raw speech: '%s'", transcript)
 
-                # Clean words
+                # Làm sạch từ, chỉ giữ ký tự chữ cái và đưa về chữ thường
                 raw_words = [re.sub(r'[^a-zA-Z]', '', w).lower() for w in transcript.split() if w.strip()]
                 raw_words = [w for w in raw_words if w]
                 if not raw_words:
                     return []
 
-                # Allocate timestamps across active audio speech duration
+                # Phân bổ mốc thời gian ước lượng đều cho từng từ trong tổng thời lượng đoạn âm thanh
                 total_duration = float(len(audio)) / float(sample_rate)
-                # Word approximate distribution
+                # Thời lượng ước lượng trung bình cho mỗi từ
                 w_dur = total_duration / max(1, len(raw_words))
                 detected_list = []
                 for i, w in enumerate(raw_words):
@@ -380,9 +415,9 @@ class SpeechEvidenceDetector:
 
 class WordSequenceAligner:
     """
-    Performs Sequence Alignment between Expected Words and Spoken Evidence
-    using dynamic programming (Needleman-Wunsch global alignment).
-    Detects omissions (NOT_SPOKEN), substitutions, and verified matches.
+    Thực hiện gióng hàng chuỗi giữa các từ kỳ vọng (expected words) và bằng chứng từ nhận diện được
+    bằng thuật toán quy hoạch động (Needleman-Wunsch global alignment).
+    Phát hiện chính xác các lỗi: bỏ sót từ (`NOT_SPOKEN`), đọc thay thế (`SUBSTITUTION`) và đọc khớp (`MATCH`).
     """
 
     def align(
@@ -391,12 +426,12 @@ class WordSequenceAligner:
         detected_words: List[DetectedWord]
     ) -> List[AlignedWordEvidence]:
         """
-        Aligns expected script words against detected spoken words.
-        If detected_words is empty (e.g. ASR unavailable or silent),
-        marks words with conservative heuristic.
+        Gióng hàng danh sách từ trong kịch bản mẫu với danh sách từ ASR nghe được.
+        Nếu `detected_words` rỗng (ví dụ ASR không khả dụng hoặc không nhận diện được),
+        tạm đánh dấu khớp bảo thủ với độ tin cậy 0.75.
         """
         if not detected_words:
-            # If no ASR evidence was obtainable, fall back to matching
+            # Nếu không thu được bằng chứng ASR thì tạm fallback về trạng thái MATCH bảo thủ
             return [
                 AlignedWordEvidence(
                     expected_word=w,
@@ -412,14 +447,14 @@ class WordSequenceAligner:
         n = len(expected_words)
         m = len(detected_words)
 
-        # DP scoring matrix
-        # MATCH = +2, CLOSE_SUBSTITUTION = +1, DELETION (expected word missing) = -2, INSERTION = -1
+        # Khởi tạo ma trận điểm quy hoạch động (DP)
+        # Khớp đúng = +3.0, thay thế gần giống = +1.0, thay thế xa = -2.5, thiếu từ (DELETION) = -2.0, thừa từ (INSERTION) = -1.0
         dp = np.zeros((n + 1, m + 1), dtype=np.float32)
 
         for i in range(1, n + 1):
-            dp[i][0] = dp[i - 1][0] - 2.0  # Omission penalty
+            dp[i][0] = dp[i - 1][0] - 2.0  # Điểm phạt khi bỏ sót từ kỳ vọng
         for j in range(1, m + 1):
-            dp[0][j] = dp[0][j - 1] - 1.0  # Spurious insertion penalty
+            dp[0][j] = dp[0][j - 1] - 1.0  # Điểm phạt khi chèn thêm từ thừa
 
         for i in range(1, n + 1):
             e_w = re.sub(r'[^a-zA-Z]', '', expected_words[i - 1]).lower()
@@ -434,12 +469,12 @@ class WordSequenceAligner:
                     match_score = -2.5
 
                 score_diag = dp[i - 1][j - 1] + match_score
-                score_del = dp[i - 1][j] - 2.0   # Expected word was NOT spoken
-                score_ins = dp[i][j - 1] - 1.0   # Extra spoken word
+                score_del = dp[i - 1][j] - 2.0   # Từ kỳ vọng KHÔNG được người dùng đọc
+                score_ins = dp[i][j - 1] - 1.0   # Từ đọc dư ngoài kịch bản
 
                 dp[i][j] = max(score_diag, score_del, score_ins)
 
-        # Backtracking from dp[n][m]
+        # Truy vết ngược từ ô dp[n][m] về gốc để lấy các cặp từ gióng hàng
         i = n
         j = m
         aligned_pairs: List[Tuple[Optional[int], Optional[int]]] = []
@@ -463,16 +498,16 @@ class WordSequenceAligner:
                     continue
 
             if i > 0 and np.isclose(dp[i][j], dp[i - 1][j] - 2.0):
-                # Expected word is DELETED (not spoken)
+                # Từ kỳ vọng bị xóa / bỏ sót (chưa đọc)
                 aligned_pairs.append((i - 1, None))
                 i -= 1
             else:
-                # Extra word inserted in audio, ignore
+                # Từ đọc dư trong đoạn âm thanh -> bỏ qua
                 j -= 1
 
         aligned_pairs.reverse()
 
-        # Build final AlignedWordEvidence list in expected word order
+        # Tạo danh sách AlignedWordEvidence theo đúng thứ tự các từ trong câu mẫu
         results: List[AlignedWordEvidence] = []
         for e_idx, d_idx in aligned_pairs:
             e_word = expected_words[e_idx]
@@ -482,7 +517,7 @@ class WordSequenceAligner:
                 d_clean = re.sub(r'[^a-zA-Z]', '', d_obj.word).lower()
                 is_exact = (e_clean == d_clean)
                 status = WordAlignmentStatus.MATCH if is_exact else WordAlignmentStatus.SUBSTITUTION
-                # If substitution, scale down confidence based on distance
+                # Nếu là đọc thay thế sang từ gần âm, giảm độ tin cậy theo hệ số 0.65
                 conf = d_obj.confidence if is_exact else round(d_obj.confidence * 0.65, 2)
                 results.append(
                     AlignedWordEvidence(
@@ -510,15 +545,15 @@ class WordSequenceAligner:
         return results
 
     def _is_close_word(self, w1: str, w2: str) -> bool:
-        """Determines if two words are phonetically/orthographically close."""
+        """Kiểm tra xem hai từ có gần nhau về mặt chính tả / âm vị hay không."""
         if not w1 or not w2:
             return False
         if w1 == w2:
             return True
-        # For short words (length < 4), exact match required
+        # Với từ ngắn (độ dài < 4 ký tự), bắt buộc phải khớp chính xác hoàn toàn
         if min(len(w1), len(w2)) < 4:
             return False
-        # For longer words, allow max edit distance 1 or 2 if length >= 6
+        # Với từ dài hơn, cho phép sai khác tối đa 1 ký tự (hoặc 2 nếu từ dài >= 6 ký tự)
         dist = self._levenshtein(w1, w2)
         if len(w1) >= 6 and dist <= 2:
             return True
@@ -526,6 +561,7 @@ class WordSequenceAligner:
 
     @staticmethod
     def _levenshtein(s1: str, s2: str) -> int:
+        """Tính khoảng cách chỉnh sửa Levenshtein giữa hai chuỗi ký tự."""
         if len(s1) < len(s2):
             return WordSequenceAligner._levenshtein(s2, s1)
         if len(s2) == 0:

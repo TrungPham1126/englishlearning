@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { studentApi } from "../api/studentApi";
 import type { SpeakingAiEvaluationResult } from "../types";
+import { AiCoachingCard } from "./speaking/AiCoachingCard";
 import {
   isMockOrBrokenAudioUrl,
   isGradingRubricOrMetaText,
@@ -1019,6 +1020,11 @@ export default function SpeakingQAStudio({
                 )}
             </div>
           )}
+
+          {/* Lời khuyên AI Coach dựa trên dữ liệu chấm âm học Python */}
+          <AiCoachingCard
+            coaching={aiResult.aiCoaching ?? aiResult.phoneticEvaluation?.aiCoaching}
+          />
 
           {/* So Sánh Song Song: Bản Bóc Băng Giọng Nói (STT) vs Câu Trả Lời Mẫu Nâng Cấp (Model Answer) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

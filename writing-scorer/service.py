@@ -1,4 +1,9 @@
-"""FastAPI microservice for local IELTS Writing Task 2 scoring & offline diagnostics."""
+"""Dịch vụ microservice FastAPI chấm điểm IELTS & Academic Writing cục bộ và sinh phản hồi sư phạm tiếng Việt ngoại tuyến.
+
+Hỗ trợ phân loại và chấm 3 nhóm bài viết (`TASK_1`, `TASK_2`, `PARAGRAPH`), bọc mô hình
+`WritingScorer` qua endpoint `POST /api/v1/writing/evaluate` và chuẩn hóa JSON đầu ra
+tương thích với dịch vụ Spring Boot (`PythonIntegrationService`).
+"""
 
 from __future__ import annotations
 
@@ -21,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 
-# Configure structured logging matching phonetics-service conventions
+# Cấu hình ghi log có cấu trúc thống nhất với quy ước của phonetics-service
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -32,8 +37,10 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL_DIR = BASE_DIR / "models"
 DEFAULT_PORT = 8001
 MAX_ESSAY_CHARS = 30000
+# 3 nhóm dạng bài viết được service hỗ trợ chấm điểm
 SUPPORTED_WRITING_TASKS: tuple[str, ...] = ("TASK_2", "TASK_1", "PARAGRAPH")
 
+# Tập bí danh chuẩn hóa đầu vào về TASK_1 (IELTS Writing Task 1: biểu đồ, quy trình, bản đồ)
 _TASK_1_ALIASES = frozenset(
     {
         "TASK_1",
@@ -52,6 +59,7 @@ _TASK_1_ALIASES = frozenset(
         "TASK1_MAP",
     }
 )
+# Tập bí danh chuẩn hóa đầu vào về TASK_2 (bài luận IELTS Task 2 / Discursive Essay)
 _TASK_2_ALIASES = frozenset(
     {
         "TASK_2",
@@ -77,6 +85,7 @@ _TASK_2_ALIASES = frozenset(
         "TASK2_DISCURSIVE_C1",
     }
 )
+# Tập bí danh chuẩn hóa đầu vào về PARAGRAPH (đoạn văn ngắn, email, đoạn văn có hướng dẫn)
 _PARAGRAPH_ALIASES = frozenset(
     {
         "PARAGRAPH",
@@ -107,6 +116,7 @@ _PARAGRAPH_ALIASES = frozenset(
     }
 )
 
+# Hư từ tiếng Anh và các từ đề bài chung loại trừ khi trích xuất từ khóa nội dung
 _STOPWORDS = frozenset(
     {
         "a", "an", "the", "and", "or", "but", "if", "while", "because", "although",
@@ -129,6 +139,7 @@ _STOPWORDS = frozenset(
     }
 )
 
+# Các cụm từ nối, kết luận, liên từ phụ thuộc và tín hiệu riêng cho Task 1 / Email
 _DISCOURSE_MARKERS = (
     "however", "nevertheless", "nonetheless", "although", "even though", "whereas",
     "on the other hand", "in contrast", "despite", "in spite of", "therefore",
@@ -167,6 +178,7 @@ _SPATIAL_MARKERS = (
     "corner", "center", "centre", "redeveloped", "transformed",
 )
 
+# Biểu thức chính quy kiểm tra số liệu/xu hướng Task 1, lời chào/kết Email, khung số từ và phát hiện tiếng Việt
 _DATA_TREND_RE = re.compile(
     r"(?:\b\d+(?:[.,]\d+)?%?\b|\b(?:increased|decreased|rose|fell|dropped|peaked|fluctuated|remained|surged|declined|grew|accounted\s+for|respectively)\b)",
     re.IGNORECASE,
@@ -192,6 +204,7 @@ _VIETNAMESE_DIACRITIC_RE = re.compile(
 _WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
 _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
+# Bộ luật chính quy phát hiện lỗi mạo từ, đại từ 'i', lặp từ liền kề, khoảng trắng và chia số nhiều
 _ARTICLE_A_BEFORE_VOWEL_RE = re.compile(
     r"\b(a)\s+(?!(?:university|universities|uniform|uniforms|unique|useful|usual|usually|unit|units|union|unions|european|one|once|utensil|utensils|eulogy|uk|usa|user|users|ubiquitous)\b)([aeiou][a-z]{2,})\b",
     re.IGNORECASE,
@@ -212,7 +225,7 @@ _ONE_OF_SINGULAR_RE = re.compile(
 )
 _SENT_ABBREV_RE = re.compile(r"(?:e\.g|i\.e|etc|vs|mr|mrs|ms|dr|prof)\.$", re.IGNORECASE)
 
-# High-precision spelling & academic mechanics dictionary: wrong -> (correction, type, vn_explanation)
+# Từ điển bắt lỗi chính tả và hình thức học thuật độ chính xác cao: từ sai -> (từ sửa, loại lỗi, giải thích tiếng Việt)
 _TYPO_CORRECTIONS: dict[str, tuple[str, str, str]] = {
     "recieve": ("receive", "spelling", "Lỗi chính tả: quy tắc 'i trước e ngoại trừ sau c' -> viết đúng là 'receive'."),
     "beleive": ("believe", "spelling", "Lỗi chính tả: viết đúng là 'believe'."),
@@ -308,7 +321,7 @@ _INFORMAL_CONTRACTIONS: dict[str, str] = {
 
 
 class ServiceConfig(BaseModel):
-    """Runtime settings loaded from environment variables."""
+    """Cấu hình chạy dịch vụ nạp từ biến môi trường (`WRITING_SCORER_*`)."""
 
     host: str = Field(default_factory=lambda: os.getenv("WRITING_SCORER_HOST", "0.0.0.0"))
     port: int = Field(default_factory=lambda: int(os.getenv("WRITING_SCORER_PORT", str(DEFAULT_PORT))))
@@ -320,7 +333,7 @@ class ServiceConfig(BaseModel):
 
 
 class ServiceDomainError(Exception):
-    """Structured domain error matching phonetics-service error format."""
+    """Lỗi nghiệp vụ có cấu trúc khớp với định dạng trả lỗi của phonetics-service."""
 
     def __init__(
         self,
@@ -337,7 +350,7 @@ class ServiceDomainError(Exception):
 
 
 class WritingEvaluateRequest(BaseModel):
-    """JSON payload sent by Spring Boot PythonIntegrationService."""
+    """Schema JSON đầu vào được gửi từ dịch vụ Spring Boot (`PythonIntegrationService`)."""
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -363,6 +376,7 @@ class WritingEvaluateRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalize_aliases(cls, data: Any) -> Any:
+        """Chuẩn hóa các tên trường thay thế (`prompt` -> `topic`, `essay` -> `essayText`, `taskType` -> `writingTask`)."""
         if not isinstance(data, dict):
             return data
         out = dict(data)
@@ -384,12 +398,16 @@ EvaluateWritingRequest = WritingEvaluateRequest
 
 
 class TaskAchievementSchema(BaseModel):
+    """Mức độ hoàn thành yêu cầu đề bài: điểm số, ý đã đạt và ý còn thiếu."""
+
     score: float
     addressedPoints: list[str]
     missingPoints: list[str]
 
 
 class WritingMistakeSchema(BaseModel):
+    """Thông tin một lỗi chính tả/ngữ pháp/dấu câu/từ vựng được phát hiện trong bài."""
+
     original: str
     correction: str
     type: str
@@ -397,11 +415,15 @@ class WritingMistakeSchema(BaseModel):
 
 
 class WritingSuggestionSchema(BaseModel):
+    """Một gợi ý cải thiện theo từng khía cạnh bài viết."""
+
     area: str
     recommendation: str
 
 
 class CriterionHighlightSchema(BaseModel):
+    """Đoạn trích dẫn minh họa cụ thể trong bài kèm bản viết lại và cách sửa."""
+
     inEssay: str
     rewritten: str
     critique: str
@@ -409,6 +431,8 @@ class CriterionHighlightSchema(BaseModel):
 
 
 class CriterionDetailSchema(BaseModel):
+    """Đánh giá chi tiết từng tiêu chí (TR/TA, CC, LR, GRA) kèm lời khuyên lên band kế tiếp."""
+
     code: str
     name: str
     band: float
@@ -419,6 +443,8 @@ class CriterionDetailSchema(BaseModel):
 
 
 class SuggestedVocabSchema(BaseModel):
+    """Từ vựng hoặc collocation học thuật gợi ý theo chủ đề kèm phiên âm IPA và ví dụ."""
+
     word: str
     ipa: str
     meaning: str
@@ -427,6 +453,8 @@ class SuggestedVocabSchema(BaseModel):
 
 
 class SubcriteriaSchema(BaseModel):
+    """Điểm chi tiết 4 tiêu chí IELTS (cả dạng làm tròn và dạng thô liên tục)."""
+
     taskResponse: float
     taskResponseRaw: float
     coherenceCohesion: float
@@ -439,7 +467,7 @@ class SubcriteriaSchema(BaseModel):
 
 
 class WritingEvaluateResponse(BaseModel):
-    """Exact response contract aligned with Spring Boot & frontend WritingAiEvaluationResult."""
+    """Cấu trúc JSON đầu ra chuẩn hóa khớp hoàn toàn với Spring Boot & frontend `WritingAiEvaluationResult`."""
 
     writingTask: str = "TASK_2"
     writingSubType: str = "TASK2_OPINION"
@@ -469,6 +497,8 @@ class WritingEvaluateResponse(BaseModel):
 
 @dataclass(frozen=True)
 class _SpanEdit:
+    """Biểu diễn một chỉnh sửa tại vị trí ký tự [start, end) dùng khi tự động sửa bài và xuất danh sách lỗi."""
+
     start: int
     end: int
     replacement: str
@@ -479,21 +509,21 @@ class _SpanEdit:
 
 
 def round_to_half_band(val: float) -> float:
-    """Clip score to [1.0, 9.0] and round half-up to the nearest 0.5 IELTS band."""
+    """Giới hạn điểm trong [1.0, 9.0] và làm tròn nửa lên (half-up) về bước 0.5 gần nhất."""
     clipped = max(1.0, min(9.0, float(val)))
     rounded = int(clipped * 2.0 + 0.5) / 2.0
     return max(1.0, min(9.0, rounded))
 
 
 def round_to_whole_band(val: float) -> float:
-    """Clip score to [1.0, 9.0] and round half-up to the nearest official IELTS integer sub-band."""
+    """Giới hạn điểm trong [1.0, 9.0] và làm tròn nửa lên về số nguyên band chuẩn cho từng tiêu chí IELTS."""
     clipped = max(1.0, min(9.0, float(val)))
     rounded = float(int(clipped + 0.5))
     return max(1.0, min(9.0, rounded))
 
 
 def floor_to_half_band(val: float) -> float:
-    """Clip mean score to [1.0, 9.0] and round DOWN to the nearest 0.5 IELTS overall band."""
+    """Giới hạn điểm trung bình trong [1.0, 9.0] và làm tròn XUỐNG về bước 0.5 theo quy tắc tính Overall IELTS."""
     clipped = max(1.0, min(9.0, float(val)))
     floored = math.floor(clipped * 2.0 + 1e-9) / 2.0
     return max(1.0, min(9.0, floored))
@@ -503,7 +533,7 @@ _ALNUM_TOKEN_RE = re.compile(r"[A-Za-z0-9\u00C0-\u024F\u1E00-\u1EFF]")
 
 
 def count_ielts_words(text: str) -> int:
-    """Count words matching official IELTS convention (hyphenated compounds count as 1 word)."""
+    """Đếm số từ theo quy ước chính thức của IELTS (từ ghép nối bằng dấu gạch ngang tính là 1 từ)."""
     cleaned = (text or "").strip()
     if not cleaned:
         return 0
@@ -511,7 +541,7 @@ def count_ielts_words(text: str) -> int:
 
 
 def normalize_writing_task(raw_task: Optional[str]) -> str:
-    """Normalize incoming writingTask/taskType strings; omitted or AUTO defaults to TASK_2."""
+    """Chuẩn hóa chuỗi `writingTask`/`taskType` đầu vào về `TASK_1`, `TASK_2` hoặc `PARAGRAPH` (mặc định/AUTO -> `TASK_2`)."""
     if raw_task is None:
         return "TASK_2"
     cleaned = str(raw_task).strip()
@@ -554,7 +584,7 @@ def detect_writing_subtype(
     assignment_title: str = "",
     rubrics: str = "",
 ) -> str:
-    """Resolve granular writing subtype from explicit format code, title, rubrics, and prompt."""
+    """Phân loại chi tiết tiểu thể loại (subtype) của bài viết từ mã định dạng, tiêu đề, rubrics và đề bài."""
     norm_task = normalize_writing_task(writing_task)
     raw_upper = re.sub(r"[\s\-]+", "_", (raw_task or "").strip().upper())
     combined = " ".join(
@@ -563,6 +593,7 @@ def detect_writing_subtype(
         if p and str(p).strip()
     )
 
+    # Nhánh 1: IELTS Task 1 chia thành Quy trình (Process), Bản đồ (Map) hoặc Biểu đồ/Số liệu (Data)
     if norm_task == "TASK_1":
         if raw_upper == "TASK1_PROCESS" or any(
             kw in combined
@@ -590,6 +621,7 @@ def detect_writing_subtype(
             return "TASK1_MAP"
         return "TASK1_DATA"
 
+    # Nhánh 2: Đoạn văn (Paragraph) chia thành Email ngắn, Miêu tả, Quan điểm, Ưu/Nhược, Nguyên nhân/Kết quả, Vấn đề/Giải pháp hoặc Có hướng dẫn
     if norm_task == "PARAGRAPH":
         if raw_upper in ("WRITING_SHORT_EMAIL", "SHORT_EMAIL", "WRITING_EMAIL", "EMAIL", "PARAGRAPH_EMAIL") or any(
             kw in combined
@@ -619,7 +651,7 @@ def detect_writing_subtype(
             return "PARAGRAPH_PROBLEM_SOLUTION"
         return "PARAGRAPH_GUIDED"
 
-    # TASK_2 / Discursive Academic Essay
+    # Nhánh 3: IELTS Task 2 / Bài luận học thuật đa chiều (Discursive C1, Discussion, Adv/Disadv, Problem/Solution, Two-part, Opinion)
     if raw_upper in ("WRITING_DISCURSIVE_ESSAY", "DISCURSIVE_ESSAY", "DISCURSIVE_ACADEMIC_ESSAY", "TASK2_DISCURSIVE_C1") or "discursive" in combined or "phản biện đa chiều" in combined:
         return "TASK2_DISCURSIVE_C1"
     if raw_upper == "TASK2_DISCUSSION" or "discuss both" in combined or "both views" in combined or "both sides" in combined:
@@ -644,7 +676,7 @@ def _extract_target_word_range(
     assignment_title: str = "",
     rubrics: str = "",
 ) -> tuple[int, int]:
-    """Infer expected (min_words, ideal_max_words) from explicit rubric/prompt cues or task defaults."""
+    """Suy luận khung số từ kỳ vọng `(min_words, ideal_max_words)` từ mô tả đề/rubrics hoặc theo chuẩn từng dạng bài."""
     meta = " ".join(p for p in (rubrics or "", assignment_title or "", prompt or "") if p)
     range_match = _EXPLICIT_RANGE_RE.search(meta)
     if range_match:
@@ -657,6 +689,7 @@ def _extract_target_word_range(
         if 20 <= low <= 400:
             return (low, low + 60)
 
+    # Nếu đề không ghi rõ khoảng số từ, áp dụng khung mặc định theo TASK_1 (150-210), PARAGRAPH (40-180) hoặc TASK_2 (250-320)
     norm_task = normalize_writing_task(writing_task)
     if norm_task == "TASK_1":
         return (150, 210)
@@ -673,7 +706,7 @@ def _extract_target_word_range(
 
 
 def band_to_cefr(band: float) -> str:
-    """Map IELTS overall band to CEFR level."""
+    """Quy đổi điểm tổng thể (Overall Band) IELTS sang khung trình độ CEFR."""
     if band >= 8.5:
         return "C2"
     if band >= 7.0:
@@ -686,6 +719,7 @@ def band_to_cefr(band: float) -> str:
 
 
 def _simple_stem(token: str) -> str:
+    """Rút gọn hậu tố từ vựng đơn giản để so khớp từ khóa giữa đề bài và bài làm."""
     t = token.lower()
     for suffix in (
         "ings", "ing", "ations", "ation", "ments", "ment",
@@ -697,7 +731,7 @@ def _simple_stem(token: str) -> str:
 
 
 def _extract_content_keywords(text: str) -> list[tuple[str, str]]:
-    """Return ordered unique (display_word, stem) pairs for content words."""
+    """Trích xuất danh sách duy nhất các cặp `(từ_hiển_thị, gốc_từ)` cho từ khóa nội dung trong đề bài."""
     seen: set[str] = set()
     items: list[tuple[str, str]] = []
     for raw in _WORD_RE.findall(text or ""):
@@ -712,6 +746,7 @@ def _extract_content_keywords(text: str) -> list[tuple[str, str]]:
 
 
 def _match_case(source: str, target: str) -> str:
+    """Giữ nguyên kiểu viết hoa (toàn hoa, hoa chữ cái đầu hoặc thường) của từ gốc khi thay thế sửa lỗi."""
     if source.isupper():
         return target.upper()
     if source and source[0].isupper():
@@ -725,7 +760,7 @@ def _analyze_essay_surface_and_mechanics(
     writing_task: str = "TASK_2",
     writing_subtype: str = "TASK2_OPINION",
 ) -> dict[str, Any]:
-    """Run deterministic surface, relevance, and mechanics diagnostics offline."""
+    """Chạy chẩn đoán bề mặt, kiểm tra độ bám đề, phát hiện viết tiếng Việt/chép đề và tự sửa lỗi chính tả/ngữ pháp ngoại tuyến."""
     essay_str = essay.strip()
     prompt_str = (prompt or "").strip()
     raw_words = _WORD_RE.findall(essay_str)
@@ -744,6 +779,7 @@ def _analyze_essay_surface_and_mechanics(
     sent_lens = [len(_WORD_RE.findall(s)) for s in raw_sents] or [0]
     avg_sent_len = round(sum(sent_lens) / max(1, len(sent_lens)), 1)
 
+    # Đếm các tín hiệu đặc trưng theo dạng bài: từ nối, kết luận, Overview/số liệu (Task 1), chào/kết (Email)
     essay_lower = essay_str.lower()
     dm_unique = sum(
         1 for ph in _DISCOURSE_MARKERS if re.search(rf"\b{re.escape(ph)}\b", essay_lower)
@@ -790,7 +826,7 @@ def _analyze_essay_surface_and_mechanics(
         or (word_count >= 40 and top1_content_ratio > 0.22)
     )
 
-    # Vietnamese text & parroting checks
+    # Kiểm tra bài viết pha nhiều tiếng Việt (>=25% từ có dấu tiếng Việt) hoặc chép lại nguyên đề bài (parroting)
     vi_tokens = sum(1 for tok in whitespace_tokens if _VIETNAMESE_DIACRITIC_RE.search(tok))
     is_vietnamese_heavy = bool(whitespace_tokens and (vi_tokens / len(whitespace_tokens)) >= 0.25)
 
@@ -803,14 +839,14 @@ def _analyze_essay_surface_and_mechanics(
         if overlap_ratio >= 0.80:
             is_parroting = True
 
-    # Prompt keyword overlap
+    # So khớp từ khóa nội dung giữa đề bài và bài làm
     prompt_kws = _extract_content_keywords(prompt_str)
     essay_stems = {_simple_stem(w) for w in words_lower if len(w) >= 3}
     matched_kws = [disp for disp, stem in prompt_kws if stem in essay_stems]
     missing_kws = [disp for disp, stem in prompt_kws if stem not in essay_stems]
     prompt_coverage = round(len(matched_kws) / len(prompt_kws), 3) if prompt_kws else 0.0
 
-    # Pass 1: Lexical, grammar, article, duplicate, and spacing edits
+    # Lượt 1: Thu thập các chỉnh sửa từ vựng, ngữ pháp, mạo từ a/an, lặp từ, chia số nhiều và khoảng trắng sau dấu câu
     candidate_edits: list[_SpanEdit] = []
 
     for m in _LOWERCASE_I_RE.finditer(essay_str):
@@ -942,6 +978,7 @@ def _analyze_essay_surface_and_mechanics(
         )
 
     def _apply_non_overlapping(text: str, edits: list[_SpanEdit]) -> tuple[str, list[_SpanEdit]]:
+        """Áp dụng các span chỉnh sửa không chồng lấn từ cuối chuỗi lên đầu để bảo toàn chỉ số vị trí."""
         edits.sort(key=lambda e: (e.start, -(e.end - e.start)))
         chosen: list[_SpanEdit] = []
         last_end = -1
@@ -958,7 +995,7 @@ def _analyze_essay_surface_and_mechanics(
 
     pass1_text, accepted_pass1 = _apply_non_overlapping(essay_str, candidate_edits)
 
-    # Pass 2: Sentence-start capitalization & terminal punctuation on Pass 1 result
+    # Lượt 2: Chuẩn hóa viết hoa đầu câu và bổ sung dấu chấm kết thúc đoạn/câu trên văn bản sau lượt 1
     punct_edits: list[_SpanEdit] = []
     for m in re.finditer(r"(?:^|(?<=[.!?])\s+|(?<=\n))([a-z][a-zA-Z']*)", pass1_text):
         word_tok = m.group(1)
@@ -1004,6 +1041,7 @@ def _analyze_essay_surface_and_mechanics(
     accepted_edits = accepted_pass1 + accepted_pass2
     corrected_text = final_text if final_text != essay_str else ""
 
+    # Gom tối đa 12 lỗi tiêu biểu (loại trùng theo cặp original/correction/type)
     mistakes: list[dict[str, str]] = []
     seen_mistake_keys: set[tuple[str, str, str]] = set()
     for ed in accepted_edits:
@@ -1022,7 +1060,7 @@ def _analyze_essay_surface_and_mechanics(
         if len(mistakes) >= 12:
             break
 
-    # Non-rewrite academic register & repetition diagnostics (appended if space remains)
+    # Chẩn đoán bổ sung về văn phong học thuật (dạng viết tắt) và lặp từ (chỉ báo nhắc, không sửa đè văn bản)
     is_informal_email = writing_subtype == "PARAGRAPH_EMAIL"
     if len(mistakes) < 12 and not is_informal_email:
         for contr, full_form in _INFORMAL_CONTRACTIONS.items():
@@ -1097,6 +1135,7 @@ def _build_vietnamese_task_achievement(
     writing_subtype: str = "TASK2_OPINION",
     target_range: tuple[int, int] = (250, 320),
 ) -> dict[str, Any]:
+    """Dựng danh sách điểm đã đạt (`addressedPoints`) và điểm còn thiếu (`missingPoints`) bằng tiếng Việt theo đúng dạng bài."""
     addressed: list[str] = []
     missing: list[str] = []
 
@@ -1106,6 +1145,7 @@ def _build_vietnamese_task_achievement(
     missing_kws: list[str] = surface["missing_keywords"]
     min_words, max_words = target_range
 
+    # Kiểm tra các trường hợp ngoại lệ nặng trước (viết tiếng Việt, chép lại đề, lạc đề)
     if surface["is_vietnamese_heavy"]:
         missing.append("Bài viết chứa nhiều tiếng Việt thay vì sử dụng tiếng Anh chuẩn.")
     elif surface["is_parroting"]:
@@ -1113,6 +1153,7 @@ def _build_vietnamese_task_achievement(
     elif is_off_topic:
         missing.append("Nội dung chưa bám sát yêu cầu trọng tâm và từ khóa chính của đề bài.")
     else:
+        # Ghi nhận các điểm đã hoàn thành tương ứng với TASK_1, PARAGRAPH hoặc TASK_2
         if matched_kws:
             addressed.append(f"Đã đề cập các từ khóa trọng tâm của đề bài: {', '.join(matched_kws[:5])}.")
         if writing_task == "TASK_1":
@@ -1152,6 +1193,7 @@ def _build_vietnamese_task_achievement(
         if not addressed:
             addressed.append("Đã bước đầu trình bày ý liên quan đến yêu cầu đề bài.")
 
+    # Liệt kê các khía cạnh còn thiếu theo ngưỡng độ dài, độ phủ đề bài và cấu trúc từng dạng bài
     if not is_off_topic:
         if wc < min_words:
             missing.append(f"Chưa đạt độ dài tối thiểu {min_words} từ (hiện có {wc} từ).")
@@ -1204,6 +1246,7 @@ def _build_vietnamese_feedback_and_suggestions(
     writing_subtype: str = "TASK2_OPINION",
     target_range: tuple[int, int] = (250, 320),
 ) -> tuple[str, list[dict[str, str]]]:
+    """Sinh đoạn nhận xét tổng quan (`generalFeedback`) và danh sách gợi ý cải thiện (`suggestions`) bằng tiếng Việt."""
     task_criterion_label = (
         "Task Achievement (Mức độ hoàn thành mô tả)"
         if writing_task == "TASK_1"
@@ -1250,6 +1293,7 @@ def _build_vietnamese_feedback_and_suggestions(
             "nên tiêu chí nội dung bị giới hạn <= 3.5 và Overall <= 4.0."
         )
 
+    # Nhận xét độ dài và bố cục đoạn tương ứng với PARAGRAPH, TASK_1 hoặc TASK_2
     if writing_task == "PARAGRAPH":
         severe_floor = max(12, int(round(min_words * 0.45)))
         if wc < severe_floor:
@@ -1314,6 +1358,7 @@ def _build_vietnamese_feedback_and_suggestions(
     elif adjustments:
         parts.append("Lưu ý chấm điểm: " + "; ".join(adjustments))
 
+    # Tạo danh sách gợi ý cải thiện ưu tiên theo các tiêu chí còn yếu (< 6.5) hoặc vi phạm hình thức
     suggestions: list[dict[str, str]] = []
 
     if is_off_topic or surface["is_vietnamese_heavy"] or surface["is_parroting"]:
@@ -1432,6 +1477,7 @@ def _build_vietnamese_feedback_and_suggestions(
     return " ".join(parts), suggestions
 
 
+# Kho từ vựng & collocations học thuật theo 5 chủ đề phổ biến (kèm IPA, nghĩa tiếng Việt, ví dụ và ngữ cảnh dùng)
 _TOPIC_VOCAB_BANK: dict[str, tuple[tuple[str, ...], list[dict[str, str]]]] = {
     "energy_environment": (
         (
@@ -1508,6 +1554,7 @@ _TOPIC_VOCAB_BANK: dict[str, tuple[tuple[str, ...], list[dict[str, str]]]] = {
     ),
 }
 
+# Kho mẫu câu nâng cấp ví dụ chung chung thành dẫn chứng định lượng cụ thể (từ khóa -> câu viết lại, nhận xét, cách sửa)
 _CONCRETE_EXAMPLE_BANK: list[tuple[tuple[str, ...], str, str, str]] = [
     (
         ("northern european", "european nations", "nordic", "renewable", "solar", "wind", "fossil", "carbon", "coal", "decarboniz"),
@@ -1536,8 +1583,10 @@ def _build_suggested_vocabulary(
     writing_task: str = "TASK_2",
     limit: int = 16,
 ) -> list[dict[str, str]]:
+    """Chọn tối đa `limit` từ vựng/collocation học thuật phù hợp nhất với chủ đề của đề bài và bài viết."""
     combined = f"{prompt or ''} {essay or ''}".lower()
     ranked_domains: list[tuple[int, str]] = []
+    # Xếp hạng chủ đề theo số lượng từ khóa khớp với (prompt + essay), luôn bổ sung nhóm academic_core
     for dom_name, (keywords, _) in _TOPIC_VOCAB_BANK.items():
         if not keywords:
             continue
@@ -1570,7 +1619,7 @@ def _find_example_upgrade_and_rewrite(
     writing_task: str,
     is_off_topic: bool,
 ) -> tuple[Optional[dict[str, str]], str, int]:
-    """Identify a general/unquantified example sentence to upgrade with concrete evidence and build correctedText."""
+    """Tìm câu ví dụ còn chung chung (thiếu số liệu/địa danh) để gợi ý viết lại cụ thể hơn và tạo `correctedText` hoàn chỉnh."""
     clean_base = (base_revised_text or essay_str).replace("\ufffd", "—").strip()
     if is_off_topic or count_ielts_words(essay_str) < 20 or writing_task == "TASK_1":
         final_rev = clean_base if clean_base != essay_str.replace("\ufffd", "—").strip() else ""
@@ -1584,6 +1633,7 @@ def _find_example_upgrade_and_rewrite(
     )
     has_metric_re = re.compile(r"(?:\b\d+(?:[.,]\d+)?%?\b|\bpercent\b|\bmillion\b|\bbillion\b)", re.IGNORECASE)
 
+    # Tìm câu chứa tín hiệu nêu ví dụ nhưng thiếu số liệu định lượng cụ thể
     candidate_sent: Optional[str] = None
     for sent in sentences:
         clean_sent = sent.strip()
@@ -1649,6 +1699,7 @@ def _build_criteria_details(
     mistakes: list[dict[str, str]],
     tr_highlight: Optional[dict[str, str]],
 ) -> dict[str, dict[str, Any]]:
+    """Tạo đánh giá chi tiết tiếng Việt cho từng tiêu chí (TR/TA, CC, LR, GRA) kèm mục tiêu lên band kế tiếp và highlight lỗi."""
     tr_code = "TA" if writing_task == "TASK_1" else "TR"
     tr_name = "Task Achievement" if writing_task == "TASK_1" else "Task Response"
 
@@ -1657,6 +1708,7 @@ def _build_criteria_details(
     lr_band_i = int(round(lr_score))
     gra_band_i = int(round(gra_score))
 
+    # 1. Nhận xét và lời khuyên nâng band cho tiêu chí Nội dung / Đáp ứng đề (TR hoặc TA)
     if is_off_topic:
         tr_summary = "Bài viết chưa bám sát trọng tâm câu hỏi hoặc chưa đảm bảo ngôn ngữ tiếng Anh học thuật, khiến mức độ hoàn thành yêu cầu đề bị giới hạn."
     elif tr_band_i >= 8:
@@ -1682,6 +1734,7 @@ def _build_criteria_details(
     else:
         tr_advice = "Đọc kỹ mọi vế câu hỏi, đảm bảo đủ độ dài mục tiêu và mỗi luận điểm đều có giải thích nguyên nhân–kết quả kèm ví dụ minh họa."
 
+    # 2. Nhận xét và lời khuyên nâng band cho tiêu chí Mạch lạc & Liên kết (CC)
     para_count = surface["paragraph_count"]
     dm_unique = surface["discourse_markers_unique"]
     if cc_band_i >= 8:
@@ -1697,6 +1750,7 @@ def _build_criteria_details(
         cc_summary = f"Bài viết có {para_count} đoạn và {dm_unique} nhóm từ nối; mạch triển khai ý giữa các câu/đoạn còn đôi chỗ rời rạc."
         cc_advice = "Chia tách rõ bố cục Mở bài – Thân bài – Kết bài và đặt Topic Sentence rõ ràng ở đầu mỗi đoạn."
 
+    # 3. Nhận xét và lời khuyên nâng band cho tiêu chí Từ vựng (LR)
     ttr = surface["lexical_diversity_ttr"]
     vocab_mistakes = [m for m in mistakes if m.get("type") == "vocabulary"]
     if lr_band_i >= 8:
@@ -1712,6 +1766,7 @@ def _build_criteria_details(
         lr_summary = "Vốn từ nhìn chung truyền tải được ý cơ bản nhưng độ đa dạng và độ chuẩn xác trong kết hợp từ (collocation) còn hạn chế."
         lr_advice = "Mở rộng bộ từ vựng gợi ý theo chủ đề bên dưới, ưu tiên collocations chuẩn xác và tránh lỗi chính tả."
 
+    # 4. Nhận xét và lời khuyên nâng band cho tiêu chí Ngữ pháp (GRA)
     gra_mistakes = [m for m in mistakes if m.get("type") in ("grammar", "punctuation", "spelling")]
     if gra_band_i >= 8:
         gra_summary = (
@@ -1726,6 +1781,7 @@ def _build_criteria_details(
         gra_summary = f"Bài viết có sử dụng câu ghép/câu phức cơ bản nhưng vẫn còn {len(gra_mistakes)} điểm cần điều chỉnh về ngữ pháp, chính tả hoặc dấu câu."
         gra_advice = "Kiểm tra lại thì động từ, hòa hợp chủ–vị, mạo từ a/an và dấu chấm câu trước khi nộp bài."
 
+    # Đưa tối đa 2 lỗi nổi bật làm ví dụ minh họa sửa lỗi trực tiếp cho GRA và LR
     gra_highlights: list[dict[str, str]] = []
     for m in gra_mistakes[:2]:
         gra_highlights.append(
@@ -1808,10 +1864,11 @@ def _apply_task_specific_calibrations(
     guardrails_applied_by_model: bool,
     raw_overall_cap: Optional[float] = None,
 ) -> tuple[float, float, float, float, float, float, float]:
-    """Apply format-appropriate word count, structure, and genre rubrics per writing task."""
+    """Áp dụng luật hiệu chỉnh độ dài, bố cục và đặc trưng thể loại riêng cho từng dạng bài (TASK_2, TASK_1, PARAGRAPH)."""
     wc = surface["word_count"]
     changed = False
 
+    # Nhánh TASK_2: áp dụng các mốc độ dài chuẩn bài luận IELTS (<50, <120, <220 từ)
     if writing_task == "TASK_2":
         if wc < 50:
             tr_score = min(tr_score, 3.0)
@@ -1828,6 +1885,7 @@ def _apply_task_specific_calibrations(
             overall_band = min(overall_band, 5.5)
             adjustments.append(f"Under 250-word IELTS Task 2 threshold ({wc}w): overall capped at 5.5.")
             changed = True
+    # Nhánh TASK_1: thưởng sàn 6.0 nếu đủ từ và có Overview; phạt nếu thiếu Overview, thiếu số liệu/từ nối quy trình/chỉ hướng bản đồ hoặc thiếu từ (<150)
     elif writing_task == "TASK_1":
         if not is_off_topic and wc >= min_words and tr_score < 6.0 and surface["has_overview_signal"]:
             tr_score = max(tr_score, 6.0)
@@ -1871,6 +1929,7 @@ def _apply_task_specific_calibrations(
             tr_score = min(tr_score, 5.0)
             overall_band = min(overall_band, 5.5)
             adjustments.append(f"Bài Task 1 dưới ngưỡng tối thiểu ({wc}/{min_words} từ): giới hạn điểm tổng <= 5.5.")
+    # Nhánh PARAGRAPH: hiệu chỉnh lại thang điểm từ mô hình Task 2 sang khung độ dài đoạn văn/email ngắn (không phạt oan bài 50-150 từ)
     elif writing_task == "PARAGRAPH":
         severe_floor = max(12, int(round(min_words * 0.45)))
         under_floor = max(25, int(round(min_words * 0.80)))
@@ -1914,6 +1973,7 @@ def _apply_task_specific_calibrations(
     if raw_overall_cap is not None and writing_task == "TASK_2" and guardrails_applied_by_model:
         overall_band = min(overall_band, floor_to_half_band(raw_overall_cap))
 
+    # Chuẩn hóa lần cuối: 4 tiêu chí con là số nguyên [1..9], điểm Overall làm tròn xuống bước 0.5
     tr_score = round_to_whole_band(tr_score)
     cc_score = round_to_whole_band(cc_score)
     lr_score = round_to_whole_band(lr_score)
@@ -1935,7 +1995,8 @@ def build_evaluation_response(
     assignment_title: Optional[str] = None,
     rubrics: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Transform WritingScorer prediction + offline diagnostics into Spring Boot JSON schema."""
+    """Hợp nhất kết quả dự đoán từ `WritingScorer` và phân tích ngoại tuyến thành phản hồi JSON chuẩn cho Spring Boot."""
+    # 1. Phân loại Task (TASK_1 / TASK_2 / PARAGRAPH), tiểu thể loại và khung số từ mục tiêu
     norm_task = normalize_writing_task(writing_task)
     writing_subtype = detect_writing_subtype(
         writing_task=norm_task,
@@ -1951,6 +2012,7 @@ def build_evaluation_response(
         assignment_title=assignment_title or "",
         rubrics=rubrics or "",
     )
+    # 2. Chạy chẩn đoán bề mặt, kiểm tra lạc đề/tiếng Việt/chép đề và tự động sửa lỗi chính tả/ngữ pháp
     surface = _analyze_essay_surface_and_mechanics(
         prompt,
         essay,
@@ -1960,6 +2022,7 @@ def build_evaluation_response(
     diag = dict(raw_pred.get("diagnostics") or {})
     adjustments = list(diag.get("rubric_adjustments") or [])
 
+    # 3. Quy đổi điểm thô từ mô hình sang 4 tiêu chí nguyên IELTS và tính trung bình làm tròn xuống 0.5
     tr_raw = float(raw_pred.get("task_response_raw", raw_pred.get("task_response", raw_pred.get("overall_band", 5.5))))
     cc_raw = float(raw_pred.get("coherence_cohesion_raw", raw_pred.get("coherence_cohesion", raw_pred.get("overall_band", 5.5))))
     lr_raw = float(raw_pred.get("lexical_resource_raw", raw_pred.get("lexical_resource", raw_pred.get("overall_band", 5.5))))
@@ -1989,6 +2052,7 @@ def build_evaluation_response(
         or surface["is_parroting"]
     )
 
+    # 4. Hiệu chỉnh điểm theo đặc thù Task 1 / Task 2 / Paragraph và khóa trần khi lạc đề/vi phạm ngôn ngữ
     tr_score, cc_score, lr_score, gra_score, overall_band, tr_raw, ov_raw = _apply_task_specific_calibrations(
         writing_task=norm_task,
         writing_subtype=writing_subtype,
@@ -2026,6 +2090,7 @@ def build_evaluation_response(
 
     word_count = int(surface["word_count"] if surface["word_count"] > 0 else (raw_pred.get("word_count") or 0))
 
+    # 5. Dựng đầy đủ phản hồi sư phạm tiếng Việt, gợi ý sửa lỗi, nâng cấp ví dụ, chi tiết 4 tiêu chí và từ vựng gợi ý
     task_achievement = _build_vietnamese_task_achievement(
         tr_score=tr_score,
         is_off_topic=is_off_topic,
@@ -2126,7 +2191,7 @@ def build_evaluation_response(
 
 
 def load_scorer(config: ServiceConfig) -> Any:
-    """Lazily import WritingScorer from infer.py and load the configured model."""
+    """Import lười `WritingScorer` từ `infer.py` và nạp mô hình theo cấu hình dịch vụ."""
     if str(BASE_DIR) not in sys.path:
         sys.path.insert(0, str(BASE_DIR))
     from infer import WritingScorer
@@ -2142,12 +2207,14 @@ def create_app(
     config: Optional[ServiceConfig] = None,
     scorer_instance: Any = None,
 ) -> FastAPI:
-    """Build configured FastAPI application for IELTS Writing Task 2 evaluation."""
+    """Khởi tạo ứng dụng FastAPI kèm lifespan nạp mô hình, CORS, xử lý lỗi và các route `/health`, `/api/v1/writing/evaluate`."""
     cfg = config or ServiceConfig()
+    # Khóa tuần tự hóa suy luận để bảo vệ mô hình PyTorch/VRAM khi có nhiều request đồng thời
     infer_lock = threading.Lock()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        # Nạp mô hình AI một lần khi server khởi động (trừ khi đã truyền sẵn scorer_instance khi test)
         if getattr(application.state, "scorer", None) is None:
             try:
                 logger.info(
@@ -2188,6 +2255,7 @@ def create_app(
         allow_headers=["*"],
     )
 
+    # Bộ xử lý ngoại lệ nghiệp vụ có cấu trúc (ServiceDomainError) trả HTTP status + code/message/suggestion
     @application.exception_handler(ServiceDomainError)
     async def handle_domain_error(request: Request, exc: ServiceDomainError):
         logger.warning("ServiceDomainError [%s] on %s: %s", exc.code, request.url.path, exc.message)
@@ -2202,6 +2270,7 @@ def create_app(
             },
         )
 
+    # Bộ xử lý ngoại lệ hệ thống ngoài dự kiến trả HTTP 500 theo định dạng chuẩn
     @application.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception):
         logger.error("Unexpected error on %s: %s", request.url.path, exc, exc_info=True)
@@ -2217,6 +2286,7 @@ def create_app(
             },
         )
 
+    # Endpoint kiểm tra trạng thái sống của service và tình trạng nạp mô hình AI
     @application.get("/health", status_code=status.HTTP_200_OK)
     async def health_check():
         scorer = getattr(application.state, "scorer", None)
@@ -2237,12 +2307,14 @@ def create_app(
             "error": load_err,
         }
 
+    # Endpoint chính: nhận bài viết từ backend, kiểm tra hợp lệ, chạy suy luận trong threadpool và dựng phản hồi tiếng Việt
     @application.post(
         "/api/v1/writing/evaluate",
         response_model=WritingEvaluateResponse,
         status_code=status.HTTP_200_OK,
     )
     async def evaluate_writing(req: WritingEvaluateRequest):
+        # Bước 1: Chuẩn hóa và xác thực dạng bài viết thuộc (TASK_1, TASK_2, PARAGRAPH)
         requested_task = normalize_writing_task(req.writing_task)
         if requested_task not in SUPPORTED_WRITING_TASKS:
             logger.info("Rejected unsupported writingTask=%r (normalized=%s)", req.writing_task, requested_task)
@@ -2256,6 +2328,7 @@ def create_app(
                 },
             )
 
+        # Bước 2: Kiểm tra nội dung bài viết không rỗng, có ký tự chữ/số và không vượt quá 30.000 ký tự
         essay_text = (req.essay_text or "").strip()
         if not essay_text or not re.search(r"[A-Za-z0-9\u00C0-\u024F\u1E00-\u1EFF]", essay_text):
             raise ServiceDomainError(
@@ -2272,6 +2345,7 @@ def create_app(
                 suggestion="Vui lòng rút gọn bài viết xuống dưới 30.000 ký tự.",
             )
 
+        # Bước 3: Kiểm tra mô hình AI đã sẵn sàng nạp trong application.state
         scorer = getattr(application.state, "scorer", None)
         if scorer is None:
             raise ServiceDomainError(
@@ -2284,6 +2358,8 @@ def create_app(
         prompt_parts = [p.strip() for p in (req.topic,) if p and p.strip()]
         prompt_text = " ".join(prompt_parts)
 
+        # Bước 4: Đưa tác vụ suy luận đồng bộ (PyTorch/LightGBM) vào threadpool với infer_lock để không block event loop async;
+        # chỉ bật guardrails của Task 2 tại WritingScorer khi requested_task == "TASK_2" (TASK_1 và PARAGRAPH xử lý riêng ở bước sau)
         def _run_predict() -> dict[str, Any]:
             with infer_lock:
                 return scorer.predict(
@@ -2294,6 +2370,7 @@ def create_app(
                 )
 
         raw_pred = await run_in_threadpool(_run_predict)
+        # Bước 5: Áp dụng hiệu chỉnh thang điểm theo loại bài và dựng phản hồi tiếng Việt đầy đủ
         return build_evaluation_response(
             raw_pred=raw_pred,
             prompt=prompt_text,
@@ -2308,10 +2385,12 @@ def create_app(
     return application
 
 
+# Khởi tạo đối tượng ASGI app mặc định để chạy trực tiếp qua uvicorn service:app
 app = create_app()
 
 
 def main() -> None:
+    """Điểm vào CLI khởi chạy máy chủ FastAPI/Uvicorn với cấu hình host, port, model_type và device."""
     parser = argparse.ArgumentParser(description="Run IELTS Writing Task 2 FastAPI microservice.")
     parser.add_argument("--host", type=str, default=os.getenv("WRITING_SCORER_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.getenv("WRITING_SCORER_PORT", str(DEFAULT_PORT))))

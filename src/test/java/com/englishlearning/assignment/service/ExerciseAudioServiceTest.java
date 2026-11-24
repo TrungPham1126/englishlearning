@@ -826,5 +826,12 @@ public class ExerciseAudioServiceTest {
 
         Mockito.verifyNoInteractions(audioRepo, storage);
     }
+
+    @Test
+    void cleanShadowingSentence_preservesFullSentenceWithInlineQuotes() {
+        String inlineQuoted = "In everyday conversation, the phrase \"going to\" is frequently reduced to \"gonna\" for speed and ease.";
+        String cleaned = ExerciseAudioService.cleanShadowingSentence(inlineQuoted);
+        Assertions.assertEquals(inlineQuoted, cleaned);
+    }
 }
 

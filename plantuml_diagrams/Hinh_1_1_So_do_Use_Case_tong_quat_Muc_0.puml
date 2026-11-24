@@ -1,47 +1,49 @@
 @startuml Hinh_1_1_So_do_Use_Case_tong_quat_Muc_0
 title Hình 1.1: Sơ đồ Use Case tổng quát mức 0 của hệ thống (ELP)
 left to right direction
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 10
+skinparam ranksep 12
 
 actor "Giảng viên\n(Teacher)" as Teacher
 actor "Học viên\n(Student)" as Student
 actor "Quản trị viên\n(Admin)" as Admin
 
-rectangle "«External Services»" {
-    actor "Cloudflare R2\nStorage" as R2 <<Service>>
-    actor "Python Phonetics\nMicroservice" as PythonService <<Service>>
-    actor "Gemini & Groq\nCloud AI" as CloudAI <<Service>>
-}
-
-rectangle "Hệ thống Học tiếng Anh trực tuyến (English Learning Platform - ELP)" {
-    usecase "UC-AUTH: Xác thực &\nQuản lý tài khoản" as UC_AUTH
-    usecase "UC-STU: Học tập &\nThi tương tác CBT" as UC_STU
-    usecase "UC-TEA: Quản lý lớp học &\nTạo bài tập đa nguồn" as UC_TEA
-    usecase "UC-ADM: Quản trị hệ thống,\nQuota & Nhật ký" as UC_ADM
-    usecase "UC-AI: Luyện phát âm &\nChấm Speaking/Writing" as UC_AI
+rectangle "Hệ thống Học tiếng Anh trực tuyến (ELP)" {
+    usecase "UC-TEA: Quản lý lớp, Lộ trình &\nTạo bài tập / Đề thi đa nguồn" as UC_TEA
     usecase "UC-SYS: Chuyển đổi Video HLS\n& Quản trị học liệu" as UC_SYS
+    usecase "UC-STU: Học tập theo lộ trình &\nThi tương tác CBT" as UC_STU
+    usecase "UC-AI: Luyện phát âm Shadowing &\nChấm Speaking / Writing AI" as UC_AI
+    usecase "UC-AUTH: Xác thực &\nQuản lý tài khoản" as UC_AUTH
+    usecase "UC-ADM: Quản trị hệ thống,\nAI Quota, CSDL & Audit Logs" as UC_ADM
 }
 
-Teacher --> UC_AUTH
+actor "Cloudflare R2\nStorage" as R2 <<Service>>
+actor "Python AI Services\n(:8000 / :8001)" as PythonService <<Service>>
+actor "Gemini & Groq\nCloud AI" as CloudAI <<Service>>
+
 Teacher --> UC_TEA
-Student --> UC_AUTH
+Teacher --> UC_AUTH
 Student --> UC_STU
+Student --> UC_AUTH
 Admin --> UC_AUTH
 Admin --> UC_ADM
 
-UC_STU ..> UC_AI : <<include>>
-UC_TEA ..> UC_SYS : <<include>>
+UC_TEA ..> UC_SYS : <<includes>>
+UC_STU ..> UC_AI : <<includes>>
 
-UC_AI --> PythonService : Phân tích Formant & GOP
-UC_AI --> CloudAI : Fallback STT & Chấm bài
-UC_TEA --> CloudAI : Sinh câu hỏi theo CEFR
-UC_SYS --> R2 : Lưu trữ Video HLS (.m3u8, .ts)
-UC_ADM --> CloudAI : Giám sát Quota & Chi phí
+UC_SYS --> R2
+UC_AI --> PythonService
+UC_AI --> CloudAI
+UC_ADM --> CloudAI
 @enduml

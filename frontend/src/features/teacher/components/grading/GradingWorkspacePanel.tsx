@@ -18,6 +18,7 @@ import type {
 } from "./gradingTypes";
 import { AiEvaluationCard } from "./AiEvaluationCard";
 import { normalizeScoreTo10 } from "@/utils/scoreScale";
+import { sortQuestionOptions } from "@/utils/questionOptions";
 
 interface GradingWorkspacePanelProps {
   selectedSub: GradingSubmission | null;
@@ -304,8 +305,14 @@ export const GradingWorkspacePanel: React.FC<GradingWorkspacePanelProps> = ({
                     </div>
 
                     {hasOptions ? (
-                      <div className="space-y-1.5">
-                        {q.options.map((opt: any) => {
+                      <div
+                        className={
+                          qType === "MATCHING"
+                            ? "space-y-1.5"
+                            : "grid grid-cols-1 sm:grid-cols-2 grid-flow-row gap-2"
+                        }
+                      >
+                        {sortQuestionOptions(q.options).map((opt: any) => {
                           const isChosen =
                             q.selectedOptionId === opt.id ||
                             q.studentAnswer === opt.id;

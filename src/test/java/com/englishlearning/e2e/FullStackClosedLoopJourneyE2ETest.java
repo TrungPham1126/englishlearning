@@ -1265,8 +1265,8 @@ class FullStackClosedLoopJourneyE2ETest {
         mockMvc.perform(get("/api/v1/analytics/my-profile").with(user(studentUser)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.writingScore").value(92.0))
-                .andExpect(jsonPath("$.data.pronunciationScore").value(84.0))
-                .andExpect(jsonPath("$.data.fluencyScore").value(81.0));
+                .andExpect(jsonPath("$.data.pronunciationScore").value(92.0))
+                .andExpect(jsonPath("$.data.fluencyScore").value(89.0));
 
         // Admin checks AI Monitoring stats, Audit logs, Database Overview, R2 Storage & Classroom Excel Report
         mockMvc.perform(get("/api/v1/admin/ai-monitoring/stats").with(user(adminUser)))
@@ -1336,9 +1336,9 @@ class FullStackClosedLoopJourneyE2ETest {
                 .andExpect(jsonPath("$.status").value(200))
                 .andExpect(jsonPath("$.data.evaluatedBy").value("RULE_BASED_OFFLINE_FALLBACK"))
                 .andExpect(jsonPath("$.data.statusMessage").value("Đánh giá hoàn tất bằng cơ chế Fallback ngoại tuyến (Offline Heuristics)."))
-                .andExpect(jsonPath("$.data.overallScore").value(75))
+                .andExpect(jsonPath("$.data.overallScore").value(83))
                 .andExpect(jsonPath("$.data.sentenceTokens.length()").value(9))
-                .andExpect(jsonPath("$.data.sentenceTokens[0].color").value("YELLOW"));
+                .andExpect(jsonPath("$.data.sentenceTokens[0].color").value("GREEN"));
 
         // Verify Audit Trail captured AI_FALLBACK_LOCAL event automatically
         assertThat(state.auditLogs)
@@ -1368,7 +1368,7 @@ class FullStackClosedLoopJourneyE2ETest {
                         .with(user(studentUser)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.evaluatedBy").value("GEMINI_AI_FALLBACK"))
-                .andExpect(jsonPath("$.data.overallScore").value(86));
+                .andExpect(jsonPath("$.data.overallScore").value(95));
     }
 
     private AssignmentRequest buildFull6TypesAssignmentRequest(UUID classroomId, UUID lessonId, boolean isExam) {

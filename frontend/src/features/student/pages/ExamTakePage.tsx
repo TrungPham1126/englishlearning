@@ -19,6 +19,11 @@ import {
 import { studentApi } from '@/features/student/api/studentApi';
 import type { AttemptResponse, QuestionResultDetail } from '@/features/student/types';
 import { useExamProctoring } from '@/features/student/hooks/useExamProctoring';
+import { sortQuestionOptions } from '@/utils/questionOptions';
+import {
+  resolveRestoredOptionId,
+  resolveSubmitAnswerPayload,
+} from '@/features/student/utils/questionReviewScoring';
 
 type ExamPhase = 'LOADING' | 'PRE_START' | 'TESTING' | 'RESULT';
 
@@ -102,8 +107,7 @@ export default function ExamTakePage() {
     > = {};
     (detail.questions || []).forEach((q) => {
       restored[q.questionId] = {
-        selectedOptionId:
-          q.selectedOptionId || (q.studentAnswer?.length === 36 ? q.studentAnswer : undefined),
+        selectedOptionId: resolveRestoredOptionId(q),
         textAnswer: q.studentAnswer,
         audioUrl: q.audioUrl,
       };
@@ -175,11 +179,11 @@ export default function ExamTakePage() {
     const questions = attempt?.questions || [];
     const current = answersRef.current;
     return questions.map((q) => {
-      const a = current[q.questionId];
+      const payload = resolveSubmitAnswerPayload(q, current[q.questionId]);
       return {
-        questionId: q.questionId,
-        selectedOptionId: a?.selectedOptionId,
-        textAnswer: a?.textAnswer,
+        questionId: payload.questionId,
+        selectedOptionId: payload.selectedOptionId,
+        textAnswer: payload.textAnswer,
       };
     });
   }, [attempt?.questions]);
@@ -619,8 +623,8 @@ export default function ExamTakePage() {
 
                 {/* Question Type Controls */}
                 {activeQuestion.options && activeQuestion.options.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {activeQuestion.questionType === 'MATCHING' ? (
+                  activeQuestion.questionType === 'MATCHING' ? (
+                    <div className="space-y-2.5">
                       <input
                         type="text"
                         value={currentAns?.textAnswer || ''}
@@ -636,8 +640,10 @@ export default function ExamTakePage() {
                         placeholder="Nhập đáp án..."
                         className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-blue-500"
                       />
-                    ) : (
-                      activeQuestion.options.map((opt) => {
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 grid-flow-row gap-2.5">
+                      {sortQuestionOptions(activeQuestion.options).map((opt, optIdx) => {
                         const chosen = currentAns?.selectedOptionId === opt.id;
                         return (
                           <button
@@ -666,14 +672,14 @@ export default function ExamTakePage() {
                                   : 'border-slate-700 text-slate-400'
                               }`}
                             >
-                              {opt.optionLabel || '•'}
+                              {opt.optionLabel || String.fromCharCode(65 + optIdx)}
                             </span>
                             <span>{opt.optionText}</span>
                           </button>
                         );
-                      })
-                    )}
-                  </div>
+                      })}
+                    </div>
+                  )
                 ) : activeQuestion.questionType === 'AUDIO_RESPONSE' ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
                     <div className="flex items-center justify-between gap-2">

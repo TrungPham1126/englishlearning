@@ -84,7 +84,7 @@ export default function TeacherManagementPage() {
     const nextStatus = !user.isActive;
     if (
       !window.confirm(
-        `${nextStatus ? "Mở khóa" : "Khóa"} giảng viên "${user.lastName} ${user.firstName}"?`,
+        `${nextStatus ? "Mở khóa" : "Khóa"} giảng viên "${user.firstName} ${user.lastName}"?`,
       )
     )
       return;
@@ -99,7 +99,7 @@ export default function TeacherManagementPage() {
   const handleDelete = async (user: UserSummaryDto) => {
     if (
       !window.confirm(
-        `Xóa vĩnh viễn giảng viên "${user.lastName} ${user.firstName}"?`,
+        `Xóa vĩnh viễn giảng viên "${user.firstName} ${user.lastName}"?`,
       )
     )
       return;
@@ -309,7 +309,7 @@ export default function TeacherManagementPage() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 dark:text-white">
-                              {teacher.lastName} {teacher.firstName}
+                              {teacher.firstName} {teacher.lastName}
                             </p>
                           </div>
                         </div>
@@ -633,7 +633,7 @@ export default function TeacherManagementPage() {
               <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-100">
                 <span className="text-xs font-semibold text-slate-500 block">Giảng viên</span>
                 <span className="text-sm font-bold text-blue-900 block mt-0.5">
-                  {selectedTeacher.lastName} {selectedTeacher.firstName} ({selectedTeacher.email})
+                  {selectedTeacher.firstName} {selectedTeacher.lastName} ({selectedTeacher.email})
                 </span>
               </div>
 

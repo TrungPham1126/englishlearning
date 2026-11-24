@@ -94,7 +94,6 @@ export default function SpeakingShadowingStudio({
     toggleRecording,
     resetRecording,
     triggerAiEvaluation,
-    repairNativeAudio,
     changePlaybackSpeed,
   } = useShadowingAudioEngine({
     questionId,
@@ -127,15 +126,12 @@ export default function SpeakingShadowingStudio({
       data-portal="student"
       className="elp-card student-portal rounded-lg border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-950 p-2.5 sm:p-3 shadow-2xs space-y-2.5 transition-colors duration-200"
     >
-      {/* Vùng 1 (Top): Thanh tiến trình bài học, chế độ Shadowing/Normal, giọng đọc và nút Back */}
+      {/* Vùng 1 (Top): Thanh tiến trình bài học, bảng chú giải, tốc độ và nút Back */}
       <ShadowingTopBar
         currentStep={currentStep}
         totalSteps={totalSteps}
         onBack={onBack}
         onChangeSpeed={changePlaybackSpeed}
-        onRepairAudio={() => {
-          void repairNativeAudio();
-        }}
       />
 
       {/* Vùng 2 (Center): Transcript tiếng Anh cỡ chữ lớn, highlight từng từ theo trạng thái */}
@@ -144,7 +140,7 @@ export default function SpeakingShadowingStudio({
         evaluationResult={localEvaluationResult}
       />
 
-      {/* Vùng 3 (Waveform & Player): Khung hiển thị sóng âm song song (Native Speaker vs Learner) */}
+      {/* Vùng 3 (Waveform & Player): Chỉ hiển thị sóng âm khi đang phát mẫu, ghi âm hoặc phát lại */}
       <DualWaveformVisualizer
         targetSentence={targetSentence}
         onTogglePlayNative={() => {
@@ -158,6 +154,7 @@ export default function SpeakingShadowingStudio({
         onPlayNative={() => {
           void togglePlayNativeAudio();
         }}
+        onTogglePlayLearner={togglePlayLearnerAudio}
         onToggleRecord={toggleRecording}
         onResetRecord={() => {
           setLocalEvaluationResult(null);

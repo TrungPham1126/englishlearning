@@ -246,7 +246,7 @@ export default function VideoModerationPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-slate-400">Người tải:</span>
                         <strong className="text-blue-800 dark:text-blue-400">
-                          {vid.uploadedBy.lastName} {vid.uploadedBy.firstName} ({vid.uploadedBy.email})
+                          {vid.uploadedBy.firstName} {vid.uploadedBy.lastName} ({vid.uploadedBy.email})
                         </strong>
                       </div>
                     )}

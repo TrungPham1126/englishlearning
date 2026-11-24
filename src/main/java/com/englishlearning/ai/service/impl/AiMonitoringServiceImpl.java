@@ -302,8 +302,14 @@ public class AiMonitoringServiceImpl implements AiMonitoringService {
         long studentCompletionTokens = Math.max(evalCompletionTokens, quotaCompletionTokens) + liveGeminiCompletionTokens.get();
         long studentTotalTokens = studentPromptTokens + studentCompletionTokens;
 
-        double studentCost = (studentPromptTokens * (GEMINI_INPUT_COST_PER_M / 1_000_000.0)) +
+        double quotaRecordedCost = allQuotas.stream()
+                .mapToDouble(q -> (q.getEstimatedCostUsd() != null && q.getEstimatedCostUsd() > 0)
+                        ? q.getEstimatedCostUsd()
+                        : 0.0)
+                .sum();
+        double tokenBasedStudentCost = (studentPromptTokens * (GEMINI_INPUT_COST_PER_M / 1_000_000.0)) +
                 (studentCompletionTokens * (GEMINI_OUTPUT_COST_PER_M / 1_000_000.0));
+        double studentCost = Math.max(tokenBasedStudentCost, quotaRecordedCost + liveGeminiCostUsd.get());
 
         // 2. Giáo viên (Groq LLaMA: sinh đề thi, bài tập trắc nghiệm)
         long dbTeacherCompletionTokens = 0L;

@@ -187,10 +187,10 @@ public class ShadowingServiceTest {
                 ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(
                                 audio, answerId, "\"    \"");
 
-                Assertions.assertEquals(90, res.getOverallScore());
+                Assertions.assertEquals(99, res.getOverallScore());
                 verify(aiEvaluationRepository).save(existingEval);
                 verify(entityManager).merge(answer);
-                verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 0.9);
+                verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 9.9 * 0.1);
         }
 
         @Test
@@ -238,8 +238,8 @@ public class ShadowingServiceTest {
 
                 ShadowingEvaluationResponse res = shadowingService.evaluateShadowing(audio, questionId, null);
 
-                Assertions.assertEquals(80, res.getOverallScore());
-                Assertions.assertEquals(8.0, answer.getEarnedPoints());
+                Assertions.assertEquals(88, res.getOverallScore());
+                Assertions.assertEquals(8.8, answer.getEarnedPoints());
                 verify(pythonIntegrationService).evaluatePhonetics(any(), eq("test.wav"), eq("Practice makes perfect."));
                 verify(aiEvaluationRepository).save(any(AiEvaluation.class));
         }
@@ -288,5 +288,44 @@ public class ShadowingServiceTest {
                 verifyNoInteractions(groqClientService);
                 verify(geminiClientService).generateWithSystemInstruction(anyString(),
                                 argThat(p -> p != null && p.contains("[SILENCE / NO SPEECH DETECTED]")));
+        }
+
+        @Test
+        void testEvaluateShadowing_PythonSuccess_AttachesAndPersistsAiCoaching() {
+                MockMultipartFile audio = new MockMultipartFile("audio", "test.wav", "audio/wav",
+                                new byte[] { 1, 2, 3 });
+                UUID answerId = UUID.randomUUID();
+                StudentAnswer answer = new StudentAnswer();
+                answer.setId(answerId);
+                when(entityManager.find(StudentAnswer.class, answerId)).thenReturn(answer);
+                when(aiEvaluationRepository.findByStudentAnswerId(answerId)).thenReturn(Optional.empty());
+
+                com.englishlearning.ai.service.SpeakingAiCoachingService coachingMock =
+                                mock(com.englishlearning.ai.service.SpeakingAiCoachingService.class);
+                ((ShadowingServiceImpl) shadowingService).setSpeakingAiCoachingService(coachingMock);
+
+                ShadowingEvaluationResponse pythonResp = ShadowingEvaluationResponse.builder()
+                                .overallScore(76)
+                                .isPassed(false)
+                                .build();
+                when(pythonIntegrationService.evaluatePhonetics(any(), any(), any())).thenReturn(pythonResp);
+
+                com.englishlearning.ai.dto.AiCoachingAdvice advice = com.englishlearning.ai.dto.AiCoachingAdvice.builder()
+                                .summary("Cần chú ý âm đuôi từ world.")
+                                .actionTips(List.of("Bật rõ âm /d/ cuối từ world."))
+                                .practiceDrill("Đọc chậm 'Hello world' 5 lần.")
+                                .generatedBy("GROQ_AI_COACH")
+                                .build();
+                when(coachingMock.generateShadowingCoaching(eq(pythonResp), eq("Hello world"), eq("SHADOWING")))
+                                .thenReturn(advice);
+
+                ShadowingEvaluationResponse result = shadowingService.evaluateShadowing(audio, answerId, "Hello world");
+
+                Assertions.assertNotNull(result.getAiCoaching());
+                Assertions.assertEquals("GROQ_AI_COACH", result.getAiCoaching().getGeneratedBy());
+                ArgumentCaptor<AiEvaluation> captor = ArgumentCaptor.forClass(AiEvaluation.class);
+                verify(aiEvaluationRepository).save(captor.capture());
+                Assertions.assertTrue(captor.getValue().getSuggestionsJson().contains("GROQ_AI_COACH"));
+                Assertions.assertTrue(captor.getValue().getSuggestionsJson().contains("world"));
         }
 }

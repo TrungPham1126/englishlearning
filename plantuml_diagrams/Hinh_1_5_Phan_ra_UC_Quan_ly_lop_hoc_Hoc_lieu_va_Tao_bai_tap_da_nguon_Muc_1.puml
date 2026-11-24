@@ -1,39 +1,55 @@
 @startuml Hinh_1_5_Phan_ra_UC_Quan_ly_lop_hoc_Hoc_lieu_va_Tao_bai_tap_da_nguon_Muc_1
 title Hình 1.5: Phân rã UC Quản lý lớp, Học liệu & Tạo bài tập đa nguồn (Teacher) - Mức 1
 left to right direction
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 10
+skinparam ranksep 12
 
 actor "Giảng viên\n(Teacher)" as Teacher
-actor "Cloudflare R2\nStorage" as R2 <<Service>>
-actor "Kokoro-82M TTS\nMicroservice" as TTS <<Service>>
-actor "Google Gemini 2.5\nFlash AI" as GeminiAI <<Service>>
 
-rectangle "Phân hệ Giảng viên & Quản lý Học liệu (UC-TEA)" {
-    usecase "UC-TEA-01: Quản lý lớp học &\nDanh sách học viên" as UC_CLASS
-    usecase "UC-TEA-02: Xây dựng giáo trình,\nBài giảng & Tài liệu PDF" as UC_CURRICULUM
-    usecase "UC-TEA-03: Tạo bài tập từ\nFile Excel (SheetJS)" as UC_EXCEL
-    usecase "UC-TEA-04: Tạo bài tập tự động\nbằng Gemini AI theo CEFR" as UC_GEN_AI
-    usecase "UC-TEA-05: Sinh âm thanh mẫu bản ngữ\nqua Kokoro-82M TTS" as UC_TTS
-    usecase "UC-TEA-06: Chấm bài tự luận &\nNhận xét bài làm học viên" as UC_GRADE
+rectangle "Phân hệ Quản lý lớp học, Học liệu & Bài tập (Giảng viên)" {
+    usecase "Quản lý lớp học, Học viên\n& Bài giảng" as UC_CLASS
+    usecase "Tải lên Video bài giảng\n(Đẩy vào RabbitMQ)" as UC_UPLOAD
+    usecase "Lập & Mở khóa Lộ trình\n(DailyStudyPlan)" as UC_UNLOCK
+    usecase "Tạo bài tập & Đề thi đa nguồn\n(AI / Excel / Thủ công)" as UC_CREATE
+    usecase "Chấm bài thi tự luận &\nGửi thông báo lớp" as UC_GRADE
+
+    usecase "Quản lý Tài liệu PDF/DOC,\nTừ vựng & Ngữ pháp" as UC_DOC
+    usecase "Chuyển mã Video HLS\n(Worker FFmpeg)" as UC_HLS
+    usecase "Sinh câu hỏi / Đề thi CEFR\n(Gemini 2.5 / Groq)" as UC_GEN_AI
+    usecase "Tổng hợp âm thanh đọc\n(Kokoro-82M TTS)" as UC_TTS
+    usecase "Xem gợi ý điểm AI &\nNhận xét sư phạm" as UC_AI_GRADE
 }
 
+actor "Cloudflare R2\nStorage" as R2 <<Service>>
+actor "Kokoro TTS (:8000)\n& Cloud AI" as GeminiTTS <<Service>>
+
 Teacher --> UC_CLASS
-Teacher --> UC_CURRICULUM
-Teacher --> UC_EXCEL
-Teacher --> UC_GEN_AI
+Teacher --> UC_UPLOAD
+Teacher --> UC_UNLOCK
+Teacher --> UC_CREATE
 Teacher --> UC_GRADE
 
-UC_GEN_AI --> GeminiAI : Sinh câu hỏi & đáp án JSON
-UC_EXCEL ..> UC_TTS : <<extend>>
-UC_GEN_AI ..> UC_TTS : <<extend>>
-UC_TTS --> TTS : Tổng hợp giọng bản ngữ (af_heart)
-UC_TTS --> R2 : Lưu tệp âm thanh WAV
-UC_CURRICULUM --> R2 : Lưu tài liệu học tập
+UC_CLASS ..> UC_DOC : <<includes>>
+UC_UPLOAD ..> UC_HLS : <<includes>>
+UC_CREATE ..> UC_UNLOCK : <<includes>>
+UC_CREATE ..> UC_GEN_AI : <<includes>>
+UC_CREATE ..> UC_TTS : <<includes>>
+UC_GRADE ..> UC_AI_GRADE : <<includes>>
+
+UC_DOC --> R2
+UC_HLS --> R2
+UC_GEN_AI --> GeminiTTS
+UC_TTS --> GeminiTTS
+UC_TTS --> R2
 @enduml

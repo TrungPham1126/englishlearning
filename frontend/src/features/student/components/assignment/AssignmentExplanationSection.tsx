@@ -4,6 +4,11 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import type { QuestionResultDetail } from '@/features/student/types';
+import {
+  evaluateQuestionReviewOutcome,
+  formatQuestionPoints,
+  type StudentQuestionAnswer,
+} from '@/features/student/utils/questionReviewScoring';
 
 export interface AssignmentExplanationSectionProps {
   question: QuestionResultDetail;
@@ -17,17 +22,35 @@ export interface AssignmentExplanationSectionProps {
     grammarAnalysis?: string;
     suggestedAnswer?: string;
   };
+  studentAnswer?: StudentQuestionAnswer;
+  isCorrectOverride?: boolean;
+  earnedPointsOverride?: number;
   phase: 'CHECKING' | 'INTRO' | 'TESTING' | 'REVIEW' | 'EXHAUSTED';
   studyMode: 'PRACTICE' | 'TEST';
 }
 
 export const AssignmentExplanationSection: React.FC<AssignmentExplanationSectionProps> = ({
   question,
+  studentAnswer,
+  isCorrectOverride,
+  earnedPointsOverride,
   phase,
 }) => {
   const isReview = phase === 'REVIEW';
 
   if (!isReview) return null;
+
+  const outcome = evaluateQuestionReviewOutcome(question, studentAnswer);
+  const resolvedIsCorrect =
+    isCorrectOverride !== undefined ? isCorrectOverride : outcome.isCorrect;
+  const resolvedPoints =
+    earnedPointsOverride !== undefined
+      ? earnedPointsOverride
+      : resolvedIsCorrect
+      ? outcome.earnedPoints > 0
+        ? outcome.earnedPoints
+        : outcome.maxPoints
+      : 0;
 
   return (
     <div className="pt-2">
@@ -39,13 +62,13 @@ export const AssignmentExplanationSection: React.FC<AssignmentExplanationSection
           </span>
           <span
             className={`px-2 py-0.5 rounded text-[11px] font-bold tabular-nums ${
-              (question as any).isCorrect
+              resolvedIsCorrect
                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                 : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
             }`}
           >
-            {(question as any).isCorrect
-              ? `+${(question as any).earnedPoints ?? (question as any).maxPoints ?? 1} đ`
+            {resolvedIsCorrect
+              ? `+${formatQuestionPoints(resolvedPoints)} đ`
               : '+0 đ'}
           </span>
         </div>

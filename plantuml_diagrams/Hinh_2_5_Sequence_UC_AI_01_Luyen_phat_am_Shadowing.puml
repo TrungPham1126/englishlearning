@@ -1,45 +1,46 @@
 @startuml Hinh_2_5_Sequence_UC_AI_01_Luyen_phat_am_Shadowing
-title Hình 2.5: Biểu đồ tuần tự Luyện phát âm Shadowing qua dịch vụ âm học và AI (UC-AI-01)
-skinparam dpi 200
+title Hình 2.5: Biểu đồ tuần tự Luyện phát âm Shadowing qua dịch vụ âm học & AI (UC-AI-01)
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
-skinparam maxMessageSize 110
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam maxMessageSize 130
 
 actor "Học viên" as Student
-participant "React Frontend\n(Shadowing Studio)" as FE
+participant "React\n(Shadowing)" as FE
 participant "AiLabController" as AiCtrl
 participant "ShadowingService" as ShadowSvc
-participant "Python FastAPI\n(:8000 Phonetics)" as PyFastAPI
-participant "Groq Whisper\n(STT Cloud)" as GroqSTT
-participant "Gemini 2.5\n(Phonetics AI)" as GeminiAI
-participant "MySQL DB\n(evaluations)" as DB
-participant "WebSocket\n(/topic/student)" as STOMP
+participant "Python FastAPI\n(:8000)" as PyAPI
+participant "Groq Whisper\n& Gemini 2.5" as CloudAI
+database "MySQL DB" as DB
 
-Student -> FE: Đọc to câu mẫu & kết thúc thu âm (Web Audio)
-FE -> AiCtrl: POST /api/v1/ai/speaking/shadowing-evaluate\n(Tệp WAV 16kHz & Câu mẫu)
+Student -> FE: Đọc câu mẫu & dừng thu âm (WAV 16kHz)
+FE -> AiCtrl: POST /api/v1/ai/speaking/shadowing-evaluate
 AiCtrl -> ShadowSvc: evaluateShadowing(audio, answerId, sentence)
 
-alt Tầng 1: Phân tích âm học qua Python FastAPI
-    ShadowSvc -> PyFastAPI: POST /api/v1/audio/evaluate-phonetics
-    PyFastAPI -> PyFastAPI: VAD kiểm tra SNR -> Wav2Vec2 CTC\nPraat đo Formant F1/F2 & GOP
-    PyFastAPI --> ShadowSvc: HTTP 200 JSON (GOP, Formant, IPA)
-    ShadowSvc -> ShadowSvc: EvaluatedBy = "PYTHON_ACOUSTIC_ENGINE"
-else Tầng 2 Fallback: Groq Whisper STT + Gemini 2.5 Flash
-    ShadowSvc -> GroqSTT: POST /v1/audio/transcriptions (WAV)
-    GroqSTT --> ShadowSvc: Transcript bóc băng (< 800ms)
-    ShadowSvc -> GeminiAI: evaluateWithAi(Cambridge Rules, prompt)
-    GeminiAI --> ShadowSvc: JSON điểm số, mảng màu từ & IPA
-    ShadowSvc -> ShadowSvc: EvaluatedBy = "GEMINI_AI_FALLBACK"
+alt Tầng 1: Python Acoustic Engine (Ưu tiên)
+    ShadowSvc -> PyAPI: POST /api/v1/audio/evaluate-phonetics
+    PyAPI -> PyAPI: VAD + Wav2Vec2 CTC + Praat F1/F2 + GOP
+    PyAPI --> ShadowSvc: HTTP 200 JSON (IPA, Formant, GOP)
+else Tầng 2 & 3: Fallback Groq Whisper + Gemini 2.5 / LLaMA 3.3
+    ShadowSvc -> CloudAI: Groq Whisper STT -> Transcript
+    CloudAI --> ShadowSvc: Văn bản bóc băng
+    ShadowSvc -> CloudAI: Gemini 2.5 Flash (fallback Groq LLaMA 3.3)
+    CloudAI --> ShadowSvc: JSON điểm số, mảng màu từ & IPA
 end
 
-ShadowSvc -> DB: INSERT INTO ai_evaluations\n(overall_score, stt_transcript, engine)
-ShadowSvc -> DB: UPDATE student_answers SET eval_feedback = ...
-ShadowSvc -> DB: UPDATE student_skill_profiles\nSET speaking_score = ... (Radar)
-ShadowSvc -> STOMP: convertAndSend(/topic/student/{id}/evaluation)
-STOMP --> FE: Đẩy kết quả tức thì qua WebSocket
-FE --> Student: Hiển thị Review Mode\n(Tô màu từ, âm vị IPA, Formant)
+ShadowSvc -> CloudAI: SpeakingAiCoachingService: Groq (fallback Gemini)\ntổng hợp KPI, từ yếu & IPA -> AiCoachingAdvice
+CloudAI --> ShadowSvc: AiCoachingAdvice (summary, actionTips, practiceDrill)
+
+ShadowSvc -> DB: Lưu ai_evaluations & cập nhật student_answers
+ShadowSvc -> DB: Cập nhật điểm Speaking (student_skill_profiles)
+ShadowSvc --> AiCtrl: ShadowingEvaluationResponse (kèm aiCoaching)
+AiCtrl --> FE: HTTP 200 OK (Kết quả chi tiết)
+FE --> Student: Hiển thị Review Mode (Tô màu từ, IPA) & AiCoachingCard
 @enduml

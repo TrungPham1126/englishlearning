@@ -1,3 +1,14 @@
+"""
+Module kiểm tra chất lượng thu âm và bằng chứng âm học phụ âm.
+
+Bao gồm:
+1. Cổng kiểm tra chất lượng thu âm (`AudioQualityGate`): đánh giá thời lượng, độ to,
+   hiện tượng vỡ tiếng (clipping) và tỷ lệ tín hiệu trên nhiễu (SNR) trước khi chấm điểm.
+2. Kiểm tra bằng chứng âm học của phụ âm (`check_consonant_acoustic_evidence_detailed`):
+   phân tích đặc trưng vật lý của sóng âm để xác nhận phụ âm (âm xát, âm bật, âm mũi, âm trượt)
+   có thực sự được phát âm rõ ràng hay bị nuốt âm.
+"""
+
 from typing import List, Tuple
 import numpy as np
 
@@ -12,17 +23,29 @@ from app.schemas import AudioQualityMetrics
 
 
 class AudioQualityGate:
+    """
+    Cổng gác kiểm định chất lượng âm thanh đầu vào.
+    Giúp phát hiện sớm bản thu quá ngắn, quá dài, im lặng, bị rè vỡ tiếng hoặc quá ồn
+    để tránh hệ thống chấm điểm sai lệch.
+    """
+
     def __init__(
         self,
         min_duration: float = settings.MIN_AUDIO_DURATION,
         max_duration: float = settings.MAX_AUDIO_DURATION,
         sample_rate: int = settings.SAMPLE_RATE
     ):
+        """Khởi tạo các ngưỡng kiểm tra thời lượng tối thiểu, tối đa và tần số lấy mẫu chuẩn."""
         self.min_duration = min_duration
         self.max_duration = max_duration
         self.sample_rate = sample_rate
 
     def evaluate(self, audio: np.ndarray, strict: bool = True) -> AudioQualityMetrics:
+        """
+        Đánh giá toàn diện chất lượng đoạn ghi âm và trả về bộ chỉ số `AudioQualityMetrics`.
+        Nếu `strict=True`, sẽ ném ngoại lệ ngay khi phát hiện âm thanh kém chất lượng nghiêm trọng.
+        """
+        # Tính tổng thời lượng đoạn âm thanh (tính bằng giây)
         duration = float(len(audio)) / float(self.sample_rate)
 
         if duration < self.min_duration:
@@ -30,20 +53,24 @@ class AudioQualityGate:
         if duration > self.max_duration:
             raise AudioTooLongError(duration, self.max_duration)
 
+        # Đo biên độ đỉnh (peak) và độ to trung bình (RMS) để phát hiện file im lặng hoặc micro quá nhỏ
         peak = float(np.max(np.abs(audio))) if len(audio) > 0 else 0.0
         rms = float(np.sqrt(np.mean(audio**2))) if len(audio) > 0 else 0.0
 
         if peak < 0.005 or rms < 0.002:
             raise EmptySpeechError("Âm lượng ghi âm quá nhỏ hoặc hoàn toàn im lặng.")
 
+        # Tính tỷ lệ mẫu âm thanh chạm ngưỡng biên độ tối đa (>= 0.985), dấu hiệu âm bị rè / vỡ tiếng (clipping)
         clipped_samples = np.sum(np.abs(audio) >= 0.985)
         clipping_ratio = float(clipped_samples) / float(len(audio))
 
+        # Phân tích chi tiết từng khung âm thanh để ước lượng khoảng lặng, tỷ lệ nói, độ ồn nền (SNR) và dải động
         silence_ratio, speech_ratio, estimated_snr, dynamic_range = self._analyze_frames(audio)
 
         warnings: List[str] = []
         is_acceptable = True
 
+        # Cảnh báo nếu vỡ tiếng nhẹ (> 3%) và từ chối nếu vỡ tiếng nặng (> 10%)
         if clipping_ratio > 0.03:
             warnings.append(f"Audio clipping detected ({clipping_ratio * 100:.1f}% samples clipped).")
             if clipping_ratio > 0.10:
@@ -51,6 +78,7 @@ class AudioQualityGate:
                 if strict:
                     raise AudioQualityTooLowError("Âm thanh bị vỡ tiếng (clipping) quá nặng.")
 
+        # Với file dài hơn 1.2 giây: cảnh báo nếu nhiễu nền cao (SNR < 7 dB) và từ chối nếu quá ồn (SNR < 4 dB)
         if estimated_snr < 7.0 and duration > 1.2:
             warnings.append(f"High background noise (SNR: {estimated_snr:.1f} dB).")
             if estimated_snr < 4.0:
@@ -72,8 +100,12 @@ class AudioQualityGate:
         )
 
     def _analyze_frames(self, audio: np.ndarray) -> Tuple[float, float, float, float]:
-        frame_len = int(0.025 * self.sample_rate)  # 25ms
-        hop_len = int(0.010 * self.sample_rate)    # 10ms
+        """
+        Chia tín hiệu âm thanh thành các khung ngắn 25ms (bước nhảy 10ms) để tính mức năng lượng dB,
+        từ đó ước lượng mức nhiễu nền (noise floor), tỷ lệ tín hiệu trên nhiễu (SNR) và tỷ lệ có giọng nói.
+        """
+        frame_len = int(0.025 * self.sample_rate)  # Độ dài mỗi khung phân tích: 25 mili-giây
+        hop_len = int(0.010 * self.sample_rate)    # Bước trượt giữa các khung liên tiếp: 10 mili-giây
 
         if len(audio) < frame_len:
             return 0.5, 0.5, 25.0, 30.0
@@ -85,10 +117,11 @@ class AudioQualityGate:
             frame_rms = np.sqrt(np.mean(frame**2))
             energies.append(frame_rms)
 
+        # Quy đổi năng lượng RMS sang thang đo decibel (dB)
         energies_arr = np.array(energies)
         energies_db = 20.0 * np.log10(np.maximum(energies_arr, 1e-6))
 
-        # File ngắn (< 1.2s): lấy phân vị 5% để không nhầm âm thanh từ vựng thành noise floor
+        # File ngắn (< 1.2s): lấy phân vị 5% để không nhầm âm thanh từ vựng thành mức nhiễu nền (noise floor)
         duration_sec = float(len(audio)) / float(self.sample_rate)
         noise_pct = 5 if duration_sec < 1.2 else 15
 
@@ -96,13 +129,14 @@ class AudioQualityGate:
         speech_peak_db = float(np.percentile(energies_db, 95))
         dynamic_range = max(0.0, speech_peak_db - noise_floor_db)
 
-        # Với audio ngắn chất lượng cao, SNR tối thiểu đảm bảo 24dB
+        # Với audio ngắn chất lượng cao (biên độ rõ > 0.3), gán mức SNR mặc định an toàn là 26 dB
         if duration_sec < 1.2 and dynamic_range < 15.0 and np.max(np.abs(audio)) > 0.3:
             estimated_snr = 26.0
             dynamic_range = 26.0
         else:
             estimated_snr = max(0.0, dynamic_range)
 
+        # Đặt ngưỡng phân biệt khung có tiếng nói và khung khoảng lặng
         threshold_db = noise_floor_db + min(12.0, dynamic_range * 0.4)
         speech_frames = np.sum(energies_db > threshold_db)
         total_frames = len(energies_db)
@@ -119,29 +153,33 @@ def check_consonant_acoustic_evidence_detailed(
     sample_rate: int = settings.SAMPLE_RATE
 ) -> Tuple[bool, float, str]:
     """
-    Evaluates acoustic evidence for consonants based on international CAPT standards:
-    - Fricatives: Spectral Centroid (> 2500Hz) & Zero-Crossing Rate (ZCR)
-    - Plosives: Transient burst energy ratio
-    - Nasals: Low frequency concentration (< 800Hz)
-    Returns (has_evidence: bool, acoustic_multiplier: float, detail: str)
+    Đánh giá bằng chứng âm học thực tế của phụ âm theo chuẩn đánh giá phát âm quốc tế (CAPT):
+    - Âm xát (Fricatives): kiểm tra trọng tâm phổ tần (> 2500Hz) và tỷ lệ cắt trục 0 (ZCR) để xác nhận luồng hơi xì.
+    - Âm bật (Plosives): kiểm tra tỷ lệ xung năng lượng bùng nổ đột ngột khi bật hơi.
+    - Âm mũi (Nasals): kiểm tra mức độ tập trung năng lượng cộng hưởng ở vùng tần số thấp (< 800Hz).
+    - Âm trượt/tiếp cận (Liquids): kiểm tra độ lớn năng lượng âm thanh tối thiểu.
+    Trả về bộ 3 giá trị: (có_bằng_chứng: bool, hệ_số_nhân_điểm: float, mô_tả_chi_tiết: str).
     """
-    if len(audio_slice) < 160:  # < 10ms at 16kHz
+    if len(audio_slice) < 160:  # Đoạn âm quá ngắn (nhỏ hơn 10ms ở tần số lấy mẫu 16kHz)
         return False, 0.0, "Thời lượng âm quá ngắn (< 10ms)"
 
     clean_sym = phoneme_symbol.strip("/ ")
     rms = float(np.sqrt(np.mean(audio_slice ** 2)))
     if rms < 0.002:
+        # Riêng nhóm âm bật có pha ngậm hơi im lặng ngắn trước khi bật ra nên vẫn được chấp nhận có điều kiện
         if clean_sym in {"p", "t", "k", "b", "d", "g", "ɡ"}:
             return True, 0.85, "Âm bật trong pha ngậm (closure phase)"
         return False, 0.0, "Không phát hiện năng lượng âm thanh (quá nhỏ hoặc im lặng)"
 
+    # Tính tỷ lệ cắt trục 0 (ZCR - số lần sóng âm đổi dấu, cao ở các âm có tiếng gió/xì)
     zcr = float(np.mean(np.abs(np.diff(np.sign(audio_slice)))) / 2.0)
 
-    # 1. Sibilants & Fricatives (/s/, /z/, /ʃ/, /ʒ/, /tʃ/, /dʒ/, /f/, /v/, /θ/, /ð/, /h/)
+    # 1. Nhóm âm xuýt và âm xát (/s/, /z/, /ʃ/, /ʒ/, /tʃ/, /dʒ/, /f/, /v/, /θ/, /ð/, /h/)
     sibilants = {"s", "z", "ʃ", "ʒ", "tʃ", "dʒ", "ts", "dz"}
     weak_fricatives = {"f", "v", "θ", "ð", "h"}
 
     if clean_sym in sibilants:
+        # Dùng biến đổi Fourier (FFT) kiểm tra trọng tâm tần số và phần trăm năng lượng ở vùng cao >= 2500Hz
         magnitudes = np.abs(np.fft.rfft(audio_slice))
         freqs = np.fft.rfftfreq(len(audio_slice), 1.0 / sample_rate)
         mag_sum = float(np.sum(magnitudes)) + 1e-9
@@ -160,7 +198,7 @@ def check_consonant_acoustic_evidence_detailed(
             return False, 0.0, "Âm xát yếu, thiếu luồng hơi"
         return True, 0.90, "Đặc trưng âm xát nhẹ đạt yêu cầu"
 
-    # 2. Plosives (/p/, /t/, /k/, /b/, /d/, /g/, /ɡ/)
+    # 2. Nhóm âm bật (/p/, /t/, /k/, /b/, /d/, /g/, /ɡ/): chia làm 4 đoạn nhỏ để tìm cú bật năng lượng đột ngột
     plosives = {"p", "t", "k", "b", "d", "g", "ɡ"}
     if clean_sym in plosives:
         sub_len = max(16, len(audio_slice) // 4)
@@ -180,7 +218,7 @@ def check_consonant_acoustic_evidence_detailed(
                 return True, 0.70, "Âm bật tương đối mờ"
         return True, 0.85, "Âm bật bình thường"
 
-    # 3. Nasals (/m/, /n/, /ŋ/)
+    # 3. Nhóm âm mũi (/m/, /n/, /ŋ/): kiểm tra tỷ lệ năng lượng cộng hưởng ở vùng tần số thấp <= 800Hz
     nasals = {"m", "n", "ŋ"}
     if clean_sym in nasals:
         magnitudes = np.abs(np.fft.rfft(audio_slice))
@@ -195,7 +233,7 @@ def check_consonant_acoustic_evidence_detailed(
         else:
             return True, 0.65, "Âm mũi chưa cộng hưởng tốt"
 
-    # 4. Liquids / Approximants (/l/, /r/, /ɹ/, /w/, /j/)
+    # 4. Nhóm âm trượt / bán nguyên âm (/l/, /r/, /ɹ/, /w/, /j/)
     liquids = {"l", "r", "ɹ", "w", "j"}
     if clean_sym in liquids:
         if rms < 0.003:
@@ -206,8 +244,10 @@ def check_consonant_acoustic_evidence_detailed(
 
 
 def check_consonant_acoustic_evidence(audio_slice: np.ndarray, phoneme_symbol: str) -> bool:
+    """Hàm rút gọn kiểm tra xem đoạn âm thanh có chứa bằng chứng âm học của phụ âm hay không (True/False)."""
     has_ev, _, _ = check_consonant_acoustic_evidence_detailed(audio_slice, phoneme_symbol)
     return has_ev
 
 
+# Thể hiện dùng chung duy nhất (singleton) của cổng kiểm tra chất lượng âm thanh
 quality_gate = AudioQualityGate()

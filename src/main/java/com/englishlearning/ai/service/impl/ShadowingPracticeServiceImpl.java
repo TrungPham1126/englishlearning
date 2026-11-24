@@ -2,6 +2,7 @@ package com.englishlearning.ai.service.impl;
 
 import com.englishlearning.ai.service.*;
 
+import com.englishlearning.ai.dto.AiCoachingAdvice;
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
 import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.entity.AiEvaluationType;
@@ -29,6 +30,13 @@ public class ShadowingPracticeServiceImpl implements ShadowingPracticeService {
     private final AnalyticsService analyticsService;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SpeakingAiCoachingService speakingAiCoachingService;
+
+    public void setSpeakingAiCoachingService(SpeakingAiCoachingService speakingAiCoachingService) {
+        this.speakingAiCoachingService = speakingAiCoachingService;
+    }
+
     @Override
     @Transactional
     public ShadowingEvaluationResponse practiceShadowing(
@@ -46,6 +54,8 @@ public class ShadowingPracticeServiceImpl implements ShadowingPracticeService {
         ShadowingEvaluationResponse response = aiEvaluationService.evaluateSpeech(
                 audioBytes, filename, referenceSentence);
 
+        enrichWithAiCoaching(response, referenceSentence);
+
         if (studentAnswer != null) {
             persistEvaluation(studentAnswer, response);
         }
@@ -61,7 +71,19 @@ public class ShadowingPracticeServiceImpl implements ShadowingPracticeService {
 
         log.debug("Xử lý audio chunk cho WebSocket session: {}", sessionId);
         String chunkFilename = "chunk_" + (sessionId != null ? sessionId : "default") + ".wav";
-        return aiEvaluationService.evaluateSpeech(audioChunk, chunkFilename, referenceText);
+        ShadowingEvaluationResponse response = aiEvaluationService.evaluateSpeech(audioChunk, chunkFilename, referenceText);
+        enrichWithAiCoaching(response, referenceText);
+        return response;
+    }
+
+    private void enrichWithAiCoaching(ShadowingEvaluationResponse response, String referenceSentence) {
+        if (speakingAiCoachingService != null && response != null && response.getAiCoaching() == null) {
+            AiCoachingAdvice coaching = speakingAiCoachingService.generateShadowingCoaching(
+                    response, referenceSentence, "SHADOWING");
+            if (coaching != null) {
+                response.setAiCoaching(coaching);
+            }
+        }
     }
 
     private void persistEvaluation(StudentAnswer studentAnswer, ShadowingEvaluationResponse response) {

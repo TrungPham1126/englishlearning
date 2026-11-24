@@ -30,6 +30,13 @@ export interface WordPhonemeDetail {
   phonemes: PhonemeItem[];
 }
 
+export interface AiCoachingAdvice {
+  summary: string;
+  actionTips: string[];
+  practiceDrill?: string;
+  generatedBy?: string;
+}
+
 export interface ShadowingEvaluationResponse {
   overallScore: number;
   isPassed: boolean;
@@ -39,6 +46,7 @@ export interface ShadowingEvaluationResponse {
   kpi: KpiMetrics;
   sentenceTokens: SentenceToken[];
   wordRows: WordPhonemeDetail[];
+  aiCoaching?: AiCoachingAdvice | null;
 }
 
 // ================= 2. IELTS AI (SPEAKING & WRITING) DTOs =================
@@ -81,6 +89,7 @@ export interface SpeakingAiEvaluationResult {
   suggestions: SpeakingAiSuggestion[];
   generalFeedback: string;
   phoneticEvaluation?: ShadowingEvaluationResponse;
+  aiCoaching?: AiCoachingAdvice | null;
 }
 
 export type FullSpeakingAiResult = SpeakingAiEvaluationResult & {
@@ -163,6 +172,7 @@ export interface WritingAiEvaluationResult {
   suggestedVocabulary?: WritingSuggestedVocab[];
   generalFeedback: string;
   phoneticEvaluation?: ShadowingEvaluationResponse;
+  aiCoaching?: AiCoachingAdvice | null;
 }
 
 // ================= 3. KHÓA HỌC & GIÁO TRÌNH (CURRICULUM) =================
@@ -290,6 +300,7 @@ export interface QuestionResultDetail {
   correctAnswer?: string;
   matchText?: string;
   explanation?: string;
+  hint?: string;
   isCorrect?: boolean;
   options?: QuestionOptionDetail[];
   evalFeedback?: string;

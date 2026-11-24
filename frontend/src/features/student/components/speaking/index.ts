@@ -1,4 +1,5 @@
 // src/features/student/components/speaking/index.ts
+export * from "./AiCoachingCard";
 export * from "./SpeakingDaySelector";
 export * from "./SpeakingTasksSidebar";
 export * from "./SpeakingPromptHeader";

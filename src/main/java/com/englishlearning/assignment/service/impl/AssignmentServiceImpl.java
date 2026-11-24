@@ -385,12 +385,23 @@ public class AssignmentServiceImpl implements AssignmentService {
                 assignment.setQuestions(sorted);
             }
             for (com.englishlearning.assignment.entity.AssignmentQuestion q : assignment.getQuestions()) {
-                if (q.getOptions() != null) {
-                    q.getOptions().size();
-                }
+                sortQuestionOptions(q);
             }
         }
         return assignment;
+    }
+
+    private void sortQuestionOptions(AssignmentQuestion q) {
+        if (q == null || q.getOptions() == null) {
+            return;
+        }
+        try {
+            q.getOptions().sort(QuestionOption.DISPLAY_ORDER_COMPARATOR);
+        } catch (UnsupportedOperationException ex) {
+            List<QuestionOption> sorted = new ArrayList<>(q.getOptions());
+            sorted.sort(QuestionOption.DISPLAY_ORDER_COMPARATOR);
+            q.setOptions(sorted);
+        }
     }
 
 
@@ -781,15 +792,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
                 exam.getQuestions().size();
 
-                exam.getQuestions().forEach(q -> {
-
-                    if (q.getOptions() != null) {
-
-                        q.getOptions().size();
-
-                    }
-
-                });
+                exam.getQuestions().forEach(this::sortQuestionOptions);
 
             }
 
@@ -838,6 +841,8 @@ public class AssignmentServiceImpl implements AssignmentService {
                         ? java.util.Collections.emptyList()
 
                         : q.getOptions().stream()
+
+                                .sorted(QuestionOption.DISPLAY_ORDER_COMPARATOR)
 
                                 .map(opt -> QuestionBankItemDto.OptionDto.builder()
 

@@ -1,5 +1,44 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { RotateCcw } from 'lucide-react';
+
+const STANDALONE_PUNCT_REGEX = /^[.,!?;:]$/;
+
+export function formatUnscrambleTokens(tokens: string[]): string {
+  return tokens
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+([.,!?;:])/g, '$1')
+    .trim();
+}
+
+export function parseAnswerToTokens(answer: string, chips: string[]): string[] {
+  const trimmed = String(answer || '').trim();
+  if (!trimmed) return [];
+
+  const chipSet = new Set(chips);
+  const standalonePuncts = new Set(chips.filter((c) => STANDALONE_PUNCT_REGEX.test(c)));
+  const pieces = trimmed.split(/\s+/).filter(Boolean);
+  if (standalonePuncts.size === 0) return pieces;
+
+  const result: string[] = [];
+  for (const piece of pieces) {
+    if (chipSet.has(piece)) {
+      result.push(piece);
+      continue;
+    }
+    const trailing: string[] = [];
+    let stem = piece;
+    while (stem.length > 1) {
+      const lastChar = stem[stem.length - 1];
+      if (!standalonePuncts.has(lastChar)) break;
+      trailing.unshift(lastChar);
+      stem = stem.slice(0, -1);
+    }
+    result.push(stem, ...trailing);
+  }
+  return result;
+}
 
 export function WordUnscrambleInteractive({
 
@@ -25,7 +64,8 @@ export function WordUnscrambleInteractive({
 
   const chips = useMemo(() => {
 
-    const raw = promptText.includes(":") ? promptText.split(":")[1] || promptText : promptText;
+    const colonIdx = promptText.indexOf(":");
+    const raw = colonIdx !== -1 ? promptText.slice(colonIdx + 1) || promptText : promptText;
 
     const tokens = raw
 
@@ -43,9 +83,9 @@ export function WordUnscrambleInteractive({
 
   const placedTokens = useMemo(() => {
 
-    return currentAnswer ? currentAnswer.split(" ").filter(Boolean) : [];
+    return parseAnswerToTokens(currentAnswer, chips);
 
-  }, [currentAnswer]);
+  }, [currentAnswer, chips]);
 
   const availableChips = useMemo(() => {
 
@@ -79,7 +119,7 @@ export function WordUnscrambleInteractive({
 
     const newPlaced = [...placedTokens, word];
 
-    onAnswerChange(newPlaced.join(" "));
+    onAnswerChange(formatUnscrambleTokens(newPlaced));
 
   };
 
@@ -91,7 +131,7 @@ export function WordUnscrambleInteractive({
 
     newPlaced.splice(index, 1);
 
-    onAnswerChange(newPlaced.join(" "));
+    onAnswerChange(formatUnscrambleTokens(newPlaced));
 
   };
 

@@ -1,4 +1,5 @@
 @startuml Hinh_1_7_So_do_hoat_dong_UC_AUTH_01_Dang_nhap_va_Lam_moi_phien
+skinparam ConditionStyle diamond
 title Hình 1.7: Sơ đồ hoạt động của UC Đăng nhập và Làm mới phiên xác thực (UC-AUTH-01)
 skinparam dpi 200
 skinparam monochrome true

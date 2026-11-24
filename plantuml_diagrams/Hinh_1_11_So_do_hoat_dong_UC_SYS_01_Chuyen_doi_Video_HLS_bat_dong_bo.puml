@@ -1,4 +1,5 @@
 @startuml Hinh_1_11_So_do_hoat_dong_UC_SYS_01_Chuyen_doi_Video_HLS_bat_dong_bo
+skinparam ConditionStyle diamond
 title Hình 1.11: Sơ đồ hoạt động UC Chuyển đổi Video sang luồng HLS bất đồng bộ (UC-SYS-01)
 skinparam dpi 200
 skinparam monochrome true

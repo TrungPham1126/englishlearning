@@ -32,6 +32,7 @@ vi.mock("@/features/student/api/studentApi", () => ({
     checkInstantAnswer: vi.fn(),
     repairListeningAudio: vi.fn(),
     synthesizeTts: vi.fn(),
+    synthesizeTTS: vi.fn(),
   },
 }));
 
@@ -878,5 +879,115 @@ describe("features/student/hooks — Suite 2: Shadowing & Speaking Hooks + Memor
     });
     expect(result.current.currentAttempt?.attemptId).toBe("att-2");
     expect(result.current.shadowingReport).toBeNull();
+  });
+
+  it("useAssignmentTakeSession: hủy phát TTS nếu unmount trước khi synthesis xong, và nâng cấp toggleAiVoiceStream thành mainAudioUrl hỗ trợ tốc độ 0.75x - 1.5x", async () => {
+    let resolveTts!: (val: { audioUrl: string }) => void;
+    const pendingTts = new Promise<{ audioUrl: string }>((res) => {
+      resolveTts = res;
+    });
+    vi.mocked(studentApi.synthesizeTTS).mockReturnValueOnce(pendingTts as any);
+    vi.mocked(studentApi.getMyAttempts).mockResolvedValue([
+      {
+        attemptId: "att-listen-1",
+        assignmentId: "asg-listen-1",
+        assignmentTitle: "Listening A1",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        isExam: false,
+      } as any,
+    ]);
+    vi.mocked(studentApi.getAttemptDetail).mockResolvedValue({
+      attemptId: "att-listen-1",
+      assignmentId: "asg-listen-1",
+      assignmentTitle: "Listening A1",
+      skillType: "LISTENING",
+      listeningScript: "Hello everyone from Green Valley.",
+      attemptNumber: 1,
+      status: "IN_PROGRESS",
+      timeLimitMinutes: 30,
+      isExam: false,
+      questions: [
+        {
+          id: "q-l-1",
+          questionId: "q-l-1",
+          promptText: "When does it open?",
+          questionType: "MULTIPLE_CHOICE",
+          maxPoints: 2,
+          options: [],
+        },
+      ],
+    } as any);
+
+    const playSpy = vi.fn().mockResolvedValue(undefined);
+    const pauseSpy = vi.fn();
+    const audioCtorSpy = vi.fn().mockImplementation(function MockAudio() {
+      return {
+        play: playSpy,
+        pause: pauseSpy,
+        playbackRate: 1,
+        defaultPlaybackRate: 1,
+        onended: null,
+        onerror: null,
+      };
+    });
+    const origAudio = globalThis.Audio;
+    Object.defineProperty(globalThis, "Audio", { configurable: true, value: audioCtorSpy });
+
+    try {
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <MemoryRouter initialEntries={["/student/assignments/asg-listen-1/take"]}>
+          <Routes>
+            <Route path="/student/assignments/:assignmentId/take" element={<>{children}</>} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      const { result, unmount } = renderHook(() => useAssignmentTakeSession(), { wrapper });
+      await waitFor(() => expect(result.current.phase).toBe("TESTING"));
+
+      // Bấm speakText và unmount trước khi synthesizeTTS trả về -> tuyệt đối không được tạo/play Audio ở trang chính
+      let speakPromise!: Promise<void>;
+      act(() => {
+        speakPromise = result.current.speakText("Delayed clip");
+      });
+      unmount();
+
+      await act(async () => {
+        resolveTts({ audioUrl: "/uploads/audio/delayed.wav" });
+        await speakPromise;
+      });
+      expect(audioCtorSpy).not.toHaveBeenCalled();
+      expect(playSpy).not.toHaveBeenCalled();
+
+      // Mount mới, bấm toggleAiVoiceStream trên bài Listening chưa có audioUrl -> gán mainAudioUrl & cập nhật tốc độ 0.75x / 1.5x
+      vi.mocked(studentApi.repairQuestionAudio).mockResolvedValueOnce({
+        url: "/uploads/audio/repaired_listening.wav",
+      } as any);
+
+      const second = renderHook(() => useAssignmentTakeSession(), { wrapper });
+      await waitFor(() => expect(second.result.current.phase).toBe("TESTING"));
+
+      await act(async () => {
+        await second.result.current.toggleAiVoiceStream();
+      });
+
+      expect(second.result.current.mainAudioUrl).toBe("/uploads/audio/repaired_listening.wav");
+      expect(second.result.current.isRepairingListeningAudio).toBe(false);
+
+      act(() => {
+        second.result.current.handleRateChange(0.75);
+      });
+      expect(second.result.current.playbackRate).toBe(0.75);
+
+      act(() => {
+        second.result.current.handleRateChange(1.5);
+      });
+      expect(second.result.current.playbackRate).toBe(1.5);
+
+      second.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "Audio", { configurable: true, value: origAudio });
+    }
   });
 });

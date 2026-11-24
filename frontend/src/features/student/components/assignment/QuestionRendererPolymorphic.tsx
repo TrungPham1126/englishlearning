@@ -26,8 +26,18 @@ import ParagraphWritingStudio from './ParagraphWritingStudio';
 import SpeakingShadowingStudio, { cleanShadowingSentence } from '@/features/student/components/SpeakingShadowingStudio';
 import SpeakingQAStudio from '@/features/student/components/SpeakingQAStudio';
 import AssignmentExplanationSection from './AssignmentExplanationSection';
-import { getFirstLetterHint } from '@/features/student/utils/hintHelper';
+import {
+  buildQuestionHintText,
+  stripInlinePromptHint,
+} from '@/features/student/utils/hintHelper';
 import { isGradingRubricOrMetaText } from '@/utils/sampleAudioPlayer';
+import { sortQuestionOptions } from '@/utils/questionOptions';
+import {
+  evaluateQuestionReviewOutcome,
+  formatQuestionPoints,
+  normalizeAnswerText,
+  normalizeTrueFalseValue,
+} from '@/features/student/utils/questionReviewScoring';
 import {
   isQuestionPassed,
   getQuestionBestScoreAcrossAttempts,
@@ -266,6 +276,35 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
   const isMultipleChoice = !isSpeaking && !isWordUnscramble && !isIeltsEssay && !isParagraphWriting && !isTrueFalse && !isFillInBlank;
 
+  const supportsQuestionHint =
+    (isFillInBlank || isWordUnscramble) &&
+    !isSpeaking &&
+    !isParagraphWriting &&
+    !isIeltsEssay &&
+    !isMultipleChoice &&
+    !isTrueFalse;
+
+  const displayPrompt = supportsQuestionHint
+    ? stripInlinePromptHint(cleanPrompt)
+    : cleanPrompt;
+
+  const hintText = supportsQuestionHint
+    ? buildQuestionHintText({
+        promptText: prompt,
+        hint: question.hint,
+        correctAnswer: question.correctAnswer,
+        isWordUnscramble,
+      })
+    : null;
+
+  const canShowHintControl =
+    phase === 'TESTING' && !attempt?.isExam && Boolean(hintText);
+
+  const sortedOptions = React.useMemo(
+    () => sortQuestionOptions(question.options),
+    [question.options],
+  );
+
   // Nhận diện bài thi/bài tập Listening tổng thể (Nghe toàn bài qua track âm thanh chung)
   const isListeningAssignment = Boolean(
     isListening || (attempt?.skillType || '').toUpperCase() === 'LISTENING',
@@ -365,17 +404,11 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
 
   const studentAns = answers[question.questionId];
 
-  // Trạng thái đúng sai trong Review
-  const isCorrectInReview =
-    phase === 'REVIEW' &&
-    ((question as any).isCorrect === true ||
-      ((question as any).earnedPoints != null && (question as any).earnedPoints > 0) ||
-      (Array.isArray(question.options) &&
-        question.options.some(
-          (o: any) =>
-            (o.id === studentAns?.selectedOptionId || o.optionLabel === studentAns?.selectedOptionId) &&
-            o.isCorrect === true,
-        )));
+  // Trạng thái đúng sai và điểm đạt được trong Review
+  const reviewOutcome =
+    phase === 'REVIEW' ? evaluateQuestionReviewOutcome(question, studentAns) : null;
+  const isCorrectInReview = Boolean(reviewOutcome?.isCorrect);
+  const earnedPointsInReview = reviewOutcome?.earnedPoints ?? 0;
 
   return (
     <div
@@ -393,7 +426,7 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
             isCorrectInReview ? (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 tabular-nums">
                 <CheckCircle2 size={11} />
-                Đúng (+{(question as any).earnedPoints ?? 1})
+                Đúng (+{formatQuestionPoints(earnedPointsInReview)})
               </span>
             ) : (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
@@ -434,18 +467,36 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onToggleFlag(question.questionId)}
-          className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium transition cursor-pointer active:scale-95 touch-manipulation ${
-            isFlagged
-              ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 text-amber-800 dark:text-amber-300'
-              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
-          }`}
-        >
-          <Flag size={11} className={isFlagged ? 'fill-amber-500 text-amber-500' : ''} />
-          <span>{isFlagged ? 'Bỏ dấu' : 'Đánh dấu'}</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          {canShowHintControl && (
+            <button
+              type="button"
+              aria-expanded={isHintExpanded}
+              onClick={() => onToggleHint(question.questionId)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium transition cursor-pointer active:scale-95 touch-manipulation ${
+                isHintExpanded
+                  ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 text-amber-800 dark:text-amber-300'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-300 hover:text-amber-700 dark:hover:text-amber-300'
+              }`}
+            >
+              <Lightbulb size={11} className={isHintExpanded ? 'fill-amber-500 text-amber-500' : 'text-amber-500'} />
+              <span>{isHintExpanded ? 'Ẩn gợi ý' : 'Gợi ý'}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onToggleFlag(question.questionId)}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium transition cursor-pointer active:scale-95 touch-manipulation ${
+              isFlagged
+                ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 text-amber-800 dark:text-amber-300'
+                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            <Flag size={11} className={isFlagged ? 'fill-amber-500 text-amber-500' : ''} />
+            <span>{isFlagged ? 'Bỏ dấu' : 'Đánh dấu'}</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. NỘI DUNG CÂU HỎI & NÚT PHÁT ÂM RIÊNG BIỆT TỪNG CÂU */}
@@ -453,7 +504,7 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-sm md:text-[15px] font-semibold text-slate-800 dark:text-slate-100 leading-normal">
-              {cleanPrompt}
+              {displayPrompt}
             </h3>
 
             {isListeningWord && (
@@ -510,26 +561,30 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
               className="w-full min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition"
             />
           </div>
-          {phase === 'REVIEW' && question.correctAnswer && (
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Gợi ý: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{getFirstLetterHint(question.correctAnswer)}...</span>
-            </div>
-          )}
         </div>
       )}
 
       {/* 3C. Trắc nghiệm (MULTIPLE CHOICE) */}
-      {isMultipleChoice && Array.isArray(question.options) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-          {question.options.map((opt: any, optIdx: number) => {
+      {isMultipleChoice && sortedOptions.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 grid-flow-row gap-2.5 pt-1">
+          {sortedOptions.map((opt: any, optIdx: number) => {
             const optId = String(opt.id || opt.optionLabel || opt.text || opt.optionText);
-            const isChecked = studentAns?.selectedOptionId === optId;
+            const normOptText = normalizeAnswerText(opt.optionText ?? opt.text);
+            const normOptLabel = normalizeAnswerText(opt.optionLabel);
+            const normCorrect = normalizeAnswerText(question.correctAnswer);
+            const normStudentText = normalizeAnswerText(studentAns?.textAnswer);
+            const isChecked =
+              studentAns?.selectedOptionId === optId ||
+              (!studentAns?.selectedOptionId &&
+                Boolean(normStudentText) &&
+                (normStudentText === normOptText || normStudentText === normOptLabel));
 
             const isOptionRevealedCorrect =
               phase === 'REVIEW' &&
               (opt.isCorrect === true ||
                 optId === question.correctAnswer ||
-                (opt.optionText && opt.optionText === question.correctAnswer));
+                (Boolean(normOptLabel) && normOptLabel === normCorrect) ||
+                (Boolean(normOptText) && normOptText === normCorrect));
 
             const isOptionRevealedWrong =
               phase === 'REVIEW' && isChecked && !isOptionRevealedCorrect;
@@ -599,8 +654,31 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
       {isTrueFalse && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
           {['TRUE', 'FALSE', 'NOT GIVEN'].map((val) => {
-            const isSelected = studentAns?.selectedOptionId === val || studentAns?.textAnswer === val;
-            const isCorrectVal = question.correctAnswer?.toUpperCase() === val;
+            const matchedOpt = Array.isArray(question.options)
+              ? question.options.find(
+                  (o: any) =>
+                    normalizeTrueFalseValue(o?.optionText ?? o?.text) === val ||
+                    normalizeTrueFalseValue(o?.optionLabel) === val,
+                )
+              : undefined;
+            const selectedByText = normalizeTrueFalseValue(studentAns?.textAnswer);
+            const selectedByOptId = (() => {
+              const sid = String(studentAns?.selectedOptionId || '').trim();
+              if (!sid) return '';
+              const byId = Array.isArray(question.options)
+                ? question.options.find((o: any) => String(o?.id ?? '').trim() === sid)
+                : undefined;
+              if (byId) {
+                return (
+                  normalizeTrueFalseValue(byId.optionText ?? byId.text) ||
+                  normalizeTrueFalseValue(byId.optionLabel)
+                );
+              }
+              return normalizeTrueFalseValue(sid);
+            })();
+            const selectedTfValue = selectedByText || selectedByOptId;
+            const isSelected = selectedTfValue === val;
+            const isCorrectVal = normalizeTrueFalseValue(question.correctAnswer) === val;
             const isRevealedCorrect = phase === 'REVIEW' && isCorrectVal;
             const isRevealedWrong = phase === 'REVIEW' && isSelected && !isCorrectVal;
 
@@ -609,7 +687,12 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
                 key={val}
                 type="button"
                 disabled={isSubmitting || phase === 'REVIEW'}
-                onClick={() => onUpdateAnswer(question.questionId, { selectedOptionId: val, textAnswer: val })}
+                onClick={() =>
+                  onUpdateAnswer(question.questionId, {
+                    selectedOptionId: matchedOpt?.id ? String(matchedOpt.id) : val,
+                    textAnswer: val,
+                  })
+                }
                 className={`min-h-[38px] py-2 rounded-lg border font-semibold text-xs transition active:scale-[0.98] cursor-pointer touch-manipulation ${
                   isRevealedCorrect
                     ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200'
@@ -731,10 +814,27 @@ const QuestionRendererPolymorphicComponent: React.FC<QuestionRendererPolymorphic
         />
       )}
 
+      {/* 4. KHỐI GỢI Ý RIÊNG BIỆT (CHỈ HIỆN KHI ĐANG LÀM BÀI VÀ BẤM NÚT GỢI Ý) */}
+      {canShowHintControl && isHintExpanded && hintText && (
+        <div
+          role="note"
+          className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/80 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2"
+        >
+          <Lightbulb size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Gợi ý: </span>
+            <span className="font-mono font-semibold">{hintText}</span>
+          </div>
+        </div>
+      )}
+
       {/* 5. KHỐI GIẢI THÍCH & PHẢN HỒI SƯ PHẠM */}
       <AssignmentExplanationSection
         question={question}
         checkedState={checkedState}
+        studentAnswer={studentAns}
+        isCorrectOverride={isCorrectInReview}
+        earnedPointsOverride={earnedPointsInReview}
         phase={phase}
         studyMode={studyMode}
       />

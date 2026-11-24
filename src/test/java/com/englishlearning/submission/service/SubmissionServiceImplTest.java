@@ -1864,4 +1864,155 @@ class SubmissionServiceImplTest {
         assertThat(warningRes.getViolationLogJson()).contains("FOCUS_LOST");
         verify(attemptRepository).save(inProg);
     }
+
+    @Test
+    @DisplayName("getAttemptDetail luôn sắp xếp đáp án A, B, C, D dù DB trả về thứ tự xáo trộn khi làm bài và xem đáp án")
+    void getAttemptDetail_sortsScrambledOptionsInCanonicalOrderForBothInProgressAndCompleted() {
+        UUID studentId = UUID.randomUUID();
+        UUID assId = UUID.randomUUID();
+        UUID qId = UUID.randomUUID();
+
+        QuestionOption optD = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("D").optionText("Delta").isCorrect(false).build();
+        QuestionOption optB = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("Bravo").isCorrect(true).build();
+        QuestionOption optA = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Alpha").isCorrect(false).build();
+        QuestionOption optC = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("C").optionText("Charlie").isCorrect(false).build();
+
+        AssignmentQuestion mcq = AssignmentQuestion.builder()
+                .id(qId)
+                .orderIndex(1)
+                .questionType(QuestionType.MULTIPLE_CHOICE)
+                .skillType(SkillType.GRAMMAR)
+                .promptText("Choose B")
+                .correctAnswer("B")
+                .options(new ArrayList<>(List.of(optD, optB, optA, optC)))
+                .build();
+
+        Assignment assignment = Assignment.builder()
+                .id(assId)
+                .title("Grammar Quiz")
+                .skillType(SkillType.GRAMMAR)
+                .questions(List.of(mcq))
+                .build();
+
+        UUID inProgAttemptId = UUID.randomUUID();
+        AssignmentAttempt inProgressAttempt = AssignmentAttempt.builder()
+                .id(inProgAttemptId)
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .answers(new ArrayList<>())
+                .build();
+
+        UUID completedAttemptId = UUID.randomUUID();
+        AssignmentAttempt completedAttempt = AssignmentAttempt.builder()
+                .id(completedAttemptId)
+                .assignment(assignment)
+                .attemptNumber(1)
+                .status(AttemptStatus.COMPLETED)
+                .answers(new ArrayList<>())
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(inProgAttemptId, studentId)).thenReturn(Optional.of(inProgressAttempt));
+        when(attemptRepository.findByIdAndStudentId(completedAttemptId, studentId)).thenReturn(Optional.of(completedAttempt));
+        when(assignmentRepository.findByIdWithQuestions(assId)).thenReturn(Optional.of(assignment));
+
+        AttemptResponse inProgressRes = submissionService.getAttemptDetail(inProgAttemptId, studentId, false);
+        assertThat(inProgressRes.getQuestions()).hasSize(1);
+        assertThat(inProgressRes.getQuestions().get(0).getOptions())
+                .extracting(AttemptResponse.OptionDetail::getOptionLabel)
+                .containsExactly("A", "B", "C", "D");
+
+        AttemptResponse completedRes = submissionService.getAttemptDetail(completedAttemptId, studentId, false);
+        assertThat(completedRes.getQuestions()).hasSize(1);
+        assertThat(completedRes.getQuestions().get(0).getOptions())
+                .extracting(AttemptResponse.OptionDetail::getOptionLabel)
+                .containsExactly("A", "B", "C", "D");
+    }
+
+    @Test
+    @DisplayName("getAttemptDetail chỉ trả về gợi ý an toàn (hint) cho câu Điền từ / Sắp xếp từ ở bài tập thường, không lộ đáp án và tắt gợi ý với Trắc nghiệm / Bài thi")
+    void getAttemptDetail_returnsSafeHintOnlyForEligibleNonExamQuestions() {
+        UUID studentId = UUID.randomUUID();
+
+        AssignmentQuestion fillQ = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .orderIndex(1)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .promptText("Nghe và nhập từ: /ˈbrekfəst/")
+                .correctAnswer("breakfast")
+                .build();
+        AssignmentQuestion unscrambleQ = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .orderIndex(2)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .promptText("Sắp xếp các từ sau thành câu hoàn chỉnh: How / often / do / you / practice / piano / ?")
+                .correctAnswer("How often do you practice piano?")
+                .build();
+        AssignmentQuestion mcqQ = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .orderIndex(3)
+                .questionType(QuestionType.MULTIPLE_CHOICE)
+                .promptText("Choose one:")
+                .correctAnswer("A")
+                .options(new ArrayList<>())
+                .build();
+        AssignmentQuestion tfQ = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .orderIndex(4)
+                .questionType(QuestionType.TRUE_FALSE)
+                .promptText("The earth is flat.")
+                .correctAnswer("FALSE")
+                .options(new ArrayList<>())
+                .build();
+
+        UUID normalAssId = UUID.randomUUID();
+        Assignment normalAss = Assignment.builder()
+                .id(normalAssId)
+                .title("Practice Mix")
+                .isExam(false)
+                .questions(List.of(fillQ, unscrambleQ, mcqQ, tfQ))
+                .build();
+        UUID normalAttemptId = UUID.randomUUID();
+        AssignmentAttempt normalAttempt = AssignmentAttempt.builder()
+                .id(normalAttemptId)
+                .assignment(normalAss)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .answers(new ArrayList<>())
+                .build();
+
+        UUID examAssId = UUID.randomUUID();
+        Assignment examAss = Assignment.builder()
+                .id(examAssId)
+                .title("Midterm Exam")
+                .isExam(true)
+                .questions(List.of(fillQ))
+                .build();
+        UUID examAttemptId = UUID.randomUUID();
+        AssignmentAttempt examAttempt = AssignmentAttempt.builder()
+                .id(examAttemptId)
+                .assignment(examAss)
+                .attemptNumber(1)
+                .status(AttemptStatus.IN_PROGRESS)
+                .answers(new ArrayList<>())
+                .build();
+
+        when(attemptRepository.findByIdAndStudentId(normalAttemptId, studentId)).thenReturn(Optional.of(normalAttempt));
+        when(assignmentRepository.findByIdWithQuestions(normalAssId)).thenReturn(Optional.of(normalAss));
+        when(attemptRepository.findByIdAndStudentId(examAttemptId, studentId)).thenReturn(Optional.of(examAttempt));
+        when(assignmentRepository.findByIdWithQuestions(examAssId)).thenReturn(Optional.of(examAss));
+
+        AttemptResponse practiceRes = submissionService.getAttemptDetail(normalAttemptId, studentId, false);
+        assertThat(practiceRes.getQuestions()).hasSize(4);
+        assertThat(practiceRes.getQuestions().get(0).getHint()).isEqualTo("b________ (9 ký tự)");
+        assertThat(practiceRes.getQuestions().get(0).getCorrectAnswer()).isNull();
+        assertThat(practiceRes.getQuestions().get(1).getHint()).isEqualTo("Bắt đầu bằng \"How\" (6 từ)");
+        assertThat(practiceRes.getQuestions().get(1).getCorrectAnswer()).isNull();
+        assertThat(practiceRes.getQuestions().get(2).getHint()).isNull();
+        assertThat(practiceRes.getQuestions().get(3).getHint()).isNull();
+
+        AttemptResponse examRes = submissionService.getAttemptDetail(examAttemptId, studentId, false);
+        assertThat(examRes.getQuestions()).hasSize(1);
+        assertThat(examRes.getQuestions().get(0).getHint()).isNull();
+    }
 }

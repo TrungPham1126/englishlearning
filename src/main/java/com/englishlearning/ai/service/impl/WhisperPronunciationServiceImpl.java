@@ -1,13 +1,16 @@
 package com.englishlearning.ai.service.impl;
 
-import com.englishlearning.ai.service.WhisperPronunciationService;
-
+import com.englishlearning.ai.dto.AiCoachingAdvice;
 import com.englishlearning.ai.dto.PhoneticEvaluationResponse;
+import com.englishlearning.ai.service.SpeakingAiCoachingService;
+import com.englishlearning.ai.service.WhisperPronunciationService;
+import com.englishlearning.ai.util.SpeakingScoreCalibrationUtils;
 import com.englishlearning.common.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,13 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+
+    @Autowired(required = false)
+    private SpeakingAiCoachingService speakingAiCoachingService;
+
+    public void setSpeakingAiCoachingService(SpeakingAiCoachingService speakingAiCoachingService) {
+        this.speakingAiCoachingService = speakingAiCoachingService;
+    }
 
     @Override
     public PhoneticEvaluationResponse evaluatePronunciation(MultipartFile audioFile, String referenceText) {
@@ -79,7 +89,8 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
                     double similarity = calculateSimilarity(expected, actual);
 
                     if (similarity >= 0.72) { // Đọc chuẩn hoặc gần đúng (khoan dung biến âm nhẹ của STT)
-                        int wordSc = Math.min(100, (int) Math.round(Math.max(82.0, similarity * 100)));
+                        int rawWordSc = Math.min(100, (int) Math.round(Math.max(82.0, similarity * 100)));
+                        int wordSc = SpeakingScoreCalibrationUtils.boostPercentageScore(rawWordSc);
                         wordScores.add(PhoneticEvaluationResponse.WordScore.builder()
                                 .word(expected)
                                 .score(wordSc)
@@ -89,11 +100,12 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
                                 .build());
                         actualIdx = i + 1;
                         matchedWords++;
-                        weightedMatchSum += (wordSc / 100.0);
+                        weightedMatchSum += (rawWordSc / 100.0);
                         found = true;
                         break;
                     } else if (similarity >= 0.45) { // Đọc lệch âm nhưng vẫn có nỗ lực phát âm
-                        int wordSc = (int) Math.round(Math.max(60.0, similarity * 100));
+                        int rawWordSc = (int) Math.round(Math.max(60.0, similarity * 100));
+                        int wordSc = SpeakingScoreCalibrationUtils.boostPercentageScore(rawWordSc);
                         wordScores.add(PhoneticEvaluationResponse.WordScore.builder()
                                 .word(expected)
                                 .score(wordSc)
@@ -117,15 +129,25 @@ public class WhisperPronunciationServiceImpl implements WhisperPronunciationServ
                 }
             }
 
-            int overallScore = totalWords > 0 ? (int) Math.round((weightedMatchSum / totalWords) * 100) : 0;
+            int rawOverallScore = totalWords > 0 ? (int) Math.round((weightedMatchSum / totalWords) * 100) : 0;
+            int overallScore = SpeakingScoreCalibrationUtils.boostPercentageScore(rawOverallScore);
             String feedback = String.format("Đã phát âm đúng %d/%d từ. Độ chính xác tổng thể: %d%%.",
                     matchedWords, totalWords, overallScore);
 
-            return PhoneticEvaluationResponse.builder()
+            PhoneticEvaluationResponse result = PhoneticEvaluationResponse.builder()
                     .overallScore(overallScore)
                     .feedback(feedback)
                     .wordScores(wordScores)
                     .build();
+
+            if (speakingAiCoachingService != null && totalWords > 0) {
+                AiCoachingAdvice coaching = speakingAiCoachingService.generatePronunciationCoaching(result, referenceText);
+                if (coaching != null) {
+                    result.setAiCoaching(coaching);
+                }
+            }
+
+            return result;
 
         } catch (Exception e) {
             log.error("Lỗi chấm giọng đọc qua Whisper: ", e);

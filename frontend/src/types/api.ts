@@ -106,6 +106,7 @@ export interface QuestionResultDetail {
   selectedOptionId?: string;
   correctAnswer?: string;
   explanation?: string;
+  hint?: string;
   isCorrect?: boolean;
 }
 

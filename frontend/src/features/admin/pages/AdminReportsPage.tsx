@@ -589,7 +589,7 @@ export default function AdminReportsPage() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between tabular-nums">
-            <span>Hoàn thành TB:</span>
+            <span>Tỷ lệ bài nộp đã chấm:</span>
             <span className="font-bold text-slate-900 dark:text-white">
               {stats?.completionRate != null
                 ? `${stats.completionRate.toFixed(1)}%`
@@ -1020,7 +1020,7 @@ export default function AdminReportsPage() {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition"
                     >
                       <td className="p-4 pl-6 font-bold text-slate-900 dark:text-white">
-                        {teacher.lastName} {teacher.firstName}
+                        {teacher.firstName} {teacher.lastName}
                       </td>
                       <td className="p-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
                         {teacher.email}

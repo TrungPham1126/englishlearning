@@ -84,7 +84,7 @@ export default function StudentManagementPage() {
     const nextStatus = !user.isActive;
     if (
       !window.confirm(
-        `${nextStatus ? "Mở khóa" : "Khóa"} học viên "${user.lastName} ${user.firstName}"?`,
+        `${nextStatus ? "Mở khóa" : "Khóa"} học viên "${user.firstName} ${user.lastName}"?`,
       )
     )
       return;
@@ -99,7 +99,7 @@ export default function StudentManagementPage() {
   const handleDelete = async (user: UserSummaryDto) => {
     if (
       !window.confirm(
-        `Xóa vĩnh viễn học viên "${user.lastName} ${user.firstName}"?`,
+        `Xóa vĩnh viễn học viên "${user.firstName} ${user.lastName}"?`,
       )
     )
       return;
@@ -301,7 +301,7 @@ export default function StudentManagementPage() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 dark:text-white">
-                              {student.lastName} {student.firstName}
+                              {student.firstName} {student.lastName}
                             </p>
                           </div>
                         </div>
@@ -605,7 +605,7 @@ export default function StudentManagementPage() {
               <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100">
                 <span className="text-xs font-semibold text-slate-500 block">Học viên</span>
                 <span className="text-sm font-bold text-emerald-950 block mt-0.5">
-                  {selectedStudent.lastName} {selectedStudent.firstName} ({selectedStudent.email})
+                  {selectedStudent.firstName} {selectedStudent.lastName} ({selectedStudent.email})
                 </span>
               </div>
 

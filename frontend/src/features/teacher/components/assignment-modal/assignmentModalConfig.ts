@@ -496,66 +496,132 @@ export const getSuggestedTopics = (
       ];
     }
     if (subCode === "VOCAB_DICTATION" || subCode === "VOCAB_LISTEN_CHOOSE") {
+      if (level === "A1" || level === "A2") {
+        return [
+          `Phonetics & Dictation (${level}): Daily routines, home objects and family`,
+          `Phonetics & Dictation (${level}): Travel, directions, airports and city places`,
+          `Phonetics & Dictation (${level}): Food, hobbies, weather and shopping`,
+          `Phonetics & Dictation (${level}): Common minimal pairs and everyday adjectives`,
+        ];
+      }
+      if (level === "B1" || level === "B2") {
+        return [
+          `Phonetics & Dictation (${level}): Workplace projects, technology and media trends`,
+          `Phonetics & Dictation (${level}): Environmental protection, urban transport and tourism`,
+          `Phonetics & Dictation (${level}): Education, health habits and social communication`,
+          `Phonetics & Dictation (${level}): Commonly confused multisyllabic words and silent letters`,
+        ];
+      }
       return [
-        `Phonetics & Dictation (${level}): Daily routines, home objects and family`,
-        `Phonetics & Dictation (${level}): Travel, directions, airports and city places`,
-        `Phonetics & Dictation (${level}): Academic lecture vocabulary and high-frequency terms`,
-        `Phonetics & Dictation (${level}): Commonly confused minimal pairs and silent letters`,
+        `Phonetics & Dictation (${level}): Academic lecture vocabulary and research methodology`,
+        `Phonetics & Dictation (${level}): Economics, public policy and technological ethics`,
+        `Phonetics & Dictation (${level}): Complex Latin/Greek academic lexis and stress shifts`,
+        `Phonetics & Dictation (${level}): Nuanced IELTS/C1 lexical items and formal registers`,
       ];
     }
   }
 
   if (type === "GRAMMAR") {
+    const isBeginner = level === "A1" || level === "A2";
+    const isIntermediate = level === "B1" || level === "B2";
     if (subCode === "GRAMMAR_VERB_CONJUGATION") {
+      if (isBeginner) {
+        return [
+          `Verb Conjugation (${level}): Thì Hiện tại đơn (Present Simple) - Thói quen & ngôi thứ ba số ít`,
+          `Verb Conjugation (${level}): Thì Quá khứ đơn (Past Simple) - Kể chuyện & Động từ bất quy tắc`,
+          `Verb Conjugation (${level}): Thì Hiện tại tiếp diễn & Tương lai gần (Be going to)`,
+        ];
+      }
+      if (isIntermediate) {
+        return [
+          `Verb Conjugation (${level}): Thì Hiện tại hoàn thành & Quá khứ hoàn thành (Perfect Tenses)`,
+          `Verb Conjugation (${level}): Câu điều kiện loại 1, 2, 3 & Wish clauses`,
+          `Verb Conjugation (${level}): Thể bị động (Passive Voice) đa thì & Modal Perfect`,
+        ];
+      }
       return [
-        `Verb Conjugation (${level}): Thì Hiện tại đơn (Present Simple Tense) - Thói quen, chân lý & ngôi thứ ba số ít`,
-        `Verb Conjugation (${level}): Thì Quá khứ đơn (Past Simple Tense) - Kể chuyện & Động từ bất quy tắc`,
-        `Verb Conjugation (${level}): Thì Hiện tại tiếp diễn (Present Continuous) - Hành động đang diễn ra`,
-        `Verb Conjugation (${level}): Thì Hiện tại hoàn thành (Present Perfect) với Since & For`,
-        `Verb Conjugation (${level}): Thì Tương lai đơn & Be going to - Kế hoạch & Dự đoán`,
-        `Verb Conjugation (${level}): Câu điều kiện loại 1 & loại 2 (Conditionals Type 1 & 2)`,
-        `Verb Conjugation (${level}): Thể bị động (Passive Voice) ở các thì cơ bản`,
+        `Verb Conjugation (${level}): Mixed Conditionals, Subjunctive & Advanced Aspect Shifts`,
+        `Verb Conjugation (${level}): Participle Clauses, Cleft Structures & Formal Passive`,
+        `Verb Conjugation (${level}): Complex Sequence of Tenses in Academic Writing`,
       ];
     }
     if (subCode === "GRAMMAR_MULTIPLE_CHOICE") {
+      if (isBeginner) {
+        return [
+          `Multiple Choice (${level}): Trắc nghiệm Thì Hiện tại đơn & Trạng từ tần suất (always, usually, never)`,
+          `Multiple Choice (${level}): Trắc nghiệm Giới từ thời gian/nơi chốn (in, on, at) & Mạo từ (a, an, the)`,
+          `Multiple Choice (${level}): Trắc nghiệm Động từ khiếm khuyết (Can, Could, Must, Should)`,
+        ];
+      }
+      if (isIntermediate) {
+        return [
+          `Multiple Choice (${level}): Trắc nghiệm Mệnh đề quan hệ (Relative Clauses) & Mệnh đề trạng ngữ`,
+          `Multiple Choice (${level}): Trắc nghiệm Gerunds, Infinitives & Phân từ (V-ing / V3-ed)`,
+          `Multiple Choice (${level}): Trắc nghiệm Liên từ tương phản/nguyên nhân (Although, Despite, Whereas)`,
+        ];
+      }
       return [
-        `Multiple Choice (${level}): Trắc nghiệm Thì Hiện tại đơn & Trạng từ tần suất (always, usually, never)`,
-        `Multiple Choice (${level}): Trắc nghiệm Thì Quá khứ đơn & Động từ có quy tắc / Bất quy tắc`,
-        `Multiple Choice (${level}): Trắc nghiệm Giới từ chỉ thời gian & nơi chốn (in, on, at)`,
-        `Multiple Choice (${level}): Trắc nghiệm Mạo từ (A, An, The) & Danh từ đếm được / Không đếm được`,
-        `Multiple Choice (${level}): Trắc nghiệm Động từ khiếm khuyết (Can, Could, Must, Should)`,
+        `Multiple Choice (${level}): Trắc nghiệm Đảo ngữ (Inversion), Cleft Sentences & Participle Clauses`,
+        `Multiple Choice (${level}): Trắc nghiệm Subjunctive, Nominalisation & Academic Cohesion`,
+        `Multiple Choice (${level}): Band 8.0+ Complex Sentence Synthesis & Modality Nuances`,
       ];
     }
     if (subCode === "GRAMMAR_WORD_ARRANGEMENT" || subCode === "GRAMMAR_UNSCRAMBLE") {
+      if (isBeginner) {
+        return [
+          `Sắp xếp từ (${level}): Cấu trúc câu khẳng định & phủ định Thì Hiện tại đơn (S + V + O)`,
+          `Sắp xếp từ (${level}): Trật tự trạng từ chỉ tần suất & câu nghi vấn Do/Does`,
+          `Sắp xếp từ (${level}): Cụm giới từ chỉ địa điểm & thời gian trong câu cơ bản`,
+        ];
+      }
+      if (isIntermediate) {
+        return [
+          `Sắp xếp từ (${level}): Mệnh đề quan hệ (who, which, that) & Mệnh đề nhượng bộ (although)`,
+          `Sắp xếp từ (${level}): Câu bị động (Passive Voice) & Câu điều kiện loại 1/2`,
+          `Sắp xếp từ (${level}): Trật tự từ trong câu gián tiếp (Reported Speech)`,
+        ];
+      }
       return [
-        `Sắp xếp từ (${level}): Cấu trúc câu khẳng định & phủ định Thì Hiện tại đơn (S + V + O)`,
-        `Sắp xếp từ (${level}): Trật tự trạng từ chỉ tần suất (always, usually) và trạng từ thời gian`,
-        `Sắp xếp từ (${level}): Câu nghi vấn Wh- questions & Yes/No với trợ động từ do/does`,
-        `Sắp xếp từ (${level}): Cụm giới từ chỉ địa điểm & nơi chốn trong câu`,
+        `Sắp xếp từ (${level}): Đảo ngữ học thuật (Not only / Never / Seldom + Aux + S + V)`,
+        `Sắp xếp từ (${level}): Câu chẻ (It is... that...) & Cụm phân từ rút gọn`,
       ];
     }
     if (subCode === "GRAMMAR_FILL_IN_BLANK") {
+      if (isBeginner) {
+        return [
+          `Điền từ (${level}): Giới từ chỉ vị trí và thời gian (in, on, at, under, between)`,
+          `Điền từ (${level}): Đại từ nhân xưng, tân ngữ và tính từ sở hữu (I/me/my, they/them/their)`,
+          `Điền từ (${level}): Trợ động từ Do/Does và Lượng từ (some, any, much, many)`,
+        ];
+      }
       return [
-        `Điền từ (${level}): Giới từ chỉ vị trí và thời gian (in, on, at, under, between)`,
-        `Điền từ (${level}): Đại từ nhân xưng, tân ngữ và tính từ sở hữu (I/me/my, they/them/their)`,
-        `Điền từ (${level}): Trợ động từ Do/Does và Động từ To Be (am/is/are)`,
-        `Điền từ (${level}): Lượng từ (much, many, a lot of, some, any, few, little)`,
+        `Điền từ (${level}): Đại từ quan hệ (who, whom, whose, which, where) & Giới từ học thuật`,
+        `Điền từ (${level}): Liên từ nối ý & Cụm phân từ trong câu phức`,
       ];
     }
     if (subCode === "GRAMMAR_ERROR_CORRECTION") {
+      if (isBeginner) {
+        return [
+          `Sửa lỗi sai (${level}): Lỗi hòa hợp chủ vị (Subject-Verb Agreement) & trợ động từ Do/Does`,
+          `Sửa lỗi sai (${level}): Lỗi chia thì Quá khứ đơn & giới từ cơ bản`,
+        ];
+      }
       return [
-        `Sửa lỗi sai (${level}): Lỗi hòa hợp chủ vị (Subject-Verb Agreement) ở Thì Hiện tại đơn`,
-        `Sửa lỗi sai (${level}): Lỗi dùng sai trợ động từ và dạng nguyên mẫu của động từ`,
-        `Sửa lỗi sai (${level}): Lỗi chia thì Quá khứ đơn và động từ bất quy tắc`,
-        `Sửa lỗi sai (${level}): Lỗi dùng sai giới từ trong các cụm cố định`,
+        `Sửa lỗi sai (${level}): Lỗi rút gọn mệnh đề, Dangling Modifiers & cấu trúc song song (Parallelism)`,
+        `Sửa lỗi sai (${level}): Lỗi đảo ngữ, mệnh đề quan hệ không xác định & Subjunctive`,
       ];
     }
     if (subCode === "GRAMMAR_TRANSFORMATION") {
+      if (isBeginner) {
+        return [
+          `Transformation (${level}): Câu chủ động sang bị động cơ bản & So sánh hơn/nhất`,
+          `Transformation (${level}): Too...to / Enough...to & Because <-> Because of`,
+        ];
+      }
       return [
-        `Transformation (${level}): Active sang Passive voice (Chủ động sang Bị động)`,
-        `Transformation (${level}): Direct sang Reported speech (Trực tiếp sang Gián tiếp)`,
-        `Transformation (${level}): Câu điều kiện loại 1 & loại 2`,
-        `Transformation (${level}): So sánh hơn & So sánh nhất (Comparatives & Superlatives)`,
+        `Transformation (${level}): Active sang Passive voice (Passive Reporting) & Reported Speech`,
+        `Transformation (${level}): Đảo ngữ học thuật, Cleft sentences & Nominalisation (Danh từ hóa)`,
+        `Transformation (${level}): Câu điều kiện hỗn hợp (Mixed Conditionals) & Although <-> Despite`,
       ];
     }
   }

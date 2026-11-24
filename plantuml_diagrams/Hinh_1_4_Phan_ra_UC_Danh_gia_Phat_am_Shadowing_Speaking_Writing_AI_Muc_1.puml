@@ -1,39 +1,59 @@
 @startuml Hinh_1_4_Phan_ra_UC_Danh_gia_Phat_am_Shadowing_Speaking_Writing_AI_Muc_1
 title Hình 1.4: Phân rã UC Đánh giá Phát âm Shadowing, Speaking & Writing AI - Mức 1
 left to right direction
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 10
+skinparam ranksep 12
 
 actor "Học viên\n(Student)" as Student
-actor "Python Phonetics\n(FastAPI :8000)" as PythonService <<Service>>
-actor "Groq Cloud\n(Whisper / LLaMA)" as GroqCloud <<Service>>
-actor "Google Gemini 2.5\n(Flash AI)" as GeminiAI <<Service>>
 
-rectangle "Phân hệ Đánh giá Ngữ âm & Trí tuệ Nhân tạo Đa tầng (UC-AI)" {
-    usecase "UC-AI-01: Luyện phát âm Shadowing\n(Phân tích âm học Formant F1/F2)" as UC_SHADOW
-    usecase "UC-AI-02: Chấm bài nói Speaking\n(Độ trôi chảy, từ vựng, ngữ pháp)" as UC_SPEAK
-    usecase "UC-AI-03: Chấm bài viết luận Writing\n(Chính tả, ngữ pháp, độ mạch lạc)" as UC_WRITE
-    usecase "UC-AI-04: Cơ chế dự phòng 3 tầng\n(3-Tier AI Fallback Pipeline)" as UC_FALLBACK
-    usecase "UC-AI-05: Cập nhật Radar Chart &\nLưu ai_evaluations (MySQL)" as UC_UPDATE
+rectangle "Phân hệ Đánh giá Phát âm Shadowing, Speaking & Writing AI" {
+    usecase "Luyện phát âm\nShadowing Studio" as UC_SHADOW
+    usecase "Luyện nói tương tác\nSpeaking Q&A\n(Part 1/2/3)" as UC_SPEAK
+    usecase "Luyện viết luận\nWriting (IELTS Task 1,\nTask 2 & Đoạn văn)" as UC_WRITE
+    usecase "Xem hồ sơ năng lực\n& Lịch sử bài nộp AI" as UC_RADAR
+
+    usecase "Phân tích Formant\nF1/F2 & GOP\nWav2Vec 2.0" as UC_PHONETIC
+    usecase "Bóc băng STT\n(Groq Whisper\n/ Gemini)" as UC_STT
+    usecase "Chấm bài viết\n4 tiêu chí (Task,\nCC, LR, GRA)" as UC_WRITE_SCORE
+    usecase "Sinh lời khuyên\nAI Coach\n(AiCoachingAdvice)" as UC_COACH
+    usecase "Cơ chế dự phòng\n3 tầng (3-Tier\nAI Fallback)" as UC_FALLBACK
+    usecase "Cập nhật điểm\nkỹ năng\n(StudentSkillProfile)" as UC_SKILL
 }
+
+actor "Python AI Services\n(:8000 / :8001)" as PythonService <<Service>>
+actor "Gemini & Groq\nCloud AI" as CloudAI <<Service>>
 
 Student --> UC_SHADOW
 Student --> UC_SPEAK
 Student --> UC_WRITE
+Student --> UC_RADAR
 
-UC_SHADOW ..> UC_FALLBACK : <<include>>
-UC_SPEAK ..> UC_FALLBACK : <<include>>
-UC_SHADOW ..> UC_UPDATE : <<include>>
-UC_SPEAK ..> UC_UPDATE : <<include>>
-UC_WRITE ..> UC_UPDATE : <<include>>
+UC_SHADOW ..> UC_PHONETIC : <<includes>>
+UC_SPEAK ..> UC_STT : <<includes>>
+UC_SPEAK ..> UC_PHONETIC : <<includes>>
+UC_SHADOW ..> UC_COACH : <<includes>>
+UC_SPEAK ..> UC_COACH : <<includes>>
+UC_WRITE ..> UC_WRITE_SCORE : <<includes>>
+UC_SHADOW ..> UC_FALLBACK : <<includes>>
+UC_SPEAK ..> UC_FALLBACK : <<includes>>
+UC_WRITE ..> UC_FALLBACK : <<includes>>
+UC_RADAR ..> UC_SKILL : <<includes>>
 
-UC_FALLBACK --> PythonService : Tầng 1: Wav2Vec2 CTC & Praat Formant
-UC_FALLBACK --> GroqCloud : Tầng 2 STT (Whisper) & Tầng 3 (LLaMA 3.3)
-UC_FALLBACK --> GeminiAI : Tầng 2: Cambridge Phonetics Rule
+UC_PHONETIC --> PythonService
+UC_WRITE_SCORE --> PythonService
+UC_STT --> CloudAI
+UC_WRITE_SCORE --> CloudAI
+UC_COACH --> CloudAI
+UC_FALLBACK --> CloudAI
 @enduml

@@ -1,10 +1,15 @@
 """
-Comprehensive Before-vs-After Benchmark Suite for phonetics-service:
-  1. Unseen SpeechOcean762/test held-out speakers (utterance r/rho/MAE/RMSE, word-level, phoneme ROC-AUC & F1)
-  2. Unseen LibriSpeech clean/validation held-out 8 native speakers (scores, pass rate @ 80, latency ms/utt)
-  3. Targeted linguistic & bug-fix probes (mid-sentence skip non-cascading, off-script multi-word rejection)
+Bộ đo kiểm toàn diện Before-vs-After (Trước và Sau hiệu chuẩn) cho phonetics-service:
+  1. Tập SpeechOcean762/test (125 người nói hoàn toàn chưa thấy ở bước train):
+     đo tương quan & sai số cấp câu (r, rho, MAE, RMSE), cấp từ (word_level),
+     và phân biệt lỗi phát âm cấp âm vị (ROC-AUC, PR-AUC, F1 tốt nhất).
+  2. Tập LibriSpeech clean/validation giữ lại (8 người nói bản ngữ held-out):
+     đo điểm trung bình, tỷ lệ đạt chuẩn ở ngưỡng 80 (`pass_rate_pct`) và tốc độ suy luận (`ms_per_utt`).
+  3. Các bài kiểm thử mục tiêu (targeted probes):
+     kiểm tra bỏ sót từ giữa câu không gây lỗi trượt dây chuyền (`mid_sentence_skip`)
+     và từ chối câu đọc sai hoàn toàn kịch bản (`off_script_multiword`).
 
-Writes full results to cache/comprehensive_eval_report.json.
+Toàn bộ kết quả đối chiếu được xuất ra file `cache/comprehensive_eval_report.json`.
 """
 import argparse
 import concurrent.futures
@@ -42,10 +47,12 @@ from tools.dataset_utils import (  # noqa: E402
     numpy_to_wav_bytes,
 )
 
+# Ngữ cảnh TestClient dùng chung cho từng worker đánh giá đa tiến trình
 _EVAL_WORKER_CTX: Dict[str, Any] = {}
 
 
 def _init_eval_worker(torch_threads: int) -> None:
+    """Khởi tạo worker đánh giá: nạp lại `vowels.json` và `calibration.json` mới nhất ở chế độ hiệu chuẩn hoạt động."""
     os.environ["OMP_NUM_THREADS"] = str(torch_threads)
     os.environ["MKL_NUM_THREADS"] = str(torch_threads)
     import torch
@@ -63,6 +70,7 @@ def _init_eval_worker(torch_threads: int) -> None:
     from app.services.formant_service import formant_service as w_fs
     from app.services.scorer import ScoringCalibrator as w_SC, scorer as w_scorer
 
+    # Bắt buộc nạp lại file hồ sơ formant và bộ hiệu chuẩn mới vừa huấn luyện trên đĩa
     w_fs._load_profiles_from_disk(w_settings.VOWEL_PROFILE_PATH)
     w_scorer.calibrator = w_SC()
     forced_aligner.model_mgr.load_model()
@@ -70,6 +78,7 @@ def _init_eval_worker(torch_threads: int) -> None:
 
 
 def _eval_worker_so(item: Tuple[dict, dict]) -> Dict[str, Any]:
+    """Chạy 1 câu SpeechOcean762/test qua API với bộ hiệu chuẩn mới và ghép với `raw_scores` cũ để so sánh Before-vs-After."""
     rec, row = item
     client = _EVAL_WORKER_CTX["client"]
     idx = int(rec["idx"])
@@ -118,6 +127,7 @@ def _eval_worker_so(item: Tuple[dict, dict]) -> Dict[str, Any]:
 
 
 def _eval_worker_ls(item: Tuple[int, dict]) -> Dict[str, Any]:
+    """Chạy 1 câu LibriSpeech held-out qua API với bộ hiệu chuẩn đang bật để thu điểm và trạng thái `isPassed`."""
     idx, row = item
     client = _EVAL_WORKER_CTX["client"]
     audio_16k = decode_parquet_audio(row["audio"], target_sr=16000)
@@ -143,6 +153,7 @@ def _eval_worker_ls(item: Tuple[int, dict]) -> Dict[str, Any]:
 
 
 def _load_jsonl(path: Path) -> List[dict]:
+    """Đọc danh sách đối tượng JSON từ file JSONL."""
     out = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -153,12 +164,18 @@ def _load_jsonl(path: Path) -> List[dict]:
 
 
 def _eval_phoneme_discrimination(so_test_feats: List[dict]) -> Dict[str, Any]:
+    """
+    Đánh giá chất lượng chấm điểm cấp âm vị trên SpeechOcean762/test thông qua các cặp âm vị đã căn chỉnh.
+
+    Đo tương quan hạng Spearman của điểm âm vị, `gop_margin`, `canon_posterior`, `posterior` so với điểm chuyên gia,
+    cùng chỉ số phân loại lỗi phát âm `ROC-AUC`, `PR-AUC` và tìm ngưỡng `best_mispron_threshold` đạt `F1` cao nhất.
+    """
     phones = [p for r in so_test_feats for p in r.get("phone_pairs", [])]
     if len(phones) < 20:
         return {"n": len(phones), "note": "insufficient aligned phone pairs"}
 
     y_acc = np.asarray([float(p["human_acc"]) for p in phones], dtype=np.float64)
-    # Mispronounced in SpeechOcean762 is typically human phone accuracy < 1.5 (0 or 1 on 0..2 scale)
+    # Trong SpeechOcean762, âm vị đọc sai thường được chuyên gia chấm < 1.5 (tức điểm 0 hoặc 1 trên thang 0..2)
     y_good = (y_acc >= 1.5).astype(int)
     y_bad = 1 - y_good
 
@@ -188,6 +205,7 @@ def _eval_phoneme_discrimination(so_test_feats: List[dict]) -> Dict[str, Any]:
         res["pr_auc_mispron_score"] = round(float(average_precision_score(y_bad, 100.0 - scores)), 4)
         best_f1 = 0.0
         best_th = 60.0
+        # Quét ngưỡng điểm từ 30 đến 85 (bước nhảy 5) để tìm ngưỡng tối ưu F1 bắt lỗi phát âm
         for th in range(30, 86, 5):
             pred_bad = (scores < float(th)).astype(int)
             f1 = float(f1_score(y_bad, pred_bad, zero_division=0))
@@ -206,6 +224,12 @@ def _run_live_so_test(
     torch_threads: int = 2,
     fast_from_cache: bool = False,
 ) -> Dict[str, Any]:
+    """
+    Đo kiểm tập SpeechOcean762/test và đối chiếu trực tiếp kết quả Before (`uncalibrated_phase1_2`) vs After (`calibrated_after`).
+
+    - Nếu `fast_from_cache=True`: tính điểm hiệu chuẩn tức thì từ `utt_features` và `raw_scores` trong JSONL cache.
+    - Nếu `fast_from_cache=False`: chạy lại toàn bộ pipeline âm thanh trực tiếp qua FastAPI `TestClient`.
+    """
     t0 = time.time()
     records = []
     word_pairs = []
@@ -226,6 +250,7 @@ def _run_live_so_test(
                 completeness=comp,
                 features=feats,
             )
+            # Áp dụng trần bảo vệ nhất quán với scorer: nếu phát âm quá kém (< 55) thì điểm tổng không vượt quá pron + 10
             if cal["pronunciation"] < 55.0:
                 cal["overall"] = min(cal["overall"], round(cal["pronunciation"] + 10.0, 1))
             if rec.get("rejected_mismatch"):
@@ -316,6 +341,7 @@ def _run_live_so_test(
                     if (i + 1) % 100 == 0 or (i + 1) == len(items):
                         print(f"  [Eval SO Test w={workers}] {i + 1}/{len(items)} ({time.time() - t0:.1f}s)", flush=True)
 
+    # Tổng hợp bảng so sánh Before (uncalibrated_phase1_2) vs After (calibrated_after) trên cùng tập câu
     elapsed = time.time() - t0
     metrics_after = {}
     metrics_uncalibrated = {}
@@ -354,6 +380,12 @@ def _run_live_ls_heldout(
     torch_threads: int = 2,
     fast_from_cache: bool = False,
 ) -> Dict[str, Any]:
+    """
+    Đánh giá bộ hiệu chuẩn trên 8 người nói bản ngữ giữ lại (held-out) của LibriSpeech clean/validation.
+
+    Kiểm tra mức điểm trung bình các thành phần và tỷ lệ đạt chuẩn (`overall >= 80`, `pronunciation >= 75`, `completeness >= 80`)
+    để bảo đảm việc hiệu chuẩn theo người học không đánh tụt điểm của người nói bản ngữ.
+    """
     t0 = time.time()
     overalls, prons, flus, pros, speeds, comps, passed = [], [], [], [], [], [], []
     errors = 0
@@ -439,10 +471,11 @@ def _run_live_ls_heldout(
 
 
 def _run_targeted_probes(client: TestClient) -> Dict[str, Any]:
+    """Chạy 2 bài kiểm thử định hướng: (1) bỏ sót từ giữa câu không gây trượt alignment dây chuyền và (2) từ chối câu đọc sai kịch bản."""
     from tests.audio_cases import FULL_SENTENCE, case_full
 
     probes: Dict[str, Any] = {}
-    # 1. Mid-sentence skip probe: splice middle silence over "phonemic" or add extra skipped word in script
+    # 1. Thử nghiệm bỏ sót từ giữa câu: chèn thêm từ "omittedword" vào kịch bản chuẩn để kiểm tra các từ theo sau vẫn khớp
     full_audio_bytes = case_full()
     alt_script = "Consistent pronunciation practice omittedword phonemic awareness enhance oral fluency."
     r_mid = client.post(
@@ -462,7 +495,7 @@ def _run_targeted_probes(client: TestClient) -> Dict[str, Any]:
     else:
         probes["mid_sentence_skip"] = {"status_code": r_mid.status_code}
 
-    # 2. Off-script multi-word mismatch probe: speak FULL_SENTENCE against completely unrelated target script
+    # 2. Thử nghiệm đọc lệch kịch bản nhiều từ: gửi âm thanh của FULL_SENTENCE nhưng đối chiếu với câu kịch bản hoàn toàn khác
     unrelated_script = "Yesterday my brother bought three purple bicycles near the harbor."
     r_off = client.post(
         "/api/v1/audio/evaluate-phonetics",
@@ -478,6 +511,7 @@ def _run_targeted_probes(client: TestClient) -> Dict[str, Any]:
 
 
 def main():
+    """Điểm khởi chạy CLI: nạp lại `vowels.json` và `calibration.json` mới, đo kiểm toàn bộ SpeechOcean test, LibriSpeech held-out và lưu báo cáo JSON."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--so-test-jsonl", type=Path, default=ROOT / "cache" / "so_test_feats.jsonl")
     parser.add_argument("--ls-heldout-jsonl", type=Path, default=ROOT / "cache" / "ls_heldout_feats.jsonl")
@@ -488,7 +522,7 @@ def main():
     parser.add_argument("--fast-from-cache", action="store_true")
     args = parser.parse_args()
 
-    # Reload FormantService & Scorer calibrator to ensure newly written profiles are live
+    # Nạp lại hồ sơ FormantService và bộ hiệu chuẩn Scorer từ đĩa để đảm bảo dùng đúng các file profile vừa huấn luyện
     formant_service._load_profiles_from_disk(settings.VOWEL_PROFILE_PATH)
     scorer.calibrator = ScoringCalibrator()
     print(

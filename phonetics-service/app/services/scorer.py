@@ -1,3 +1,15 @@
+"""
+Module tính điểm phát âm phân tầng và hiệu chuẩn thực nghiệm (`scorer.py`).
+
+Nhiệm vụ chính:
+1. Nạp và suy luận bộ hiệu chuẩn hồi quy Ridge + nội suy đơn điệu từng đoạn từ `reference_profiles/calibration.json`
+   (`ScoringCalibrator`), giúp ánh xạ điểm thô sát với thang chấm của chuyên gia trên bộ dữ liệu SpeechOcean762.
+2. Trích xuất tập đặc trưng âm học cấp độ câu (`extract_utterance_acoustic_features`) dùng chung giữa chấm trực tuyến và hiệu chuẩn offline.
+3. Chấm điểm chi tiết từng thành phần (`Scorer`): nguyên âm, phụ âm (GOP & GOP margin), từng từ, tốc độ nói, độ trôi chảy,
+   ngữ điệu (prosody), độ hoàn thiện câu và điểm tổng kết.
+4. Sinh nhận xét sư phạm tiếng Việt nhất quán 100% với mức điểm (`generate_phoneme_pedagogical_feedback`).
+"""
+
 import json
 import logging
 from pathlib import Path
@@ -14,9 +26,9 @@ logger = logging.getLogger("phonetics-service")
 
 class ScoringCalibrator:
     """
-    Loads empirical standardized Ridge + piecewise monotonic calibration parameters
-    from reference_profiles/calibration.json (fitted on SpeechOcean762/train).
-    Falls back cleanly to identity mode when no artifact exists or in bare unit tests.
+    Nạp và áp dụng bộ tham số hiệu chuẩn thực nghiệm (Ridge chuẩn hóa kết hợp nội suy đơn điệu từng đoạn)
+    từ file `reference_profiles/calibration.json` (được huấn luyện trên SpeechOcean762).
+    Tự động chuyển sang chế độ đồng nhất ('identity') nếu không tìm thấy file cấu hình hoặc khi chạy unit test tối giản.
     """
 
     def __init__(
@@ -24,6 +36,7 @@ class ScoringCalibrator:
         mode: str = "calibrated",
         calibration_path: Path = settings.CALIBRATION_PROFILE_PATH,
     ):
+        """Khởi tạo bộ hiệu chuẩn và tự động nạp `calibration.json` nếu `mode != 'identity'`."""
         self.mode = mode
         self.calibration_path = calibration_path
         self.models: Dict[str, dict] = {}
@@ -32,6 +45,7 @@ class ScoringCalibrator:
             self._load(calibration_path)
 
     def _resolve_path(self, path: Path) -> Path:
+        """Tìm đường dẫn file calibration (ưu tiên đường dẫn trực tiếp, fallback về thư mục gốc phonetics-service)."""
         p = Path(path)
         if not p.is_absolute() and not p.exists():
             pkg_root = Path(__file__).resolve().parents[2]
@@ -41,6 +55,11 @@ class ScoringCalibrator:
         return p
 
     def _load(self, path: Path) -> None:
+        """
+        Đọc file JSON đã train (`reference_profiles/calibration.json`) chứa các mô hình con
+        (`pronunciation`, `fluency`, `prosody`, `overall`) và các ngưỡng đạt (`thresholds`).
+        Nếu file không tồn tại hoặc lỗi đọc, chuyển an toàn về chế độ `identity`.
+        """
         resolved = self._resolve_path(path)
         if not resolved.exists():
             self.mode = "identity"
@@ -48,6 +67,7 @@ class ScoringCalibrator:
         try:
             with open(resolved, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # Đọc từ điển các mô hình hồi quy (`models`) và các ngưỡng chuẩn (`thresholds`) từ JSON
             self.models = data.get("models", {}) or {}
             self.thresholds = data.get("thresholds", {}) or {}
             if self.models:
@@ -64,12 +84,22 @@ class ScoringCalibrator:
             self.mode = "identity"
 
     def has_model(self, name: str) -> bool:
+        """Kiểm tra xem mô hình hiệu chuẩn cho thành phần `name` có đang hoạt động hay không."""
         return self.mode == "calibrated" and name in self.models
 
     def calibrate(self, raw_score: float) -> float:
+        """Làm tròn điểm thô về 1 chữ số thập phân (dùng ở nhánh chưa bật mô hình hiệu chuẩn)."""
         return round(float(raw_score), 1)
 
     def predict_component(self, component_name: str, features: Dict[str, float]) -> Optional[float]:
+        """
+        Dự đoán điểm đã hiệu chuẩn cho một thành phần (`pronunciation`, `fluency`, `prosody`, hoặc `overall`)
+        từ từ điển đặc trưng `features` thông qua `calibration.json`:
+        1. Chuẩn hóa z-score từng đặc trưng: `(val - mu) / std` (điền `mu` nếu thiếu hoặc NaN/Inf).
+        2. Tính tổ hợp tuyến tính Ridge: `z = intercept + sum(w_i * z_i)`.
+        3. Ánh xạ đơn điệu từng đoạn qua các điểm nút `(x_knots, y_knots)` bằng `np.interp` để khớp phân phối điểm thực tế.
+        4. Giới hạn kết quả trong `[min_score, max_score]` và làm tròn 1 chữ số thập phân.
+        """
         model = self.models.get(component_name)
         if not model:
             return None
@@ -82,6 +112,7 @@ class ScoringCalibrator:
         if not feat_names or len(weights) != len(feat_names):
             return None
 
+        # Bước 1 & 2: Chuẩn hóa z-score theo thống kê tập train và cộng trọng số tuyến tính Ridge
         z = intercept
         for name, mu, sd, w in zip(feat_names, means, stds, weights):
             val = float(features.get(name, mu))
@@ -90,6 +121,7 @@ class ScoringCalibrator:
             safe_sd = float(sd) if float(sd) > 1e-8 else 1.0
             z += float(w) * ((val - float(mu)) / safe_sd)
 
+        # Bước 3: Áp dụng đường cong nội suy đơn điệu từng đoạn (piecewise monotonic knots) nếu mô hình có khai báo
         x_knots = model.get("x_knots")
         y_knots = model.get("y_knots")
         if x_knots and y_knots and len(x_knots) == len(y_knots) and len(x_knots) >= 2:
@@ -97,13 +129,14 @@ class ScoringCalibrator:
         else:
             pred = float(z)
 
+        # Bước 4: Cắt ngưỡng theo biên hợp lệ của thành phần
         min_val = float(model.get("min_score", 0.0))
         max_val = float(model.get("max_score", 100.0))
         return round(float(np.clip(pred, min_val, max_val)), 1)
 
 
 def _gop_margin_to_score(gop_margin: float) -> float:
-    """Maps Witt & Young GOP log-likelihood margin to an uncalibrated [0, 100] score."""
+    """Ánh xạ biên độ GOP (log-likelihood margin theo Witt & Young) qua hàm sigmoid sang điểm thô trong [0, 100]."""
     return float(100.0 / (1.0 + np.exp(-0.72 * (float(gop_margin) + 1.15))))
 
 
@@ -125,10 +158,10 @@ def extract_utterance_acoustic_features(
     completeness_score: float,
 ) -> Dict[str, float]:
     """
-    Computes the canonical utterance-level feature dictionary shared identically between
-    online evaluation (`routes.py`) and offline SpeechOcean762 calibration/evaluation.
+    Tính toán bộ từ điển đặc trưng âm học chuẩn ở cấp độ toàn câu nói,
+    được dùng thống nhất giữa luồng chấm điểm trực tuyến (`routes.py`) và quy trình hiệu chuẩn/đánh giá offline trên SpeechOcean762.
     """
-    # 1. Inter-word timing & hesitation dynamics
+    # 1. Động học khoảng nghỉ giữa các từ & độ ngập ngừng (hesitation)
     gaps: List[float] = []
     hesitation_count = 0
     runs: List[int] = []
@@ -141,6 +174,7 @@ def extract_utterance_acoustic_features(
         gap = max(0.0, float(next_w.start_time - curr_w.end_time))
         gaps.append(gap)
         has_punc = any(ch in curr_w.word for ch in ",.!?;:")
+        # Khoảng lặng >= 220ms tại vị trí không có dấu câu được tính là một nhịp ngập ngừng
         if gap >= 0.22 and not has_punc:
             hesitation_count += 1
             runs.append(curr_run)
@@ -157,7 +191,7 @@ def extract_utterance_acoustic_features(
     gap_std = float(np.std(gaps)) if len(gaps) >= 2 else 0.0
     mean_run_norm = min(1.0, (float(np.mean(runs)) if runs else 0.0) / 5.0)
 
-    # 2. Local word speaking rate regularity (duration per phoneme CV)
+    # 2. Độ ổn định tốc độ nói cục bộ từng từ (hệ số biến thiên CV của thời lượng trung bình trên mỗi âm vị)
     dur_per_ph: List[float] = []
     for w_schema, w_align in zip(words_schema, getattr(alignment_result, "words", [])):
         st = w_schema.word_status.value if hasattr(w_schema.word_status, "value") else str(w_schema.word_status)
@@ -170,7 +204,7 @@ def extract_utterance_acoustic_features(
         else 0.35
     )
 
-    # 3. Phoneme / GOP / Formant / Stress contrast aggregates
+    # 3. Tổng hợp thống kê điểm âm vị, xác suất GOP, Formant và độ tương phản trọng âm (thời lượng / năng lượng RMS / cao độ F0)
     all_ph_scores: List[float] = []
     vowel_scores: List[float] = []
     cons_scores: List[float] = []
@@ -258,6 +292,7 @@ def extract_utterance_acoustic_features(
     f0_slope = float(getattr(utterance_acoustics, "f0_slope_abs", 5.0) if utterance_acoustics is not None else 5.0)
     voiced_ratio = float(getattr(utterance_acoustics, "voiced_frame_ratio", 0.6) if utterance_acoustics is not None else 0.6)
 
+    # Tính tỷ lệ tương phản giữa nguyên âm mang trọng âm và nguyên âm không nhấn
     stress_dur_contrast = (
         float(np.clip(np.mean(stressed_durs) / max(0.02, float(np.mean(unstressed_durs))), 0.5, 2.5))
         if (stressed_durs and unstressed_durs)
@@ -336,10 +371,13 @@ def extract_utterance_acoustic_features(
 
 class Scorer:
     """
-    Hierarchical Scoring Engine with Un-Pooled GOP Margin Sensitivity,
-    Empirical SpeechOcean762 Calibration, and Formant Floor Protection.
+    Bộ máy chấm điểm phân tầng (Hierarchical Scoring Engine):
+    - Chấm điểm âm vị nhạy với biên độ GOP chưa gộp lỗi (`gop_margin`) và bảo vệ sàn bằng Formant Praat.
+    - Chấm điểm cấp độ từ có trọng số nguyên âm/phụ âm và trần phạt khi âm trọng yếu bị sai/nuốt.
+    - Hiệu chuẩn cấp độ toàn câu bằng mô hình thực nghiệm SpeechOcean762 (`calibration.json`).
     """
 
+    # Tập hợp âm bật (tắc-bật) và âm tắc xát / bán nguyên âm có thời lượng ngắn
     PLOSIVES = {"p", "t", "k", "b", "d", "g", "ɡ"}
     AFFRICATES_AND_GLIDES = {"tʃ", "dʒ", "ts", "dz", "h", "j", "w"}
 
@@ -352,6 +390,7 @@ class Scorer:
         speed_target_max: float = settings.SPEED_TARGET_MAX,
         calibrator: Optional[ScoringCalibrator] = None,
     ):
+        """Khởi tạo bộ chấm điểm với trọng số thành phần, dải tốc độ mục tiêu và bộ hiệu chuẩn."""
         self.pron_weight = pron_weight
         self.fluency_weight = fluency_weight
         self.speed_weight = speed_weight
@@ -369,16 +408,24 @@ class Scorer:
         canonical_posterior: Optional[float] = None,
         gop_margin: Optional[float] = None,
     ) -> float:
-        # When canonical_posterior is provided, score strict dialect identity rather than error-pooled posterior.
+        """
+        Chấm điểm nguyên âm trên thang [0, 100] dựa trên:
+        - Xác suất hậu nghiệm chuẩn (`canonical_posterior` hoặc fallback `posterior`) kết hợp biên độ GOP (`gop_margin`).
+        - Điểm khẩu hình Formant F1/F2 từ Praat (chiếm 55% khi có mặt) và độ tin cậy gióng hàng (5%).
+        Có cơ chế bảo vệ điểm sàn nếu Formant đạt chuẩn tốt, đồng thời phạt nặng nếu phát âm lệch rõ rệt sang âm khác (`gop_margin < -2.0`).
+        """
+        # Khi có `canonical_posterior`, chấm theo nhận diện phương ngữ chuẩn thay vì xác suất đã gộp lỗi
         has_strict_gop = canonical_posterior is not None or gop_margin is not None
         eff_post = canonical_posterior if canonical_posterior is not None else posterior
         safe_post = max(1e-6, min(1.0, eff_post))
 
+        # Nếu xác suất quá thấp và biên độ GOP âm sâu (< -2.0), trả về điểm rất thấp hoặc fallback theo Formant nếu không ở chế độ GOP nghiêm ngặt
         if safe_post < 0.015 and (gop_margin is None or gop_margin < -2.0):
             if formant_score is not None and formant_score >= 55.0 and not has_strict_gop:
                 return float(formant_score * 0.92)
             return float(max(0.0, _gop_margin_to_score(gop_margin))) if gop_margin is not None else 0.0
 
+        # Tính điểm GOP thô từ log-posterior và hòa trộn với điểm biên độ cạnh tranh `gop_margin`
         log_post = float(np.log(safe_post))
         gop_div = 8.5 if symbol is not None else 5.5
         gop_cap = 100.0 if symbol is not None else 98.0
@@ -391,19 +438,23 @@ class Scorer:
         if formant_score is not None:
             safe_formant = float(np.clip(formant_score, 0.0, 100.0))
             clean_v_sym = symbol.strip("/ ") if symbol else ""
+            # Nhóm nguyên âm yếu/ngắn thường biến thiên lớn hơn trong lời nói liên tục
             is_weak_vowel = clean_v_sym in ("ə", "ɪ", "ɚ", "ʊ", "uː")
             if symbol is not None:
+                # Kết hợp: 40% điểm GOP + 55% điểm Formant + 5% độ tin cậy gióng hàng
                 vowel_score = (
                     raw_gop * 0.40 +
                     safe_formant * 0.55 +
                     (alignment_confidence * 100.0) * 0.05
                 )
+                # Bảo vệ điểm sàn theo Formant nếu khẩu hình chuẩn và Wav2Vec2 không bác bỏ mạnh
                 if safe_formant >= 80.0 and safe_post >= 0.20 and (gop_margin is None or gop_margin >= -0.9):
                     vowel_score = max(vowel_score, safe_formant * 0.99)
                 elif safe_formant >= 62.0 and safe_post >= 0.08 and (gop_margin is None or gop_margin >= -1.5):
                     vowel_score = max(vowel_score, safe_formant * 0.91)
                 if raw_gop >= 82.0 and safe_formant >= 62.0 and (gop_margin is None or gop_margin >= -0.2):
                     vowel_score = max(vowel_score, raw_gop * 0.96)
+                # Nếu là nguyên âm mạnh nhưng xác suất chuẩn rất thấp -> chặn trần kết hợp
                 if safe_post < 0.08 and not is_weak_vowel and (gop_margin is None or gop_margin < -1.0):
                     vowel_score = min(vowel_score, raw_gop * 0.55 + safe_formant * 0.45)
             else:
@@ -417,13 +468,14 @@ class Scorer:
                 if raw_gop >= 75.0 and safe_formant >= 50.0:
                     vowel_score = max(vowel_score, raw_gop * 0.90)
 
-            # Clear phonetic vowel substitution (e.g. /iː/ spoken as /ɪ/, gop_margin < -2.0) cannot be masked by formant chance.
+            # Lỗi thay thế nguyên âm rõ rệt (ví dụ đọc /iː/ thành /ɪ/, gop_margin < -2.0) không thể được che lấp bởi Formant ngẫu nhiên
             if gop_margin is not None and gop_margin < -2.0:
                 vowel_score = min(vowel_score, max(20.0, _gop_margin_to_score(gop_margin) * 1.15))
 
             if safe_formant < 45.0 and raw_gop < 60.0:
                 vowel_score = min(vowel_score, safe_formant * 1.35)
         else:
+            # Nếu không đo được Formant tin cậy, chấm dựa trên 90% GOP + 10% độ tin cậy gióng hàng
             vowel_score = raw_gop * 0.90 + (alignment_confidence * 100.0) * 0.10
 
         return float(np.clip(vowel_score, 0.0, 100.0))
@@ -440,6 +492,11 @@ class Scorer:
         canonical_posterior: Optional[float] = None,
         gop_margin: Optional[float] = None,
     ) -> float:
+        """
+        Chấm điểm phụ âm trên thang [0, 100] dựa trên xác suất GOP, biên độ cạnh tranh `gop_margin`,
+        hệ số thời lượng tối thiểu (`dur_factor`) và hệ số bằng chứng âm học (`acoustic_multiplier`).
+        Có xử lý riêng cho âm bật ngắn, âm /r/ cuối âm tiết (non-rhotic UK) và phạt mạnh lỗi thay thế âm.
+        """
         if acoustic_multiplier <= 0.0:
             return 0.0
 
@@ -448,7 +505,7 @@ class Scorer:
         eff_post = canonical_posterior if canonical_posterior is not None else posterior
         safe_post = max(1e-6, min(1.0, eff_post))
 
-        # Restrict non-rhotic R softening strictly to genuine post-vocalic coda /r/ (never initial /r/!).
+        # Chỉ nới lỏng cho âm /r/ không bật hơi ở cuối âm tiết sau nguyên âm (theo giọng Anh-Anh), tuyệt đối không nới cho /r/ đầu từ
         if is_coda_r and not has_strict_gop and alignment_confidence >= 0.35:
             return 90.0
 
@@ -462,6 +519,7 @@ class Scorer:
 
         log_post = float(np.log(safe_post))
 
+        # Thiết lập tham số độ nhạy GOP và thời lượng tối thiểu tùy theo phụ âm ngắn hay kéo dài
         if symbol is not None:
             gop_scale = 5.8 if is_short_cons else 5.2
             min_dur = 0.012 if is_short_cons else 0.020
@@ -471,11 +529,13 @@ class Scorer:
             min_dur = 0.042
             gop_cap = 98.0
 
+        # Hòa trộn 45% log-posterior GOP + 55% điểm biên độ cạnh tranh `gop_margin`
         raw_gop_score = float(np.clip(100.0 * (1.0 + log_post / gop_scale), 0.0, gop_cap))
         if gop_margin is not None:
             margin_score = _gop_margin_to_score(gop_margin)
             raw_gop_score = 0.45 * raw_gop_score + 0.55 * margin_score
 
+        # Giảm điểm theo tỷ lệ nếu phụ âm bị đọc lướt quá ngắn hơn ngưỡng `min_dur`, rồi nhân với bằng chứng âm học
         dur_factor = min(1.0, duration / min_dur) if duration < min_dur else 1.0
         base_score = (raw_gop_score * 0.90 + (alignment_confidence * 100.0) * 0.10) * dur_factor
         consonant_score = base_score * acoustic_multiplier
@@ -487,10 +547,10 @@ class Scorer:
             elif is_plosive and safe_post >= 0.22 and alignment_confidence >= 0.65:
                 consonant_score = max(consonant_score, 94.0)
         elif is_coda_r and alignment_confidence >= 0.50 and (gop_margin is None or gop_margin > -2.5):
-            # Non-rhotic tolerance only for coda /r/ (still requires no strong foreign consonant substitution).
+            # Dung sai cho giọng non-rhotic ở âm /r/ cuối âm tiết (vẫn yêu cầu không bị đọc nhầm sang phụ âm khác)
             consonant_score = max(consonant_score, 84.0)
 
-        # Penalize clear consonant substitutions (e.g. /θ/ -> /f,s,t/ or /ð/ -> /d,z/) where competitor beats target.
+        # Phạt các lỗi thay thế phụ âm rõ rệt (ví dụ /θ/ -> /f,s,t/ hoặc /ð/ -> /d,z/) khi âm đối thủ vượt trội hơn âm đích
         if gop_margin is not None and gop_margin < -1.5:
             consonant_score = min(consonant_score, max(15.0, _gop_margin_to_score(gop_margin) * 1.15))
 
@@ -502,6 +562,12 @@ class Scorer:
         aligned_phonemes: List[AlignedPhoneme],
         is_oov: bool = False
     ) -> float:
+        """
+        Tổng hợp điểm cho một từ từ danh sách điểm âm vị:
+        - Phân bổ 65% trọng số cho nguyên âm (nhân 1.2x nếu là nguyên âm mang trọng âm) và 35% cho phụ âm (nhân 1.1x nếu là âm cuối từ).
+        - Áp đặt các ngưỡng trần phạt (hard cap) nếu từ bị hỏng nguyên âm trọng tâm hoặc thiếu/sai phụ âm (nhất là phụ âm cuối).
+        - Làm mềm điểm nhẹ cho từ ngoài từ điển (OOV / tên riêng tiếng Việt).
+        """
         if not phoneme_schemas:
             return 0.0
 
@@ -535,6 +601,7 @@ class Scorer:
 
         weighted_mean = float(np.sum(np.array(scores) * np.array(weights)) / max(1e-6, np.sum(weights)))
 
+        # Chặn trần điểm từ nếu nguyên âm trọng tâm bị phát âm quá yếu (< 25 điểm)
         if vowels:
             if len(phoneme_schemas) <= 3:
                 min_vowel_score = min(p_s.score for p_s, _ in vowels)
@@ -552,6 +619,7 @@ class Scorer:
                 elif vowel_avg < 25.0:
                     weighted_mean = min(weighted_mean, 45.0)
 
+        # Chặn trần điểm từ nếu phụ âm bị nuốt hoặc sai lệch (đặc biệt siết chặt ở vị trí âm cuối từ)
         for p_schema, p_aligned in consonants:
             if p_aligned.is_word_final:
                 if p_schema.score < 20.0:
@@ -564,18 +632,23 @@ class Scorer:
                 elif p_schema.score < 55.0:
                     weighted_mean = min(weighted_mean, 62.0)
 
+        # Giảm nhẹ độ khắt khe đối với các từ ngoài từ điển (ví dụ tên riêng tiếng Việt)
         if is_oov:
             weighted_mean = max(weighted_mean, min(78.0, 55.0 + (weighted_mean * 0.35)))
 
         return float(np.clip(weighted_mean, 0.0, 100.0))
 
     def calculate_wpm(self, word_count: int, total_speech_duration: float) -> int:
+        """Tính tốc độ nói theo số từ mỗi phút (WPM); trả về mặc định 120 nếu đoạn nói quá ngắn."""
         if total_speech_duration <= 0.2 or word_count <= 0:
             return 120
         return int(round((word_count / total_speech_duration) * 60.0))
 
     def calculate_speed_score(self, articulation_rate: float, wpm: float = 135.0) -> float:
-        """Scores articulation speed cleanly against target syllable-rate bounds."""
+        """
+        Chấm điểm tốc độ phát âm dựa trên 80% tốc độ âm tiết/giây (`articulation_rate` quanh khoảng chuẩn
+        `[speed_target_min, speed_target_max]`) và 20% điểm tối ưu theo WPM (vùng lý tưởng 110–195 WPM).
+        """
         if articulation_rate <= 0.0:
             return 50.0
         if self.speed_target_min <= articulation_rate <= self.speed_target_max:
@@ -607,12 +680,18 @@ class Scorer:
         speech_ratio: float,
         features: Optional[Dict[str, float]] = None,
     ) -> float:
+        """
+        Tính điểm độ trôi chảy (`fluency`):
+        - Ưu tiên dùng mô hình `'fluency'` đã hiệu chuẩn từ `calibration.json` nếu khả dụng.
+        - Nếu không, dùng công thức âm học dự phòng: kết hợp 40% tốc độ WPM (tối ưu 110–195 WPM),
+          40% nhịp điệu (trừ điểm ngắt nghỉ thừa, ngập ngừng và độ lệch thời lượng), 10% tỷ lệ lời nói và 10% độ dài cụm từ trôi chảy.
+        """
         if features is not None and self.calibrator.has_model("fluency"):
             pred = self.calibrator.predict_component("fluency", features)
             if pred is not None:
                 return float(np.clip(pred, 25.0, 100.0))
 
-        # Smooth acoustic fallback (non-saturated): conversational plateau [110, 195] WPM.
+        # Công thức dự phòng mượt (tránh bão hòa): vùng tối ưu giao tiếp nằm trong [110, 195] WPM
         if float(wpm) < 110.0:
             wpm_score = 100.0 * float(np.exp(-((110.0 - float(wpm)) / 48.0) ** 2))
         elif float(wpm) <= 195.0:
@@ -636,6 +715,7 @@ class Scorer:
         total_expected: int,
         partial_count: int = 0
     ) -> int:
+        """Tính phần trăm độ hoàn thiện câu đọc; các từ đọc dở (`partial_count`) được tính hệ số 0.55."""
         if total_expected <= 0:
             return 100
         effective_spoken = spoken_count + 0.55 * partial_count
@@ -650,6 +730,13 @@ class Scorer:
         linking_ratio: float = 0.0,
         features: Optional[Dict[str, float]] = None,
     ) -> float:
+        """
+        Tính điểm ngữ điệu (`prosody`):
+        - Ưu tiên dùng mô hình `'prosody'` trong `calibration.json` nếu khả dụng.
+        - Nếu không, tính từ 35% biến thiên cao độ F0 chuẩn hóa theo giới tính (`f0_rel_std`, đạt đỉnh quanh 12–24%),
+          15% độ tương phản trọng âm, 25% độ trôi chảy, 25% phát âm và điểm thưởng nối âm (`linking_ratio`),
+          có chặn trần để ngữ điệu không vượt quá xa mặt bằng phát âm và trôi chảy.
+        """
         if features is not None and self.calibrator.has_model("prosody"):
             pred = self.calibrator.predict_component("prosody", features)
             if pred is not None:
@@ -658,7 +745,7 @@ class Scorer:
         rel_std = float(features.get("f0_rel_std", f0_std / 180.0)) if features else (f0_std / 180.0)
         stress_dur = float(features.get("stress_dur_contrast", 1.15)) if features else 1.15
 
-        # Gender-normalized pitch contour score peaking around 12%-24% relative F0 SD
+        # Điểm đường cao độ chuẩn hóa theo giới tính, đạt tối ưu khi độ lệch chuẩn tương đối của F0 quanh 12%–24%
         if rel_std < 0.06:
             pitch_score = 55.0 + (rel_std / 0.06) * 22.0
         elif rel_std <= 0.28:
@@ -686,11 +773,13 @@ class Scorer:
         features: Dict[str, float],
     ) -> Dict[str, float]:
         """
-        Applies calibrated SpeechOcean762 predictors for pronunciation, fluency, prosody,
-        and overall score when calibration.json is active, falling back cleanly otherwise.
+        Áp dụng bộ dự đoán hiệu chuẩn SpeechOcean762 (từ `calibration.json`) cho cả 4 điểm:
+        `pronunciation`, `fluency`, `prosody` và `overall`.
+        Tự động giữ kết quả thô cho thành phần nào chưa có mô hình và điều chỉnh giảm tỷ lệ nếu người học bỏ sót từ (`completeness < 95`).
         """
         comp_ratio = max(0.0, min(1.0, float(completeness) / 100.0))
 
+        # 1. Hiệu chuẩn điểm phát âm (`pronunciation`)
         pron = raw_pronunciation
         if self.calibrator.has_model("pronunciation"):
             feat_p = dict(features)
@@ -699,12 +788,14 @@ class Scorer:
             if p_cal is not None:
                 pron = p_cal
 
+        # 2. Hiệu chuẩn điểm trôi chảy (`fluency`) và ngữ điệu (`prosody`)
         flu = self.calibrator.predict_component("fluency", features) if self.calibrator.has_model("fluency") else None
         flu_val = flu if flu is not None else raw_fluency
 
         pros = self.calibrator.predict_component("prosody", features) if self.calibrator.has_model("prosody") else None
         pros_val = pros if pros is not None else raw_prosody
 
+        # 3. Hiệu chuẩn điểm tổng kết (`overall`) dựa trên 3 điểm thành phần đã hiệu chuẩn và đặc trưng âm học
         if self.calibrator.has_model("overall"):
             feat_o = dict(features)
             feat_o["cal_pronunciation"] = float(pron)
@@ -715,6 +806,7 @@ class Scorer:
             if overall is None:
                 overall = self.calculate_overall_score(pron, flu_val, pros_val, completeness)
             else:
+                # Tránh dìm điểm ở dải xuất sắc khi câu đầy đủ (>= 90%) và phát âm + trôi chảy đều đạt >= 82
                 if completeness >= 90.0 and pron >= 82.0 and flu_val >= 82.0:
                     weighted_ref = (
                         self.pron_weight * pron
@@ -744,6 +836,10 @@ class Scorer:
         prosody: float,
         completeness: float = 100.0
     ) -> float:
+        """
+        Tính điểm tổng kết thô theo tổng trọng số cấu hình (`pron_weight`, `fluency_weight`, `speed_weight`),
+        nhân giảm theo tỷ lệ hoàn thiện nếu đọc thiếu từ (`completeness < 95`), rồi làm tròn qua `calibrator.calibrate`.
+        """
         raw_overall = (
             self.pron_weight * pronunciation +
             self.fluency_weight * fluency +
@@ -771,6 +867,7 @@ def generate_phoneme_pedagogical_feedback(
     Không bao giờ xảy ra mâu thuẫn điểm thấp nhưng khen đạt chuẩn.
     """
     clean_sym = symbol.strip("/ ")
+    # Nhóm 1: Từ bị bỏ sót hoặc âm vị hoàn toàn không có bằng chứng (điểm <= 0)
     if is_missing or score <= 0.0:
         if is_word_final and acoustic_detail and "nuốt" in acoustic_detail:
             return f"Bạn đã nuốt hoặc quên phát âm âm đuôi /{clean_sym}/ ở cuối từ."
@@ -778,16 +875,19 @@ def generate_phoneme_pedagogical_feedback(
             return "Bạn chưa đọc từ này."
         return f"Chưa phát hiện âm /{clean_sym}/ (âm bị thiếu hoặc quá nhỏ)."
 
+    # Nhóm 2: Đạt chuẩn tốt (>= 80 điểm)
     if score >= 80.0:
         if phoneme_type == "vowel":
             return "Khẩu hình và vị trí đặt lưỡi chuẩn xác!"
         return "Phát âm rõ ràng, chuẩn xác."
 
+    # Nhóm 3: Tương đối tốt (60 - 79.9 điểm) -> ưu tiên gợi ý điều chỉnh Formant nếu có
     elif score >= 60.0:
         if phoneme_type == "vowel" and formant_feedback and "chuẩn xác" not in formant_feedback.lower():
             return formant_feedback
         return "Phát âm tương đối tốt, cần tròn vành rõ chữ hơn."
 
+    # Nhóm 4: Trung bình / Cần sửa (30 - 59.9 điểm)
     elif score >= 30.0:
         if phoneme_type == "vowel" and formant_feedback and "chuẩn xác" not in formant_feedback.lower():
             return formant_feedback
@@ -795,6 +895,7 @@ def generate_phoneme_pedagogical_feedback(
             return f"Âm /{clean_sym}/ chưa đạt: {acoustic_detail}."
         return f"Phát âm âm /{clean_sym}/ chưa chuẩn xác, cần chú ý khẩu hình."
 
+    # Nhóm 5: Sai lệch nặng hoặc nuốt âm (< 30 điểm)
     else:
         if is_word_final and ((acoustic_detail and "nuốt" in acoustic_detail) or score < 15.0):
             return f"Bạn đã nuốt hoặc quên phát âm âm đuôi /{clean_sym}/ ở cuối từ."

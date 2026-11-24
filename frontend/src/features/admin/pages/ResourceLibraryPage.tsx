@@ -6,6 +6,7 @@ import {
   UploadCloud,
   FileText,
   Video,
+  Volume2,
   FileQuestion,
   Loader2,
   Trash2,
@@ -98,7 +99,7 @@ export default function ResourceLibraryPage() {
           onClick={() => setActiveTab("VIDEO")}
           className={`px-6 py-3 text-sm font-black uppercase tracking-wider border-b-2 transition flex items-center gap-2 ${activeTab === "VIDEO" ? "border-blue-700 dark:border-blue-400 text-blue-800 dark:text-blue-400" : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"}`}
         >
-          <Video size={18} /> Video
+          <Video size={18} /> Video / Audio
         </button>
         <button
           onClick={() => setActiveTab("EXAM")}
@@ -145,7 +146,11 @@ export default function ResourceLibraryPage() {
                         <FileText className="text-blue-500" size={18} />
                       )}
                       {activeTab === "VIDEO" && (
-                        <Video className="text-rose-500" size={18} />
+                        /\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(item.name || "") ? (
+                          <Volume2 className="text-sky-500" size={18} />
+                        ) : (
+                          <Video className="text-rose-500" size={18} />
+                        )
                       )}
                       {activeTab === "EXAM" && (
                         <FileQuestion className="text-amber-500" size={18} />

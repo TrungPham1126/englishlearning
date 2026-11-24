@@ -1,3 +1,11 @@
+"""
+Module dịch vụ Tổng hợp Giọng nói (Text-to-Speech - TTS) sử dụng mô hình neural Kokoro-82M.
+
+Cung cấp khả năng đọc văn bản tiếng Anh (giọng Anh-Mỹ và Anh-Anh) với chất lượng 24kHz tự nhiên,
+tự động làm sạch nhãn kịch bản hội thoại, gán giọng thông minh cho nhiều nhân vật,
+ghép nối hội thoại kèm mốc thời gian đồng bộ (startMs/endMs) và lưu đệm LRU trong bộ nhớ.
+"""
+
 import hashlib
 import io
 import logging
@@ -13,7 +21,7 @@ from kokoro import KPipeline
 
 logger = logging.getLogger("phonetics-service")
 
-# Configure PyTorch CPU thread count to match physical cores for maximum inference speed without contention
+# Cấu hình số luồng CPU cho PyTorch phù hợp với số nhân vật lý để đạt tốc độ suy luận tối đa mà không gây nghẽn
 try:
     cpu_count = os.cpu_count() or 4
     optimal_threads = min(8, max(2, cpu_count // 2 if cpu_count >= 8 else cpu_count))
@@ -22,8 +30,9 @@ try:
 except Exception as e:
     logger.warning("Could not set PyTorch thread count: %s", e)
 
+# Danh sách các giọng đọc hỗ trợ trong Kokoro-82M cùng thông tin mô tả và mã pipeline vùng miền
 AVAILABLE_VOICES: Dict[str, Dict[str, str]] = {
-    # American English (lang_code='a')
+    # Nhóm giọng tiếng Anh - Mỹ (lang_code='a')
     "af_heart": {
         "name": "Heart (US Female)",
         "accent": "en-US",
@@ -52,7 +61,7 @@ AVAILABLE_VOICES: Dict[str, Dict[str, str]] = {
         "description": "Giọng nam Mỹ hiện đại, ngữ điệu dứt khoát",
         "pipeline": "a"
     },
-    # British English (lang_code='b')
+    # Nhóm giọng tiếng Anh - Anh (lang_code='b')
     "bf_emma": {
         "name": "Emma (UK Female)",
         "accent": "en-GB",
@@ -69,6 +78,7 @@ AVAILABLE_VOICES: Dict[str, Dict[str, str]] = {
     }
 }
 
+# Các hằng số mặc định cho giọng đọc, tốc độ (1.0x) và tần số lấy mẫu đầu ra của mô hình Kokoro (24kHz)
 DEFAULT_VOICE = "af_heart"
 DEFAULT_SPEED = 1.0
 SAMPLE_RATE = 24000
@@ -76,11 +86,13 @@ SAMPLE_RATE = 24000
 
 class KokoroTtsService:
     """
-    Singleton TTS engine utilizing hexgrad/Kokoro-82M with turn-level LRU caching.
-    Runs locally on CPU/CUDA, producing high-fidelity 24kHz mono audio.
+    Dịch vụ tổng hợp giọng nói dùng chung duy nhất (Singleton) sử dụng mô hình hexgrad/Kokoro-82M
+    kết hợp bộ nhớ đệm LRU ở cấp độ từng lượt nói.
+    Chạy trực tiếp trên CPU/CUDA cục bộ, tạo ra âm thanh 1 kênh (mono) độ phân giải cao 24kHz.
     """
 
     def __init__(self, repo_id: str = "hexgrad/Kokoro-82M", cache_max_size: int = 500):
+        """Khởi tạo các pipeline ngôn ngữ, bộ nhớ đệm LRU và khóa đồng bộ đa luồng."""
         self.repo_id = repo_id
         self._pipelines: Dict[str, KPipeline] = {}
         self._is_initialized = False
@@ -91,10 +103,12 @@ class KokoroTtsService:
 
     @staticmethod
     def _compute_cache_key(text: str, voice: str, speed: float) -> str:
+        """Tạo khóa băm SHA-256 duy nhất dựa trên nội dung văn bản, tên giọng đọc và tốc độ."""
         raw_key = f"{text.strip()}::{voice.strip().lower()}::{speed:.2f}"
         return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
     def _get_from_cache(self, key: str) -> Optional[Tuple[np.ndarray, float]]:
+        """Tra cứu âm thanh đã tổng hợp trong bộ nhớ đệm LRU (an toàn đa luồng) và cập nhật thứ tự mới dùng."""
         with self._cache_lock:
             if key in self._turn_cache:
                 self._turn_cache.move_to_end(key)
@@ -103,6 +117,7 @@ class KokoroTtsService:
         return None
 
     def _put_to_cache(self, key: str, arr: np.ndarray, dur: float):
+        """Lưu mảng âm thanh vừa tổng hợp vào bộ nhớ đệm; tự động xóa mục cũ nhất nếu vượt quá giới hạn."""
         with self._cache_lock:
             if key in self._turn_cache:
                 self._turn_cache.move_to_end(key)
@@ -112,17 +127,17 @@ class KokoroTtsService:
             self._turn_cache[key] = (arr.copy(), dur)
 
     def initialize(self):
-        """Pre-load KPipeline instances for US ('a') and UK ('b') English."""
+        """Nạp sẵn các pipeline KPipeline của Kokoro-82M cho giọng Anh - Mỹ ('a') và Anh - Anh ('b')."""
         if self._is_initialized:
             return
 
         logger.info("Khởi tạo Kokoro-82M Pipelines (US: 'a', UK: 'b')...")
         try:
-            # Pipeline for American English
+            # Khởi tạo pipeline tổng hợp giọng tiếng Anh - Mỹ
             self._pipelines["a"] = KPipeline(lang_code="a", repo_id=self.repo_id)
             logger.info("Pipeline US ('a') sẵn sàng.")
 
-            # Pipeline for British English
+            # Khởi tạo pipeline tổng hợp giọng tiếng Anh - Anh
             self._pipelines["b"] = KPipeline(lang_code="b", repo_id=self.repo_id)
             logger.info("Pipeline UK ('b') sẵn sàng.")
 
@@ -133,7 +148,7 @@ class KokoroTtsService:
             raise
 
     def warmup(self):
-        """Warm up model with a short sample phrase to eliminate cold-start latency."""
+        """Chạy làm nóng mô hình bằng một câu mẫu ngắn khi khởi động để loại bỏ độ trễ ở lần gọi đầu tiên."""
         if not self._is_initialized:
             self.initialize()
         logger.info("Thực hiện warmup Kokoro-82M TTS...")
@@ -150,13 +165,14 @@ class KokoroTtsService:
     @staticmethod
     def strip_speaker_and_stage_directions(text: str) -> str:
         """
-        Strips leading speaker prefixes (e.g. 'Friend A:', '**Speaker 1:**', '[Man]:', '- Alice (smiling):')
-        and stage directions ('(laughs)', '[sighs]') plus markdown formatting ('**', '*')
-        across all lines so that Kokoro-82M NEVER reads speaker labels or non-spoken annotations aloud.
-        Also normalizes Unicode hyphens and smart quotes to prevent phonemizer word-count mismatches.
+        Loại bỏ tiền tố tên người nói (ví dụ: 'Friend A:', '**Speaker 1:**', '[Man]:', '- Alice (smiling):'),
+        các chỉ dẫn hành động/biểu cảm ('(laughs)', '[sighs]') và ký hiệu định dạng Markdown ('**', '*')
+        trên mọi dòng để Kokoro-82M KHÔNG BAO GIỜ đọc nhầm nhãn kịch bản thành tiếng.
+        Đồng thời chuẩn hóa dấu gạch nối Unicode và dấu ngoặc kép thông minh để tránh sai lệch khi tách từ phát âm.
         """
         if not text:
             return ""
+        # Quy đổi các ký tự gạch ngang Unicode và dấu ngoặc kép cong về dạng ASCII chuẩn
         raw_text = (
             text.replace("\u2010", "-")
             .replace("\u2011", "-")
@@ -169,6 +185,7 @@ class KokoroTtsService:
             .replace("\u201d", '"')
             .strip()
         )
+        # Tách xuống dòng trước các nhãn người nói nếu nhiều lượt thoại bị viết nối liền trên cùng một đoạn
         raw_text = re.sub(
             r'(?<=[.?!])\s+(?=(?:\*{1,2}|_)?(?:Friend\s+[A-Z0-9]|Speaker\s+[A-Z0-9]|Person\s+[A-Z0-9]|Student\s+[A-Z0-9]|Man|Woman|Boy|Girl|Receptionist|Customer|Interviewer|Candidate|Teacher|Professor|Waiter|Waitress|Doctor|Patient)(?:\*{1,2}|_)?\s*:)',
             '\n',
@@ -180,6 +197,7 @@ class KokoroTtsService:
             s = line.strip()
             if not s:
                 continue
+            # Xóa ký hiệu đầu dòng (-, *, số thứ tự), nhãn tên nhân vật và các chỉ dẫn trong ngoặc đơn/vuông
             s = re.sub(r'^(?:[-*•]+|\d+[.)])\s*', '', s)
             s = re.sub(
                 r'^(?:\*{1,2}|_)?(?:\[\s*[A-Za-z0-9_.\-\s]{1,30}\s*\]|[A-Za-z][A-Za-z0-9_.\-]*(?:\s+[A-Za-z0-9_.\-]+){0,2}(?:\s*\([^)]{1,25}\))?)(?:\*{1,2}|_)?\s*:(?:\*{1,2}|_)?(?:\s+|$)\s*',
@@ -202,8 +220,8 @@ class KokoroTtsService:
     @staticmethod
     def resolve_smart_voice_for_speaker(speaker_label: str, assigned_voices: List[str]) -> str:
         """
-        Maps a speaker label to an appropriate Kokoro-82M voice based on gender keywords/names
-        while ensuring distinct voices for multi-speaker dialogues.
+        Tự động chọn giọng đọc Kokoro-82M phù hợp cho nhãn người nói dựa trên từ khóa hoặc tên riêng gợi ý giới tính,
+        đồng thời đảm bảo các nhân vật trong cùng đoạn hội thoại sử dụng các giọng khác nhau để dễ phân biệt.
         """
         spk_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', (speaker_label or "")).strip().lower()
         tokens = set(spk_clean.split())
@@ -229,7 +247,7 @@ class KokoroTtsService:
         is_female = bool(tokens & female_keywords)
         is_male = bool(tokens & male_keywords)
 
-        # Special rule for A vs B / 1 vs 2 when no explicit gender keyword is present
+        # Quy tắc mặc định cho cặp nhân vật A vs B hoặc 1 vs 2 khi nhãn không nêu rõ giới tính (A/1 -> nữ, B/2 -> nam)
         if not is_female and not is_male:
             if any(k in spk_clean for k in ["friend a", "speaker a", "person a", "student a", "speaker 1", "person 1", "student 1"]) or spk_clean == "a":
                 is_female = True
@@ -248,7 +266,7 @@ class KokoroTtsService:
                     return v
             return male_pool[len(assigned_voices) % len(male_pool)]
 
-        # Alternating fallback (Female -> Male -> UK Female -> UK Male)
+        # Phương án dự phòng luân phiên giọng (Nữ Mỹ -> Nam Mỹ -> Nữ Anh -> Nam Anh) khi chưa xác định được giới tính
         for v in alternating_pool:
             if v not in assigned_voices:
                 return v
@@ -256,8 +274,8 @@ class KokoroTtsService:
 
     def preprocess_text(self, text: str) -> str:
         """
-        Normalize and clean input text while preserving critical punctuation marks
-        (commas, periods, exclamation marks, question marks) which dictate prosody and pauses.
+        Chuẩn hóa và làm sạch văn bản đầu vào nhưng vẫn giữ nguyên các dấu câu quan trọng
+        (dấu phẩy, dấu chấm, chấm than, chấm hỏi) vì chúng quyết định ngữ điệu và nhịp ngắt nghỉ của AI.
         """
         if not text or not text.strip():
             raise ValueError("Văn bản yêu cầu phát âm không được để trống.")
@@ -266,7 +284,7 @@ class KokoroTtsService:
         if not cleaned:
             cleaned = re.sub(r'\s+', ' ', text.strip())
 
-        # If sentence lacks terminating punctuation, append period for natural falling intonation
+        # Nếu cuối câu chưa có dấu ngắt kết thúc, tự động thêm dấu chấm để giọng đọc hạ xuống tự nhiên
         if not re.search(r'[.?!,:;]$', cleaned):
             cleaned += "."
 
@@ -279,9 +297,9 @@ class KokoroTtsService:
         speed: float = DEFAULT_SPEED
     ) -> Tuple[np.ndarray, int, float]:
         """
-        Synthesizes text into a numpy 1D float32 audio array.
-        Uses turn-level in-memory LRU cache and thread-safe synthesis lock.
-        Returns: (audio_array, sample_rate, duration_seconds)
+        Tổng hợp văn bản thành mảng âm thanh numpy 1 chiều kiểu float32.
+        Sử dụng bộ nhớ đệm LRU ở cấp độ từng lượt nói và khóa đồng bộ đa luồng.
+        Trả về: (mảng_âm_thanh, tần_số_lấy_mẫu, thời_lượng_giây)
         """
         if not self._is_initialized:
             self.initialize()
@@ -291,10 +309,10 @@ class KokoroTtsService:
         voice_meta = AVAILABLE_VOICES[effective_voice]
         pipeline_code = voice_meta["pipeline"]
 
-        # Clamp speed between 0.5x and 2.0x for stability
+        # Giới hạn tốc độ đọc trong khoảng an toàn từ 0.5x đến 2.0x để giữ âm thanh ổn định
         clamped_speed = max(0.5, min(2.0, float(speed)))
 
-        # 1. Fast path: check turn-level cache first
+        # 1. Đường dẫn nhanh: kiểm tra xem kết quả của câu và giọng này đã có trong bộ nhớ đệm chưa
         cache_key = self._compute_cache_key(cleaned_text, effective_voice, clamped_speed)
         cached = self._get_from_cache(cache_key)
         if cached is not None:
@@ -304,7 +322,7 @@ class KokoroTtsService:
             )
             return cached[0], SAMPLE_RATE, cached[1]
 
-        # 2. Acquire synthesis lock so espeak-ng C library is never called concurrently
+        # 2. Xin khóa tổng hợp tuần tự để thư viện C espeak-ng không bao giờ bị gọi đồng thời từ nhiều luồng
         with self._synth_lock:
             cached = self._get_from_cache(cache_key)
             if cached is not None:
@@ -324,6 +342,7 @@ class KokoroTtsService:
                 cleaned_text[:60] + ("..." if len(cleaned_text) > 60 else "")
             )
 
+            # Chạy suy luận mô hình PyTorch ở chế độ không tính gradient để tiết kiệm RAM và tăng tốc
             with torch.inference_mode():
                 generator = pipeline(
                     cleaned_text,
@@ -350,7 +369,7 @@ class KokoroTtsService:
             full_audio = np.concatenate(audio_pieces).astype(np.float32)
             duration_sec = float(len(full_audio) / SAMPLE_RATE)
 
-            # 3. Store in turn-level cache
+            # 3. Lưu kết quả âm thanh vào bộ nhớ đệm cấp độ lượt nói để tái sử dụng nhanh
             self._put_to_cache(cache_key, full_audio, duration_sec)
 
             return full_audio, SAMPLE_RATE, duration_sec
@@ -362,8 +381,8 @@ class KokoroTtsService:
         speed: float = DEFAULT_SPEED
     ) -> Tuple[bytes, float]:
         """
-        Synthesizes text and encodes into WAV (16-bit PCM, 24kHz mono) bytes.
-        Returns: (wav_bytes, duration_seconds)
+        Tổng hợp văn bản và đóng gói thành dữ liệu nhị phân WAV chuẩn (PCM 16-bit, 1 kênh mono, 24kHz).
+        Trả về: (dữ_liệu_wav_bytes, thời_lượng_giây)
         """
         audio_arr, sr, duration_sec = self.synthesize_audio_array(text, voice, speed)
 
@@ -379,13 +398,13 @@ class KokoroTtsService:
         inter_turn_pause_ms: int = 450
     ) -> Tuple[bytes, int, List[dict]]:
         """
-        Synthesizes multi-speaker dialogue into a single continuous 24kHz WAV audio stream.
-        - Maps each distinct speaker to a unique Kokoro voice (e.g. A -> af_heart, B -> am_michael).
-        - Normalizes RMS energy across turns to eliminate loudness imbalances.
-        - Connects turns with natural pauses and subtle 15ms linear fade transitions to eliminate clicks.
-        - Generates millisecond-accurate timeline metadata (startMs, endMs) for frontend transcript synchronization.
+        Tổng hợp đoạn hội thoại nhiều người nói thành một luồng âm thanh WAV 24kHz liên tục duy nhất:
+        - Ánh xạ từng người nói sang một giọng Kokoro riêng biệt (ví dụ: A -> af_heart, B -> am_michael).
+        - Cân bằng năng lượng âm lượng (RMS) giữa các lượt nói để tránh tình trạng người nói to, người nói nhỏ.
+        - Nối các lượt nói bằng khoảng nghỉ tự nhiên và hiệu ứng chuyển tiếp âm lượng mượt 15ms để loại bỏ tiếng "tách".
+        - Tạo danh sách mốc thời gian chính xác đến mili-giây (startMs, endMs) giúp giao diện đồng bộ lời thoại.
 
-        Returns: (wav_bytes, total_duration_ms, segments_metadata)
+        Trả về: (dữ_liệu_wav_bytes, tổng_thời_lượng_ms, danh_sách_metadata_từng_lượt)
         """
         if not self._is_initialized:
             self.initialize()
@@ -393,7 +412,7 @@ class KokoroTtsService:
         if not turns:
             raise ValueError("Danh sách lượt thoại không được để trống.")
 
-        # 1. Establish Speaker-to-Voice mapping
+        # 1. Thiết lập bảng ánh xạ từ tên người nói sang giọng đọc và tốc độ tương ứng
         resolved_speaker_map: Dict[str, Dict[str, Any]] = {}
         assigned_voices: List[str] = []
         if speaker_map:
@@ -411,7 +430,7 @@ class KokoroTtsService:
                 resolved_speaker_map[spk_key.strip().upper()] = {"voice": v, "speed": s}
                 assigned_voices.append(v)
 
-        # Smart gender-aware auto-assignment for any speaker not explicitly configured
+        # Tự động phân công giọng phù hợp theo giới tính cho những người nói chưa có cấu hình riêng
         for t in turns:
             spk = (t.get("speaker") if isinstance(t, dict) else getattr(t, "speaker", "")).strip().upper()
             if spk and spk not in resolved_speaker_map:
@@ -419,11 +438,11 @@ class KokoroTtsService:
                 assigned_voices.append(assigned_voice)
                 resolved_speaker_map[spk] = {"voice": assigned_voice, "speed": 1.0}
 
-        # 2. Synthesize each turn & construct continuous audio timeline
+        # 2. Tổng hợp từng lượt thoại và ghép nối thành dòng thời gian âm thanh liên tục
         pause_samples = int(SAMPLE_RATE * (max(100, min(2000, inter_turn_pause_ms)) / 1000.0))
         silence_gap = np.zeros(pause_samples, dtype=np.float32)
 
-        fade_len = int(SAMPLE_RATE * 0.015) # 15ms linear fade
+        fade_len = int(SAMPLE_RATE * 0.015) # Độ dài đoạn chuyển tiếp âm lượng mượt: 15 mili-giây
         fade_in = np.linspace(0.0, 1.0, fade_len, dtype=np.float32)
         fade_out = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
 
@@ -450,23 +469,23 @@ class KokoroTtsService:
                     continue
 
                 spk_upper = spk.upper()
-                # Determine effective voice and speed for this turn
+                # Xác định giọng đọc và tốc độ thực tế áp dụng cho lượt thoại này
                 spk_cfg = resolved_speaker_map.get(spk_upper, {"voice": DEFAULT_VOICE, "speed": 1.0})
                 effective_voice = t_voice if (t_voice and t_voice in AVAILABLE_VOICES) else spk_cfg["voice"]
                 effective_speed = t_speed if t_speed is not None else spk_cfg.get("speed", 1.0)
 
-                # Synthesize turn audio
+                # Tổng hợp sóng âm cho lượt thoại hiện tại
                 turn_audio, _, _ = self.synthesize_audio_array(text, effective_voice, effective_speed)
 
-                # RMS Loudness Normalization
+                # Chuẩn hóa độ lớn âm thanh (RMS) về mức mục tiêu để các nhân vật nghe đồng đều
                 turn_rms = float(np.sqrt(np.mean(turn_audio**2))) if len(turn_audio) > 0 else 0.0
                 if turn_rms > 1e-4:
                     scale = TARGET_RMS / turn_rms
-                    # Clamp scaling factor to avoid extreme amplification of quiet segments
+                    # Giới hạn hệ số khuếch đại (0.5x - 2.0x) để tránh phóng đại quá mức tạp âm ở đoạn quá nhỏ
                     scale = max(0.5, min(2.0, scale))
                     turn_audio = turn_audio * scale
 
-                # Apply smooth linear fade-in & fade-out to prevent boundary clicks
+                # Áp dụng fade-in ở đầu và fade-out ở cuối đoạn âm để loại bỏ tiếng "tách" tại điểm nối
                 if len(turn_audio) > fade_len * 2:
                     turn_audio[:fade_len] = turn_audio[:fade_len] * fade_in
                     turn_audio[-fade_len:] = turn_audio[-fade_len:] * fade_out
@@ -476,7 +495,7 @@ class KokoroTtsService:
                 if len(turn_audio) == 0:
                     continue
 
-                # Insert pause before subsequent non-empty turns
+                # Chèn khoảng im lặng ngăn cách trước các lượt thoại kế tiếp
                 if audio_segments and len(silence_gap) > 0:
                     audio_segments.append(silence_gap)
                     current_sample_cursor += len(silence_gap)
@@ -501,7 +520,7 @@ class KokoroTtsService:
         concatenated_audio = np.concatenate(audio_segments).astype(np.float32)
         total_duration_ms = int(round((len(concatenated_audio) / SAMPLE_RATE) * 1000.0))
 
-        # Encode to WAV 16-bit PCM
+        # Đóng gói toàn bộ luồng âm thanh hội thoại sang định dạng WAV PCM 16-bit
         buffer = io.BytesIO()
         sf.write(buffer, concatenated_audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
         buffer.seek(0)
@@ -516,7 +535,7 @@ class KokoroTtsService:
 
     @staticmethod
     def get_available_voices() -> List[Dict[str, str]]:
-        """List metadata of all supported voices."""
+        """Trả về danh sách thông tin mô tả của tất cả các giọng đọc được hỗ trợ."""
         return [
             {
                 "id": vid,
@@ -531,6 +550,6 @@ class KokoroTtsService:
         ]
 
 
-# Global singleton instance
+# Thể hiện dùng chung toàn cục (singleton) của bộ tổng hợp giọng nói Kokoro TTS
 tts_engine = KokoroTtsService()
 

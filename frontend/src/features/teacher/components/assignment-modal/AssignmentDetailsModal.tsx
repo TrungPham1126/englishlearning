@@ -18,6 +18,7 @@ import {
   Layers,
 } from "lucide-react";
 import { teacherApi } from "../../api/teacherApi";
+import { sortQuestionOptions } from "@/utils/questionOptions";
 
 export interface AssignmentDetailsModalProps {
   isOpen: boolean;
@@ -326,7 +327,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
             ) : (
               <div className="space-y-3">
                 {questions.map((q, idx) => {
-                  const opts: any[] = q.options || [];
+                  const opts: any[] = sortQuestionOptions(q.options || []);
                   const resolvedAnswer = (q.correctAnswer || "").trim().toLowerCase();
                   const isMatching = String(q.questionType).toUpperCase() === "MATCHING";
                   const isPlayingThis = playingAudioUrl === q.mediaUrl;
@@ -394,7 +395,7 @@ export const AssignmentDetailsModal: React.FC<AssignmentDetailsModalProps> = ({
                         <>
                           {/* Options for Multiple Choice */}
                           {opts.length > 0 && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 grid-flow-row gap-2 pt-1">
                               {opts.map((opt, oIdx) => {
                                 const optText = opt.optionText || opt || "";
                                 const optLabel =

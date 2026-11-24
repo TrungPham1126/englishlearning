@@ -1391,5 +1391,73 @@ describe("Teacher Module - teacherApi & Custom Hooks", () => {
         "Quá thời gian chờ phản hồi từ AI (timeout). Vui lòng thử lại hoặc giảm số câu/đề.",
       );
     });
+
+    it("useCreateAssignmentForm syncs aiTopic cleanly across skill, sub-format, IELTS passage, and CEFR level changes", async () => {
+      vi.spyOn(teacherApi, "getGlobalResources").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+      vi.spyOn(teacherApi, "getDailyPlans").mockResolvedValue({
+        data: { data: [] },
+      } as any);
+
+      const { result } = renderHook(() =>
+        useCreateAssignmentForm({
+          isOpen: true,
+          mode: "CREATE",
+          classId: "c-1",
+          initialSkillType: "READING",
+          onClose: vi.fn(),
+          onSuccess: vi.fn(),
+        }),
+      );
+
+      // 1. IELTS Reading Passage 1 -> Passage 2 updates aiTopic prefix to Passage 2:
+      act(() => {
+        result.current.handleSelectLevel("IELTS");
+      });
+      act(() => {
+        result.current.handleSelectReadingPassage(2);
+      });
+      await waitFor(() => {
+        expect(result.current.aiTopic).toMatch(/^Passage 2:/);
+      });
+
+      // 2. Switching skill READING -> SPEAKING clears Reading Passage 1/2 topic cleanly
+      act(() => {
+        result.current.setAssignmentType("SPEAKING");
+      });
+      await waitFor(() => {
+        expect(result.current.aiTopic).not.toContain("Passage 2:");
+      });
+
+      // 3. Switching WRITING IELTS Task 1 -> Task 2 updates aiTopic to Task 2
+      act(() => {
+        result.current.setAssignmentType("WRITING");
+      });
+      act(() => {
+        result.current.handleSelectSubFormat("WRITING_IELTS_TASK1");
+      });
+      await waitFor(() => {
+        expect(result.current.aiTopic).toContain("Task 1");
+      });
+      act(() => {
+        result.current.handleSelectSubFormat("WRITING_IELTS_TASK2");
+      });
+      await waitFor(() => {
+        expect(result.current.aiTopic).toContain("Task 2");
+      });
+
+      // 4. Switching VOCAB_DICTATION A2 -> B1 produces B1-labeled topic
+      act(() => {
+        result.current.setAssignmentType("VOCABULARY");
+      });
+      act(() => {
+        result.current.handleSelectSubFormat("VOCAB_DICTATION");
+        result.current.handleSelectLevel("B1");
+      });
+      await waitFor(() => {
+        expect(result.current.aiTopic).toContain("(B1)");
+      });
+    });
   });
 });

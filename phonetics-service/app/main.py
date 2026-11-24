@@ -1,3 +1,13 @@
+"""
+Điểm khởi đầu (entry point) của dịch vụ web FastAPI đánh giá phát âm (`phonetics-service`).
+Chịu trách nhiệm:
+1. Cấu hình hệ thống ghi nhật ký (logging).
+2. Khởi tạo trước mô hình TTS khi ứng dụng khởi động và dọn dẹp khi tắt.
+3. Tạo ứng dụng FastAPI và mở CORS cho backend Spring Boot / giao diện Frontend.
+4. Đăng ký các hàm xử lý lỗi tập trung để luôn trả về JSON lỗi chuẩn hóa.
+5. Gắn các đường dẫn API (routes) vào ứng dụng.
+"""
+
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -8,7 +18,7 @@ from app.api.routes import router
 from app.exceptions import SpeechAssessmentException
 from app.schemas import ErrorResponse, ErrorDetail, ErrorCode
 
-# Configure structured logging
+# Cấu hình hệ thống ghi nhật ký (logging) chuẩn theo định dạng: thời gian [MỨC_ĐỘ] tên_logger: nội dung
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -18,17 +28,25 @@ logger = logging.getLogger("phonetics-service")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for model warmups and resource cleanup."""
+    """
+    Hàm quản lý vòng đời (lifespan) của ứng dụng FastAPI:
+    - Trước `yield`: khởi động trước (warmup) bộ tổng hợp giọng nói Kokoro-82M TTS khi bật server.
+    - Sau `yield`: thực hiện giải phóng/ghi nhận khi server chuẩn bị tắt.
+    """
     logger.info("Initializing Speech Assessment Engine & Kokoro-82M TTS...")
+    # Nạp sẵn mô hình TTS để lượt gọi đầu tiên không bị chậm; nếu thiếu thư viện/file thì chỉ ghi cảnh báo
+    # nhằm đảm bảo chức năng chấm điểm phát âm vẫn hoạt động bình thường.
     try:
         from app.services.tts_service import tts_engine
         tts_engine.initialize()
     except Exception as e:
         logger.warning("Kokoro-82M model initialization warning: %s", e)
     yield
+    # Khối mã dưới đây chạy khi ứng dụng nhận tín hiệu dừng
     logger.info("Shutting down Speech Assessment Engine...")
 
 
+# Khởi tạo thể hiện ứng dụng FastAPI chính kèm thông tin tài liệu Swagger/OpenAPI
 app = FastAPI(
     title="Speech Assessment Microservice",
     description="High-precision phonetic pronunciation & acoustic assessment engine for English learning.",
@@ -36,7 +54,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS Middleware for Spring Boot & Frontend consumption
+# Cấu hình CORS Middleware cho phép backend Spring Boot và Frontend gọi API từ bất kỳ nguồn nào
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,9 +67,9 @@ app.add_middleware(
 @app.exception_handler(SpeechAssessmentException)
 async def handle_speech_exception(request: Request, exc: SpeechAssessmentException):
     """
-    Handles custom domain exceptions:
-    - Logs detailed reason and internal error on server
-    - Returns structured ErrorDetail JSON to client without exposing stack traces.
+    Bộ xử lý tập trung cho các ngoại lệ nghiệp vụ có kiểm soát (`SpeechAssessmentException`):
+    - Ghi lại lý do chi tiết và lỗi gốc (nếu có) vào log phía máy chủ để phục vụ tra cứu.
+    - Trả về JSON theo cấu trúc chuẩn `ErrorDetail` cho client mà không làm lộ stack trace nội bộ.
     """
     logger.warning(
         "SpeechAssessmentException [%s] on %s: %s (Reason: %s)",
@@ -70,9 +88,9 @@ async def handle_speech_exception(request: Request, exc: SpeechAssessmentExcepti
 @app.exception_handler(Exception)
 async def handle_unhandled_exception(request: Request, exc: Exception):
     """
-    Catches all unexpected internal errors:
-    - Full stack trace logged to server logger
-    - Safe generic 500 error returned to client.
+    Bộ xử lý dự phòng cho mọi ngoại lệ hệ thống ngoài dự kiến (unhandled exceptions):
+    - Ghi đầy đủ dấu vết lỗi (stack trace) vào log máy chủ và console để lập trình viên gỡ lỗi.
+    - Trả về mã HTTP 500 cùng thông báo lỗi chung an toàn cho phía client.
     """
     import traceback
     error_trace = traceback.format_exc()
@@ -92,5 +110,5 @@ async def handle_unhandled_exception(request: Request, exc: Exception):
     )
 
 
-# Mount API Routes
+# Gắn toàn bộ các endpoint API từ router vào ứng dụng FastAPI
 app.include_router(router)

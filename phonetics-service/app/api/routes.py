@@ -1,3 +1,14 @@
+"""
+Module định nghĩa các API endpoint của `phonetics-service` (`routes.py`).
+
+Bao gồm 3 nhóm chức năng chính:
+1. Kiểm tra trạng thái hoạt động của dịch vụ (`/health`).
+2. Pipeline đánh giá phát âm toàn diện (`/api/v1/audio/evaluate-phonetics`):
+   tiền xử lý audio -> kiểm tra chất lượng & VAD -> cổng kiểm tra khớp nội dung ->
+   gióng hàng Wav2Vec 2.0 -> đo Formant/F0 bằng Praat -> chấm điểm từng âm vị/từ/câu & hiệu chuẩn -> trả về phản hồi sư phạm tiếng Việt.
+3. Tổng hợp giọng nói bản ngữ bằng mô hình Kokoro-82M TTS (`/tts`, `/tts/dialogue`, `/tts/voices`).
+"""
+
 import base64
 from contextvars import ContextVar
 import json
@@ -69,11 +80,15 @@ def _build_rejected_mismatch_response(
     quality_metrics,
     spoken_repr: str,
 ) -> SpeechAssessmentResponse:
-    """Builds a uniform REJECTED_MISMATCH response for single-word or multi-word off-script speech."""
+    """
+    Khởi tạo phản hồi thống nhất ở trạng thái `REJECTED_MISMATCH` (từ chối chấm điểm vì nói sai kịch bản)
+    cho cả trường hợp đọc từ đơn lẫn đọc câu nhiều từ không khớp nội dung bài học.
+    """
     words_schema: List[WordSchema] = []
     sentence_tokens_list = []
     word_rows_list = []
 
+    # Gắn toàn bộ các từ và âm vị trong câu mẫu về 0 điểm kèm nhãn WRONG_WORD / tô màu RED
     for w_text, ph_list in word_phonemes:
         phonemes_schema: List[PhonemeSchema] = []
         for p in ph_list:
@@ -160,7 +175,7 @@ def _build_rejected_mismatch_response(
 
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():
-    """Health check probe for container orchestration."""
+    """Endpoint kiểm tra tình trạng sống (health check probe) cho container/orchestration."""
     return {
         "status": "healthy",
         "service": "phonetics-service",
@@ -180,29 +195,31 @@ async def evaluate_phonetics(
     script: str = Form(..., description="Reference target sentence text")
 ):
     """
-    Primary Speech Assessment API endpoint.
-    Hỗ trợ đánh giá đa phương ngữ (US & UK) tự động cho mọi âm vị và từ vựng tiếng Anh.
+    Endpoint chính đánh giá phát âm tiếng Anh (`/api/v1/audio/evaluate-phonetics`).
+    Hỗ trợ đánh giá đa phương ngữ (Anh-Mỹ US & Anh-Anh UK) tự động cho mọi âm vị và từ vựng tiếng Anh
+    qua các bước: tiền xử lý audio, lọc chất lượng & VAD, kiểm tra khớp kịch bản, gióng hàng Wav2Vec 2.0,
+    phân tích Formant/Pitch bằng Praat, chấm điểm từng âm vị/từ/câu, hiệu chuẩn và sinh nhận xét tiếng Việt.
     """
-    # 1. Validate Script Input Gate
+    # Bước 1: Kiểm tra tính hợp lệ của kịch bản văn bản đầu vào (loại bỏ chuỗi rỗng/ký tự rác)
     validated_words = validate_script(script)
     clean_script = " ".join(validated_words)
 
-    # 2. Read and Validate Payload Size
+    # Bước 2: Đọc dữ liệu nhị phân file audio upload và kiểm tra giới hạn dung lượng (MB)
     audio_bytes = await audio.read()
     await audio.seek(0)
     size_mb = len(audio_bytes) / (1024 * 1024)
     if size_mb > settings.MAX_UPLOAD_SIZE_MB:
         raise AudioTooLargeError(size_mb, settings.MAX_UPLOAD_SIZE_MB)
 
-    # 3. Decode, Resample (16kHz), Normalize, Band-pass filter
+    # Bước 3: Giải mã định dạng âm thanh, chuyển về mono 16kHz, chuẩn hóa biên độ và lọc thông dải
     filename = audio.filename or "recording.wav"
     audio_data = preprocessor.decode_and_resample(audio_bytes, filename)
 
-    # 4. Audio Quality Gate
+    # Bước 4: Cổng đánh giá chất lượng âm thanh thô (SNR, clipping, độ dài) và ước lượng độ tin cậy audio
     quality_metrics = quality_gate.evaluate(audio_data, strict=True)
     audio_conf = confidence_estimator.estimate_audio_confidence(quality_metrics)
 
-    # 5. Voice Activity Detection
+    # Bước 5: Phát hiện phân đoạn giọng nói (VAD) và lọc các tiếng nhiễu ngắn hơn 80ms
     speech_segments = speech_detector.detect(audio_data)
     valid_speech = [seg for seg in speech_segments if seg.duration >= 0.08]
     if not valid_speech:
@@ -211,7 +228,7 @@ async def evaluate_phonetics(
     last_speech_time = valid_speech[-1].end
     first_speech_time = valid_speech[0].start
 
-    # Compute median speech RMS energy across active speech frames
+    # Tính năng lượng RMS trung vị trên các khung thực sự có tiếng nói (dùng làm chuẩn phát hiện từ bị bỏ sót)
     speech_frames = []
     for seg in valid_speech:
         s_idx = int(seg.start * settings.SAMPLE_RATE)
@@ -233,12 +250,12 @@ async def evaluate_phonetics(
     else:
         median_speech_rms = 0.05
 
-    # 5b. ASR Content Verification Gate
+    # Bước 5b: Cổng xác thực nội dung nói (ASR Content Verification Gate) cho trường hợp từ đơn
     expected_words_list = clean_script.split()
     is_single_word = (len(expected_words_list) == 1)
 
     if is_single_word and not hasattr(forced_aligner.align, "assert_called"):
-        # Guard against single-word hallucinations / mismatches (e.g. reading full sentence when target is 1 word)
+        # Chặn sớm lỗi đọc lạc đề/ảo giác ở từ đơn (ví dụ: mục tiêu 1 từ nhưng người dùng đọc cả câu khác)
         is_valid, reject_reason, sim_score, emitted_tokens, spoken_repr = verify_speech_content(
             audio_data, expected_words_list
         )
@@ -260,7 +277,7 @@ async def evaluate_phonetics(
             clean_script
         )
 
-    # 6. Neural Forced Alignment across target script
+    # Bước 6: Gióng hàng cưỡng bức bằng mô hình neural Wav2Vec 2.0 CTC (Trellis Forced Alignment) trên toàn câu mẫu
     alignment_result = await forced_aligner.align(audio_data, clean_script)
     align_conf = alignment_result.alignment_confidence
     logger.info("Trellis alignment confidence: %.3f for script: '%s'", align_conf, clean_script)
@@ -270,7 +287,7 @@ async def evaluate_phonetics(
 
     is_mocked_align = hasattr(forced_aligner.align, "assert_called")
 
-    # 7. Optional ASR Word-Sequence Evidence & Word Coverage (reuse single-pass Wav2Vec2 emissions)
+    # Bước 7: Kiểm tra bằng chứng chuỗi từ ASR và tỷ lệ bao phủ từng từ (tái sử dụng kết quả Wav2Vec 2.0 đã chạy 1 lần)
     word_evidences = []
     spoken_prefix_len = len(alignment_result.words)
     word_coverage_ratios: List[float] = [1.0] * len(alignment_result.words)
@@ -280,6 +297,7 @@ async def evaluate_phonetics(
         if detected_words:
             word_evidences = word_sequence_aligner.align(expected_words_list, detected_words)
     elif len(expected_words_list) >= 3 and not is_mocked_align:
+        # Với câu >= 3 từ, đo độ bao phủ từng từ và đếm phần tiền tố thực sự được đọc từ đầu câu
         prefix_count, cov_ratios = analyze_word_coverage(
             audio_data,
             expected_words_list,
@@ -296,6 +314,7 @@ async def evaluate_phonetics(
             has_suffix_recovery = any(
                 r >= 0.50 for r in word_coverage_ratios[spoken_prefix_len:]
             )
+            # Nếu người học chỉ đọc đoạn đầu rồi dừng hẳn (không có đoạn sau phục hồi), gióng hàng lại riêng phần tiền tố trên vùng âm thanh có tiếng nói
             if not has_suffix_recovery and last_speech_time < quality_metrics.duration - 0.25:
                 prefix_end_idx = min(
                     len(audio_data),
@@ -319,7 +338,7 @@ async def evaluate_phonetics(
                 except Exception as pref_ex:
                     logger.debug("[Prefix Gate] Prefix re-alignment skipped: %s", pref_ex)
 
-    # 8. Speaker Pitch, Gender & In-Memory Utterance Acoustics (computed ONCE per utterance)
+    # Bước 8: Trích xuất đặc trưng cao độ F0, giới tính giọng nói và đối tượng Praat Pitch/Formant trong RAM (chỉ tính 1 lần cho cả câu)
     utterance_acoustics = (
         formant_service.extract_utterance_acoustics(audio_data, settings.SAMPLE_RATE)
         if not is_mocked_align
@@ -331,7 +350,7 @@ async def evaluate_phonetics(
         speaker_gender, mean_f0 = formant_service.detect_gender(audio_data)
     logger.info("Detected speaker F0: %.1f Hz -> Profile: %s", mean_f0, speaker_gender)
 
-    # Whole-file CTC raw phonetic sequence verification (tái sử dụng kết quả greedy CTC 1 lần chạy)
+    # Kiểm tra khớp chuỗi âm vị thô CTC trên toàn bộ file (tái sử dụng kết quả greedy CTC 1 lần chạy)
     whole_raw_tokens: List[str] = (
         (cached_raw_tokens if cached_raw_tokens is not None else decode_raw_speech(audio_data))
         if not is_mocked_align
@@ -368,6 +387,7 @@ async def evaluate_phonetics(
         diag_sink["align_conf"] = float(align_conf)
         diag_sink["mean_utt_canon"] = float(mean_utt_canon)
 
+    # Cổng từ chối câu nhiều từ đọc lạc hoàn toàn khỏi kịch bản (cả độ tương đồng thô, độ tin cậy gióng hàng và posterior chuẩn đều rất thấp)
     if (
         len(expected_words_list) >= 2
         and not is_mocked_align
@@ -391,7 +411,7 @@ async def evaluate_phonetics(
             spoken_repr=f"/{spoken_preview}/",
         )
 
-    # 9. Acoustic Phoneme & Word Scoring
+    # Bước 9: Chấm điểm âm học cho từng âm vị và tổng hợp điểm cho từng từ
     words_schema: List[WordSchema] = []
     total_syllables = 0
     all_word_scores: List[float] = []
@@ -404,7 +424,7 @@ async def evaluate_phonetics(
     }
 
     for w_idx, word_obj in enumerate(alignment_result.words):
-        # A. Overlap with detected speech segments
+        # A. Tính tỷ lệ thời gian từ chồng lấn với các phân đoạn giọng nói (VAD)
         overlap_sec = 0.0
         for seg in valid_speech:
             o_start = max(word_obj.start, seg.start)
@@ -414,7 +434,7 @@ async def evaluate_phonetics(
         w_dur = max(0.01, word_obj.end - word_obj.start)
         overlap_ratio = overlap_sec / w_dur
 
-        # B. RMS energy of word segment
+        # B. Tính năng lượng RMS của đoạn âm thanh tương ứng với từ và tỷ lệ so với mức trung vị toàn câu
         w_start_idx = int(word_obj.start * settings.SAMPLE_RATE)
         w_end_idx = int(word_obj.end * settings.SAMPLE_RATE)
         w_slice = (
@@ -425,15 +445,16 @@ async def evaluate_phonetics(
         w_rms = float(np.sqrt(np.mean(w_slice**2))) if len(w_slice) > 0 else 0.0
         energy_ratio = w_rms / max(1e-5, median_speech_rms)
 
-        # C. Raw CTC posterior across phonemes
+        # C. Tính xác suất hậu nghiệm CTC thô trung bình trên các âm vị của từ
         raw_posts = [p.raw_posterior if p.raw_posterior is not None else p.posterior for p in word_obj.phonemes]
         mean_raw_post = float(np.mean(raw_posts)) if raw_posts else 0.0
 
-        # D. Check if word is beyond active speech
+        # D. Kiểm tra xem từ có bị đẩy ra ngoài thời điểm kết thúc giọng nói thực tế hay không (tránh ảo giác forced alignment trên vùng im lặng cuối file)
         is_past_speech_end = (word_obj.start >= last_speech_time + settings.SPEECH_TRIM_MARGIN_SEC) or (
             overlap_ratio < 0.10 and word_obj.start >= last_speech_time - 0.05
         )
 
+        # Kiểm tra xem phần từ phía sau có thực sự xuất hiện âm thanh hay không (cho phép bỏ sót giữa câu nhưng đọc tiếp phần sau)
         w_cov = word_coverage_ratios[w_idx] if w_idx < len(word_coverage_ratios) else 1.0
         later_recovery = (not is_mocked_align) and any(
             word_coverage_ratios[k] >= 0.50
@@ -441,6 +462,7 @@ async def evaluate_phonetics(
             for k in range(w_idx + 1, min(len(alignment_result.words), len(word_coverage_ratios)))
         )
 
+        # Tổng hợp nhiều tín hiệu để kết luận từ bị bỏ sót (`is_missing`): bằng chứng ASR, cổng tiền tố, VAD, năng lượng và posterior thô
         is_missing = False
         if word_evidences:
             if w_idx < len(word_evidences) and word_evidences[w_idx].status == "NOT_SPOKEN":
@@ -474,6 +496,7 @@ async def evaluate_phonetics(
         if not is_missing and missing_triggered:
             missing_triggered = False
 
+        # Nếu từ được xác định là chưa đọc (`MISSING`), bỏ qua bước đo Formant/âm vị và ghi nhận điểm rỗng
         if is_missing:
             all_word_scores.append(0.0)
             words_schema.append(
@@ -491,6 +514,7 @@ async def evaluate_phonetics(
             )
             continue
 
+        # Lấy chuỗi token CTC thô phát ra trong cửa sổ thời gian của từ hiện tại để phát hiện lỗi chèn/thay thế âm cục bộ
         phonemes_schema: List[PhonemeSchema] = []
         w_win_start = max(0, int(word_obj.start * settings.SAMPLE_RATE) - 320)
         w_win_end = min(len(audio_data), int(word_obj.end * settings.SAMPLE_RATE) + 320)
@@ -506,10 +530,12 @@ async def evaluate_phonetics(
         else:
             w_raw_tokens = []
 
+        # Dùng lại đối tượng Formant đã trích xuất sẵn trong RAM nếu không ở chế độ mock unit test
         precomp_formants = utterance_acoustics.formants if (utterance_acoustics is not None and not hasattr(formant_service.analyze_vowel, "assert_called")) else None
 
         word_diag_phonemes: List[Dict[str, Any]] = []
         for p_idx, p_obj in enumerate(word_obj.phonemes):
+            # Lấy âm vị đứng liền trước để phục vụ nhận diện đồng cấu âm (ví dụ /uː/ sau /j/)
             prec_ph = word_obj.phonemes[p_idx - 1].symbol if p_idx > 0 else (
                 alignment_result.words[w_idx - 1].phonemes[-1].symbol if (w_idx > 0 and alignment_result.words[w_idx - 1].phonemes) else None
             )
@@ -520,6 +546,7 @@ async def evaluate_phonetics(
             p_diag_coda_r: bool = False
 
             if p_obj.phoneme_type == "vowel":
+                # Nhánh A: Chấm điểm NGUYÊN ÂM bằng phân tích Formant (F1/F2) + xác suất GOP / biên độ GOP margin
                 total_syllables += 1
                 p_symbol = p_obj.symbol
 
@@ -550,6 +577,7 @@ async def evaluate_phonetics(
                     gop_margin=gop_m,
                 )
                 p_diag_formant = float(formant_score) if formant_score is not None else None
+                # Nếu cả xác suất chuẩn, Formant và GOP margin đều quá yếu -> hạ trần và đánh dấu thiếu bằng chứng
                 if canon_p < 0.02 and (formant_score is None or formant_score < 50.0) and (gop_m is None or gop_m < -1.8):
                     p_score = min(p_score, 40.0)
                     status_str = "INSUFFICIENT_EVIDENCE"
@@ -583,6 +611,7 @@ async def evaluate_phonetics(
                     )
                 )
             else:
+                # Nhánh B: Chấm điểm PHỤ ÂM bằng kiểm tra bằng chứng âm học đặc thù + GOP margin + phát hiện lỗi L2 Việt Nam
                 p_start_idx = int(p_obj.start * settings.SAMPLE_RATE)
                 p_end_idx = int(p_obj.end * settings.SAMPLE_RATE)
                 slice_audio = (
@@ -600,6 +629,7 @@ async def evaluate_phonetics(
                 is_unreleased_plosive = clean_cons_sym in ("p", "t", "k", "b", "d", "g", "ɡ")
                 custom_cons_feedback: Optional[str] = None
 
+                # Phát hiện lỗi nuốt phụ âm cuối từ (trừ âm /r/ non-rhotic hoặc âm bật có thể không bật hơi)
                 if p_obj.is_word_final and not is_coda_r and not is_unreleased_plosive and (not has_evidence or canon_p < 0.04):
                     p_score = 0.0 if canon_p < 0.02 else 20.0
                     p_status = MeasurementStatus.INSUFFICIENT_EVIDENCE
@@ -716,6 +746,7 @@ async def evaluate_phonetics(
         if diag_sink is not None:
             diag_sink.setdefault("word_phonemes", {})[w_idx] = word_diag_phonemes
 
+        # Chấm điểm cấp độ từ và phân loại trạng thái đọc (SPOKEN / PARTIAL / MISSING)
         w_score = scorer.score_word(phonemes_schema, word_obj.phonemes, is_oov=word_obj.is_oov)
         evidence_count = sum(1 for p in phonemes_schema if p.score >= 30.0)
         evidence_ratio = evidence_count / float(max(1, len(phonemes_schema)))
@@ -743,7 +774,7 @@ async def evaluate_phonetics(
             )
         )
 
-    # 10. Temporal & Inter-word Transition Analysis
+    # Bước 10: Phân tích thời lượng, nhịp ngắt nghỉ (pause) và hiện tượng nối âm (linking) giữa các từ
     spoken_words = [
         w for w in words_schema
         if w.word_status in (SpokenWordStatus.SPOKEN, SpokenWordStatus.PARTIAL, "SPOKEN", "PARTIAL")
@@ -772,11 +803,13 @@ async def evaluate_phonetics(
         gap = next_w.start_time - curr_w.end_time
         has_punc = bool(re.search(r'[.,!?;:]', curr_w.word))
 
+        # Khoảng lặng >= 450ms là một nhịp ngắt; nếu không có dấu câu tại đây thì tính là ngắt bất thường
         if gap >= 0.45:
             total_pause_duration += gap
             if not has_punc:
                 awkward_pause_count += 1
         elif 0.0 <= gap < 0.065 and not has_punc:
+            # Khoảng cách cực sát (< 65ms) giữa hai từ liên tiếp được ghi nhận là nối âm tự nhiên
             linking_count += 1
 
     pause_ratio = min(1.0, total_pause_duration / total_speech_duration)
@@ -790,7 +823,7 @@ async def evaluate_phonetics(
     syllable_count = max(1, total_syllables if total_syllables > 0 else len(spoken_words))
     articulation_rate = round(syllable_count / max(0.2, articulation_time), 2)
 
-    # 11. Weighted Pronunciation & Completeness (Softens impact of Vietnamese proper names / OOV words)
+    # Bước 11: Tính điểm phát âm có trọng số (giảm trọng số từ OOV / tên riêng tiếng Việt xuống 0.4) và độ hoàn thiện câu
     word_weights = []
     scored_values = []
     for w in words_schema:
@@ -813,6 +846,7 @@ async def evaluate_phonetics(
         partial_count=partial_word_count
     )
 
+    # Trích xuất từ điển đặc trưng âm học cấp độ câu để đưa vào các mô hình tính fluency, prosody và calibration
     utt_features = extract_utterance_acoustic_features(
         audio_data=audio_data,
         sample_rate=settings.SAMPLE_RATE,
@@ -831,6 +865,7 @@ async def evaluate_phonetics(
         completeness_score=float(completeness_score),
     )
 
+    # Tính điểm lưu loát, ngữ điệu, tốc độ và tổng điểm thô trước khi hiệu chuẩn
     fluency_score = scorer.calculate_fluency_score(
         pause_events=pause_events,
         awkward_pause_count=awkward_pause_count,
@@ -864,6 +899,7 @@ async def evaluate_phonetics(
         1
     )
 
+    # Thống kê số từ chuẩn (không phải OOV) bị phát âm yếu (< 70 điểm) để phục vụ chẩn đoán và nhánh fallback
     non_oov_spoken = [
         w for w in words_schema
         if w.word_status in (SpokenWordStatus.SPOKEN, SpokenWordStatus.PARTIAL, "SPOKEN", "PARTIAL")
@@ -893,6 +929,7 @@ async def evaluate_phonetics(
             "completeness": int(completeness_score),
         }
 
+    # Bước 12: Áp dụng bộ hiệu chuẩn thực nghiệm SpeechOcean762 (`calibration.json`) hoặc logic phạt/thưởng thủ công khi không dùng calibration
     disable_cal = bool(diag_sink.get("disable_calibration")) if diag_sink is not None else False
     if (not is_mocked_align) and (not disable_cal) and scorer.calibrator.has_model("overall"):
         cal_scores = scorer.calibrate_utterance_scores(
@@ -958,6 +995,7 @@ async def evaluate_phonetics(
                 1
             )
 
+    # Bước 13: Ước lượng độ tin cậy tổng thể, sinh nhận xét lưu loát và xác định trạng thái đạt (pass >= 80)
     overall_conf = confidence_estimator.estimate_overall_confidence(audio_conf, align_conf, alignment_result.words)
     eval_status = confidence_estimator.determine_evaluation_status(overall_conf, align_conf, quality_metrics)
 
@@ -993,6 +1031,7 @@ async def evaluate_phonetics(
         "wordsPerMinute": wpm,
     }
 
+    # Đóng gói danh sách token câu kèm màu hiển thị (GREEN/YELLOW/RED/GRAY) và cờ ngắt/nối âm phục vụ UI
     sentence_tokens_list = []
     for idx, w in enumerate(words_schema):
         raw_st = w.word_status.value if hasattr(w.word_status, "value") else str(w.word_status or "SPOKEN")
@@ -1028,6 +1067,7 @@ async def evaluate_phonetics(
             "wordStatus": word_st,
         })
 
+    # Đóng gói bảng chi tiết từng từ và từng âm vị IPA trả về cho client
     word_rows_list = []
     for w_idx, w in enumerate(words_schema):
         raw_st = w.word_status.value if hasattr(w.word_status, "value") else str(w.word_status or "SPOKEN")
@@ -1091,7 +1131,7 @@ async def evaluate_phonetics(
 
 
 # ==============================================================================
-# KOKORO-82M TTS ENDPOINTS
+# CÁC ENDPOINT TỔNG HỢP GIỌNG NÓI (KOKORO-82M TTS)
 # ==============================================================================
 @router.post(
     "/tts",
@@ -1111,10 +1151,10 @@ async def synthesize_speech(
     speed: Optional[float] = Query(None, description="Playback speed 0.5 - 2.0")
 ):
     """
-    High-fidelity neural TTS endpoint running Kokoro-82M locally on CPU/CUDA.
-    Returns 24kHz mono WAV audio stream.
+    Endpoint tổng hợp giọng đọc neural độ nét cao bằng mô hình Kokoro-82M chạy cục bộ trên CPU/CUDA.
+    Trả về luồng nhị phân âm thanh WAV mono 24kHz.
     """
-    # Resolve parameters from JSON body or query parameters
+    # Ưu tiên lấy tham số từ JSON body; nếu không có thì lấy từ query parameters
     effective_text = (request.text if request and request.text else text or "").strip()
     effective_voice = (request.voice if request and request.voice else voice or "af_heart").strip()
     effective_speed = request.speed if (request and request.speed is not None) else (speed if speed is not None else 1.0)
@@ -1127,7 +1167,7 @@ async def synthesize_speech(
         )
 
     try:
-        # Offload CPU-bound inference to worker threadpool to keep event loop responsive
+        # Đẩy tác vụ suy luận nặng (CPU/GPU-bound) sang worker threadpool để tránh chặn event loop
         wav_bytes, duration_sec = await run_in_threadpool(
             tts_engine.synthesize_wav_bytes,
             text=effective_text,
@@ -1169,15 +1209,16 @@ async def synthesize_speech(
 )
 async def synthesize_dialogue(request: DialogueTtsRequest):
     """
-    Multi-speaker neural dialogue synthesis:
-    - Synthesizes each turn using its assigned voice
-    - Applies crossfade transitions and RMS loudness normalization
-    - Returns base64 WAV payload + segments metadata for live transcript highlighting.
+    Endpoint tổng hợp hội thoại đa nhân vật bằng Kokoro-82M:
+    - Sinh giọng đọc riêng cho từng lượt thoại theo giọng được gán (`speaker_map` hoặc mặc định).
+    - Áp dụng chuyển tiếp mượt (crossfade) và chuẩn hóa độ lớn âm thanh RMS.
+    - Trả về dữ liệu WAV mã hóa base64 kèm metadata mốc thời gian (ms) từng lượt để UI tô sáng phụ đề theo thời gian thực.
     """
     if not request.turns:
         raise HTTPException(status_code=400, detail="Danh sách lượt thoại không được để trống.")
 
     try:
+        # Chạy tổng hợp hội thoại trên threadpool để giữ API bất đồng bộ phản hồi nhanh
         wav_bytes, total_duration_ms, segments_meta = await run_in_threadpool(
             tts_engine.synthesize_dialogue,
             turns=[t.model_dump() for t in request.turns],
@@ -1223,6 +1264,6 @@ async def synthesize_dialogue(request: DialogueTtsRequest):
     status_code=status.HTTP_200_OK
 )
 async def get_tts_voices():
-    """Retrieve catalog of available voices across US and UK English."""
+    """Lấy danh sách các giọng đọc Kokoro-82M khả dụng cho cả tiếng Anh-Mỹ (US) và Anh-Anh (UK)."""
     voices = tts_engine.get_available_voices()
     return voices

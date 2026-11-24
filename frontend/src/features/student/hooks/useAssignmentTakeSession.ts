@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { studentApi } from '@/features/student/api/studentApi';
 import { normalizeScoreTo100 } from '@/features/student/utils/speakingScoring';
+import {
+  evaluateQuestionReviewOutcome,
+  resolveRestoredOptionId,
+  resolveSubmitAnswerPayload,
+} from '@/features/student/utils/questionReviewScoring';
 import type {
   AttemptResponse,
   QuestionResultDetail,
@@ -74,13 +79,34 @@ export function useAssignmentTakeSession() {
   const [isRepairingListeningAudio, setIsRepairingListeningAudio] = useState(false);
   const [customListeningAudioUrl, setCustomListeningAudioUrl] = useState<string | null>(null);
 
+  const isMountedRef = useRef<boolean>(true);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsCacheMapRef = useRef<Map<string, string>>(new Map());
+  const ttsRequestSeqRef = useRef<number>(0);
+  const pendingAutoPlayRef = useRef<boolean>(false);
   const createdBlobUrlsRef = useRef<string[]>([]);
   const handleSubmitTestRef = useRef<() => Promise<void>>(async () => {});
   const isSubmittingRef = useRef(false);
   const playbackRateRef = useRef(playbackRate);
   playbackRateRef.current = playbackRate;
+
+  const stopAllVoicePlayback = useCallback(() => {
+    ttsRequestSeqRef.current += 1;
+    if (ttsAudioRef.current) {
+      try {
+        ttsAudioRef.current.onended = null;
+        ttsAudioRef.current.onerror = null;
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current.currentTime = 0;
+      } catch {}
+      ttsAudioRef.current = null;
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+  }, []);
 
   // 1. Kiểm tra trạng thái lượt làm bài ban đầu
   useEffect(() => {
@@ -115,8 +141,7 @@ export function useAssignmentTakeSession() {
             const restored: any = {};
             detail.questions?.forEach((q) => {
               restored[q.questionId] = {
-                selectedOptionId:
-                  q.selectedOptionId || (q.studentAnswer?.length === 36 ? q.studentAnswer : undefined),
+                selectedOptionId: resolveRestoredOptionId(q),
                 textAnswer: q.studentAnswer,
                 audioUrl: q.audioUrl,
               };
@@ -297,20 +322,9 @@ export function useAssignmentTakeSession() {
   // Thống kê kết quả Review
   const reviewStats = useMemo(() => {
     if (phase !== 'REVIEW') return { correctCount: 0, totalQuestions: questions.length };
-    const correctCount = questions.filter((q) => {
-      const earned = (q as any).earnedPoints;
-      if (earned != null && earned > 0) return true;
-      if ((q as any).isCorrect === true) return true;
-      const ans = answers[q.questionId];
-      if (ans?.selectedOptionId && (q as any).options) {
-        return (q as any).options.some(
-          (o: any) =>
-            (o.id === ans.selectedOptionId || o.optionLabel === ans.selectedOptionId) &&
-            o.isCorrect === true,
-        );
-      }
-      return false;
-    }).length;
+    const correctCount = questions.filter(
+      (q) => evaluateQuestionReviewOutcome(q, answers[q.questionId]).isCorrect,
+    ).length;
     return { correctCount, totalQuestions: questions.length };
   }, [questions, phase, answers]);
 
@@ -423,85 +437,109 @@ export function useAssignmentTakeSession() {
     return url;
   }, []);
 
-  // Kokoro TTS / Web Speech API
-  const speakText = useCallback(async (text: string, onEnd?: () => void) => {
-    if (!text) {
-      if (onEnd) onEnd();
-      return;
-    }
-
-    if (ttsAudioRef.current) {
-      try {
-        ttsAudioRef.current.pause();
-        ttsAudioRef.current.currentTime = 0;
-      } catch {}
-    }
-
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-
-    const cleanText = text.trim();
-    let audioUrl = ttsCacheMapRef.current.get(cleanText);
-
-    if (!audioUrl) {
-      try {
-        const res = await studentApi.synthesizeTTS({
-          text: cleanText,
-          voice: 'af_heart',
-          speed: 1.0,
-        });
-        if (res?.audioUrl) {
-          audioUrl = res.audioUrl;
-          ttsCacheMapRef.current.set(cleanText, audioUrl);
+  const fallbackWebSpeech = useCallback(
+    (text: string, reqId: number, onEnd?: () => void) => {
+      if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+        return;
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'en-US';
+          utterance.rate = playbackRateRef.current || 0.95;
+          utterance.onend = () => {
+            if (isMountedRef.current && reqId === ttsRequestSeqRef.current && onEnd) {
+              onEnd();
+            }
+          };
+          utterance.onerror = () => {
+            if (isMountedRef.current && reqId === ttsRequestSeqRef.current && onEnd) {
+              onEnd();
+            }
+          };
+          window.speechSynthesis.speak(utterance);
+          return;
+        } catch {
+          if (isMountedRef.current && reqId === ttsRequestSeqRef.current && onEnd) {
+            onEnd();
+          }
         }
-      } catch (err) {
-        console.warn('Kokoro TTS fallback:', err);
+      } else if (isMountedRef.current && reqId === ttsRequestSeqRef.current && onEnd) {
+        onEnd();
       }
-    }
+    },
+    [],
+  );
 
-    if (audioUrl) {
-      try {
-        const audio = new Audio(resolveAudioUrl(audioUrl));
-        ttsAudioRef.current = audio;
-        audio.onended = () => {
-          if (onEnd) onEnd();
-        };
-        audio.onerror = () => {
-          fallbackWebSpeech(cleanText, onEnd);
-        };
-        await audio.play();
-        return;
-      } catch {
-        fallbackWebSpeech(cleanText, onEnd);
+  // Kokoro TTS / Web Speech API
+  const speakText = useCallback(
+    async (text: string, onEnd?: () => void) => {
+      if (!text) {
+        if (isMountedRef.current && onEnd) onEnd();
         return;
       }
-    }
 
-    fallbackWebSpeech(cleanText, onEnd);
-  }, [resolveAudioUrl]);
+      stopAllVoicePlayback();
+      const reqId = ttsRequestSeqRef.current;
+      const cleanText = text.trim();
+      let audioUrl = ttsCacheMapRef.current.get(cleanText);
 
-  const fallbackWebSpeech = (text: string, onEnd?: () => void) => {
-    if (window.speechSynthesis) {
-      try {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.95;
-        utterance.onend = () => {
-          if (onEnd) onEnd();
-        };
-        utterance.onerror = () => {
-          if (onEnd) onEnd();
-        };
-        window.speechSynthesis.speak(utterance);
-        return;
-      } catch {
-        if (onEnd) onEnd();
+      if (!audioUrl) {
+        try {
+          const res = await studentApi.synthesizeTTS({
+            text: cleanText,
+            voice: 'af_heart',
+            speed: 1.0,
+          });
+          if (res?.audioUrl) {
+            audioUrl = res.audioUrl;
+            ttsCacheMapRef.current.set(cleanText, audioUrl);
+          }
+        } catch (err) {
+          console.warn('Kokoro TTS fallback:', err);
+        }
       }
-    } else {
-      if (onEnd) onEnd();
-    }
-  };
+
+      if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+        return;
+      }
+
+      if (audioUrl) {
+        try {
+          const audio = new Audio(resolveAudioUrl(audioUrl));
+          audio.playbackRate = playbackRateRef.current || 1.0;
+          audio.defaultPlaybackRate = playbackRateRef.current || 1.0;
+          (audio as any).preservesPitch = true;
+          ttsAudioRef.current = audio;
+          audio.onended = () => {
+            if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
+            if (isMountedRef.current && reqId === ttsRequestSeqRef.current && onEnd) {
+              onEnd();
+            }
+          };
+          audio.onerror = () => {
+            if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
+            fallbackWebSpeech(cleanText, reqId, onEnd);
+          };
+          await audio.play();
+          if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+            audio.pause();
+            if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
+          }
+          return;
+        } catch {
+          if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+            return;
+          }
+          fallbackWebSpeech(cleanText, reqId, onEnd);
+          return;
+        }
+      }
+
+      fallbackWebSpeech(cleanText, reqId, onEnd);
+    },
+    [resolveAudioUrl, stopAllVoicePlayback, fallbackWebSpeech],
+  );
 
   // Audio Player Controls
   const mainAudioUrl = customListeningAudioUrl || attempt?.audioUrl;
@@ -532,9 +570,15 @@ export function useAssignmentTakeSession() {
   }, [audioDuration]);
 
   const handleRateChange = useCallback((rate: number) => {
+    playbackRateRef.current = rate;
     setPlaybackRate(rate);
     if (audioRef.current) {
       audioRef.current.playbackRate = rate;
+      audioRef.current.defaultPlaybackRate = rate;
+    }
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.playbackRate = rate;
+      ttsAudioRef.current.defaultPlaybackRate = rate;
     }
   }, []);
 
@@ -576,6 +620,14 @@ export function useAssignmentTakeSession() {
     el.addEventListener('pause', onPause);
     el.addEventListener('ended', onEnded);
 
+    if (mainAudioUrl && pendingAutoPlayRef.current) {
+      pendingAutoPlayRef.current = false;
+      el.load();
+      el.playbackRate = playbackRateRef.current;
+      el.defaultPlaybackRate = playbackRateRef.current;
+      el.play().catch(console.warn);
+    }
+
     return () => {
       el.removeEventListener('timeupdate', updateTime);
       el.removeEventListener('loadedmetadata', updateMeta);
@@ -587,20 +639,84 @@ export function useAssignmentTakeSession() {
     };
   }, [mainAudioUrl, phase]);
 
-  // Voice AI đoạn văn
-  const toggleAiVoiceStream = useCallback(() => {
-    if (isPlayingAiVoice) {
-      window.speechSynthesis?.cancel();
+  // Voice AI đoạn văn / tổng hợp audio gắn vào trình phát có thanh giây & tốc độ
+  const toggleAiVoiceStream = useCallback(async () => {
+    if (isPlayingAiVoice || isRepairingListeningAudio) {
+      stopAllVoicePlayback();
       setIsPlayingAiVoice(false);
+      setIsRepairingListeningAudio(false);
       return;
     }
 
-    const script = attempt?.listeningScript || attempt?.passage || '';
+    const script = (attempt?.listeningScript || attempt?.passage || '').trim();
     if (!script) return;
 
+    const reqId = ttsRequestSeqRef.current + 1;
+    ttsRequestSeqRef.current = reqId;
+    setIsRepairingListeningAudio(true);
+
+    let resolvedUrl: string | undefined;
+    try {
+      const firstQ = questions[0];
+      if (firstQ?.questionId && typeof studentApi.repairQuestionAudio === 'function') {
+        try {
+          const rep = await studentApi.repairQuestionAudio(firstQ.questionId);
+          resolvedUrl = rep?.url || (rep as any)?.audioUrl;
+        } catch {
+          // Fallback sang tổng hợp TTS trực tiếp từ listeningScript
+        }
+      }
+
+      if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+        return;
+      }
+
+      if (!resolvedUrl && typeof studentApi.synthesizeTTS === 'function') {
+        const cached = ttsCacheMapRef.current.get(script);
+        if (cached) {
+          resolvedUrl = cached;
+        } else {
+          const ttsRes = await studentApi.synthesizeTTS({
+            text: script,
+            voice: 'af_heart',
+            speed: 1.0,
+          });
+          if (ttsRes?.audioUrl) {
+            resolvedUrl = ttsRes.audioUrl;
+            ttsCacheMapRef.current.set(script, resolvedUrl);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Không thể tổng hợp audio bài nghe:', err);
+    }
+
+    if (!isMountedRef.current || reqId !== ttsRequestSeqRef.current) {
+      return;
+    }
+
+    setIsRepairingListeningAudio(false);
+
+    if (resolvedUrl) {
+      pendingAutoPlayRef.current = true;
+      setCustomListeningAudioUrl(resolvedUrl);
+      return;
+    }
+
     setIsPlayingAiVoice(true);
-    speakText(script, () => setIsPlayingAiVoice(false));
-  }, [isPlayingAiVoice, attempt, speakText]);
+    fallbackWebSpeech(script, reqId, () => {
+      if (isMountedRef.current && reqId === ttsRequestSeqRef.current) {
+        setIsPlayingAiVoice(false);
+      }
+    });
+  }, [
+    isPlayingAiVoice,
+    isRepairingListeningAudio,
+    attempt,
+    questions,
+    stopAllVoicePlayback,
+    fallbackWebSpeech,
+  ]);
 
   // Sửa lỗi audio tự động
   const handleRepairListeningAudio = useCallback(async () => {
@@ -634,20 +750,7 @@ export function useAssignmentTakeSession() {
     const ans = answers[questionId];
     if (!ans) return;
 
-    const studentSelected = ans.selectedOptionId;
-    const studentText = (ans.textAnswer || '').trim().toLowerCase();
-    const correctVal = (q.correctAnswer || '').trim().toLowerCase();
-
-    let isCorrect = false;
-    if (studentSelected && Array.isArray(q.options)) {
-      isCorrect = q.options.some(
-        (o: any) =>
-          (o.id === studentSelected || o.optionLabel === studentSelected) &&
-          o.isCorrect === true,
-      );
-    } else if (studentText && correctVal) {
-      isCorrect = studentText === correctVal;
-    }
+    const { isCorrect } = evaluateQuestionReviewOutcome(q, ans);
 
     setCheckedQuestions((prev) => ({
       ...prev,
@@ -699,6 +802,7 @@ export function useAssignmentTakeSession() {
       setAttempt(detail);
       setAnswers({});
       setCheckedQuestions({});
+      setExpandedHints({});
       setFlaggedQuestions({});
       const limitMins = detail?.timeLimitMinutes && detail.timeLimitMinutes > 0 ? detail.timeLimitMinutes : 45;
       setRemainingSeconds(limitMins * 60);
@@ -718,15 +822,9 @@ export function useAssignmentTakeSession() {
     setIsSubmitting(true);
 
     try {
-      const payloadAnswers = questions.map((q) => {
-        const ans = answers[q.questionId];
-        return {
-          questionId: q.questionId,
-          selectedOptionId: ans?.selectedOptionId,
-          textAnswer: ans?.textAnswer,
-          answerText: ans?.textAnswer,
-        };
-      });
+      const payloadAnswers = questions.map((q) =>
+        resolveSubmitAnswerPayload(q, answers[q.questionId]),
+      );
 
       const res = await studentApi.submitAssignment(
         assignmentId,
@@ -740,23 +838,34 @@ export function useAssignmentTakeSession() {
         }),
       );
 
-      // Nạp lại chi tiết bài làm đã chấm
+      // Nạp lại chi tiết bài làm đã chấm, bảo toàn đáp án cục bộ khi câu hỏi chưa được lưu chi tiết
       const freshDetail = await studentApi.getAttemptDetail(res.attemptId || attempt.attemptId);
       setAttempt(freshDetail);
 
-      if (freshDetail.answersPersisted !== false) {
-        const restored: any = {};
+      setAnswers((prev) => {
+        const merged: Record<
+          string,
+          { selectedOptionId?: string; textAnswer?: string; audioUrl?: string }
+        > = { ...prev };
         freshDetail.questions?.forEach((q) => {
-          restored[q.questionId] = {
-            selectedOptionId:
-              q.selectedOptionId || (q.studentAnswer?.length === 36 ? q.studentAnswer : undefined),
-            textAnswer: q.studentAnswer,
-            audioUrl: q.audioUrl,
+          const existing = prev[q.questionId];
+          const serverSelectedOptionId = resolveRestoredOptionId(q);
+          const serverTextAnswer =
+            q.studentAnswer != null && String(q.studentAnswer).trim().length > 0
+              ? q.studentAnswer
+              : undefined;
+          const serverAudioUrl = q.audioUrl || undefined;
+
+          merged[q.questionId] = {
+            selectedOptionId: serverSelectedOptionId || existing?.selectedOptionId,
+            textAnswer: serverTextAnswer ?? existing?.textAnswer,
+            audioUrl: serverAudioUrl || existing?.audioUrl,
           };
         });
-        setAnswers((prev) => ({ ...prev, ...restored }));
-      }
+        return merged;
+      });
 
+      setExpandedHints({});
       setIsSubmitModalOpen(false);
       setPhase('REVIEW');
       setShowListeningScript(false);
@@ -819,18 +928,13 @@ export function useAssignmentTakeSession() {
 
   // Dọn dẹp audio, speechSynthesis và blob URL khi unmount để tránh memory leak
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      if (ttsAudioRef.current) {
-        ttsAudioRef.current.pause();
-        ttsAudioRef.current.onended = null;
-        ttsAudioRef.current.onerror = null;
-        ttsAudioRef.current = null;
-      }
+      isMountedRef.current = false;
+      pendingAutoPlayRef.current = false;
+      stopAllVoicePlayback();
       if (audioRef.current) {
         audioRef.current.pause();
-      }
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
       }
       createdBlobUrlsRef.current.forEach((url) => {
         try {
@@ -839,7 +943,7 @@ export function useAssignmentTakeSession() {
       });
       createdBlobUrlsRef.current = [];
     };
-  }, []);
+  }, [stopAllVoicePlayback]);
 
   return {
     assignmentId,

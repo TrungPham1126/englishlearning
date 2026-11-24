@@ -617,4 +617,77 @@ class GradingEngineServiceTest {
         assertThat(result.getAiGradedQuestionIds()).containsExactly(essayId, audioId);
     }
 
+    @Test
+    @DisplayName("evaluateSubmission_whenTrueFalseHasNotGivenWithUnderscoreAndStudentSendsSpace_gradesCorrectly")
+    void evaluateSubmission_whenTrueFalseHasNotGivenWithUnderscoreAndStudentSendsSpace_gradesCorrectly() {
+        UUID qTfId = UUID.randomUUID();
+        AssignmentQuestion tfQ = AssignmentQuestion.builder()
+                .id(qTfId)
+                .questionType(QuestionType.TRUE_FALSE)
+                .correctAnswer("NOT_GIVEN")
+                .points(2.0)
+                .options(List.of(
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("TRUE").optionText("TRUE").isCorrect(false).build(),
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("FALSE").optionText("FALSE").isCorrect(false).build(),
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("NOT_GIVEN").optionText("NOT GIVEN").isCorrect(true).build()
+                ))
+                .build();
+
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                List.of(tfQ),
+                List.of(SubmissionRequest.AnswerDto.builder().questionId(qTfId).textAnswer("NOT GIVEN").build())
+        );
+
+        assertThat(result.getCorrectnessPerQuestion().get(qTfId)).isTrue();
+        assertThat(result.getEarnedPointsPerQuestion().get(qTfId)).isEqualTo(2.0);
+        assertThat(result.getTotalScore()).isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("evaluateSubmission_whenUnscrambleHasSpaceBeforePunctuationAndMcqLacksIsCorrectFlag_gradesCorrectly")
+    void evaluateSubmission_whenUnscrambleHasSpaceBeforePunctuationAndMcqLacksIsCorrectFlag_gradesCorrectly() {
+        UUID qUnscramble1 = UUID.randomUUID();
+        UUID qUnscramble2 = UUID.randomUUID();
+        UUID qMcqFallback = UUID.randomUUID();
+        UUID optBId = UUID.randomUUID();
+
+        AssignmentQuestion u1 = AssignmentQuestion.builder()
+                .id(qUnscramble1)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .correctAnswer("How often do you practice piano?")
+                .points(2.0)
+                .build();
+        AssignmentQuestion u2 = AssignmentQuestion.builder()
+                .id(qUnscramble2)
+                .questionType(QuestionType.FILL_IN_BLANK)
+                .correctAnswer("The documentary often watches on wildlife.")
+                .points(2.0)
+                .build();
+        AssignmentQuestion mcqFallback = AssignmentQuestion.builder()
+                .id(qMcqFallback)
+                .questionType(QuestionType.MULTIPLE_CHOICE)
+                .correctAnswer("B")
+                .points(2.0)
+                .options(List.of(
+                        QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Wrong").isCorrect(null).build(),
+                        QuestionOption.builder().id(optBId).optionLabel("B").optionText("Right").isCorrect(null).build()
+                ))
+                .build();
+
+        GradingResult result = gradingEngineService.evaluateSubmission(
+                List.of(u1, u2, mcqFallback),
+                List.of(
+                        SubmissionRequest.AnswerDto.builder().questionId(qUnscramble1).textAnswer("How often do you practice piano ?").build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(qUnscramble2).textAnswer("The documentary often watches on wildlife .").build(),
+                        SubmissionRequest.AnswerDto.builder().questionId(qMcqFallback).selectedOptionId(optBId).build()
+                )
+        );
+
+        assertThat(result.getCorrectnessPerQuestion().get(qUnscramble1)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(qUnscramble2)).isTrue();
+        assertThat(result.getCorrectnessPerQuestion().get(qMcqFallback)).isTrue();
+        assertThat(result.getTotalScore()).isEqualTo(6.0);
+        assertThat(result.getScaledScore()).isEqualTo(10.0);
+    }
+
 }

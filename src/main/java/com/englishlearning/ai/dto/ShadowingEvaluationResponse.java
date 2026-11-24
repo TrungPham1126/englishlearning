@@ -1,6 +1,7 @@
 package com.englishlearning.ai.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
@@ -34,6 +35,10 @@ public class ShadowingEvaluationResponse {
     // 3. Danh sách chi tiết từng từ và từng âm vị (IPA)
     @Builder.Default
     private List<WordPhonemeDetail> wordRows = new ArrayList<>();
+
+    // 4. Lời khuyên sư phạm do AI tổng hợp từ dữ liệu chấm âm học Python
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private AiCoachingAdvice aiCoaching;
 
     @JsonSetter("overallScore")
     public void setOverallScoreFromNode(JsonNode node) {

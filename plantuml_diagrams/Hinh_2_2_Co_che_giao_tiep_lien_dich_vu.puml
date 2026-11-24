@@ -1,61 +1,54 @@
 @startuml Hinh_2_2_Co_che_giao_tiep_lien_dich_vu
-title Hình 2.2: Sơ đồ cơ chế giao tiếp liên dịch vụ trong hệ thống ELP
-skinparam dpi 200
+title Hình 2.2: Cơ chế giao tiếp liên dịch vụ trong hệ thống ELP
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 24
+skinparam ranksep 46
+top to bottom direction
 
-rectangle "Frontend Clients" {
-    component [React 19 SPA\n(Vite + Tailwind + Zustand)] as Frontend
+rectangle "1. Tầng Trình diễn Client" {
+    [React 19 SPA\n(Vite 8 + Zustand + Query)] as Frontend
 }
 
-rectangle "Spring Boot 3.3 Modular Backend Core (Port 8080)" {
-    component [REST API Controllers\n(Auth, Video, AI, Assignment)] as API_GW
-    component [Spring Security 6\n(Stateless JWT Guard)] as SecGuard
-    component [WebSocket STOMP Broker\n(/topic/student, /topic/notify)] as STOMP
-    component [RabbitMQ Producer\n(Video Transcode Dispatcher)] as RabbitProducer
-    component [RabbitMQ Consumer\n(VideoTranscodeConsumer)] as RabbitConsumer
+rectangle "2. Tầng Ứng dụng Lõi - Spring Boot 3.2.5 (:8080)" {
+    [REST Controllers & Security\n(JWT Dual-Token + RBAC)] as API_GW
+    [WebSocket STOMP (/ws)\n(/topic, /queue, /app)] as STOMP
+    [RabbitMQ Worker\n(VideoTranscodeConsumer)] as RabbitWorker
 }
 
-rectangle "Python FastAPI Microservice (Port 8000)" {
-    component [Acoustic Phonetics Engine\n(VAD, Wav2Vec2 CTC, Praat F1/F2)] as PythonPhonetics
-    component [Kokoro-82M Neural TTS\n(British & American Voices)] as KokoroTTS
+rectangle "3. Dịch vụ AI Cục bộ (FastAPI) & Cloud AI" {
+    [phonetics-service (:8000)\nWav2Vec2 + Praat + Kokoro] as PyPhone
+    [writing-scorer (:8001)\nIELTS Task 1/2/Paragraph] as PyWrite
+    cloud [Cloud AI Fallback\nGemini 2.5 Flash & Groq] as CloudAI
 }
 
-rectangle "Message Broker & Caching Infrastructure" {
-    queue [RabbitMQ Broker :5672\n(Queue: video.transcode.queue)] as RabbitMQ
-    database [Redis Cache :6379\n(Sessions & Rate Limits)] as Redis
+rectangle "4. Tầng Hạ tầng Dữ liệu & Lưu trữ" {
+    database "MariaDB / MySQL\n(32 bảng 3NF)" as MySQL
+    database "Redis Cache\n(TTL 60 phút)" as Redis
+    queue "RabbitMQ\n(video.transcode)" as RabbitMQ
+    cloud "Cloudflare R2\n(HLS & Media)" as R2
 }
 
-rectangle "Database & Cloud Storage Infrastructure" {
-    database [MySQL Database :3306\n(32 Bảng InnoDB UTF-8mb4)] as MySQL
-    cloud [Cloudflare R2 Object Storage\n(HLS .m3u8, .ts, Audio & Docs)] as R2
-}
+Frontend --> API_GW : HTTPS REST
+Frontend <--> STOMP : WSS STOMP
+Frontend --> R2 : Streaming HLS
 
-rectangle "External Cloud AI Providers" {
-    cloud [Google Gemini 2.5 Flash\n(Phonetics Rule & Quiz Gen)] as Gemini
-    cloud [Groq Cloud High-Speed\n(Whisper STT & LLaMA 3.3)] as Groq
-}
+API_GW --> PyPhone : HTTP POST
+API_GW --> PyWrite : HTTP POST
+API_GW --> CloudAI : HTTPS Tier 2/3
 
-Frontend --> API_GW : HTTPS / REST (JSON)
-Frontend <--> STOMP : WSS / STOMP over SockJS
-Frontend --> R2 : Phát luồng HLS Video
-
-API_GW --> SecGuard : Kiểm tra JWT Token
-API_GW --> MySQL : JDBC / HikariCP (CRUD 32 Bảng)
-API_GW --> Redis : Lưu phiên & kiểm tra quota
-API_GW --> RabbitProducer : Gửi VideoTranscodeMessage
-
-RabbitProducer --> RabbitMQ : AMQP 0-9-1 Push
-RabbitMQ --> RabbitConsumer : AMQP 0-9-1 Consume
-RabbitConsumer --> R2 : Tải luồng HLS (.m3u8, .ts)
-
-API_GW --> PythonPhonetics : REST HTTP (Phân tích âm học)
-API_GW --> KokoroTTS : REST HTTP (Sinh âm thanh mẫu)
-API_GW --> Groq : REST HTTP (Whisper STT / LLaMA 3.3)
-API_GW --> Gemini : REST HTTP (Gemini 2.5 Flash)
+API_GW --> MySQL : JDBC / HikariCP
+API_GW --> Redis : Spring Cache
+API_GW --> RabbitWorker : Dispatch
+RabbitWorker <--> RabbitMQ : AMQP 0-9-1
+RabbitWorker --> R2 : S3 Upload HLS
 @enduml

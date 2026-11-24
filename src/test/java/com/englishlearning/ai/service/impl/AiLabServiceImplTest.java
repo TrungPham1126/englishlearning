@@ -148,16 +148,16 @@ class AiLabServiceImplTest {
         MockMultipartFile audio = new MockMultipartFile("audio", "speech.webm", "audio/webm", "data".getBytes());
         JsonNode result = service.evaluateSpeakingTopic("Ignored topic", audio, answerId);
 
-        assertThat(result.path("overallBand").asDouble()).isEqualTo(7.5);
-        assertThat(answer.getEarnedPoints()).isEqualTo(7.5);
+        assertThat(result.path("overallBand").asDouble()).isEqualTo(8.5);
+        assertThat(answer.getEarnedPoints()).isEqualTo(8.5);
         assertThat(answer.getIsCorrect()).isTrue();
 
         ArgumentCaptor<AiEvaluation> evalCaptor = ArgumentCaptor.forClass(AiEvaluation.class);
         verify(aiEvaluationRepository).save(evalCaptor.capture());
         assertThat(evalCaptor.getValue().getEvalType()).isEqualTo(AiEvaluationType.SPEAKING);
-        assertThat(evalCaptor.getValue().getVocabularyScore()).isEqualTo(8.0);
+        assertThat(evalCaptor.getValue().getVocabularyScore()).isEqualTo(9.0);
         verify(entityManager).merge(answer);
-        verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 3.75);
+        verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 4.25);
     }
 
     @Test
@@ -725,8 +725,8 @@ class AiLabServiceImplTest {
                 .thenThrow(new RuntimeException("Connection refused"));
 
         JsonNode resFallback = service.evaluateSpeakingTopic("Do you like reading books?", audio, null, "QA", null);
-        assertThat(resFallback.path("overallBand").asDouble()).isEqualTo(7.0);
-        assertThat(resFallback.path("pronunciationScore").asDouble()).isEqualTo(7.5);
+        assertThat(resFallback.path("overallBand").asDouble()).isEqualTo(8.0);
+        assertThat(resFallback.path("pronunciationScore").asDouble()).isEqualTo(8.5);
     }
 
     @Test
@@ -1241,7 +1241,7 @@ class AiLabServiceImplTest {
         assertThat(result.path("sttEngine").asText()).isEqualTo("GEMINI_AUDIO_STT");
         assertThat(result.path("speakingMode").asText()).isEqualTo("QA");
         assertThat(result.path("recognizedScript").asText()).contains("travel by train");
-        assertThat(result.path("overallBand").asDouble()).isEqualTo(7.0);
+        assertThat(result.path("overallBand").asDouble()).isEqualTo(7.5);
     }
 
     @Test
@@ -1361,14 +1361,14 @@ class AiLabServiceImplTest {
                 .thenReturn(pyBlended);
 
         JsonNode blendedResult = service.evaluateSpeakingTopic("Where do you study?", audio, null, "QA", null);
-        assertThat(blendedResult.path("pronunciationScore").asDouble()).isEqualTo(6.5);
+        assertThat(blendedResult.path("pronunciationScore").asDouble()).isEqualTo(7.0);
         assertThat(blendedResult.path("wordsPerMinute").asInt()).isEqualTo(118);
         // Top 5 weak words (<70 & >0): library(20), focus(30), quiet(35), keeps(45), study(55); library bị loại trùng -> 1 LLM + 4 Python = 5
         assertThat(blendedResult.path("mistakes")).hasSize(5);
         assertThat(blendedResult.path("mistakes").toString()).doesNotContain("\"afternoon\"");
         assertThat(blendedResult.path("mistakes").toString()).contains("focus", "mất âm cuối");
 
-        // 2. LLM pronunciation = 0.0 & KPI null -> fallback sang overallScore=80 -> 100% Python = 7.0
+        // 2. LLM pronunciation = 0.0 & KPI null -> fallback sang overallScore=80 -> 7.0 * 1.10 = 7.7 -> half band 7.5
         when(groqClientService.chatCompletionJson(anyString(), anyString())).thenReturn("""
                 {
                   "isOffTopic": false,
@@ -1389,7 +1389,7 @@ class AiLabServiceImplTest {
                 .thenReturn(pyOverallOnly);
 
         JsonNode purePythonResult = service.evaluateSpeakingTopic("Where do you study?", audio, null, "QA", null);
-        assertThat(purePythonResult.path("pronunciationScore").asDouble()).isEqualTo(7.0);
+        assertThat(purePythonResult.path("pronunciationScore").asDouble()).isEqualTo(7.5);
     }
 
     @Test
@@ -1501,7 +1501,7 @@ class AiLabServiceImplTest {
 
         JsonNode fallbackResult = service.evaluateSpeakingTopic("Do you like reading?", audio, null, "QA", null);
         verify(geminiClientService).generateWithSystemInstruction(anyString(), anyString());
-        assertThat(fallbackResult.path("overallBand").asDouble()).isEqualTo(6.5);
+        assertThat(fallbackResult.path("overallBand").asDouble()).isEqualTo(7.0);
         assertThat(fallbackResult.path("isPassed").asBoolean()).isTrue();
         assertThat(fallbackResult.path("generalFeedback").asText()).isEqualTo("Gemini fallback ok");
 
@@ -1557,20 +1557,20 @@ class AiLabServiceImplTest {
         verify(aiEvaluationRepository).save(createdCaptor.capture());
         AiEvaluation created = createdCaptor.getValue();
         assertThat(created.getEvalType()).isEqualTo(AiEvaluationType.SPEAKING);
-        assertThat(created.getOverallScore()).isEqualTo(6.5);
-        assertThat(created.getPronunciationScore()).isEqualTo(6.5);
-        assertThat(created.getFluencyScore()).isEqualTo(6.5);
-        assertThat(created.getGrammarScore()).isEqualTo(6.5);
-        assertThat(created.getVocabularyScore()).isEqualTo(6.5);
-        assertThat(created.getCoherenceScore()).isEqualTo(6.5);
+        assertThat(created.getOverallScore()).isEqualTo(7.0);
+        assertThat(created.getPronunciationScore()).isEqualTo(7.0);
+        assertThat(created.getFluencyScore()).isEqualTo(7.0);
+        assertThat(created.getGrammarScore()).isEqualTo(7.0);
+        assertThat(created.getVocabularyScore()).isEqualTo(7.0);
+        assertThat(created.getCoherenceScore()).isEqualTo(7.0);
         assertThat(created.getEstimatedCefr()).isEqualTo("B2");
         assertThat(created.getSttTranscript()).isEqualTo(transcript);
         assertThat(created.getCorrectedText()).isEqualTo("Sample corrected");
-        assertThat(answer.getEarnedPoints()).isEqualTo(6.5);
+        assertThat(answer.getEarnedPoints()).isEqualTo(7.0);
         assertThat(answer.getIsCorrect()).isTrue();
-        assertThat(answer.getEvalFeedback()).contains("6.5");
+        assertThat(answer.getEvalFeedback()).contains("7.0");
         verify(entityManager).merge(answer);
-        verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 3.25);
+        verify(analyticsService).updateSkillScore(studentId, "SPEAKING", 3.5);
 
         // 2. AiEvaluation đã tồn tại -> cập nhật lại đúng thực thể đó
         AiEvaluation existingEval = AiEvaluation.builder()
@@ -1584,7 +1584,7 @@ class AiLabServiceImplTest {
         service.evaluateSpeakingTopic("Benefits of parks", audio, answerId, "QA", null);
 
         verify(aiEvaluationRepository).save(same(existingEval));
-        assertThat(existingEval.getOverallScore()).isEqualTo(6.5);
+        assertThat(existingEval.getOverallScore()).isEqualTo(7.0);
     }
 
     @Test
@@ -2219,5 +2219,135 @@ class AiLabServiceImplTest {
         assertThat(result.getRawResponseJson()).contains("First sentence to shadow.");
         org.mockito.Mockito.verify(exerciseAudioService, org.mockito.Mockito.times(1))
                 .synthesizeRawScriptToUrl(anyString(), anyString(), anyDouble());
+    }
+
+    @Test
+    @DisplayName("generateQuizFromContent: Listening trả về thành công kể cả khi tổng hợp Kokoro TTS ném lỗi/timeout")
+    void generateQuizFromContent_listeningSurvivesTtsPreSynthesisFailure() {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.mockito.Mockito.lenient()
+                .when(aiGeneratedExerciseRepository.save(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        String listeningDialogueJson = "{\"listeningPassage\":\"Speaker A: When is the meeting?\\nSpeaker B: At ten thirty.\","
+                + "\"questions\":[{\"id\":\"1\",\"questionType\":\"MULTIPLE_CHOICE\","
+                + "\"prompt\":\"When does the meeting start?\",\"options\":[\"10:00\",\"10:30\",\"11:00\",\"11:30\"],"
+                + "\"correctAnswer\":\"10:30\",\"explanation\":\"Speaker B mentions ten thirty.\"}]}";
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenReturn(listeningDialogueJson);
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenReturn(listeningDialogueJson);
+
+        org.mockito.Mockito.lenient()
+                .when(exerciseAudioService.synthesizeRawScriptToUrl(anyString(), anyString(), anyDouble()))
+                .thenThrow(new RuntimeException("Read timed out"));
+
+        com.englishlearning.ai.entity.AiGeneratedExercise result = service.generateQuizFromContent(
+                "Office Meeting", "B1", 1, teacherId, null, "LISTENING_DIALOGUE", "LISTENING");
+
+        assertThat(result.getRawResponseJson()).contains("Speaker A: When is the meeting?");
+        assertThat(result.getRawResponseJson()).contains("When does the meeting start?");
+    }
+
+    @Test
+    @DisplayName("generateQuizFromContent: Word Arrangement tự phục hồi từ bị thiếu ('does') và sai chia thì trong mảng từ xáo trộn")
+    void generateQuizFromContent_wordArrangementSanitizerRebuildsMismatchedTokens() throws Exception {
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        org.mockito.Mockito.lenient()
+                .when(aiGeneratedExerciseRepository.save(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        String mismatchedArrangementJson = "{\"questions\":[{"
+                + "\"id\":\"1\","
+                + "\"questionType\":\"FILL_IN_BLANK\","
+                + "\"prompt\":\"Sắp xếp các từ sau thành câu hoàn chỉnh: She / not / reads / the / daily / news / .\","
+                + "\"correctAnswer\":\"She does not read the daily news.\","
+                + "\"explanation\":\"Cấu trúc phủ định thì Hiện tại đơn.\"}]}";
+
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble()))
+                .thenReturn(mismatchedArrangementJson);
+        org.mockito.Mockito.lenient()
+                .when(groqClientService.chatCompletionJson(anyString(), anyString(), anyDouble(), any(), any()))
+                .thenReturn(mismatchedArrangementJson);
+
+        com.englishlearning.ai.entity.AiGeneratedExercise result = service.generateQuizFromContent(
+                "Present Simple Negative", "A2", 1, teacherId, null, "GRAMMAR_WORD_ARRANGEMENT", "GRAMMAR");
+
+        JsonNode root = new ObjectMapper().readTree(result.getRawResponseJson());
+        String repairedPrompt = root.path("questions").get(0).path("prompt").asText();
+        assertThat(repairedPrompt).contains("does");
+        assertThat(repairedPrompt).contains("read");
+        assertThat(repairedPrompt).doesNotContain("reads");
+        assertThat(repairedPrompt).doesNotContain("She / does / not / read / the / daily / news");
+    }
+
+    @Test
+    @DisplayName("evaluateSpeakingTopic: truyền dữ liệu âm vị IPA từ Python vào prompt LLM và đồng bộ aiCoaching")
+    void evaluateSpeakingTopic_generatesAndSyncsAiCoachingFromPythonPhonetics() {
+        MockMultipartFile audio = new MockMultipartFile(
+                "audio", "part1.webm", "audio/webm", "fake-audio-bytes".getBytes());
+
+        when(groqClientService.transcribeAudio(any(MultipartFile.class)))
+                .thenReturn("I usually practice speaking English every morning with my close friends.");
+
+        ShadowingEvaluationResponse pyResp = ShadowingEvaluationResponse.builder()
+                .overallScore(74)
+                .isPassed(false)
+                .evaluatedBy("PYTHON_ACOUSTIC_ENGINE")
+                .kpi(ShadowingEvaluationResponse.KpiMetrics.builder()
+                        .pronunciation(72)
+                        .fluency(76)
+                        .completeness(100)
+                        .prosody(74)
+                        .wordsPerMinute(128)
+                        .build())
+                .wordRows(java.util.List.of(
+                        ShadowingEvaluationResponse.WordPhonemeDetail.builder()
+                                .word("practice")
+                                .score(62)
+                                .wordStatus("PARTIAL")
+                                .phonemes(java.util.List.of(
+                                        ShadowingEvaluationResponse.PhonemeItem.builder()
+                                                .ipa("/s/")
+                                                .score(42)
+                                                .note("Bật rõ âm gió /s/ cuối từ")
+                                                .build()))
+                                .build()))
+                .build();
+        when(pythonIntegrationService.evaluatePhonetics(any(), eq("part1.webm"), anyString()))
+                .thenReturn(pyResp);
+
+        when(groqClientService.chatCompletionJson(anyString(), anyString())).thenReturn("""
+                {
+                  "isOffTopic": false,
+                  "taskAchievement": {"score": 6.5, "addressedPoints": ["frequency"], "missingPoints": ["example"]},
+                  "overallBand": 6.5,
+                  "pronunciationScore": 6.5,
+                  "fluencyScore": 6.5,
+                  "lexicalScore": 6.5,
+                  "grammarScore": 6.5,
+                  "coherenceScore": 6.5,
+                  "mistakes": [],
+                  "aiCoaching": {
+                    "summary": "Tốc độ nói 128 WPM ổn định, cần cải thiện âm cuối /s/ của từ practice.",
+                    "actionTips": ["Giữ hơi rõ hơn ở âm /s/ cuối từ 'practice' (62%)."],
+                    "practiceDrill": "Đọc chậm cụm 'practice speaking' 5 lần."
+                  }
+                }
+                """);
+
+        JsonNode result = service.evaluateSpeakingTopic("How often do you practice English?", audio, null, "QA", null);
+
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(groqClientService).chatCompletionJson(anyString(), promptCaptor.capture());
+        assertThat(promptCaptor.getValue()).contains("practice (62%)", "/s/ 42%");
+        assertThat(result.path("aiCoaching").path("summary").asText()).contains("128 WPM");
+        assertThat(result.path("aiCoaching").path("generatedBy").asText()).isEqualTo("IELTS_SPEAKING_AI_COACH");
+        assertThat(result.path("phoneticEvaluation").path("aiCoaching").path("practiceDrill").asText())
+                .contains("practice speaking");
     }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { teacherApi } from "../../api/teacherApi";
 import { notifyTeacherTaskStatus } from "@/utils/teacherTaskNotification";
 import { isGradingRubricOrMetaText } from "@/utils/sampleAudioPlayer";
+import { sortQuestionOptions } from "@/utils/questionOptions";
 import {
   downloadExcelTemplate,
   downloadSkillExcelTemplate,
@@ -288,7 +289,7 @@ export function useCreateAssignmentForm({
         const isNonShadowSpeaking =
           loadedSkill === "SPEAKING" && inferredSpeakingMode !== "SHADOWING";
         const mapped: QuestionDraft[] = initialData.questions.map((q: any) => {
-          let opts = (q.options || []).map((o: any) => o.optionText || "");
+          let opts = sortQuestionOptions(q.options || []).map((o: any) => o.optionText || "");
           if (opts.length === 0 && q.questionType === "MULTIPLE_CHOICE") {
             opts = ["", "", "", ""];
           }
@@ -345,8 +346,22 @@ export function useCreateAssignmentForm({
     prevAssignmentTypeRef.current = assignmentType;
     if (mode === "EDIT") return;
 
+    const subs = getLevelQuestionFormats(assignmentType, aiLevel);
+    const resolvedSub =
+      subs.length > 0 && !subs.some((f) => f.code === selectedSubFormat)
+        ? subs[0].code
+        : selectedSubFormat;
+    if (resolvedSub !== selectedSubFormat && resolvedSub) {
+      setSelectedSubFormat(resolvedSub);
+    }
+
+    let nextWritingTask = writingTaskType;
     if (assignmentType === "WRITING") {
-      const upperFmt = String(selectedSubFormat || "").toUpperCase();
+      if (resolvedSub === "WRITING_IELTS_TASK1") nextWritingTask = "TASK_1";
+      else if (resolvedSub === "WRITING_IELTS_TASK2" || resolvedSub === "WRITING_DISCURSIVE_ESSAY") {
+        nextWritingTask = "TASK_2";
+      }
+      const upperFmt = String(resolvedSub || "").toUpperCase();
       const isEssayFmt = !["WORD_ARRANGEMENT", "UNSCRAMBLE", "WORD_ORDER", "KEYWORD", "SENTENCE"].some((kw) =>
         upperFmt.includes(kw)
       );
@@ -356,7 +371,18 @@ export function useCreateAssignmentForm({
     } else if (aiQuestionCount < 3) {
       setAiQuestionCount(5);
     }
-  }, [assignmentType, mode, selectedSubFormat, aiQuestionCount]);
+
+    const nextTopics = getSuggestedTopics(
+      assignmentType,
+      aiLevel,
+      resolvedSub,
+      readingPassageIelts,
+      nextWritingTask
+    );
+    if (nextTopics.length > 0) {
+      setAiTopic(nextTopics[0]);
+    }
+  }, [assignmentType, mode, selectedSubFormat, aiQuestionCount, aiLevel, readingPassageIelts, writingTaskType]);
 
   useEffect(() => {
     if (mode === "EDIT") return;
@@ -374,18 +400,30 @@ export function useCreateAssignmentForm({
     type: string,
     level: string,
     subCode?: string,
-    writingTask?: string
+    writingTask?: string,
+    passageNum?: 1 | 2 | 3
   ) => {
     const topics = getSuggestedTopics(
       type,
       level,
-      subCode || selectedSubFormat,
-      readingPassageIelts,
-      writingTask || writingTaskType
+      subCode ?? selectedSubFormat,
+      passageNum ?? readingPassageIelts,
+      writingTask ?? writingTaskType
     );
     if (topics.length > 0) {
       setAiTopic(topics[0]);
     }
+  };
+
+  const handleSelectReadingPassage = (pNum: 1 | 2 | 3) => {
+    setReadingPassageIelts(pNum);
+    updateTopicSuggestion(
+      assignmentType,
+      aiLevel,
+      selectedSubFormat,
+      writingTaskType,
+      pNum
+    );
   };
 
   const handleSelectSubFormat = (code: string, targetLevel?: string) => {
@@ -397,11 +435,13 @@ export function useCreateAssignmentForm({
       else if (code.includes("SHADOWING")) setSpeakingMode("SHADOWING");
       else setSpeakingMode("QA");
     }
+    let nextWritingTask = writingTaskType;
     if (assignmentType === "WRITING") {
-      if (code === "WRITING_IELTS_TASK1") setWritingTaskType("TASK_1");
-      if (code === "WRITING_IELTS_TASK2" || code === "WRITING_DISCURSIVE_ESSAY") {
-        setWritingTaskType("TASK_2");
+      if (code === "WRITING_IELTS_TASK1") nextWritingTask = "TASK_1";
+      else if (code === "WRITING_IELTS_TASK2" || code === "WRITING_DISCURSIVE_ESSAY") {
+        nextWritingTask = "TASK_2";
       }
+      setWritingTaskType(nextWritingTask);
       const upperCode = code.toUpperCase();
       const isEssayWriting = !["WORD_ARRANGEMENT", "UNSCRAMBLE", "WORD_ORDER", "KEYWORD", "SENTENCE"].some((kw) =>
         upperCode.includes(kw)
@@ -412,7 +452,7 @@ export function useCreateAssignmentForm({
         setAiQuestionCount(5);
       }
     }
-    updateTopicSuggestion(assignmentType, lvl, code);
+    updateTopicSuggestion(assignmentType, lvl, code, nextWritingTask);
   };
 
   const handleSelectLevel = (newLevel: string) => {
@@ -1942,6 +1982,8 @@ export function useCreateAssignmentForm({
     activeGroupKey,
     handleSelectSubFormat,
     handleSelectLevel,
+    handleSelectReadingPassage,
+    updateTopicSuggestion,
     handleGenerateAiQuestions,
     handleAddBlankQuestion,
     handleUpdateQuestion,

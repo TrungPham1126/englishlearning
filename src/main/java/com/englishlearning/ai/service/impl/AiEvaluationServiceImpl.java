@@ -3,6 +3,7 @@ package com.englishlearning.ai.service.impl;
 import com.englishlearning.ai.service.*;
 
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
+import com.englishlearning.ai.util.SpeakingScoreCalibrationUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +45,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                         pythonResp.setEvaluatedBy("PYTHON_ACOUSTIC_ENGINE");
                     }
                     log.info("[Tầng 1 Thành công] Kết quả chấm bởi: {}", pythonResp.getEvaluatedBy());
-                    return pythonResp;
+                    return SpeakingScoreCalibrationUtils.applyShadowingBoost(pythonResp);
                 }
             } catch (Exception ex) {
                 log.warn("[Tầng 1 Thất bại / Timeout] Python microservice lỗi: {}. Chuyển sang Tầng 2...", ex.getMessage());
@@ -54,14 +55,15 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
         // --- TẦNG 2: Secondary Cloud AI API (Gemini Multimodal / Groq Whisper + LLM Fallback) ---
         try {
             log.info("[Tầng 2] Kích hoạt Secondary Cloud AI (Gemini / Groq)...");
-            return evaluateWithCloudAiFallback(audioBytes, effectiveFilename, cleanRef);
+            return SpeakingScoreCalibrationUtils.applyShadowingBoost(
+                    evaluateWithCloudAiFallback(audioBytes, effectiveFilename, cleanRef));
         } catch (Exception cloudEx) {
             log.error("[Tầng 2 Thất bại] Toàn bộ Cloud AI gặp sự cố: {}. Kích hoạt Tầng 3...", cloudEx.getMessage());
         }
 
         // --- TẦNG 3: Rule-based Offline / Heuristic Fallback ---
         log.warn("[Tầng 3] Thực hiện chấm điểm Rule-Based Offline Fallback cho câu: '{}'", cleanRef);
-        return evaluateWithRuleBasedOffline(cleanRef);
+        return SpeakingScoreCalibrationUtils.applyShadowingBoost(evaluateWithRuleBasedOffline(cleanRef));
     }
 
     private ShadowingEvaluationResponse evaluateWithCloudAiFallback(

@@ -217,7 +217,7 @@ function resolveSkillScore(
   for (const key of aliases) {
     const val = map[key];
     if (typeof val === "number" && Number.isFinite(val)) {
-      return Number(val.toFixed(1));
+      return Number(normalizeScoreTo10OrZero(val).toFixed(1));
     }
   }
   return 0;

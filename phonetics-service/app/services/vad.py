@@ -1,3 +1,10 @@
+"""
+Module phát hiện hoạt động giọng nói (VAD - Voice Activity Detection) và phân tích nhịp độ thời gian.
+
+Chịu trách nhiệm tách vùng có giọng nói khỏi vùng im lặng, tính thời gian phát âm thực tế
+và phát hiện/phân loại các khoảng ngắt nghỉ (ngắt theo dấu câu, ngập ngừng, hoặc ngừng quá lâu).
+"""
+
 from typing import List, Tuple
 import numpy as np
 
@@ -7,11 +14,11 @@ from app.models.alignment import PauseEvent, SpeechSegment
 
 class SpeechDetector:
     """
-    Voice Activity Detection (VAD) & Temporal Segmentation Service.
-    Measures:
-    - Speech vs Non-speech regions
-    - Speaking time vs Articulation time
-    - Pause event detection & categorization (natural vs hesitation vs long pause)
+    Dịch vụ Phát hiện Hoạt động Giọng nói (VAD) & Phân đoạn Thời gian.
+    Thực hiện đo lường các thông số:
+    - Phân tách vùng có giọng nói và vùng im lặng/nhiễu nền
+    - Thời gian nói tổng thể (Speaking time) so với thời gian phát âm thực tế (Articulation time)
+    - Phát hiện và phân loại các sự kiện ngắt nghỉ: tự nhiên theo dấu câu, ngập ngừng, hoặc ngừng lâu
     """
 
     def __init__(
@@ -20,14 +27,15 @@ class SpeechDetector:
         pause_threshold_ms: float = settings.PAUSE_THRESHOLD_MS,
         long_pause_threshold_ms: float = settings.LONG_PAUSE_THRESHOLD_MS
     ):
+        """Khởi tạo bộ phát hiện giọng nói và quy đổi các ngưỡng ngắt nghỉ từ mili-giây sang giây."""
         self.sample_rate = sample_rate
         self.pause_threshold_sec = pause_threshold_ms / 1000.0
         self.long_pause_threshold_sec = long_pause_threshold_ms / 1000.0
 
     def detect(self, audio: np.ndarray) -> List[SpeechSegment]:
         """
-        Detects continuous speech segments using dual-threshold short-term energy
-        and zero-crossing rate analysis.
+        Phát hiện các đoạn có giọng nói liên tục dựa trên năng lượng ngắn hạn theo ngưỡng động
+        và bước làm mượt để loại bỏ nhiễu chớp nhoáng hoặc khoảng lặng nhỏ giữa các âm tiết.
         """
         frame_ms = 25
         hop_ms = 10
@@ -38,6 +46,7 @@ class SpeechDetector:
             dur = len(audio) / self.sample_rate
             return [SpeechSegment(start=0.0, end=dur, is_speech=True)]
 
+        # Chia sóng âm thành từng khung 25ms trượt 10ms và tính năng lượng RMS cho mỗi khung
         num_frames = 1 + (len(audio) - frame_len) // hop_len
         frame_energies = np.zeros(num_frames)
 
@@ -45,20 +54,20 @@ class SpeechDetector:
             frame = audio[i * hop_len : i * hop_len + frame_len]
             frame_energies[i] = np.sqrt(np.mean(frame**2))
 
-        # Dynamic threshold based on background noise estimation
+        # Tính ngưỡng năng lượng động dựa trên ước lượng tiếng ồn nền (phân vị 20%) và đỉnh giọng nói (phân vị 95%)
         noise_energy = np.percentile(frame_energies, 20)
         peak_energy = np.percentile(frame_energies, 95)
         energy_threshold = noise_energy + 0.15 * max(0.01, peak_energy - noise_energy)
 
-        # Boolean speech mask
+        # Tạo mặt nạ nhị phân (True/False) đánh dấu những khung hình vượt ngưỡng năng lượng giọng nói
         raw_speech_mask = frame_energies > energy_threshold
 
-        # Morphological smoothing: close small gaps (< 120ms) and remove short bursts (< 80ms)
+        # Làm mượt hình thái học: lấp khoảng ngắt nhỏ giữa từ (< 120ms) và bỏ qua tiếng động ngắn bất thường (< 80ms)
         min_silence_frames = int(120 / hop_ms)
         min_speech_frames = int(80 / hop_ms)
 
         smoothed_mask = raw_speech_mask.copy()
-        # 1. Bridge small gaps between speech regions (never bridge leading silence)
+        # 1. Nối liền các khoảng lặng ngắn nằm giữa hai vùng giọng nói (không bao giờ lấp khoảng lặng ở đầu file)
         gap_count = 0
         seen_speech = False
         for i in range(len(smoothed_mask)):
@@ -70,7 +79,7 @@ class SpeechDetector:
                 seen_speech = True
                 gap_count = 0
 
-        # Convert mask to contiguous SpeechSegments
+        # Chuyển đổi mặt nạ khung hình thành danh sách các đoạn giọng nói liên tục (SpeechSegment)
         segments: List[SpeechSegment] = []
         in_speech = False
         start_frame = 0
@@ -91,6 +100,7 @@ class SpeechDetector:
                         )
                     )
 
+        # Đóng đoạn giọng nói cuối cùng nếu người nói phát âm tới sát cuối file ghi âm
         if in_speech and (num_frames - start_frame) >= min_speech_frames:
             segments.append(
                 SpeechSegment(
@@ -101,7 +111,7 @@ class SpeechDetector:
             )
 
         if not segments:
-            # Fallback if no frames crossed threshold
+            # Phương án dự phòng: nếu không có khung nào vượt ngưỡng, xem toàn bộ file là một đoạn nói
             dur = len(audio) / self.sample_rate
             segments = [SpeechSegment(start=0.0, end=dur, is_speech=True)]
 
@@ -114,10 +124,10 @@ class SpeechDetector:
         punctuation_timestamps: List[float] = None
     ) -> Tuple[float, float, List[PauseEvent]]:
         """
-        Calculates:
-        - speaking_time: duration between first onset and last offset
-        - articulation_time: speaking_time minus hesitation pauses
-        - pause_events: classified PauseEvent objects
+        Tính toán các chỉ số về thời gian và nhịp độ nói:
+        - speaking_time: khoảng thời gian từ âm tiết đầu tiên đến âm tiết cuối cùng (gồm cả khoảng nghỉ giữa câu)
+        - articulation_time: thời gian phát âm thực tế (chỉ cộng dồn các đoạn có tiếng nói, loại bỏ khoảng im lặng)
+        - pause_events: danh sách các sự kiện ngắt nghỉ được phân loại và gán điểm phạt độ trôi chảy
         """
         if not speech_segments:
             return audio_duration, audio_duration, []
@@ -130,6 +140,7 @@ class SpeechDetector:
         pause_events: List[PauseEvent] = []
         total_pause_duration = 0.0
 
+        # Duyệt từng khoảng trống nằm giữa hai đoạn nói liên tiếp để phát hiện ngập ngừng hoặc ngắt dài
         for i in range(len(speech_segments) - 1):
             gap_start = speech_segments[i].end
             gap_end = speech_segments[i + 1].start
@@ -138,16 +149,19 @@ class SpeechDetector:
             if gap_dur >= self.pause_threshold_sec:
                 total_pause_duration += gap_dur
 
-                # Check proximity to known punctuation (within 0.35s)
+                # Kiểm tra khoảng nghỉ có nằm sát vị trí dấu câu (trong phạm vi 0.35 giây) hay không
                 is_near_punctuation = any(abs(gap_start - pt) < 0.35 or abs(gap_end - pt) < 0.35 for pt in punc_times)
 
                 if is_near_punctuation:
+                    # Ngắt nghỉ tự nhiên tại dấu phẩy/chấm -> không trừ điểm trôi chảy
                     pause_type = "punctuation"
                     penalty = 0.0
                 elif gap_dur >= self.long_pause_threshold_sec:
+                    # Ngừng quá lâu giữa mạch nói -> trừ điểm nặng
                     pause_type = "long_pause"
                     penalty = min(25.0, 8.0 + (gap_dur - self.long_pause_threshold_sec) * 10.0)
                 else:
+                    # Ngập ngừng ngắn giữa các từ -> trừ điểm vừa phải
                     pause_type = "hesitation"
                     penalty = min(12.0, (gap_dur - self.pause_threshold_sec) * 15.0)
 
@@ -162,11 +176,11 @@ class SpeechDetector:
                     )
                 )
 
-        # Articulation time = sum of active speech durations
+        # Thời gian phát âm thực tế = tổng thời lượng của các đoạn có giọng nói hoạt động
         articulation_time = max(0.1, sum(seg.duration for seg in speech_segments))
 
         return speaking_time, articulation_time, pause_events
 
 
-# Singleton speech detector
+# Thể hiện dùng chung duy nhất (singleton) của bộ phát hiện giọng nói VAD
 speech_detector = SpeechDetector()

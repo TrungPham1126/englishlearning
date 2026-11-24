@@ -17,6 +17,7 @@ import { usePracticeStore } from "@/store/usePracticeStore";
 
 export interface ShadowingControlDockProps {
   readonly onPlayNative: () => void;
+  readonly onTogglePlayLearner?: () => void;
   readonly onToggleRecord: () => void;
   readonly onResetRecord: () => void;
   readonly onSubmitEvaluation: () => void;
@@ -25,12 +26,14 @@ export interface ShadowingControlDockProps {
 export const ShadowingControlDock = memo<ShadowingControlDockProps>(
   function ShadowingControlDock({
     onPlayNative,
+    onTogglePlayLearner,
     onToggleRecord,
     onResetRecord,
     onSubmitEvaluation,
   }) {
     const recordingState = useAudioStore((s) => s.recordingState);
     const isPlayingNative = useAudioStore((s) => s.isPlayingNative);
+    const isPlayingLearner = useAudioStore((s) => s.isPlayingLearner);
     const isSynthesizingNative = useAudioStore((s) => s.isSynthesizingNative);
     const recordingSeconds = useAudioStore((s) => s.recordingSeconds);
     const recordingDuration = useAudioStore((s) => s.recordingDuration);
@@ -209,6 +212,27 @@ export const ShadowingControlDock = memo<ShadowingControlDockProps>(
                     : ""}
                 </span>
               </span>
+
+              {onTogglePlayLearner && (
+                <button
+                  type="button"
+                  onClick={onTogglePlayLearner}
+                  disabled={isEvaluating}
+                  aria-label={
+                    isPlayingLearner
+                      ? "Dừng phát bản ghi âm của bạn"
+                      : "Nghe lại bản ghi âm của bạn"
+                  }
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 disabled:opacity-50 font-bold transition cursor-pointer"
+                >
+                  {isPlayingLearner ? (
+                    <Pause className="w-3 h-3" aria-hidden="true" />
+                  ) : (
+                    <Play className="w-3 h-3 fill-current" aria-hidden="true" />
+                  )}
+                  <span>{isPlayingLearner ? "Dừng nghe" : "Nghe lại"}</span>
+                </button>
+              )}
 
               <button
                 type="button"

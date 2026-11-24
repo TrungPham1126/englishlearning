@@ -9,6 +9,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import type { FullSpeakingAiResult } from "@/features/student/types";
+import { AiCoachingCard } from "./AiCoachingCard";
 
 export interface IeltsSpeakingReportCardProps {
   report: FullSpeakingAiResult;
@@ -175,6 +176,11 @@ export const IeltsSpeakingReportCard: React.FC<IeltsSpeakingReportCardProps> = (
         </div>
       </div>
 
+      {/* Lời khuyên AI Coach tổng hợp từ dữ liệu âm học Python */}
+      <AiCoachingCard
+        coaching={report.aiCoaching ?? report.phoneticEvaluation?.aiCoaching}
+      />
+
       {/* Sửa Lỗi Chi Tiết (Mistakes) */}
       {report.mistakes && report.mistakes.length > 0 && (
         <div className="rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-950/20 p-4 space-y-3 shadow-2xs">
@@ -231,6 +237,25 @@ export const IeltsSpeakingReportCard: React.FC<IeltsSpeakingReportCardProps> = (
           </p>
         </div>
       </div>
+
+      {/* Gợi ý nâng cấp chuyên sâu (Suggestions) */}
+      {report.suggestions && report.suggestions.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {report.suggestions.map((s, idx) => (
+            <div
+              key={idx}
+              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-xs shadow-2xs space-y-1"
+            >
+              <span className="font-extrabold text-blue-700 dark:text-blue-400 block">
+                {s.area}
+              </span>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                {s.recommendation}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Kịch bản nhận diện STT */}
       {report.transcript && (

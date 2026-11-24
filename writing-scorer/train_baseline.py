@@ -1,7 +1,7 @@
-"""Baseline IELTS Writing Task 2 scorer: TF-IDF + surface/lexical/syntactic features + Ridge & LightGBM ensemble.
+"""Mô hình Baseline chấm điểm IELTS Writing Task 2: kết hợp TF-IDF + đặc trưng bề mặt/từ vựng/cú pháp + Ensemble Ridge & LightGBM.
 
-Also exports deterministic feature extraction and essay diagnostic helpers used
-by hybrid inference and feedback generation.
+Module này cũng xuất các hàm rút trích đặc trưng tất định (deterministic) và tính độ tương đồng
+TF-IDF cosine dùng chung cho quá trình suy luận Hybrid và sinh phản hồi ở `infer.py`.
 """
 
 from __future__ import annotations
@@ -33,8 +33,10 @@ from evaluate import (
     round_to_half_band,
 )
 
+# 5 đầu điểm mục tiêu: band tổng thể và 4 tiêu chí thành phần
 TARGETS = ("overall_band",) + SUBCRITERIA_KEYS
 
+# Tập hư từ tiếng Anh và các từ phổ thông trong đề bài IELTS để lọc ra từ khóa nội dung
 _STOPWORDS = frozenset(
     {
         "a", "an", "the", "and", "or", "but", "if", "while", "because", "although",
@@ -56,6 +58,7 @@ _STOPWORDS = frozenset(
     }
 )
 
+# Các nhóm từ nối diễn ngôn (discourse markers) theo chức năng mạch lạc
 _DM_CONTRAST = (
     "however", "nevertheless", "nonetheless", "although", "even though", "whereas",
     "conversely", "on the other hand", "in contrast", "despite", "in spite of",
@@ -74,6 +77,7 @@ _DM_CONCLUSION = (
     "in conclusion", "to conclude", "to summarize", "to sum up", "in summary",
     "overall", "ultimately", "all in all",
 )
+# Từ nối phụ thuộc, đại từ quan hệ và động từ khuyết thiếu để đo độ đa dạng cú pháp
 _SUBORDINATORS = (
     "because", "although", "though", "since", "while", "whereas", "unless",
     "if", "provided", "whenever", "wherever", "even if", "so that", "in order that",
@@ -93,6 +97,7 @@ _DOUBLE_WORD_RE = re.compile(r"\b([A-Za-z]+)\s+\1\b", re.IGNORECASE)
 
 
 def _count_syllables(word: str) -> int:
+    """Ước lượng số âm tiết của một từ tiếng Anh dựa trên nhóm nguyên âm."""
     w = word.lower().strip("'")
     if len(w) <= 3:
         return 1
@@ -103,6 +108,7 @@ def _count_syllables(word: str) -> int:
 
 
 def _simple_stem(token: str) -> str:
+    """Rút gọn hậu tố từ vựng đơn giản (lightweight stemming) phục vụ so khớp từ khóa đề bài."""
     t = token.lower()
     for suffix in ("ings", "ing", "ations", "ation", "ments", "ment", "ities", "ity", "ness", "ers", "ies", "ied", "ed", "es", "s", "ly"):
         if len(t) > len(suffix) + 3 and t.endswith(suffix):
@@ -111,11 +117,13 @@ def _simple_stem(token: str) -> str:
 
 
 def _content_tokens(text: str) -> list[str]:
+    """Trích danh sách gốc từ nội dung (loại bỏ hư từ và từ ngắn dưới 3 ký tự)."""
     tokens = [w.lower() for w in _WORD_RE.findall(text)]
     return [_simple_stem(t) for t in tokens if len(t) >= 3 and t not in _STOPWORDS]
 
 
 def _count_phrases(text_lower: str, phrases: tuple[str, ...]) -> tuple[int, int]:
+    """Đếm tổng số lần xuất hiện và số loại cụm từ riêng biệt trong văn bản viết thường."""
     total = 0
     unique_used = 0
     for ph in phrases:
@@ -127,7 +135,7 @@ def _count_phrases(text_lower: str, phrases: tuple[str, ...]) -> tuple[int, int]
 
 
 def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
-    """Extract deterministic surface, lexical, syntactic, and prompt-overlap features."""
+    """Rút trích 65 đặc trưng bề mặt tất định: độ dài, câu/đoạn, dấu câu, đa dạng từ vựng, độ lặp, từ nối, cú pháp và độ khớp đề bài."""
     prompt_str = (prompt or "").strip()
     essay_str = (essay or "").strip()
     essay_lower = essay_str.lower()
@@ -142,7 +150,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     avg_word_len = float(np.mean(word_lens))
     std_word_len = float(np.std(word_lens))
 
-    # Sentences & paragraphs
+    # Nhóm 1: Đặc trưng phân tách câu và đoạn văn (Sentences & paragraphs)
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n|\r\n\r\n", essay_str) if p.strip()]
     if len(paragraphs) <= 1 and "\n" in essay_str:
         paragraphs = [p.strip() for p in essay_str.splitlines() if p.strip()]
@@ -163,7 +171,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     lowercase_sent_start_ratio = lowercase_sent_start / max(1, sent_count)
     missing_end_punct_ratio = missing_end_punct / max(1, sent_count)
 
-    # Punctuation & formatting
+    # Nhóm 2: Dấu câu, định dạng chữ hoa/thường và lỗi chính tả cơ học (Punctuation & formatting)
     comma_count = essay_str.count(",")
     period_count = essay_str.count(".")
     semicolon_count = essay_str.count(";")
@@ -176,7 +184,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     digit_count = len(re.findall(r"\d+", essay_str))
     all_caps_words = sum(1 for w in raw_words if len(w) >= 2 and w.isupper())
 
-    # Lexical diversity & sophistication
+    # Nhóm 3: Độ đa dạng và mức độ học thuật của từ vựng (TTR, RTTR, hapax, từ dài, âm tiết)
     counts = Counter(words_lower)
     unique_wc = len(counts)
     ttr = unique_wc / wc_safe
@@ -191,7 +199,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     avg_syllables = float(np.mean(syllables))
     polysyllabic_ratio = sum(1 for s in syllables if s >= 3) / wc_safe
 
-    # Content repetition & n-gram repetition
+    # Nhóm 4: Mức độ lặp từ khóa và lặp cụm n-gram (Content repetition & n-gram repetition)
     content_words = [w for w in words_lower if len(w) >= 3 and w not in _STOPWORDS]
     content_counts = Counter(content_words)
     content_total = max(1, len(content_words))
@@ -206,7 +214,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     repeated_trigram_ratio = 1.0 - (len(set(trigrams)) / max(1, len(trigrams))) if trigrams else 0.0
     adjacent_dup_count = len(_DOUBLE_WORD_RE.findall(essay_str))
 
-    # Discourse markers
+    # Nhóm 5: Từ nối diễn ngôn theo 4 chức năng tương phản, nhân quả, bổ sung, kết luận
     dm_con_n, dm_con_u = _count_phrases(essay_lower, _DM_CONTRAST)
     dm_cau_n, dm_cau_u = _count_phrases(essay_lower, _DM_CAUSAL)
     dm_add_n, dm_add_u = _count_phrases(essay_lower, _DM_ADDITIVE)
@@ -214,14 +222,14 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     dm_total = dm_con_n + dm_cau_n + dm_add_n + dm_end_n
     dm_unique = dm_con_u + dm_cau_u + dm_add_u + dm_end_u
 
-    # Syntactic variety & basic grammar checks
+    # Nhóm 6: Độ đa dạng cấu trúc ngữ pháp (câu phụ thuộc, mệnh đề quan hệ, modal, bị động, lỗi mạo từ)
     sub_n, _ = _count_phrases(essay_lower, _SUBORDINATORS)
     rel_n, _ = _count_phrases(essay_lower, _REL_PRONOUNS)
     mod_n, mod_u = _count_phrases(essay_lower, _MODALS)
     passive_n = len(_PASSIVE_RE.findall(essay_str))
     article_err_n = len(_ARTICLE_VOWEL_ERR_RE.findall(essay_str))
 
-    # Prompt-essay overlap (Task Response / Off-topic signals)
+    # Nhóm 7: Độ giao thoa giữa đề bài và bài viết (tín hiệu Task Response & phát hiện lạc đề)
     p_tokens = _content_tokens(prompt_str)
     e_tokens = _content_tokens(essay_str)
     p_set = set(p_tokens)
@@ -241,6 +249,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
         len(p_bigrams & e_bigrams) / len(p_bigrams) if p_bigrams else prompt_content_coverage
     )
 
+    # Kiểm tra độ bám đề riêng ở đoạn Mở bài và đoạn Kết bài
     intro_text = paragraphs[0] if paragraphs else essay_str[: max(1, len(essay_str) // 4)]
     concl_text = paragraphs[-1] if len(paragraphs) > 1 else essay_str[-max(1, len(essay_str) // 4) :]
     intro_set = set(_content_tokens(intro_text))
@@ -248,7 +257,7 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     intro_prompt_cov = len(p_set & intro_set) / len(p_set) if p_set else 0.0
     concl_prompt_cov = len(p_set & concl_set) / len(p_set) if p_set else 0.0
 
-    # Simple Flesch-Kincaid Grade proxy
+    # Chỉ số độ khó đọc Flesch-Kincaid Grade ước lượng mức học thuật câu chữ
     fk_grade = 0.39 * avg_sent_len + 11.8 * avg_syllables - 15.59 if wc > 0 else 0.0
 
     per_100 = 100.0 / wc_safe
@@ -322,11 +331,12 @@ def extract_surface_features(prompt: str, essay: str) -> dict[str, float]:
     }
 
 
+# Danh sách thứ tự cố định 65 tên đặc trưng bề mặt dùng khi dựng ma trận đặc trưng
 FEATURE_NAMES: tuple[str, ...] = tuple(extract_surface_features("Sample topic", "Sample essay text.").keys())
 
 
 def build_surface_matrix(records: list[dict[str, Any]]) -> np.ndarray:
-    """Build dense surface feature matrix of shape (N, len(FEATURE_NAMES))."""
+    """Dựng ma trận đặc trưng bề mặt dày đặc (dense) kích thước (N, len(FEATURE_NAMES))."""
     rows = []
     for rec in records:
         feats = extract_surface_features(rec.get("prompt", ""), rec.get("essay", ""))
@@ -339,16 +349,16 @@ def compute_prompt_essay_cosine(
     prompts: list[str],
     essays: list[str],
 ) -> np.ndarray:
-    """Compute element-wise TF-IDF cosine similarity between prompt and essay."""
+    """Tính độ tương đồng cosine TF-IDF từng cặp giữa đề bài (prompt) và bài viết (essay)."""
     p_mat = prompt_tfidf.transform(prompts)
     e_mat = prompt_tfidf.transform(essays)
-    # TfidfVectorizer outputs L2-normalized rows by default
+    # TfidfVectorizer mặc định chuẩn hóa L2 từng hàng nên tích vô hướng chính là cosine similarity
     sim = np.asarray(p_mat.multiply(e_mat).sum(axis=1)).ravel().astype(np.float32)
     return sim
 
 
 class BaselineScorer:
-    """Saved TF-IDF + surface feature + Ridge/LightGBM ensemble scorer."""
+    """Bộ chấm điểm Baseline đã lưu gồm TF-IDF + đặc trưng bề mặt + Ensemble Ridge & LightGBM."""
 
     def __init__(
         self,
@@ -377,6 +387,7 @@ class BaselineScorer:
     def _transform_inputs(
         self, records: list[dict[str, Any]]
     ) -> tuple[csr_matrix, np.ndarray, np.ndarray]:
+        """Biến đổi danh sách bài viết thành ma trận đầu vào cho Ridge (sparse + 0.25*dense) và LightGBM (dense + SVD)."""
         prompts = [str(r.get("prompt") or "") for r in records]
         essays = [str(r.get("essay") or "") for r in records]
         w_mat = self.word_tfidf.transform(essays)
@@ -391,6 +402,7 @@ class BaselineScorer:
         return ridge_design, dense_scaled, svd_feats
 
     def predict_batch(self, records: list[dict[str, Any]]) -> list[dict[str, float]]:
+        """Dự đoán hàng loạt cho 5 đầu điểm (overall + 4 sub-criteria), pha trộn Ridge/LightGBM và hiệu chỉnh tuyến tính."""
         if not records:
             return []
         ridge_design, dense_scaled, svd_feats = self._transform_inputs(records)
@@ -404,6 +416,7 @@ class BaselineScorer:
                 if target in self.ridge_models
                 else None
             )
+            # LightGBM nhận đầu vào xếp chồng (stacking): đặc trưng bề mặt chuẩn hóa + SVD 80 chiều + dự đoán từ Ridge
             if target in self.lgbm_models:
                 lgb_x = np.hstack(
                     [
@@ -416,16 +429,19 @@ class BaselineScorer:
             else:
                 l_pred = r_pred
 
+            # Trộn có trọng số giữa LightGBM (w) và Ridge (1 - w)
             if r_pred is not None and l_pred is not None:
                 w = float(self.blend_weights.get(target, 0.6))
                 pred = w * l_pred + (1.0 - w) * r_pred
             else:
                 pred = l_pred if l_pred is not None else r_pred
 
+            # Hiệu chỉnh tuyến tính (slope * pred + intercept) và chặn trong [1.0, 9.0]
             slope, intercept = self.calibrators.get(target, (1.0, 0.0))
             pred = np.clip(slope * pred + intercept, 1.0, 9.0)
             raw_preds[target] = pred
 
+        # Tùy chọn đồng bộ điểm Overall với trung bình cộng 4 tiêu chí con theo hệ số alpha
         if (
             self.overall_criteria_blend > 0.0
             and "overall_band" in raw_preds
@@ -449,7 +465,7 @@ class BaselineScorer:
 
 
 def load_baseline_bundle(bundle_path: str | Path) -> BaselineScorer:
-    """Load BaselineScorer safely even if pickled as __main__.BaselineScorer."""
+    """Nạp tệp `baseline_bundle.joblib` an toàn kể cả khi được pickle dưới tên `__main__.BaselineScorer`."""
     import sys
 
     main_mod = sys.modules.get("__main__")
@@ -471,7 +487,7 @@ def _fit_ridge_oof(
     groups: np.ndarray | None,
     alpha: float,
 ) -> tuple[Ridge, np.ndarray]:
-    """Fit full Ridge model and 5-fold group/kfold OOF predictions without leakage."""
+    """Huấn luyện mô hình Ridge toàn tập và tạo dự đoán Out-of-Fold (OOF) 5-fold theo GroupKFold/KFold chống rò rỉ cho tầng LightGBM."""
     n = len(y)
     oof = np.zeros(n, dtype=np.float32)
     if groups is not None and len(np.unique(groups)) >= 5:
@@ -498,6 +514,7 @@ def _fit_best_ridge_alpha(
     y_va: np.ndarray,
     alphas: tuple[float, ...] = (3.0, 8.0, 20.0, 50.0, 100.0),
 ) -> tuple[float, np.ndarray]:
+    """Tìm hệ số điều chuẩn alpha tối ưu cho hồi quy Ridge theo MSE trên tập validation."""
     best_alpha = alphas[0]
     best_mse = float("inf")
     best_val_pred = np.zeros(len(y_va), dtype=np.float32)
@@ -514,11 +531,11 @@ def _fit_best_ridge_alpha(
 
 
 def _fit_linear_calibrator(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, float]:
-    """Fit clipped linear calibration on validation predictions."""
+    """Khớp bộ hiệu chỉnh tuyến tính có chặn biên (slope, intercept) trên tập validation nếu giúp giảm MAE."""
     if len(y_true) < 20 or np.std(y_pred) < 1e-6:
         return (1.0, 0.0)
     slope, intercept = np.polyfit(y_pred, y_true, deg=1)
-    # Guard against extreme extrapolation
+    # Giới hạn hệ số góc và hệ số chặn để tránh ngoại suy quá mức ở hai đầu thang điểm
     slope = float(np.clip(slope, 0.75, 1.35))
     intercept = float(np.clip(intercept, -1.5, 1.5))
     cal_pred = np.clip(slope * y_pred + intercept, 1.0, 9.0)
@@ -536,6 +553,7 @@ def train_baseline(
     max_char_features: int = 30000,
     svd_components: int = 80,
 ) -> dict[str, Any]:
+    """Quy trình huấn luyện đầy đủ mô hình Baseline: trích TF-IDF/SVD/bề mặt, train Ridge + LightGBM, hiệu chỉnh trên val và xuất `baseline_bundle.joblib`."""
     t0 = time.time()
     train_recs = load_jsonl(data_dir / "train.jsonl")
     val_recs = load_jsonl(data_dir / "val.jsonl")
@@ -548,6 +566,7 @@ def train_baseline(
     va_essays = [str(r.get("essay") or "") for r in val_recs]
 
     print("Fitting TF-IDF + SVD + surface features on train split only...")
+    # Chỉ fit các bộ biến đổi TF-IDF, SVD và StandardScaler trên tập train để tránh rò rỉ dữ liệu val/test
     word_tfidf = TfidfVectorizer(
         ngram_range=(1, 2),
         max_features=max_word_features,
@@ -580,10 +599,12 @@ def train_baseline(
     tr_text_sparse = hstack([tr_w, tr_c]).tocsr()
     va_text_sparse = hstack([va_w, va_c]).tocsr()
 
+    # Giảm chiều ma trận TF-IDF từ+ký tự xuống 80 thành phần chính cho cây quyết định LightGBM
     svd = TruncatedSVD(n_components=svd_components, random_state=42)
     tr_svd = svd.fit_transform(tr_text_sparse).astype(np.float32)
     va_svd = svd.transform(va_text_sparse).astype(np.float32)
 
+    # Ghép 65 đặc trưng bề mặt với 1 cột TF-IDF cosine đề-bài rồi chuẩn hóa Z-score
     tr_surf = build_surface_matrix(train_recs)
     va_surf = build_surface_matrix(val_recs)
     tr_cos = compute_prompt_essay_cosine(prompt_tfidf, tr_prompts, tr_essays).reshape(-1, 1)
@@ -598,7 +619,7 @@ def train_baseline(
     tr_ridge_X = hstack([tr_text_sparse, csr_matrix(tr_dense * 0.25)]).tocsr()
     va_ridge_X = hstack([va_text_sparse, csr_matrix(va_dense * 0.25)]).tocsr()
 
-    # Prompt groups for leakage-free OOF Ridge stacking inside train
+    # Nhóm theo nội dung đề bài để chạy OOF Ridge 5-fold trong tập train mà không bị rò rỉ giữa các bài cùng đề
     prompt_groups = np.asarray(
         [re.sub(r"\W+", " ", p.lower()).strip()[:120] for p in tr_prompts]
     )
@@ -610,6 +631,7 @@ def train_baseline(
 
     val_pred_per_target: dict[str, np.ndarray] = {}
 
+    # Huấn luyện lần lượt bộ Ridge + LightGBM độc lập cho từng đầu điểm trong TARGETS
     for target in TARGETS:
         tr_idx = [i for i, r in enumerate(train_recs) if r.get(target) is not None]
         va_idx = [i for i, r in enumerate(val_recs) if r.get(target) is not None]
@@ -620,6 +642,7 @@ def train_baseline(
         y_tr = np.asarray([float(train_recs[i][target]) for i in tr_idx], dtype=np.float32)
         y_va = np.asarray([float(val_recs[i][target]) for i in va_idx], dtype=np.float32)
 
+        # Tầng 1: Chọn alpha tối ưu và tạo đặc trưng dự đoán OOF từ Ridge
         best_alpha, va_ridge_pred = _fit_best_ridge_alpha(
             tr_ridge_X[tr_idx], y_tr, va_ridge_X[va_idx], y_va
         )
@@ -628,9 +651,10 @@ def train_baseline(
         )
         ridge_models[target] = ridge_model
 
-        # Compute full-model validation prediction for Ridge (matches inference path)
+        # Tính dự đoán của mô hình Ridge toàn tập trên validation (khớp hoàn toàn với đường suy luận thật)
         va_ridge_pred_full = ridge_model.predict(va_ridge_X[va_idx])
 
+        # Tầng 2: Huấn luyện LightGBM trên (đặc trưng bề mặt + SVD + đầu ra Ridge OOF) có early stopping trên val
         tr_lgb_X = np.hstack([tr_dense[tr_idx], tr_svd[tr_idx], tr_ridge_oof.reshape(-1, 1)])
         va_lgb_X = np.hstack([va_dense[va_idx], va_svd[va_idx], va_ridge_pred_full.reshape(-1, 1)])
 
@@ -659,7 +683,7 @@ def train_baseline(
         lgbm_models[target] = lgb
         va_lgb_pred = lgb.predict(va_lgb_X)
 
-        # Tune blend weight on validation split
+        # Dò trọng số pha trộn tối ưu w giữa LightGBM và Ridge theo lưới bước 0.05 trên tập validation
         best_w = 0.6
         best_loss = float("inf")
         for w in np.linspace(0.0, 1.0, 21):
@@ -683,17 +707,17 @@ def train_baseline(
             f"blend(w={best_w:.2f})={b_mae:.4f}, cal={cal}"
         )
 
-        # Store full val predictions for overall-criteria consistency check
+        # Lưu dự đoán validation của từng tiêu chí để kiểm tra độ nhất quán với điểm tổng thể
         if target == "overall_band":
             val_pred_per_target[target] = va_cal
         else:
-            # Predict on all val rows for consistency check
+            # Suy luận trên toàn bộ tập val (kể cả mẫu thiếu nhãn tiêu chí con) phục vụ trộn đồng nhất
             all_va_r = ridge_model.predict(va_ridge_X)
             all_va_l = lgb.predict(np.hstack([va_dense, va_svd, all_va_r.reshape(-1, 1)]))
             all_va_b = np.clip(best_w * all_va_l + (1.0 - best_w) * all_va_r, 1.0, 9.0)
             val_pred_per_target[target] = np.clip(cal[0] * all_va_b + cal[1], 1.0, 9.0)
 
-    # Tune optional overall + criteria-mean blend on val
+    # Dò hệ số pha trộn alpha giữa overall_band và trung bình cộng 4 tiêu chí con trên tập val
     best_crit_blend = 0.0
     if "overall_band" in val_pred_per_target and all(k in val_pred_per_target for k in SUBCRITERIA_KEYS):
         y_va_all = np.asarray([float(r["overall_band"]) for r in val_recs], dtype=np.float32)
@@ -711,6 +735,7 @@ def train_baseline(
                 best_crit_blend = alpha
     print(f"Optimal overall-criteria consistency blend on val: {best_crit_blend}")
 
+    # Đóng gói toàn bộ pipeline đã huấn luyện thành đối tượng BaselineScorer và xuất ra baseline_bundle.joblib
     scorer = BaselineScorer(
         word_tfidf=word_tfidf,
         char_tfidf=char_tfidf,
@@ -726,7 +751,7 @@ def train_baseline(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     bundle_path = out_dir / "baseline_bundle.joblib"
-    # Ensure class pickles under 'train_baseline.BaselineScorer' even when invoked as __main__
+    # Ép tên module thành 'train_baseline.BaselineScorer' khi pickle để infer.py unpickle không bị lỗi __main__
     BaselineScorer.__module__ = "train_baseline"
     scorer.__class__.__module__ = "train_baseline"
     joblib.dump(scorer, bundle_path, compress=3)
@@ -756,7 +781,7 @@ def train_baseline(
     }
     (out_dir / "metrics.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    # Initialize best_manifest.json only if it does not yet exist
+    # Chỉ khởi tạo best_manifest.json nếu chưa tồn tại (tránh ghi đè kết quả Transformer/Hybrid nếu đã train trước)
     manifest_path = out_dir.parent / "best_manifest.json"
     if not manifest_path.exists():
         manifest = {
@@ -772,6 +797,7 @@ def train_baseline(
 
 
 def main() -> None:
+    """Điểm vào CLI để huấn luyện và xuất mô hình Baseline."""
     base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Train baseline IELTS Writing Task 2 scorer.")
     parser.add_argument("--data-dir", type=str, default=str(base_dir / "data"))

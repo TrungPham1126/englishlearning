@@ -1,10 +1,14 @@
-"""Prepare a unified, deduplicated, leakage-free IELTS Writing Task 2 dataset.
+"""Chuẩn bị bộ dữ liệu IELTS Writing Task 2 hợp nhất, đã khử trùng lặp và chống rò rỉ dữ liệu.
 
-Combines:
+Kết hợp 2 nguồn dữ liệu HuggingFace:
 1. chillies/IELTS-writing-task-2-evaluation (train + test)
 2. Jackrong/IELTS-writing-feedback-reasoning (train)
 
-Outputs under writing-scorer/data/:
+Quy trình chính: lọc nhiễu/bài không hợp lệ -> tách (prompt, essay) của Jackrong -> trích xuất điểm
+overall + 4 tiêu chí -> khử trùng lặp nội bộ & xuyên nguồn (ưu tiên Jackrong) -> gom nhóm chống rò rỉ
+đề bài/bài viết -> chia train/val/test tỷ lệ 80/10/10 cân bằng phân bố band & nguồn.
+
+Đầu ra lưu trong `writing-scorer/data/`:
 - train.jsonl
 - val.jsonl
 - test.jsonl
@@ -30,6 +34,7 @@ from datasets import load_dataset
 CHILLIES_DATASET = "chillies/IELTS-writing-task-2-evaluation"
 JACKRONG_DATASET = "Jackrong/IELTS-writing-feedback-reasoning"
 
+# Ngưỡng lọc bài hợp lệ: tối thiểu 30 từ và điểm band nằm trong [1.0, 9.0]
 MIN_ESSAY_WORDS = 30
 VALID_MIN_BAND = 1.0
 VALID_MAX_BAND = 9.0
@@ -38,7 +43,7 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "data"
 
 
 def normalize_display_text(text: Any) -> str:
-    """Normalize line endings and trim excessive blank lines while preserving paragraphs."""
+    """Chuẩn hóa ký tự xuống dòng và rút gọn dòng trống thừa nhưng vẫn giữ nguyên cấu trúc chia đoạn."""
     if not isinstance(text, str):
         return ""
     cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -48,6 +53,7 @@ def normalize_display_text(text: Any) -> str:
     return cleaned.strip()
 
 
+# Các mẫu nhận diện dữ liệu rác thu thập nhầm (bài tập trắc nghiệm, đáp án, phiếu luyện tập không phải bài luận)
 _NON_ESSAY_PATTERNS = (
     re.compile(r"\bCâu\s+\d+\s*:", re.IGNORECASE),
     re.compile(r"\bTAKE\s+TEST\s+AGAIN\b"),
@@ -60,12 +66,12 @@ _NON_ESSAY_PATTERNS = (
 
 
 def is_non_essay_artifact(essay: str) -> bool:
-    """Detect scraped MCQ tests, answer keys, and non-essay worksheet artifacts."""
+    """Phát hiện văn bản rác (đề trắc nghiệm, đáp án, phiếu bài tập) không phải bài luận Task 2."""
     return any(pat.search(essay) for pat in _NON_ESSAY_PATTERNS)
 
 
 def normalize_for_dedup(text: Any) -> str:
-    """Canonical lowercase alphanumeric representation for deduplication and leakage checks."""
+    """Chuẩn hóa chuỗi về chữ thường chỉ giữ chữ-số để so khớp khử trùng lặp và kiểm tra rò rỉ."""
     if not isinstance(text, str):
         return ""
     s = unicodedata.normalize("NFKC", text)
@@ -83,21 +89,22 @@ def normalize_for_dedup(text: Any) -> str:
 
 
 def sha256_short(text: str, length: int = 16) -> str:
+    """Băm SHA-256 rút gọn dùng tạo hậu tố ID duy nhất khi trùng ID gốc."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:length]
 
 
 def round_to_half_band(val: float) -> float:
-    """Round a float to the nearest 0.5 band increment and clamp within [1.0, 9.0]."""
+    """Làm tròn số thực về bước 0.5 gần nhất và kẹp trong khoảng [1.0, 9.0]."""
     rounded = round(val * 2.0) / 2.0
     return max(VALID_MIN_BAND, min(VALID_MAX_BAND, float(rounded)))
 
 
 def parse_numeric_band(raw: Any) -> tuple[float | None, str | None]:
-    """Parse a raw band value strictly into a 0.5-increment float in [1.0, 9.0].
+    """Phân tích nghiêm ngặt giá trị band thô về số thực bước 0.5 trong [1.0, 9.0].
 
-    Returns (band_or_none, note_or_reason).
-    Special `<4` / `<4.5` markers return (None, "lt4") or (None, "lt4.5") so the caller
-    can resolve them using evaluation sub-scores or default mapping.
+    Trả về `(band_hoặc_None, lý_do)`.
+    Các ký hiệu đặc biệt `<4` / `<4.5` trả về `(None, "lt4")` hoặc `(None, "lt4.5")` để hàm gọi
+    tự suy ra điểm từ điểm thành phần trong evaluation hoặc gán mức mặc định.
     """
     if raw is None:
         return None, "null"
@@ -117,11 +124,11 @@ def parse_numeric_band(raw: Any) -> tuple[float | None, str | None]:
     if low in {"n/a", "na", "none", "null", "nan", "-"}:
         return None, "na_string"
 
-    # Handle explicit "<4" or "<4.5" style markers
+    # Xử lý các nhãn dạng khoảng dưới ngưỡng như "<4" hoặc "<4.5"
     if re.fullmatch(r"<\s*4(?:\.0+)?", low):
         return None, "lt4"
     if re.fullmatch(r"<\s*4\.5", low):
-        # Look for explicit "(Band X)" if present, otherwise signal lt4.5
+        # Trả tín hiệu lt4.5 để ưu tiên đối chiếu thêm điểm trong phần đánh giá
         return None, "lt4.5"
 
     band_in_parens = re.search(r"\(\s*band\s*(\d+(?:\.\d+)?)\s*\)", low)
@@ -130,7 +137,7 @@ def parse_numeric_band(raw: Any) -> tuple[float | None, str | None]:
         if VALID_MIN_BAND <= val <= VALID_MAX_BAND:
             return round_to_half_band(val), "parens_band"
 
-    # Strip common wrappers like "Band 6.5", "[7]", "**6.0**"
+    # Gỡ các ký tự định dạng markdown thường bọc quanh điểm số như "Band 6.5", "[7]", "**6.0**"
     cleaned = re.sub(r"[\[\]\*`_~]", " ", low)
     cleaned = re.sub(r"\b(?:overall|suggested|band|score)\b", " ", cleaned)
     cleaned = cleaned.replace(":", " ").strip()
@@ -154,9 +161,9 @@ def parse_numeric_band(raw: Any) -> tuple[float | None, str | None]:
 
 
 def _extract_score_from_section(section_lines: list[str], inline_tail: str) -> float | None:
-    """Extract a score from a criterion heading tail or anywhere inside that section."""
+    """Trích xuất điểm số từ phần đuôi dòng tiêu đề tiêu chí hoặc từ nội dung bên trong mục đó."""
     if inline_tail:
-        # e.g. ": [7]", ": **6.0**", "(6.5)", " - **6.0**", " - 6.5"
+        # Ví dụ: ": [7]", ": **6.0**", "(6.5)", " - **6.0**", " - 6.5"
         tail_clean = inline_tail.strip()
         if tail_clean and not re.search(r"\bn/?a\b", tail_clean, re.IGNORECASE):
             if re.match(r"^[:\-\s*\[\(]*[<\d]", tail_clean):
@@ -188,7 +195,7 @@ def _extract_score_from_section(section_lines: list[str], inline_tail: str) -> f
                 return 3.5
             if note == "lt4.5":
                 return 4.0
-        # Handle Jackrong standalone bold score line directly under heading e.g. "**6.0**"
+        # Xử lý dòng điểm in đậm đứng riêng ngay dưới tiêu đề trong Jackrong, ví dụ "**6.0**"
         bare_bold = re.fullmatch(r"\*{0,2}\[?\s*(<\s*4(?:\.5)?|\d+(?:\.\d+)?)\s*\]?\*{0,2}", s)
         if bare_bold:
             val, note = parse_numeric_band(bare_bold.group(1))
@@ -201,6 +208,7 @@ def _extract_score_from_section(section_lines: list[str], inline_tail: str) -> f
     return None
 
 
+# Biểu thức nhận diện các tiêu đề mục điểm trong văn bản đánh giá markdown
 _SECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "overall_eval",
@@ -246,6 +254,7 @@ _SECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
 ]
 
+# Biểu thức bắt điểm từ các bảng tổng hợp markdown (| Criterion | Band |)
 _TABLE_CRITERION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("task_response", re.compile(r"^\|\s*\*{0,2}task\s+(?:response|achievement)(?:\s*\((?:tr|ta)\))?\*{0,2}\s*\|\s*([^|]+)\|", re.IGNORECASE)),
     ("coherence_cohesion", re.compile(r"^\|\s*\*{0,2}coherence\s*(?:&|and)\s*cohesion(?:\s*\(cc\))?\*{0,2}\s*\|\s*([^|]+)\|", re.IGNORECASE)),
@@ -255,7 +264,7 @@ _TABLE_CRITERION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 
 def extract_scores_from_evaluation(evaluation: str) -> dict[str, float | None]:
-    """Extract overall + 4 IELTS sub-criteria scores from markdown evaluation text."""
+    """Trích xuất điểm overall và 4 tiêu chí thành phần IELTS từ văn bản đánh giá markdown."""
     results: dict[str, float | None] = {
         "overall_eval": None,
         "task_response": None,
@@ -272,7 +281,7 @@ def extract_scores_from_evaluation(evaluation: str) -> dict[str, float | None]:
         stripped = line.strip()
         if not stripped:
             continue
-        # Check markdown table rows directly
+        # Kiểm tra trực tiếp các dòng dạng bảng markdown trước
         if stripped.startswith("|"):
             for key, tpat in _TABLE_CRITERION_PATTERNS:
                 tm = tpat.match(stripped)
@@ -310,7 +319,7 @@ def resolve_overall_band(
     raw_band: Any,
     eval_scores: dict[str, float | None],
 ) -> tuple[float | None, str]:
-    """Resolve raw band + evaluation scores into a strict [1.0, 9.0] 0.5-increment float."""
+    """Quy giải cột band thô kết hợp với điểm trích từ evaluation về giá trị chuẩn [1.0, 9.0] bước 0.5."""
     val, note = parse_numeric_band(raw_band)
     if val is not None:
         return val, f"raw_{note}"
@@ -322,6 +331,7 @@ def resolve_overall_band(
     ]
     eval_overall = eval_scores.get("overall_eval")
 
+    # Với các nhãn "<4" hoặc "<4.5", đối chiếu thêm điểm trong evaluation hoặc gán mốc mặc định (3.5 / 4.0)
     if note in {"lt4", "lt4.5"}:
         upper = 3.5 if note == "lt4" else 4.0
         if eval_overall is not None and eval_overall <= upper:
@@ -332,14 +342,14 @@ def resolve_overall_band(
                 return avg, f"{note}_from_subscores"
         return upper, f"{note}_default_{upper}"
 
-    # Fallback if raw band missing/corrupt
+    # Dự phòng nếu cột band thô bị thiếu hoặc lỗi định dạng
     if eval_overall is not None:
         return eval_overall, "fallback_eval_overall"
     return None, f"invalid_band:{note}"
 
 
 def extract_jackrong_topic_header(evaluation: str) -> str:
-    """Extract the quoted prompt from Jackrong's `### Topic` markdown section."""
+    """Trích xuất phần đề bài được trích lại trong mục `### Topic` của phần đánh giá Jackrong."""
     if not isinstance(evaluation, str):
         return ""
     m = re.search(
@@ -378,23 +388,23 @@ def split_jackrong_topic(
     chillies_by_topic_norm: dict[str, tuple[str, str]],
     known_prompts_norm: dict[str, str],
 ) -> tuple[str, str, str]:
-    """Split Jackrong's combined `topic` string into (prompt, essay, method)."""
+    """Tách chuỗi `topic` gộp của Jackrong thành bộ ba `(prompt, essay, phương_pháp_tách)` qua 5 tầng ưu tiên."""
     text = normalize_display_text(raw_topic)
     if not text:
         return "", "", "empty"
 
-    # 1. Exact full-topic match against chillies (prompt + essay)
+    # 1. Khớp chính xác toàn bộ (prompt + essay) với dữ liệu từ nguồn chillies
     topic_norm = normalize_for_dedup(text)
     if topic_norm in chillies_by_topic_norm:
         c_prompt, c_essay = chillies_by_topic_norm[topic_norm]
         return c_prompt, c_essay, "chillies_exact_topic"
 
-    # Gather candidate split points at double-newlines, then single-newlines
+    # Thu thập các điểm ngắt dòng tiềm năng (ưu tiên ngắt đoạn `\n\n`, sau đó mới xét `\n`)
     split_candidates: list[int] = [m.start() for m in re.finditer(r"\n\n", text)]
     if not split_candidates:
         split_candidates = [m.start() for m in re.finditer(r"\n", text)]
 
-    # 2. Prefix match against known chillies prompts
+    # 2. Khớp phần đầu (prefix) với danh sách đề bài đã biết từ chillies
     for idx in split_candidates:
         prefix = text[:idx].strip()
         prefix_norm = normalize_for_dedup(prefix)
@@ -403,7 +413,7 @@ def split_jackrong_topic(
             if len(suffix.split()) >= 10:
                 return prefix, suffix, "chillies_known_prompt"
 
-    # 3. Match prefix against Jackrong's `### Topic` block in evaluation
+    # 3. Đối chiếu phần đầu với mục `### Topic` trong phần evaluation của chính Jackrong (khớp chính xác hoặc mờ >= 0.72)
     eval_prompt = extract_jackrong_topic_header(evaluation)
     eval_prompt_norm = normalize_for_dedup(eval_prompt)
     if eval_prompt_norm and split_candidates:
@@ -426,7 +436,7 @@ def split_jackrong_topic(
         if best_idx is not None and best_score >= 0.72:
             return text[:best_idx].strip(), text[best_idx:].strip(), "eval_topic_fuzzy"
 
-    # 4. Heuristic: split at boundary whose prefix ends with an IELTS prompt question/instruction
+    # 4. Heuristic: tách tại điểm ngắt nếu phần đầu kết thúc bằng dấu `?` hoặc mẫu câu hỏi đề IELTS quen thuộc
     for idx in split_candidates:
         prefix = text[:idx].strip()
         suffix = text[idx:].strip()
@@ -434,7 +444,7 @@ def split_jackrong_topic(
             if prefix.endswith("?") or _PROMPT_END_RE.search(prefix):
                 return prefix, suffix, "prompt_end_heuristic"
 
-    # 5. Last resort: first `\n\n` if prefix looks reasonably prompt-sized
+    # 5. Phương án cuối: cắt tại dấu ngắt đầu tiên nếu độ dài phần đề nằm trong khoảng hợp lý
     if split_candidates:
         idx = split_candidates[0]
         prefix = text[:idx].strip()
@@ -451,7 +461,7 @@ def stratified_group_split(
     ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     seed: int = 42,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Deterministic stratified group split balancing total size, band distribution, and source."""
+    """Chia tập dữ liệu theo nhóm (group_id) với thuật toán tham lam cân bằng kích thước, phân bố band điểm và nguồn dữ liệu."""
     rng = random.Random(seed)
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
@@ -475,6 +485,7 @@ def stratified_group_split(
         for name, ratio in zip(split_names, ratios)
     }
 
+    # Xếp các nhóm lớn hơn trước để phân bổ tham lam đạt độ cân bằng tốt nhất
     group_items = list(groups.items())
     rng.shuffle(group_items)
     group_items.sort(key=lambda kv: len(kv[1]), reverse=True)
@@ -488,6 +499,7 @@ def stratified_group_split(
         denom = max(denom_floor, tgt)
         return ((cur + add - tgt) ** 2 - (cur - tgt) ** 2) / denom
 
+    # Với mỗi nhóm liên thông (không thể tách lẻ), chọn tập train/val/test làm tăng sai lệch tổng hợp ít nhất
     for _, grp_records in group_items:
         grp_size = len(grp_records)
         grp_bands = Counter(r["overall_band"] for r in grp_records)
@@ -521,7 +533,7 @@ def stratified_group_split(
 
 
 def _assign_leakage_groups(records: list[dict[str, Any]]) -> None:
-    """Assign connected-component group_id linking shared normalized prompt or 120-char essay prefix."""
+    """Gán `group_id` bằng thuật toán Union-Find liên kết mọi bài có chung đề bài chuẩn hóa hoặc trùng 120 ký tự đầu."""
     n = len(records)
     parent = list(range(n))
 
@@ -536,6 +548,7 @@ def _assign_leakage_groups(records: list[dict[str, Any]]) -> None:
         if ra != rb:
             parent[rb] = ra
 
+    # Gộp chung nhóm nếu hai bài chia sẻ cùng đề bài (chống rò rỉ đề) hoặc cùng phần mở bài 120 ký tự (chống rò rỉ bài viết gần giống)
     by_prompt: dict[str, int] = {}
     by_prefix: dict[str, int] = {}
     for idx, rec in enumerate(records):
@@ -556,6 +569,7 @@ def _assign_leakage_groups(records: list[dict[str, Any]]) -> None:
 
 
 def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT_DIR, seed: int = 42) -> dict[str, Any]:
+    """Tải 2 bộ dữ liệu, lọc sạch, khử trùng lặp chillies + Jackrong, chia train/val/test chống rò rỉ và xuất JSONL."""
     print(f"Loading {CHILLIES_DATASET}...")
     chillies_ds = load_dataset(CHILLIES_DATASET)
     print(f"Loading {JACKRONG_DATASET}...")
@@ -567,7 +581,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
         JACKRONG_DATASET: sum(len(jackrong_ds[s]) for s in jackrong_ds.keys()),
     }
 
-    # Pass 1: parse chillies rows (so we can also cross-reference prompts for Jackrong)
+    # Bước 1: Đọc và lọc dữ liệu nguồn chillies (đồng thời lập chỉ mục đề bài để hỗ trợ tách chuỗi Jackrong ở bước 2)
     chillies_records: list[dict[str, Any]] = []
     chillies_by_topic_norm: dict[str, tuple[str, str]] = {}
     known_prompts_norm: dict[str, str] = {}
@@ -588,6 +602,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
                 if t_norm and t_norm not in chillies_by_topic_norm:
                     chillies_by_topic_norm[t_norm] = (prompt, essay)
 
+            # Lọc bỏ các dòng thiếu bài viết, bài < 30 từ, văn bản trắc nghiệm rác hoặc thiếu đề bài
             if not essay:
                 drop_reasons["chillies_empty_essay"] += 1
                 continue
@@ -633,7 +648,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
                 }
             )
 
-    # Pass 2: parse Jackrong rows
+    # Bước 2: Đọc, tách (prompt, essay) và lọc dữ liệu nguồn Jackrong
     jackrong_records: list[dict[str, Any]] = []
     split_method_counts: Counter[str] = Counter()
 
@@ -696,7 +711,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
                 }
             )
 
-    # Diagnostic overlap analysis
+    # Bước 3: Thống kê độ giao thoa và chênh lệch điểm giữa chillies và Jackrong (phục vụ chế độ --inspect-only)
     chillies_by_essay: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in chillies_records:
         chillies_by_essay[r["_essay_norm"]].append(r)
@@ -711,7 +726,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
     chillies_only_keys = chillies_unique_keys - jackrong_unique_keys
     jackrong_only_keys = jackrong_unique_keys - chillies_unique_keys
 
-    # Compare overlapping band discrepancies
+    # Đối chiếu chênh lệch điểm band trên các bài xuất hiện ở cả hai bộ dữ liệu
     band_diffs = []
     chillies_band_vs_eval_diffs = []
     for k in overlap_keys:
@@ -764,9 +779,9 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
         print(json.dumps(diag, indent=2))
         return diag
 
-    # Deduplicate across BOTH datasets:
-    # Prefer Jackrong when an essay appears in both (has CoT reasoning, consistent 4-criteria rubric, cleaner scores).
-    # Deduplicate within each source keeping the record with highest sub-criteria completeness.
+    # Bước 4: Khử trùng lặp cả trong từng nguồn và xuyên giữa 2 nguồn (chillies + Jackrong):
+    # - Khi một bài xuất hiện ở cả 2 nguồn, ưu tiên giữ bản ghi Jackrong (có CoT reasoning, rubric 4 tiêu chí đồng nhất, nhãn sạch hơn).
+    # - Khi trùng lặp trong cùng một nguồn, giữ bản ghi có độ đầy đủ thông tin cao nhất (có reasoning, nhiều tiêu chí con nhất).
     def _completeness(rec: dict[str, Any]) -> tuple[int, int]:
         sub_cnt = sum(
             1
@@ -780,6 +795,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
     within_source_dups: Counter[str] = Counter()
     cross_source_dups = 0
 
+    # Đưa toàn bộ bản ghi Jackrong vào bảng băm trước để tự động ưu tiên Jackrong khi trùng bài
     for rec in jackrong_records:
         key = rec["_essay_norm"]
         if key not in deduped_by_essay:
@@ -789,6 +805,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
             if _completeness(rec) > _completeness(deduped_by_essay[key]):
                 deduped_by_essay[key] = rec
 
+    # Duyệt chillies: nếu trùng với Jackrong thì loại chillies (tăng cross_source_dups); nếu trùng nội bộ chillies thì chọn bản đầy đủ hơn
     for rec in chillies_records:
         key = rec["_essay_norm"]
         if key in deduped_by_essay:
@@ -812,10 +829,11 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
         rec["id"] = rec_id
         combined_records.append(rec)
 
+    # Bước 5: Gom nhóm liên thông chống rò rỉ đề bài / tiền tố bài viết rồi chia train/val/test (80/10/10)
     _assign_leakage_groups(combined_records)
     splits = stratified_group_split(combined_records, group_field="group_id", ratios=(0.8, 0.1, 0.1), seed=seed)
 
-    # Leakage verification before writing (both essay-level and prompt-level)
+    # Kiểm chứng bắt buộc trước khi ghi tệp: tuyệt đối không được trùng lặp bài luận hoặc đề bài giữa train, val và test
     split_essay_sets = {
         name: {r["_essay_norm"] for r in recs} for name, recs in splits.items()
     }
@@ -905,6 +923,7 @@ def build_datasets(inspect_only: bool = False, output_dir: Path = DEFAULT_OUTPUT
 
 
 def main() -> None:
+    """Điểm vào CLI để kiểm tra hoặc tạo bộ dữ liệu train/val/test JSONL."""
     parser = argparse.ArgumentParser(description="Prepare IELTS Writing Task 2 combined dataset.")
     parser.add_argument("--inspect-only", action="store_true", help="Inspect counts and overlap without writing files.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory for JSONL files.")

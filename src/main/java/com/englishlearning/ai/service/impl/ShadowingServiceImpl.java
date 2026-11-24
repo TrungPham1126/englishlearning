@@ -1,11 +1,13 @@
 package com.englishlearning.ai.service.impl;
 
+import com.englishlearning.ai.dto.AiCoachingAdvice;
+import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
+import com.englishlearning.ai.util.SpeakingScoreCalibrationUtils;
 import com.englishlearning.ai.service.GeminiClientService;
 import com.englishlearning.ai.service.GroqClientService;
 import com.englishlearning.ai.service.PythonIntegrationService;
 import com.englishlearning.ai.service.ShadowingService;
-
-import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
+import com.englishlearning.ai.service.SpeakingAiCoachingService;
 import com.englishlearning.ai.entity.AiEvaluation;
 import com.englishlearning.ai.entity.AiEvaluationType;
 import com.englishlearning.ai.repository.AiEvaluationRepository;
@@ -39,6 +41,13 @@ public class ShadowingServiceImpl implements ShadowingService {
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final AnalyticsService analyticsService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SpeakingAiCoachingService speakingAiCoachingService;
+
+    public void setSpeakingAiCoachingService(SpeakingAiCoachingService speakingAiCoachingService) {
+        this.speakingAiCoachingService = speakingAiCoachingService;
+    }
 
     private static final String SHADOWING_SYSTEM_INSTRUCTION = """
             You are an encouraging yet accurate Cambridge & IELTS Speaking Pronunciation Coach (calibrated to Engnovate IELTS Speaking standards).
@@ -165,7 +174,6 @@ public class ShadowingServiceImpl implements ShadowingService {
                             response.setEvaluatedBy("PYTHON_ACOUSTIC_ENGINE");
                         }
                         transcript = cleanRef;
-                        rawJson = objectMapper.writeValueAsString(response);
                         log.info("Nhận kết quả thành công từ Python acoustic microservice! EvaluatedBy: {}", response.getEvaluatedBy());
                     }
                 } catch (Exception pyEx) {
@@ -194,8 +202,21 @@ public class ShadowingServiceImpl implements ShadowingService {
                 log.info("Fallback Whisper transcript: {}", transcript);
 
                 response = evaluateTranscriptWithAi(transcript, cleanRef);
-                rawJson = objectMapper.writeValueAsString(response);
             }
+
+            if (response != null) {
+                SpeakingScoreCalibrationUtils.applyShadowingBoost(response);
+            }
+
+            // 3. AI Coach tổng hợp dữ liệu âm học vừa chấm để đưa lời khuyên cụ thể cho học viên
+            if (response != null && response.getAiCoaching() == null && speakingAiCoachingService != null) {
+                AiCoachingAdvice coaching = speakingAiCoachingService.generateShadowingCoaching(
+                        response, cleanRef, "SHADOWING");
+                if (coaching != null) {
+                    response.setAiCoaching(coaching);
+                }
+            }
+            rawJson = objectMapper.writeValueAsString(response);
 
             // 4. Lưu kết quả vào cơ sở dữ liệu và cập nhật kỹ năng học viên
             final StudentAnswer finalAnswer = answer;

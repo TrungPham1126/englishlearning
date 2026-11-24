@@ -14,6 +14,7 @@ import { getWordPhonetics } from "@/features/student/utils/ipaDictionary";
 import { playGoogleTranslateAudio } from "@/utils/googleTranslateAudio";
 import { KpiMetricGauge } from "./KpiMetricGauge";
 import { GoogleMouthAnimation } from "./GoogleMouthAnimation";
+import { AiCoachingCard } from "../speaking/AiCoachingCard";
 
 interface MouthTipGuide {
   readonly word: string;
@@ -195,6 +196,9 @@ export const ShadowingFeedbackDrawer = memo(function ShadowingFeedbackDrawer() {
             accent="amber"
           />
         </div>
+
+        {/* Lời khuyên AI Coach tổng hợp từ số liệu âm học Python */}
+        <AiCoachingCard coaching={evaluationResult.aiCoaching} compact />
 
         {/* Gợi ý khẩu hình miệng & Phân tích IPA từng từ */}
         <div className="space-y-2.5">

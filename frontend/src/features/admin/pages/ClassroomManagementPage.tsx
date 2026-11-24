@@ -191,7 +191,10 @@ export default function ClassroomManagementPage() {
             <option value="A2">A2</option>
             <option value="B1">B1</option>
             <option value="B2">B2</option>
+            <option value="C1">C1</option>
+            <option value="C2">C2</option>
             <option value="IELTS_PREP">IELTS PREP</option>
+            <option value="TOEIC_PREP">TOEIC PREP</option>
           </select>
 
           <div className="relative flex-1 sm:w-64">
@@ -326,7 +329,10 @@ export default function ClassroomManagementPage() {
                     <option value="A2">A2</option>
                     <option value="B1">B1</option>
                     <option value="B2">B2</option>
+                    <option value="C1">C1</option>
+                    <option value="C2">C2</option>
                     <option value="IELTS_PREP">IELTS PREP</option>
+                    <option value="TOEIC_PREP">TOEIC PREP</option>
                   </select>
                 </div>
                 <div>

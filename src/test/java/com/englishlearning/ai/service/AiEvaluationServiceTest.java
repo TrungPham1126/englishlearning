@@ -69,7 +69,7 @@ class AiEvaluationServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getOverallScore()).isEqualTo(92);
+        assertThat(result.getOverallScore()).isEqualTo(100);
         assertThat(result.getEvaluatedBy()).isEqualTo("PYTHON_ACOUSTIC_ENGINE");
         verify(pythonIntegrationService, times(1)).evaluatePhonetics(eq(sampleAudio), eq("audio.wav"), eq(sampleReference));
         verifyNoInteractions(geminiClientService);
@@ -101,7 +101,7 @@ class AiEvaluationServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getOverallScore()).isEqualTo(82);
+        assertThat(result.getOverallScore()).isEqualTo(90);
         assertThat(result.getIsPassed()).isTrue();
         assertThat(result.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
 
@@ -203,7 +203,7 @@ class AiEvaluationServiceTest {
         ShadowingEvaluationResponse result = aiEvaluationService.evaluateSpeech(wavHeaderPayload, "speech.wav", sampleReference);
 
         assertThat(result).isNotNull();
-        assertThat(result.getOverallScore()).isEqualTo(78);
+        assertThat(result.getOverallScore()).isEqualTo(86);
         assertThat(result.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
         verify(geminiClientService, times(1)).evaluateAudioWithInstruction(any(), eq(wavHeaderPayload), eq("audio/wav"), any());
         verify(geminiClientService, never()).generateWithSystemInstruction(any(), any());
@@ -231,7 +231,7 @@ class AiEvaluationServiceTest {
         ShadowingEvaluationResponse result = aiEvaluationService.evaluateSpeech(webmPayload, "rec.webm", sampleReference);
 
         assertThat(result).isNotNull();
-        assertThat(result.getOverallScore()).isEqualTo(70);
+        assertThat(result.getOverallScore()).isEqualTo(77);
         assertThat(result.getEvaluatedBy()).isEqualTo("GROQ_AI_FALLBACK");
         verify(groqClientService, times(1)).transcribeAudioVerbose(eq(webmPayload), eq("rec.webm"));
         verify(groqClientService, times(1)).chatCompletionJson(any(), any());
@@ -287,7 +287,7 @@ class AiEvaluationServiceTest {
 
         ShadowingEvaluationResponse pyResult = aiEvaluationService.evaluateSpeech(sampleAudio, null, sampleReference);
         assertThat(pyResult.getEvaluatedBy()).isEqualTo("PYTHON_ACOUSTIC_ENGINE");
-        assertThat(pyResult.getOverallScore()).isEqualTo(88);
+        assertThat(pyResult.getOverallScore()).isEqualTo(97);
 
         ShadowingEvaluationResponse nullScoreResp = ShadowingEvaluationResponse.builder()
                 .overallScore(null)
@@ -299,7 +299,7 @@ class AiEvaluationServiceTest {
 
         ShadowingEvaluationResponse geminiResult = aiEvaluationService.evaluateSpeech(sampleAudio, "audio.wav", sampleReference);
         assertThat(geminiResult.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
-        assertThat(geminiResult.getOverallScore()).isEqualTo(79);
+        assertThat(geminiResult.getOverallScore()).isEqualTo(87);
         verify(geminiClientService).generateWithSystemInstruction(anyString(), anyString());
     }
 
@@ -318,7 +318,7 @@ class AiEvaluationServiceTest {
 
         ShadowingEvaluationResponse textFallback = aiEvaluationService.evaluateSpeech(realWav, "speech.wav", sampleReference);
         assertThat(textFallback.getEvaluatedBy()).isEqualTo("GEMINI_AI_FALLBACK");
-        assertThat(textFallback.getOverallScore()).isEqualTo(84);
+        assertThat(textFallback.getOverallScore()).isEqualTo(92);
         verify(geminiClientService).generateWithSystemInstruction(anyString(), anyString());
 
         when(geminiClientService.evaluateAudioWithInstruction(anyString(), eq(realWav), eq("audio/wav"), anyString()))
@@ -330,7 +330,7 @@ class AiEvaluationServiceTest {
 
         ShadowingEvaluationResponse groqResult = aiEvaluationService.evaluateSpeech(realWav, "speech.wav", sampleReference);
         assertThat(groqResult.getEvaluatedBy()).isEqualTo("GROQ_AI_FALLBACK");
-        assertThat(groqResult.getOverallScore()).isEqualTo(74);
+        assertThat(groqResult.getOverallScore()).isEqualTo(81);
         verify(groqClientService).chatCompletionJson(anyString(), anyString());
     }
 
@@ -347,8 +347,8 @@ class AiEvaluationServiceTest {
 
         ShadowingEvaluationResponse offline = aiEvaluationService.evaluateSpeech(realWav, "voice.wav", "Hello — world !");
         assertThat(offline.getEvaluatedBy()).isEqualTo("RULE_BASED_OFFLINE_FALLBACK");
-        assertThat(offline.getOverallScore()).isEqualTo(75);
-        assertThat(offline.getIsPassed()).isFalse();
+        assertThat(offline.getOverallScore()).isEqualTo(83);
+        assertThat(offline.getIsPassed()).isTrue();
         assertThat(offline.getSentenceTokens()).hasSize(2);
         assertThat(offline.getKpi().getCompleteness()).isEqualTo(100);
     }

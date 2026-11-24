@@ -1,8 +1,9 @@
-"""Evaluation utilities and CLI for IELTS Writing Task 2 scoring models.
+"""Tiện ích đánh giá và giao diện dòng lệnh (CLI) cho các mô hình chấm điểm IELTS Writing Task 2.
 
-Computes MAE, RMSE, Pearson r, Spearman rho, Quadratic Weighted Kappa (QWK on
-0.5-rounded bands 1.0..9.0 mapped to classes 0..16), Exact Match %, and
-Within-0.5-Band % on validation and test JSONL splits.
+Tính toán các chỉ số đánh giá gồm MAE, RMSE, hệ số tương quan Pearson r, Spearman rho,
+Quadratic Weighted Kappa (QWK trên thang band làm tròn 0.5 từ 1.0..9.0 ánh xạ sang 17 lớp 0..16),
+tỷ lệ đoán chính xác tuyệt đối (Exact Match %) và tỷ lệ sai lệch trong khoảng 0.5 / 1.0 band
+trên các tập dữ liệu kiểm định (val) và kiểm thử (test) định dạng JSONL.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import numpy as np
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import cohen_kappa_score, mean_absolute_error, root_mean_squared_error
 
+# 4 tiêu chí chấm điểm thành phần chuẩn của IELTS Writing
 SUBCRITERIA_KEYS = (
     "task_response",
     "coherence_cohesion",
@@ -24,14 +26,16 @@ SUBCRITERIA_KEYS = (
     "grammatical_range",
 )
 
-BAND_CLASSES = list(range(17))  # 1.0, 1.5, ..., 9.0 -> 0..16
+# Danh sách 17 lớp rời rạc phục vụ tính QWK: 1.0, 1.5, ..., 9.0 -> 0..16
+BAND_CLASSES = list(range(17))
 
 
 def round_to_half_band(values: np.ndarray | Iterable[float] | float) -> np.ndarray | float:
-    """Clip scores to [1.0, 9.0] and round half-up to the nearest 0.5 IELTS band."""
+    """Giới hạn điểm trong [1.0, 9.0] và làm tròn nửa lên (half-up) về bội số 0.5 gần nhất."""
     scalar = np.ndim(values) == 0
     arr = np.asarray(values, dtype=np.float64)
     clipped = np.clip(arr, 1.0, 9.0)
+    # Nhân 2, cộng 0.5 rồi lấy floor để làm tròn half-up theo bước 0.5
     rounded = np.floor(clipped * 2.0 + 0.5) / 2.0
     rounded = np.clip(rounded, 1.0, 9.0)
     if scalar:
@@ -40,13 +44,14 @@ def round_to_half_band(values: np.ndarray | Iterable[float] | float) -> np.ndarr
 
 
 def band_to_class(values: np.ndarray | Iterable[float]) -> np.ndarray:
-    """Map IELTS bands in [1.0, 9.0] (0.5 increments) to integer classes 0..16."""
+    """Ánh xạ điểm band IELTS trong [1.0, 9.0] (bước nhảy 0.5) sang nhãn lớp nguyên 0..16."""
     rounded = np.asarray(round_to_half_band(values), dtype=np.float64)
     classes = np.rint((rounded - 1.0) * 2.0).astype(np.int64)
     return np.clip(classes, 0, 16)
 
 
 def _safe_corr(fn: Any, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Tính hệ số tương quan an toàn, trả về 0.0 nếu mảng quá ngắn hoặc phương sai bằng 0."""
     if len(y_true) < 2 or np.std(y_true) < 1e-12 or np.std(y_pred) < 1e-12:
         return 0.0
     res = fn(y_true, y_pred)
@@ -55,7 +60,7 @@ def _safe_corr(fn: Any, y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def compute_metrics(y_true: Iterable[float], y_pred: Iterable[float]) -> dict[str, float | int]:
-    """Compute regression and IELTS-band agreement metrics."""
+    """Tính toán đầy đủ các chỉ số hồi quy (MAE, RMSE, tương quan) và độ đồng thuận band IELTS (QWK, Exact, Within 0.5/1.0)."""
     yt = np.asarray(list(y_true), dtype=np.float64)
     yp_raw = np.clip(np.asarray(list(y_pred), dtype=np.float64), 1.0, 9.0)
     if len(yt) == 0:
@@ -73,11 +78,13 @@ def compute_metrics(y_true: Iterable[float], y_pred: Iterable[float]) -> dict[st
             "within_1_0_pct": 0.0,
         }
 
+    # Làm tròn nhãn thật và giá trị dự đoán về bước 0.5 trước khi tính QWK và sai lệch rời rạc
     yt_round = np.asarray(round_to_half_band(yt), dtype=np.float64)
     yp_round = np.asarray(round_to_half_band(yp_raw), dtype=np.float64)
 
     yt_cls = band_to_class(yt_round)
     yp_cls = band_to_class(yp_round)
+    # Tránh lỗi chia cho 0 trong cohen_kappa_score khi toàn bộ mẫu chỉ rơi vào 1 lớp duy nhất
     if len(np.unique(yt_cls)) == 1 and len(np.unique(yp_cls)) == 1:
         qwk = 1.0 if yt_cls[0] == yp_cls[0] else 0.0
     else:
@@ -102,7 +109,7 @@ def compute_metrics(y_true: Iterable[float], y_pred: Iterable[float]) -> dict[st
 
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
-    """Load records from a JSONL file."""
+    """Đọc danh sách bản ghi JSON từ tệp JSONL (mỗi dòng một đối tượng JSON)."""
     records: list[dict[str, Any]] = []
     with Path(path).open("r", encoding="utf-8") as f:
         for line in f:
@@ -116,11 +123,12 @@ def evaluate_predictions(
     records: list[dict[str, Any]],
     predictions: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Compute overall, per-source, and per-subcriterion metrics for aligned predictions."""
+    """Tính chỉ số đánh giá tổng thể (overall), tách theo nguồn dữ liệu (by_source) và theo từng tiêu chí con (subcriteria)."""
     y_true_all: list[float] = []
     y_pred_all: list[float] = []
     by_source: dict[str, tuple[list[float], list[float]]] = {}
 
+    # Gom cặp điểm thật và điểm dự đoán thô (ưu tiên overall_band_raw để đánh giá chính xác MAE/RMSE liên tục)
     for rec, pred in zip(records, predictions):
         yt = rec.get("overall_band")
         yp = pred.get("overall_band_raw", pred.get("overall_band"))
@@ -144,6 +152,7 @@ def evaluate_predictions(
         "subcriteria": {},
     }
 
+    # Đánh giá riêng cho 4 tiêu chí thành phần (TR, CC, LR, GRA) trên các bản ghi có nhãn
     for key in SUBCRITERIA_KEYS:
         yt_sub: list[float] = []
         yp_sub: list[float] = []
@@ -161,6 +170,7 @@ def evaluate_predictions(
 
 
 def _format_metrics_row(label: str, m: dict[str, Any]) -> str:
+    """Định dạng một dòng bảng tóm tắt các chỉ số đánh giá để in ra terminal."""
     return (
         f"{label:<22} | n={m['n']:<5} | MAE={m['mae']:.4f} | RMSE={m['rmse']:.4f} | "
         f"Pearson={m['pearson']:.4f} | Spearman={m['spearman']:.4f} | QWK={m['qwk']:.4f} | "
@@ -169,6 +179,7 @@ def _format_metrics_row(label: str, m: dict[str, Any]) -> str:
 
 
 def print_evaluation_summary(split_name: str, report: dict[str, Any]) -> None:
+    """In báo cáo đánh giá tổng thể, theo nguồn và theo 4 tiêu chí thành phần ra màn hình."""
     print(f"\n=== Evaluation [{split_name}] ===")
     print(_format_metrics_row("overall", report["overall"]))
     for src, m in report.get("by_source", {}).items():
@@ -178,11 +189,13 @@ def print_evaluation_summary(split_name: str, report: dict[str, Any]) -> None:
 
 
 def _resolve_default_paths() -> tuple[Path, Path]:
+    """Xác định đường dẫn mặc định tới thư mục data/ và models/ tương đối theo vị trí tệp hiện tại."""
     base_dir = Path(__file__).resolve().parent
     return base_dir / "data", base_dir / "models"
 
 
 def main() -> None:
+    """Điểm vào CLI cho phép đánh giá mô hình baseline/transformer/hybrid/best trên tập val/test."""
     data_dir, models_dir = _resolve_default_paths()
 
     parser = argparse.ArgumentParser(description="Evaluate IELTS Writing Task 2 models.")
@@ -230,6 +243,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Xác định các tập dữ liệu cần đánh giá (từ --data hoặc mặc định val.jsonl / test.jsonl)
     split_paths: dict[str, Path] = {}
     if args.data:
         p = Path(args.data)
@@ -246,6 +260,7 @@ def main() -> None:
 
     loaded_splits = {name: load_jsonl(path) for name, path in split_paths.items()}
 
+    # Nhánh 1: Đánh giá trực tiếp từ tệp dự đoán đã tính sẵn (--preds)
     if args.preds:
         preds_records = load_jsonl(args.preds)
         if len(loaded_splits) != 1:
@@ -261,9 +276,11 @@ def main() -> None:
             Path(args.json_out).write_text(json.dumps(report, indent=2), encoding="utf-8")
         return
 
-    from infer import WritingScorer  # lazy import to avoid circularity during training
+    # Import lười (lazy import) WritingScorer để tránh vòng lặp import trong lúc huấn luyện
+    from infer import WritingScorer
 
     root_models = Path(args.model_dir)
+    # Nhánh 2: Khi chọn --model-type all, tự động quét toàn bộ mô hình đã huấn luyện hiện có
     if args.model_type == "all":
         candidate_types = []
         if (root_models / "baseline" / "baseline_bundle.joblib").exists():
@@ -279,6 +296,7 @@ def main() -> None:
     else:
         candidate_types = [args.model_type]
 
+    # Chạy suy luận hàng loạt (tắt feedback để đánh giá nhanh) rồi tổng hợp chỉ số cho từng mô hình
     full_report: dict[str, Any] = {}
     for mtype in candidate_types:
         scorer = WritingScorer(model_dir=root_models, model_type=mtype)

@@ -2,11 +2,14 @@ package com.englishlearning.ai.service.impl;
 
 
 
+import com.englishlearning.ai.dto.AiCoachingAdvice;
+
 import com.englishlearning.ai.dto.AiExamDraftResponse;
 
 import com.englishlearning.ai.dto.AiExamGenerateRequest;
 
 import com.englishlearning.ai.dto.ShadowingEvaluationResponse;
+import com.englishlearning.ai.util.SpeakingScoreCalibrationUtils;
 
 import com.englishlearning.ai.service.AiLabService;
 
@@ -15,6 +18,8 @@ import com.englishlearning.ai.service.GeminiClientService;
 import com.englishlearning.ai.service.GroqClientService;
 
 import com.englishlearning.ai.service.PythonIntegrationService;
+
+import com.englishlearning.ai.service.SpeakingAiCoachingService;
 
 
 
@@ -132,6 +137,13 @@ public class AiLabServiceImpl implements AiLabService {
     @Value("${python.writing-service.enrich-feedback-with-llm:false}")
     private boolean enrichLocalWritingWithLlm = false;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SpeakingAiCoachingService speakingAiCoachingService;
+
+    public void setSpeakingAiCoachingService(SpeakingAiCoachingService speakingAiCoachingService) {
+        this.speakingAiCoachingService = speakingAiCoachingService;
+    }
+
 
 
     private static final String SPEAKING_SYSTEM_INSTRUCTION = """
@@ -148,7 +160,7 @@ public class AiLabServiceImpl implements AiLabService {
             3. Mathematical Consistency:
                - "overallBand" MUST equal the average of the rubric scores rounded to the nearest 0.5 (e.g. 4.5, 5.0, 5.5, 6.0, 6.5, 7.0).
             4. Detailed Pedagogical Feedback in Vietnamese:
-               - Every mistake explanation, vocabulary/grammar suggestion, and "generalFeedback" MUST be in clear Vietnamese citing concrete phrases from the transcript.
+               - Every mistake explanation, vocabulary/grammar suggestion, "generalFeedback", and "aiCoaching" MUST be in clear Vietnamese citing concrete phrases from the transcript and exact acoustic findings (weak words, IPA phonemes, WPM, or omitted words) when Python acoustic data is provided.
             5. Return strictly valid JSON conforming to the requested schema with NO markdown wrappers.
             """;
 
@@ -486,7 +498,14 @@ public class AiLabServiceImpl implements AiLabService {
                           "recommendation": "Gợi ý từ vựng/collocations tự nhiên hơn bằng tiếng Việt"
                         }
                       ],
-                      "generalFeedback": "Nhận xét tổng thể chặt chẽ, khách quan bằng tiếng Việt"
+                      "generalFeedback": "Nhận xét tổng thể chặt chẽ, khách quan bằng tiếng Việt",
+                      "aiCoaching": {
+                        "summary": "Nhận xét ngắn gọn 1-2 câu về phát âm, tốc độ nói và cách trả lời dựa trên dữ liệu Python",
+                        "actionTips": [
+                          "Gợi ý sửa cụ thể từ phát âm yếu / âm vị IPA / tốc độ WPM hoặc diễn đạt bằng tiếng Việt"
+                        ],
+                        "practiceDrill": "1 bài tập thực hành nhanh áp dụng ngay cho câu trả lời vừa nói"
+                      }
                     }
                     """,
                     detectedMode,
@@ -810,29 +829,58 @@ public class AiLabServiceImpl implements AiLabService {
         if (phoneticResult == null) {
             return "Không có dữ liệu âm học Python; tự đánh giá độ rõ phát âm từ bản bóc băng.";
         }
+        if (speakingAiCoachingService != null) {
+            return speakingAiCoachingService.buildDetailedAcousticSummary(phoneticResult);
+        }
         ShadowingEvaluationResponse.KpiMetrics kpi = phoneticResult.getKpi();
         int pron = (kpi != null && kpi.getPronunciation() != null) ? kpi.getPronunciation() : 0;
         int fluency = (kpi != null && kpi.getFluency() != null) ? kpi.getFluency() : 0;
+        int comp = (kpi != null && kpi.getCompleteness() != null) ? kpi.getCompleteness() : 0;
         int prosody = (kpi != null && kpi.getProsody() != null) ? kpi.getProsody() : 0;
         int wpm = (kpi != null && kpi.getWordsPerMinute() != null) ? kpi.getWordsPerMinute() : 0;
 
-        String weakWordsText = "Không phát hiện từ phát âm yếu (<70%).";
+        String missingWordsText = "Không có";
+        String weakWordsText = "Không phát hiện từ phát âm yếu (<80%).";
         if (phoneticResult.getWordRows() != null && !phoneticResult.getWordRows().isEmpty()) {
+            java.util.List<String> missingList = phoneticResult.getWordRows().stream()
+                    .filter(w -> w.getWord() != null
+                            && ("MISSING".equalsIgnoreCase(w.getWordStatus())
+                                    || (w.getScore() != null && w.getScore() == 0)))
+                    .limit(10)
+                    .map(ShadowingEvaluationResponse.WordPhonemeDetail::getWord)
+                    .toList();
+            if (!missingList.isEmpty()) {
+                missingWordsText = String.join(", ", missingList);
+            }
+
             java.util.List<String> weakList = phoneticResult.getWordRows().stream()
-                    .filter(w -> w.getWord() != null && w.getScore() != null && w.getScore() > 0 && w.getScore() < 70)
+                    .filter(w -> w.getWord() != null
+                            && !"MISSING".equalsIgnoreCase(w.getWordStatus())
+                            && w.getScore() != null && w.getScore() > 0 && w.getScore() < 80)
                     .sorted(java.util.Comparator.comparingInt(ShadowingEvaluationResponse.WordPhonemeDetail::getScore))
                     .limit(6)
-                    .map(w -> w.getWord() + " (" + w.getScore() + "%)")
+                    .map(w -> {
+                        String phStr = (w.getPhonemes() == null || w.getPhonemes().isEmpty()) ? ""
+                                : w.getPhonemes().stream()
+                                        .filter(p -> p.getScore() != null && p.getScore() < 80)
+                                        .limit(3)
+                                        .map(p -> (p.getIpa() != null ? p.getIpa() : "?") + " " + p.getScore() + "%"
+                                                + (p.getNote() != null && !p.getNote().isBlank() ? " - " + p.getNote() : ""))
+                                        .collect(java.util.stream.Collectors.joining(", "));
+                        return phStr.isBlank()
+                                ? w.getWord() + " (" + w.getScore() + "%)"
+                                : w.getWord() + " (" + w.getScore() + "%): [" + phStr + "]";
+                    })
                     .toList();
             if (!weakList.isEmpty()) {
-                weakWordsText = String.join(", ", weakList);
+                weakWordsText = String.join("; ", weakList);
             }
         }
 
         return String.format(
-                "- Overall Acoustic Score: %d/100 | Pronunciation: %d/100 | Fluency: %d/100 | Prosody: %d/100 | Speed: %d WPM\n- Weakly pronounced words: %s",
+                "- Overall Acoustic Score: %d/100 | Pronunciation: %d/100 | Fluency: %d/100 | Completeness: %d%% | Prosody: %d/100 | Speed: %d WPM\n- Từ bỏ sót: %s\n- Từ & âm vị IPA yếu: %s",
                 phoneticResult.getOverallScore() != null ? phoneticResult.getOverallScore() : 0,
-                pron, fluency, prosody, wpm, weakWordsText);
+                pron, fluency, comp, prosody, wpm, missingWordsText, weakWordsText);
     }
 
     private String generateSpeakingEvaluationJsonWithFallback(String userPrompt) {
@@ -941,7 +989,6 @@ public class AiLabServiceImpl implements AiLabService {
         boolean isOffTopic = obj.path("isOffTopic").asBoolean(false);
 
         if (phoneticResult != null) {
-            obj.set("phoneticEvaluation", objectMapper.valueToTree(phoneticResult));
             ShadowingEvaluationResponse.KpiMetrics kpi = phoneticResult.getKpi();
             int acousticPron = (kpi != null && kpi.getPronunciation() != null) ? kpi.getPronunciation() : 0;
             int acousticOverall = phoneticResult.getOverallScore() != null ? phoneticResult.getOverallScore() : 0;
@@ -956,11 +1003,36 @@ public class AiLabServiceImpl implements AiLabService {
                 obj.put("wordsPerMinute", kpi.getWordsPerMinute());
             }
             appendPythonPronunciationMistakes(obj, phoneticResult);
+            syncSpeakingAiCoaching(obj, phoneticResult, cleanTranscript, detectedMode);
+            ShadowingEvaluationResponse phoneticToPersist = phoneticResult;
+            if (!isOffTopic) {
+                try {
+                    ShadowingEvaluationResponse phoneticCopy = objectMapper.treeToValue(
+                            objectMapper.valueToTree(phoneticResult), ShadowingEvaluationResponse.class);
+                    if (phoneticCopy != null) {
+                        phoneticToPersist = SpeakingScoreCalibrationUtils.applyShadowingBoost(phoneticCopy);
+                    }
+                } catch (Exception copyEx) {
+                    log.warn("Không thể sao chép phoneticResult để chuẩn hóa điểm +10%: {}", copyEx.getMessage());
+                }
+            }
+            obj.set("phoneticEvaluation", objectMapper.valueToTree(phoneticToPersist));
         }
 
         JsonNode taskNode = obj.path("taskAchievement");
         boolean hasTaskScore = taskNode.isObject() && taskNode.has("score") && taskNode.get("score").isNumber();
         double taskScore = hasTaskScore ? clampBand(taskNode.path("score").asDouble(0.0)) : 0.0;
+
+        if (!isOffTopic) {
+            pron = SpeakingScoreCalibrationUtils.boostBandRaw(pron);
+            flu = SpeakingScoreCalibrationUtils.boostBandRaw(flu);
+            lex = SpeakingScoreCalibrationUtils.boostBandRaw(lex);
+            gram = SpeakingScoreCalibrationUtils.boostBandRaw(gram);
+            coh = SpeakingScoreCalibrationUtils.boostBandRaw(coh);
+            if (hasTaskScore) {
+                taskScore = SpeakingScoreCalibrationUtils.boostBandRaw(taskScore);
+            }
+        }
 
         double maxCap = 9.0;
         if (isOffTopic) {
@@ -1102,6 +1174,47 @@ public class AiLabServiceImpl implements AiLabService {
                             row.getWord(), row.getScore(), String.join("; ", noteParts));
             m.put("explanation", explain);
             mistakesArr.add(m);
+        }
+    }
+
+    private void syncSpeakingAiCoaching(
+            com.fasterxml.jackson.databind.node.ObjectNode obj,
+            ShadowingEvaluationResponse phoneticResult,
+            String cleanTranscript,
+            String detectedMode) {
+        if (phoneticResult == null) {
+            return;
+        }
+        JsonNode existingCoaching = obj.path("aiCoaching");
+        boolean hasLlmCoaching = existingCoaching.isObject()
+                && (!existingCoaching.path("summary").asText("").isBlank()
+                        || (existingCoaching.path("actionTips").isArray() && !existingCoaching.path("actionTips").isEmpty()));
+
+        if (hasLlmCoaching) {
+            com.fasterxml.jackson.databind.node.ObjectNode coachingObj =
+                    (com.fasterxml.jackson.databind.node.ObjectNode) existingCoaching;
+            if (coachingObj.path("generatedBy").asText("").isBlank()) {
+                coachingObj.put("generatedBy", "IELTS_SPEAKING_AI_COACH");
+            }
+            if (phoneticResult.getAiCoaching() == null) {
+                try {
+                    AiCoachingAdvice parsedAdvice = objectMapper.treeToValue(coachingObj, AiCoachingAdvice.class);
+                    if (parsedAdvice != null) {
+                        phoneticResult.setAiCoaching(parsedAdvice);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            return;
+        }
+
+        if (speakingAiCoachingService != null) {
+            AiCoachingAdvice generated = speakingAiCoachingService.generateShadowingCoaching(
+                    phoneticResult, cleanTranscript, detectedMode);
+            if (generated != null) {
+                phoneticResult.setAiCoaching(generated);
+                obj.set("aiCoaching", objectMapper.valueToTree(generated));
+            }
         }
     }
 
@@ -2628,15 +2741,15 @@ public class AiLabServiceImpl implements AiLabService {
 
             String wordCountGuideline = switch (cefr) {
 
-                case "A1" -> "100-140 words. Basic everyday vocabulary, simple sentence structures, present tenses, clear familiar topics.";
+                case "A1" -> "80-110 words. Basic everyday vocabulary, simple sentence structures, present tenses, clear familiar topics.";
 
-                case "A2" -> "150-200 words. Past simple, future intentions, basic social interactions, directions, shopping, travel.";
+                case "A2" -> "110-150 words. Past simple, future intentions, basic social interactions, directions, shopping, travel.";
 
-                case "B1" -> "200-260 words. Announcements, travel anecdotes, work meetings, cause-and-effect connectors, varied tenses.";
+                case "B1" -> "140-180 words. Concise announcements, travel anecdotes, work meetings, or 6-8 crisp dialogue turns with cause-and-effect connectors.";
 
-                case "B2" -> "260-350 words. Engaging presentations, debates, campus discussions, natural idiomatic expressions, complex sentences.";
+                case "B2" -> "170-220 words. Focused presentations, campus discussions, natural idiomatic expressions, complex sentences.";
 
-                default -> "350-450 words. Academic lectures, scientific discourse, subtle opinions, formal registers, higher-level vocabulary.";
+                default -> "200-260 words. Academic lectures, scientific discourse, subtle opinions, formal registers, higher-level vocabulary.";
 
             };
 
@@ -3006,13 +3119,15 @@ public class AiLabServiceImpl implements AiLabService {
 
                     1. 100%% TOPIC ANCHORING: The sentences to be assembled MUST showcase the target grammar topic ("%s") and standard English word order.
 
-                    2. NON-EXTREME & DIVERSE: Vary sentence lengths and structures (affirmative, negative, Wh- questions, sentences with frequency adverbs or time markers).
+                    2. NATURAL SEMANTICS: Every sentence must be 100%% semantically logical and natural (never use inanimate nouns as agents of human/animate verbs).
 
-                    3. HIGH CREATIVITY: Interesting real-world contexts (wildlife, music, technology, sports, travel).
+                    3. EXACT WORD PARITY: Every single word in "correctAnswer" (including auxiliaries like do/does/did/not and exact inflections) MUST appear verbatim as a slash-separated token in "prompt", with zero missing, extra, or altered words.
 
-                    4. QUESTION FORMAT:
+                    4. DIVERSE STRUCTURES: Vary sentence lengths and structures (affirmative, negative, Wh- questions, frequency adverbs or time markers).
 
-                       - "prompt": The words of the sentence scrambled in random order, separated by slashes '/': "Sắp xếp các từ sau thành câu hoàn chỉnh đúng cấu trúc: word1 / word2 / word3 / word4 / ."
+                    5. QUESTION FORMAT:
+
+                       - "prompt": The exact words of "correctAnswer" scrambled in random order, separated by slashes '/': "Sắp xếp các từ sau thành câu hoàn chỉnh đúng cấu trúc: word1 / word2 / word3 / word4 / ."
 
                        - "correctAnswer": The exact, natural English sentence with correct capitalization and punctuation.
 
@@ -5097,9 +5212,16 @@ public class AiLabServiceImpl implements AiLabService {
 
                         }
 
+                        final String scriptToSynthesize = mainPassage;
+
+                        java.util.concurrent.CompletableFuture<String> ttsFuture = null;
+
                         try {
 
-                            sharedKokoroAudioUrl = exerciseAudioService.synthesizeRawScriptToUrl(mainPassage, "af_heart", 1.0);
+                            ttsFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                                    () -> exerciseAudioService.synthesizeRawScriptToUrl(scriptToSynthesize, "af_heart", 1.0));
+
+                            sharedKokoroAudioUrl = ttsFuture.get(45, java.util.concurrent.TimeUnit.SECONDS);
 
                             if (sharedKokoroAudioUrl != null && !sharedKokoroAudioUrl.isBlank() && root.isObject()) {
 
@@ -5108,6 +5230,14 @@ public class AiLabServiceImpl implements AiLabService {
                                 ((com.fasterxml.jackson.databind.node.ObjectNode) root).put("mediaUrl", sharedKokoroAudioUrl);
 
                             }
+
+                        } catch (java.util.concurrent.TimeoutException timeoutEx) {
+
+                            if (ttsFuture != null) {
+                                ttsFuture.cancel(true);
+                            }
+
+                            log.warn("Quá thời gian 45s khi tạo trước Kokoro audio cho listeningPassage; vẫn trả về bài tập kèm kịch bản nghe để tránh timeout.");
 
                         } catch (Exception ttsEx) {
 
@@ -6001,6 +6131,33 @@ public class AiLabServiceImpl implements AiLabService {
                     changed = true;
                 }
 
+                // 4b. Deterministic Word Arrangement token-parity guard: ensure every word of correctAnswer exists in scrambled tokens
+                boolean isWordArrangement = "FILL_IN_BLANK".equalsIgnoreCase(qType)
+                        && (upperType.contains("WORD_ARRANGEMENT") || upperType.contains("UNSCRAMBLE")
+                                || prompt.toLowerCase().contains("sắp xếp các từ"));
+                if (isWordArrangement && !rawCorrect.isBlank()) {
+                    java.util.List<String> expectedTokens = tokenizeSentenceForArrangement(rawCorrect);
+                    if (expectedTokens.size() >= 2) {
+                        int colonIdx = prompt.lastIndexOf(':');
+                        String prefix = colonIdx >= 0
+                                ? prompt.substring(0, colonIdx + 1).trim() + " "
+                                : "Sắp xếp các từ sau thành câu hoàn chỉnh đúng cấu trúc: ";
+                        String body = colonIdx >= 0 ? prompt.substring(colonIdx + 1).trim() : prompt;
+                        java.util.List<String> actualTokens = new java.util.ArrayList<>();
+                        for (String rawTok : body.split("\\s*/\\s*")) {
+                            String trimmed = rawTok.trim();
+                            if (!trimmed.isEmpty()) {
+                                actualTokens.add(trimmed);
+                            }
+                        }
+                        if (!hasSameNormalizedWordMultiset(actualTokens, expectedTokens)) {
+                            java.util.List<String> scrambled = deterministicScrambleTokens(expectedTokens);
+                            qObj.put("prompt", prefix + String.join(" / ", scrambled));
+                            changed = true;
+                        }
+                    }
+                }
+
                 // 5. Explanation non-blank fallback
                 String expl = qObj.path("explanation").asText("").trim();
                 if (expl.isBlank() && !rawCorrect.isBlank()) {
@@ -6223,6 +6380,78 @@ public class AiLabServiceImpl implements AiLabService {
             }
         }
         return root;
+    }
+
+    private java.util.List<String> tokenizeSentenceForArrangement(String sentence) {
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        if (sentence == null || sentence.isBlank()) {
+            return tokens;
+        }
+        String[] parts = sentence.trim().split("\\s+");
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i].trim();
+            if (part.isEmpty()) continue;
+            if (i == parts.length - 1 && part.length() > 1 && part.matches(".*[A-Za-z0-9][.?!]+$")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.+?)([.?!]+)$").matcher(part);
+                if (m.find()) {
+                    tokens.add(m.group(1));
+                    tokens.add(m.group(2));
+                    continue;
+                }
+            }
+            tokens.add(part);
+        }
+        return tokens;
+    }
+
+    private boolean hasSameNormalizedWordMultiset(java.util.List<String> actualTokens, java.util.List<String> expectedTokens) {
+        java.util.List<String> actualWords = new java.util.ArrayList<>();
+        for (String t : actualTokens) {
+            String w = t.toLowerCase(java.util.Locale.ROOT).replaceAll("^[\\p{Punct}\\s]+|[\\p{Punct}\\s]+$", "");
+            if (!w.isEmpty()) {
+                actualWords.add(w);
+            }
+        }
+        java.util.List<String> expectedWords = new java.util.ArrayList<>();
+        for (String t : expectedTokens) {
+            String w = t.toLowerCase(java.util.Locale.ROOT).replaceAll("^[\\p{Punct}\\s]+|[\\p{Punct}\\s]+$", "");
+            if (!w.isEmpty()) {
+                expectedWords.add(w);
+            }
+        }
+        if (expectedWords.isEmpty()) {
+            return true;
+        }
+        java.util.Collections.sort(actualWords);
+        java.util.Collections.sort(expectedWords);
+        return actualWords.equals(expectedWords);
+    }
+
+    private java.util.List<String> deterministicScrambleTokens(java.util.List<String> expectedTokens) {
+        java.util.List<String> words = new java.util.ArrayList<>(expectedTokens);
+        String trailingPunct = null;
+        if (!words.isEmpty() && words.get(words.size() - 1).matches("^[.?!]+$")) {
+            trailingPunct = words.remove(words.size() - 1);
+        }
+        java.util.List<String> scrambled = new java.util.ArrayList<>();
+        if (words.size() >= 2) {
+            for (int i = 1; i < words.size(); i += 2) {
+                scrambled.add(words.get(i));
+            }
+            int lastEven = (words.size() - 1) % 2 == 0 ? words.size() - 1 : words.size() - 2;
+            for (int i = lastEven; i >= 0; i -= 2) {
+                scrambled.add(words.get(i));
+            }
+            if (scrambled.equals(words)) {
+                java.util.Collections.rotate(scrambled, 1);
+            }
+        } else {
+            scrambled.addAll(words);
+        }
+        if (trailingPunct != null) {
+            scrambled.add(trailingPunct);
+        }
+        return scrambled;
     }
 
 }

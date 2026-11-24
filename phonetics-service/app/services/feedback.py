@@ -1,3 +1,10 @@
+"""
+Module tổng hợp nhận xét và gợi ý cải thiện độ trôi chảy khi nói.
+
+Chuyển đổi các số liệu đo đạc kỹ thuật (tốc độ phát âm, các khoảng ngắt nghỉ dài, số lần ngập ngừng,
+độ tin cậy của bản ghi) thành các nhận xét ngắn gọn, mang tính xây dựng và dễ hiểu cho người học.
+"""
+
 from typing import List
 from app.models.alignment import PauseEvent
 from app.schemas import FluencyFeedbackItem, FeedbackSeverity, WordSchema
@@ -5,12 +12,11 @@ from app.schemas import FluencyFeedbackItem, FeedbackSeverity, WordSchema
 
 class FeedbackGenerator:
     """
-    Feedback Engine for Speech Assessment.
-    Generates actionable, evidence-based feedback on:
-    - Vowel formant & jaw/tongue positioning
-    - Pauses, hesitations, and rhythm
-    - Speaking rate & pacing
-    Suppresses absolute judgments if confidence is low.
+    Bộ máy tạo nhận xét cho hệ thống đánh giá phát âm.
+    Sinh ra các phản hồi cụ thể, dựa trên bằng chứng đo đạc về:
+    - Tốc độ phát âm và nhịp điệu đọc (Speaking rate & pacing)
+    - Các khoảng ngắt nghỉ dài, sự ngập ngừng và độ liền mạch của câu
+    Tự động hạn chế đưa ra phán xét khắt khe nếu độ tin cậy của bản thu âm quá thấp.
     """
 
     def generate_fluency_feedback(
@@ -21,9 +27,10 @@ class FeedbackGenerator:
         speed_target_max: float,
         confidence: float
     ) -> List[FluencyFeedbackItem]:
-        """Generates structured fluency feedback items."""
+        """Tổng hợp danh sách các nhận xét có cấu trúc về độ trôi chảy (tốc độ nói, ngắt nghỉ dài và ngập ngừng)."""
         feedback_items: List[FluencyFeedbackItem] = []
 
+        # Nếu độ tin cậy quá thấp (< 0.40), tránh chấm xét sai mà khuyên người dùng thu âm lại ở môi trường yên tĩnh
         if confidence < 0.40:
             feedback_items.append(
                 FluencyFeedbackItem(
@@ -34,7 +41,7 @@ class FeedbackGenerator:
             )
             return feedback_items
 
-        # 1. Articulation Rate Feedback
+        # 1. Nhận xét về tốc độ phát âm (số âm tiết mỗi giây) so với vùng tốc độ tự nhiên mục tiêu
         if articulation_rate < speed_target_min - 0.8:
             feedback_items.append(
                 FluencyFeedbackItem(
@@ -60,12 +67,13 @@ class FeedbackGenerator:
                 )
             )
 
-        # 2. Pause & Hesitation Feedback
+        # 2. Nhận xét về các khoảng ngắt nghỉ bất thường và tình trạng ngập ngừng giữa câu
         long_pauses = [p for p in pause_events if p.pause_type == "long_pause"]
         hesitations = [p for p in pause_events if p.pause_type == "hesitation"]
 
         if long_pauses:
-            for p in long_pauses[:2]:  # Limit to top 2 long pauses
+            # Giới hạn chỉ báo tối đa 2 khoảng ngắt dài nhất để người học dễ tập trung sửa lỗi
+            for p in long_pauses[:2]:
                 feedback_items.append(
                     FluencyFeedbackItem(
                         type="long_pause",
@@ -75,6 +83,7 @@ class FeedbackGenerator:
                     )
                 )
 
+        # Nếu ngập ngừng từ 3 lần trở lên, nhắc người học luyện đọc liền mạch theo từng cụm ý (thought groups)
         if len(hesitations) >= 3:
             feedback_items.append(
                 FluencyFeedbackItem(
@@ -87,5 +96,5 @@ class FeedbackGenerator:
         return feedback_items
 
 
-# Singleton feedback generator
+# Thể hiện dùng chung duy nhất (singleton) của bộ sinh nhận xét
 feedback_generator = FeedbackGenerator()

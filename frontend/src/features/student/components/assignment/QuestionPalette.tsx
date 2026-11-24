@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Send, Loader2, X } from 'lucide-react';
 import type { QuestionResultDetail } from '@/features/student/types';
 import { isQuestionPassed } from '@/features/student/utils/speakingScoring';
+import { evaluateQuestionReviewOutcome } from '@/features/student/utils/questionReviewScoring';
 
 export interface QuestionPaletteProps {
   questions: QuestionResultDetail[];
@@ -81,15 +82,7 @@ const QuestionPaletteComponent: React.FC<QuestionPaletteProps> = ({
           const ck = checkedQuestions[q.questionId];
 
           const isCorrectInReview =
-            phase === 'REVIEW' &&
-            ((q as any).isCorrect === true ||
-              ((q as any).earnedPoints != null && (q as any).earnedPoints > 0) ||
-              ((q as any).options &&
-                (q as any).options.some(
-                  (o: any) =>
-                    (o.id === ans?.selectedOptionId || o.optionLabel === ans?.selectedOptionId) &&
-                    o.isCorrect === true,
-                )));
+            phase === 'REVIEW' && evaluateQuestionReviewOutcome(q, ans).isCorrect;
           const isWrongInReview = phase === 'REVIEW' && isDone && !isCorrectInReview;
 
           const isSpeaking =

@@ -1,17 +1,17 @@
 """
-Extract speaker-stratified utterance, word, and phoneme acoustic features via the live
-FastAPI pipeline (with calibration disabled) on:
-  - SpeechOcean762 train split (125 speakers -> cache/so_train_feats.jsonl)
-  - SpeechOcean762 test split  (125 unseen speakers -> cache/so_test_feats.jsonl)
-  - LibriSpeech clean/validation held-out 8 speakers -> cache/ls_heldout_feats.jsonl
-  - LibriSpeech clean/validation train 32 speakers anchors -> cache/ls_train_anchors.jsonl
+Trích xuất đặc trưng âm học thô ở cả 3 cấp độ (câu, từ, âm vị) phân tầng theo từng người nói
+bằng cách chạy trực tiếp qua pipeline FastAPI (nhưng TẮT bộ hiệu chuẩn) trên 2 bộ dữ liệu:
+  - Tập train SpeechOcean762 (125 người nói -> `cache/so_train_feats.jsonl`): dùng để huấn luyện bộ hiệu chuẩn.
+  - Tập test SpeechOcean762  (125 người nói mới -> `cache/so_test_feats.jsonl`): dùng để đánh giá khách quan.
+  - 8 người nói held-out của LibriSpeech clean/validation -> `cache/ls_heldout_feats.jsonl`: đo kiểm giọng bản ngữ chưa thấy.
+  - 32 người nói train của LibriSpeech clean/validation -> `cache/ls_train_anchors.jsonl`: làm mốc neo giọng bản ngữ khi train.
 
-Supports:
-  - `--*-per-speaker 0` to extract ALL rows in a split
-  - `--workers N` multiprocess CPU extraction
-  - `--resume` checkpointing by utterance `idx`
+Tùy chọn hỗ trợ:
+  - `--*-per-speaker 0`: trích xuất TOÀN BỘ các câu trong phân tập tương ứng.
+  - `--workers N`: chạy song song nhiều tiến trình CPU.
+  - `--resume`: chạy tiếp từ checkpoint dựa trên chỉ số câu `idx` đã lưu trong file JSONL.
 
-Offline use only. Never runs during API serving.
+Chỉ dùng ngoại tuyến (offline) để tạo bộ cache train/eval; không bao giờ chạy trong luồng API thực tế.
 """
 import argparse
 import concurrent.futures
@@ -43,14 +43,22 @@ from tools.dataset_utils import (  # noqa: E402
     split_by_speaker,
 )
 
+# Ngữ cảnh lưu các đối tượng đã khởi tạo cho từng tiến trình worker
 _SO_WORKER_CTX: Dict[str, Any] = {}
 
 
 def _strip_arpa_stress(phone: str) -> str:
+    """Xóa chữ số trọng âm (0, 1, 2) ở cuối ký hiệu âm vị ARPAbet để khớp với nhãn âm vị của SpeechOcean762."""
     return re.sub(r"[012]$", "", phone.strip())
 
 
 def _init_so_worker(torch_threads: int) -> None:
+    """
+    Khởi tạo tiến trình worker để trích xuất đặc trưng thô trước hiệu chuẩn.
+
+    Nạp hồ sơ formant `vowels.json` mới nhất, ép `scorer.calibrator` sang chế độ `identity`
+    (không hiệu chuẩn) và nạp sẵn mô hình forced aligner vào bộ nhớ worker.
+    """
     os.environ["OMP_NUM_THREADS"] = str(torch_threads)
     os.environ["MKL_NUM_THREADS"] = str(torch_threads)
     import torch
@@ -69,6 +77,7 @@ def _init_so_worker(torch_threads: int) -> None:
     from app.services.formant_service import formant_service
     from app.services.scorer import ScoringCalibrator, scorer
 
+    # Nạp hồ sơ formant hiện hành và cố tình đặt calibrator ở chế độ identity để lấy điểm thô nguyên bản
     formant_service._load_profiles_from_disk(settings.VOWEL_PROFILE_PATH)
     scorer.calibrator = ScoringCalibrator(mode="identity")
     forced_aligner.model_mgr.load_model()
@@ -79,6 +88,11 @@ def _init_so_worker(torch_threads: int) -> None:
 
 
 def _worker_process_so_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
+    """
+    Chạy 1 mẫu SpeechOcean762 qua API `/api/v1/audio/evaluate-phonetics` (tắt hiệu chuẩn qua `_diagnostics_sink`)
+    để thu về đầy đủ đặc trưng cấp câu (`utt_features`), điểm thô (`raw_scores`), điểm chuyên gia (`human`)
+    cũng như cặp đối chiếu cấp từ (`word_pairs`) và cấp âm vị (`phone_pairs`).
+    """
     split_name, orig_idx, row = item
     if not _SO_WORKER_CTX:
         _init_so_worker(2)
@@ -90,6 +104,7 @@ def _worker_process_so_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
     audio_16k = decode_parquet_audio(row["audio"], target_sr=16000)
     wav_bytes = numpy_to_wav_bytes(audio_16k, 16000)
 
+    # Dùng ContextVar `_diagnostics_sink` để chặn hiệu chuẩn và thu vector đặc trưng nội bộ từ route
     sink: Dict[str, Any] = {"disable_calibration": True}
     tok = _diagnostics_sink.set(sink)
     try:
@@ -117,6 +132,7 @@ def _worker_process_so_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
     phone_pairs = []
     diag_word_phonemes = sink.get("word_phonemes", {})
 
+    # Chỉ ghép cặp mức từ và mức âm vị khi số lượng từ/âm vị khớp 1-1 với nhãn gốc
     if len(pred_words) == len(gt_words):
         for w_i, (pw, gw) in enumerate(zip(pred_words, gt_words)):
             if pw.get("score") is not None:
@@ -151,6 +167,7 @@ def _worker_process_so_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
         "whole_file_sim": sim_val,
         "align_conf": sink.get("align_conf"),
         "mean_utt_canon": sink.get("mean_utt_canon"),
+        # Điểm chuẩn chuyên gia ở thang 0..10 được quy đổi sang thang 0..100
         "human": {
             "accuracy": float(row["accuracy"]) * 10.0,
             "fluency": float(row["fluency"]) * 10.0,
@@ -174,6 +191,7 @@ def _worker_process_so_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
 
 
 def _worker_process_ls_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
+    """Chạy 1 mẫu LibriSpeech qua pipeline (tắt hiệu chuẩn) để thu đặc trưng thô `utt_features` và điểm thô làm tập neo/kiểm thử giọng bản ngữ."""
     split_name, orig_idx, row = item
     if not _SO_WORKER_CTX:
         _init_so_worker(2)
@@ -226,7 +244,10 @@ def _worker_process_ls_item(item: Tuple[str, int, dict]) -> Tuple[bool, Any]:
 
 
 def _sample_so_stratified(rows: List[dict], per_speaker: int, seed: int = 42) -> List[tuple]:
-    """Deterministically picks `per_speaker` utterances spanning each speaker's total-score range (0 = all)."""
+    """
+    Chọn mẫu phân tầng tất định `per_speaker` câu cho mỗi người nói trong SpeechOcean762,
+    trải đều theo dải điểm `total` từ thấp đến cao của người nói đó (`0` = lấy toàn bộ).
+    """
     rng = np.random.default_rng(seed)
     by_spk: Dict[str, List[tuple]] = defaultdict(list)
     for idx, r in enumerate(rows):
@@ -249,7 +270,7 @@ def _sample_so_stratified(rows: List[dict], per_speaker: int, seed: int = 42) ->
 
 
 def _sample_ls_by_speaker(rows: List[Tuple[int, dict]], per_speaker: int, seed: int = 42) -> List[tuple]:
-    """Samples `per_speaker` utterances per speaker while preserving original parquet `idx` (0 = all)."""
+    """Lấy mẫu tối đa `per_speaker` câu mỗi người nói trong LibriSpeech nhưng vẫn giữ nguyên chỉ số `idx` gốc trong Parquet (`0` = lấy toàn bộ)."""
     rng = np.random.default_rng(seed)
     by_spk: Dict[str, List[tuple]] = defaultdict(list)
     for orig_idx, r in rows:
@@ -267,6 +288,7 @@ def _sample_ls_by_speaker(rows: List[Tuple[int, dict]], per_speaker: int, seed: 
 
 
 def _load_existing_indices(out_path: Path) -> Dict[int, dict]:
+    """Đọc các bản ghi đã lưu trước đó trong file JSONL và lập chỉ mục theo `idx` để hỗ trợ chạy tiếp `--resume`."""
     existing: Dict[int, dict] = {}
     if not out_path.exists():
         return existing
@@ -290,6 +312,7 @@ def _extract_so_split(
     resume: bool = False,
     max_items: int = 0,
 ) -> Dict[str, Any]:
+    """Điều phối quá trình trích xuất đặc trưng (đơn luồng hoặc đa tiến trình) cho một phân tập SpeechOcean762 và ghi ra JSONL."""
     sampled = _sample_so_stratified(rows, per_speaker=per_speaker, seed=seed)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -387,6 +410,7 @@ def _extract_ls_split(
     resume: bool = False,
     max_items: int = 0,
 ) -> Dict[str, Any]:
+    """Điều phối quá trình trích xuất đặc trưng (đơn luồng hoặc đa tiến trình) cho một phân tập LibriSpeech (train anchors hoặc held-out) và ghi ra JSONL."""
     sampled = _sample_ls_by_speaker(indexed_rows, per_speaker=per_speaker, seed=seed)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -462,7 +486,13 @@ def _extract_ls_split(
 
 
 def main():
+    """
+    Điểm khởi chạy CLI: đọc bộ dữ liệu Parquet SpeechOcean762 (train/test) và LibriSpeech clean/validation,
+    chia tách người nói LibriSpeech 80/20 bằng `split_by_speaker` để tránh rò rỉ dữ liệu, rồi trích xuất
+    tối đa 4 tập JSONL đặc trưng thô (`so_train`, `so_test`, `ls_heldout`, `ls_train`) và lưu báo cáo tổng hợp.
+    """
     parser = argparse.ArgumentParser()
+    # Tham số giới hạn số câu mỗi người nói (0 = lấy toàn bộ), số worker CPU, và chế độ chạy tiếp --resume
     parser.add_argument("--train-per-speaker", type=int, default=5, help="0 = ALL rows per speaker")
     parser.add_argument("--test-per-speaker", type=int, default=3, help="0 = ALL rows per speaker")
     parser.add_argument("--ls-heldout-per-speaker", type=int, default=6, help="0 = ALL rows per speaker")
@@ -489,6 +519,7 @@ def main():
     limited = args.max_items > 0
     budget = args.max_items
 
+    # 1. Trích xuất tập huấn luyện SpeechOcean762 (125 người nói) -> cache/so_train_feats.jsonl
     if args.only in ("all", "so_train") and (not limited or budget > 0):
         so_train_rows = load_parquet_rows(SPEECHOCEAN_TRAIN)
         res = _extract_so_split(
@@ -506,6 +537,7 @@ def main():
         if limited:
             budget = max(0, budget - int(res.get("processed_now", 0)))
 
+    # 2. Trích xuất tập kiểm thử SpeechOcean762 (125 người nói độc lập) -> cache/so_test_feats.jsonl
     if args.only in ("all", "so_test") and (not limited or budget > 0):
         so_test_rows = load_parquet_rows(SPEECHOCEAN_TEST)
         res = _extract_so_split(
@@ -523,6 +555,7 @@ def main():
         if limited:
             budget = max(0, budget - int(res.get("processed_now", 0)))
 
+    # 3. Chia tách người nói LibriSpeech 80/20 (32 người nói train vs 8 người nói held-out) tránh rò rỉ dữ liệu
     if args.only in ("all", "ls_heldout", "ls_train") and (not limited or budget > 0):
         ls_rows = load_parquet_rows(LIBRISPEECH_VAL)
         ls_train_rows, _ = split_by_speaker(ls_rows, speaker_key="speaker_id", train_frac=0.80, seed=42)

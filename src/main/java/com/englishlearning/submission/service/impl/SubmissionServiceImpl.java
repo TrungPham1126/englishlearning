@@ -8,6 +8,8 @@ import com.englishlearning.assignment.entity.Assignment;
 
 import com.englishlearning.assignment.entity.AssignmentQuestion;
 
+import com.englishlearning.assignment.entity.QuestionOption;
+
 import com.englishlearning.assignment.entity.QuestionType;
 
 import com.englishlearning.assignment.entity.SkillType;
@@ -1132,7 +1134,11 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                     List<AttemptResponse.OptionDetail> optionDetails = (q.getOptions() != null)
 
-                            ? q.getOptions().stream().map(opt -> AttemptResponse.OptionDetail.builder()
+                            ? q.getOptions().stream()
+
+                                    .sorted(QuestionOption.DISPLAY_ORDER_COMPARATOR)
+
+                                    .map(opt -> AttemptResponse.OptionDetail.builder()
 
                                     .id(opt.getId())
 
@@ -1261,6 +1267,8 @@ public class SubmissionServiceImpl implements SubmissionService {
 
                             .explanation((revealAnswers || isAudioResponse || isMatching) ? q.getExplanation() : null)
 
+                            .hint(buildSafeQuestionHint(q, Boolean.TRUE.equals(assignmentWithQuestions.getIsExam())))
+
                             .isCorrect(revealAnswers ? isCorrect : null)
 
                             .evalFeedback(revealAnswers ? feedback : null)
@@ -1310,6 +1318,72 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         return res;
 
+    }
+
+    private String buildSafeQuestionHint(AssignmentQuestion q, boolean isExam) {
+        if (isExam || q == null || q.getQuestionType() != QuestionType.FILL_IN_BLANK
+                || q.getCorrectAnswer() == null || q.getCorrectAnswer().isBlank()) {
+            return null;
+        }
+        String primary = null;
+        for (String part : q.getCorrectAnswer().split("[|/]")) {
+            String trimmed = part != null ? part.trim() : "";
+            if (!trimmed.isEmpty()) {
+                primary = trimmed;
+                break;
+            }
+        }
+        if (primary == null || primary.isEmpty()) {
+            return null;
+        }
+
+        String promptLower = q.getPromptText() != null
+                ? q.getPromptText().toLowerCase(java.util.Locale.ROOT)
+                : "";
+        String[] words = primary.split("\\s+");
+        if (promptLower.contains("sắp xếp") || promptLower.contains("unscramble")) {
+            if (words.length >= 2) {
+                return "Bắt đầu bằng \"" + words[0] + "\" (" + words.length + " từ)";
+            }
+            return null;
+        }
+
+        int alnumCount = 0;
+        for (int i = 0; i < primary.length(); i++) {
+            if (Character.isLetterOrDigit(primary.charAt(i))) {
+                alnumCount++;
+            }
+        }
+        if (alnumCount <= 1) {
+            return "1 ký tự";
+        }
+
+        StringBuilder masked = new StringBuilder();
+        for (int wIdx = 0; wIdx < words.length; wIdx++) {
+            if (wIdx > 0) {
+                masked.append(' ');
+            }
+            String word = words[wIdx];
+            boolean revealedFirst = false;
+            for (int i = 0; i < word.length(); i++) {
+                char ch = word.charAt(i);
+                if (Character.isLetterOrDigit(ch)) {
+                    if (!revealedFirst) {
+                        masked.append(ch);
+                        revealedFirst = true;
+                    } else {
+                        masked.append('_');
+                    }
+                } else {
+                    masked.append(ch);
+                }
+            }
+        }
+
+        if (words.length == 1) {
+            return masked + " (" + primary.length() + " ký tự)";
+        }
+        return masked + " (" + words.length + " từ)";
     }
 
     private void repairCorruptedNonShadowingSpeakingAssignment(Assignment assignment) {

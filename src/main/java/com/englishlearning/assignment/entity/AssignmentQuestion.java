@@ -59,6 +59,7 @@ public class AssignmentQuestion {
     private Double points = 1.0;
 
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("optionLabel ASC")
     @Builder.Default
     private List<QuestionOption> options = new ArrayList<>();
 }

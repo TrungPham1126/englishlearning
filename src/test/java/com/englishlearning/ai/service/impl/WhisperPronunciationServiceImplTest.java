@@ -116,7 +116,7 @@ class WhisperPronunciationServiceImplTest {
 
         assertThat(res.getWordScores()).hasSize(5);
         assertThat(res.getWordScores().get(0).getNote()).isEqualTo("Phát âm chuẩn xác");
-        assertThat(res.getWordScores().get(1).getScore()).isEqualTo(82);
+        assertThat(res.getWordScores().get(1).getScore()).isEqualTo(90);
         assertThat(res.getWordScores().get(1).getNote()).isEqualTo("Phát âm khá rõ: 'helo'");
         assertThat(res.getWordScores().get(2).isAccurate()).isFalse();
         assertThat(res.getWordScores().get(2).getNote()).contains("Cần phát âm tròn vành hơn");
@@ -149,5 +149,30 @@ class WhisperPronunciationServiceImplTest {
         assertThat(res.getFeedback()).isEqualTo("Đã phát âm đúng 0/2 từ. Độ chính xác tổng thể: 0%.");
         assertThat(res.getWordScores()).hasSize(2)
                 .allMatch(w -> !w.isAccurate() && w.getScore() == 0);
+    }
+
+    @Test
+    @DisplayName("Gắn AiCoachingAdvice sau khi Whisper chấm điểm từng từ khi SpeakingAiCoachingService khả dụng")
+    void evaluatePronunciation_attachesAiCoachingAdvice() {
+        MockMultipartFile audio = new MockMultipartFile("audio", "clip.wav", "audio/wav", "bytes".getBytes());
+        when(restTemplate.postForEntity(
+                eq("https://api.groq.com/openai/v1/audio/transcriptions"), any(), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{\"text\": \"helo morning\"}"));
+
+        com.englishlearning.ai.service.SpeakingAiCoachingService coachingMock =
+                org.mockito.Mockito.mock(com.englishlearning.ai.service.SpeakingAiCoachingService.class);
+        service.setSpeakingAiCoachingService(coachingMock);
+        when(coachingMock.generatePronunciationCoaching(any(PhoneticEvaluationResponse.class), eq("hello morning")))
+                .thenReturn(com.englishlearning.ai.dto.AiCoachingAdvice.builder()
+                        .summary("Phát âm tốt từ morning, cần làm rõ âm /h/ ở hello.")
+                        .actionTips(java.util.List.of("Luyện lại từ hello."))
+                        .generatedBy("GROQ_AI_COACH")
+                        .build());
+
+        PhoneticEvaluationResponse res = service.evaluatePronunciation(audio, "hello morning");
+
+        assertThat(res.getAiCoaching()).isNotNull();
+        assertThat(res.getAiCoaching().getGeneratedBy()).isEqualTo("GROQ_AI_COACH");
+        assertThat(res.getAiCoaching().getSummary()).contains("morning");
     }
 }

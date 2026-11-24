@@ -144,14 +144,24 @@ public interface ExerciseAudioService {
         Pattern quotePattern = Pattern.compile("[\"'“‘]([^\"'”’]{4,})[\"'”’]");
         Matcher matcher = quotePattern.matcher(s);
         if (matcher.find()) {
+            String prefixBeforeQuote = s.substring(0, matcher.start()).trim();
+            String suffixAfterQuote = s.substring(matcher.end()).trim();
             String inside = matcher.group(1).trim();
-            if (inside.split("\\s+").length >= 2 || inside.length() >= 8) {
+            boolean wholeWrapped = prefixBeforeQuote.isEmpty()
+                    && suffixAfterQuote.replaceAll("[\\s.!?]+", "").isEmpty();
+            boolean precededByInstruction = prefixBeforeQuote.endsWith(":")
+                    || prefixBeforeQuote.matches("(?i)^(?:please\\s+)?(?:listen|repeat|shadow|read|imitate|practice|hãy\\s+nghe|nhại|đọc|câu).*");
+            if ((wholeWrapped || precededByInstruction)
+                    && (inside.split("\\s+").length >= 2 || inside.length() >= 8)) {
                 s = inside;
             }
         } else if (s.contains(":")) {
-            String[] parts = s.split(":");
-            String lastPart = parts[parts.length - 1].trim();
-            if (!lastPart.isBlank() && (lastPart.split("\\s+").length >= 2 || lastPart.length() >= 8)) {
+            int colonIdx = s.lastIndexOf(':');
+            String beforeColon = s.substring(0, colonIdx).trim();
+            String lastPart = s.substring(colonIdx + 1).trim();
+            if ((beforeColon.length() <= 45 || beforeColon.matches("(?i).*(?:shadow|repeat|listen|read|imitate|practice|say|sentence|question|câu|hãy|nghe|nhại|lặp|đọc).*"))
+                    && !lastPart.isBlank()
+                    && (lastPart.split("\\s+").length >= 2 || lastPart.length() >= 8)) {
                 s = lastPart;
             }
         }

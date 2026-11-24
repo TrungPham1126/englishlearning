@@ -1,40 +1,42 @@
 @startuml Hinh_1_2_Phan_ra_UC_Xac_thuc_va_Quan_ly_tai_khoan_Muc_1
 title Hình 1.2: Sơ đồ phân rã Use Case Xác thực và Quản lý tài khoản - Mức 1
 left to right direction
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 10
+skinparam ranksep 12
 
 actor "Người dùng\n(User)" as User
-actor "Quản trị viên\n(Admin)" as Admin
-actor "Redis Cache &\nMySQL DB" as DB <<Service>>
 
-rectangle "Phân hệ Xác thực & Quản lý Tài khoản (UC-AUTH)" {
-    usecase "UC-AUTH-01: Đăng nhập hệ thống\n(Email & Password)" as UC_LOGIN
-    usecase "UC-AUTH-02: Làm mới phiên xác thực\n(Refresh Token)" as UC_REFRESH
-    usecase "UC-AUTH-03: Đăng xuất &\nThu hồi Token" as UC_LOGOUT
-    usecase "UC-AUTH-04: Cập nhật hồ sơ\ncá nhân (Profile)" as UC_PROFILE
-    usecase "UC-AUTH-05: Đổi mật khẩu\n(BCrypt Encoder)" as UC_CHANGE_PW
-    usecase "UC-AUTH-06: Quản lý danh sách\n& Khóa tài khoản" as UC_MANAGE_USERS
-    usecase "Ghi nhận phiên học\n(learning_sessions)" as UC_SESSION
+rectangle "Phân hệ Xác thực và Quản lý tài khoản (Authentication & RBAC)" {
+    usecase "Đăng nhập hệ thống\n(Email & Password)" as UC_LOGIN
+    usecase "Làm mới phiên ngầm định\n(Silent Token Refresh)" as UC_REFRESH
+    usecase "Đăng xuất & Thu hồi Token\n(Revoke RefreshToken)" as UC_LOGOUT
+    usecase "Cập nhật hồ sơ, Ảnh đại diện\n& Đổi mật khẩu" as UC_PROFILE
+
+    usecase "Xác thực BCrypt &\nCấp cặp JWT Token" as UC_BCRYPT
+    usecase "Bắt lỗi HTTP 401 &\nCấp lại Access Token" as UC_INTERCEPT
+    usecase "Thu hồi Refresh Token\ntrong CSDL & xóa Cookie" as UC_REVOKE
 }
+
+actor "Axios Interceptor\n(Client Engine)" as Axios <<Service>>
 
 User --> UC_LOGIN
 User --> UC_REFRESH
 User --> UC_LOGOUT
 User --> UC_PROFILE
-User --> UC_CHANGE_PW
 
-Admin --> UC_MANAGE_USERS
-Admin --|> User
-
-UC_LOGIN ..> UC_SESSION : <<include>>
-UC_LOGIN --> DB : Kiểm tra BCrypt & Lưu Token
-UC_REFRESH --> DB : Xác minh refresh_tokens
-UC_LOGOUT --> DB : Revoke token & Hủy Redis session
+UC_LOGIN ..> UC_BCRYPT : <<includes>>
+UC_REFRESH ..> UC_INTERCEPT : <<includes>>
+UC_LOGOUT ..> UC_REVOKE : <<includes>>
+UC_INTERCEPT --> Axios
 @enduml

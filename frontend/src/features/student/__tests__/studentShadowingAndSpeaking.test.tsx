@@ -246,7 +246,7 @@ describe("Student Shadowing & Speaking Studios Components", () => {
   });
 
   describe("SpeakingShadowingStudio + Shadowing Subcomponents", () => {
-    it("renders ShadowingTopBar, DualWaveformVisualizer, TranscriptBoard and opens FeedbackDrawer + GoogleMouthAnimation", async () => {
+    it("renders clean ShadowingTopBar, hides waveforms while idle and toggles them dynamically during playback/recording, and opens FeedbackDrawer + GoogleMouthAnimation", async () => {
       render(
         <SpeakingShadowingStudio
           questionId="q-1"
@@ -260,30 +260,59 @@ describe("Student Shadowing & Speaking Studios Components", () => {
         />,
       );
 
-      expect(screen.getByText("Learner Wave (Bạn)")).toBeInTheDocument();
+      // Khi chưa phát hoặc ghi âm: ẩn cả hai khung sóng âm
+      expect(screen.queryByText("Native Speaker Wave")).not.toBeInTheDocument();
+      expect(screen.queryByText("Learner Wave (Bạn)")).not.toBeInTheDocument();
+
+      // Đã bỏ nút Shadowing / Normal và nút Tạo lại
+      expect(
+        screen.queryByRole("radio", { name: "Shadowing" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("radio", { name: "Normal" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Tạo lại/i }),
+      ).not.toBeInTheDocument();
+
+      // Thanh trên giữ tiêu đề, badge, tiến trình và tốc độ đọc
       expect(screen.getByText("Luyện nói")).toBeInTheDocument();
+      expect(screen.getByText("Đọc đuổi")).toBeInTheDocument();
       expect(screen.getByText("40%")).toBeInTheDocument();
       expect(screen.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",
         "2",
       );
+      expect(
+        screen.getByRole("button", { name: "Tốc độ phát 0.75x" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Tốc độ phát 1x" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Tốc độ phát 1.25x" }),
+      ).toBeInTheDocument();
 
-      // Mode switch radio button
-      const normalRadio = screen.getByRole("radio", { name: "Normal" });
-      fireEvent.click(normalRadio);
-      expect(normalRadio).toHaveAttribute("aria-checked", "true");
-
-      // Repair native audio button triggers API
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "Tạo lại âm thanh mẫu trên máy chủ nếu gặp sự cố",
-        }),
-      );
-      await waitFor(() => {
-        expect(studentApi.repairQuestionAudio).toHaveBeenCalled();
+      // Chỉ hiện Native Speaker Wave khi đang phát audio mẫu, kết thúc thì ẩn
+      act(() => {
+        useAudioStore.getState().setIsPlayingNative(true);
       });
+      expect(screen.getByText("Native Speaker Wave")).toBeInTheDocument();
+      expect(screen.queryByText("Learner Wave (Bạn)")).not.toBeInTheDocument();
 
-      // Populate an evaluation result + recorded audio in store and verify drawer + word mouth guide
+      act(() => {
+        useAudioStore.getState().setIsPlayingNative(false);
+      });
+      expect(screen.queryByText("Native Speaker Wave")).not.toBeInTheDocument();
+
+      // Chỉ hiện Learner Wave khi đang ghi âm
+      act(() => {
+        useAudioStore.getState().setRecordingState("recording");
+      });
+      expect(screen.getByText("Learner Wave (Bạn)")).toBeInTheDocument();
+      expect(screen.queryByText("Native Speaker Wave")).not.toBeInTheDocument();
+
+      // Dừng ghi âm & lưu bản thu -> Learner Wave tự ẩn và hiện nút Nghe lại
       act(() => {
         useAudioStore
           .getState()
@@ -296,6 +325,21 @@ describe("Student Shadowing & Speaking Studios Components", () => {
           .getState()
           .setEvaluationResult(buildShadowingEvaluation(), false);
       });
+      expect(screen.queryByText("Learner Wave (Bạn)")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Nghe lại bản ghi âm của bạn" }),
+      ).toBeInTheDocument();
+
+      // Phát lại bản ghi âm của học viên -> Learner Wave hiện khi phát, xong tự ẩn
+      act(() => {
+        useAudioStore.getState().setIsPlayingLearner(true);
+      });
+      expect(screen.getByText("Learner Wave (Bạn)")).toBeInTheDocument();
+
+      act(() => {
+        useAudioStore.getState().setIsPlayingLearner(false);
+      });
+      expect(screen.queryByText("Learner Wave (Bạn)")).not.toBeInTheDocument();
 
       const resultBtn = await screen.findByRole("button", {
         name: /Kết quả \(88\/100\)/i,
@@ -702,6 +746,12 @@ describe("Student Shadowing & Speaking Studios Components", () => {
                 ],
               },
             ],
+            aiCoaching: {
+              summary: "Tốc độ nói ổn, cần chú ý phát âm rõ từ 'beach'.",
+              actionTips: ["Giữ hơi lâu hơn ở âm /iː/."],
+              practiceDrill: "Đọc cụm 'memorable beach' 3 lần.",
+              generatedBy: "GROQ_AI_COACH",
+            },
           },
         }) as unknown as FullSpeakingAiResult,
       );
@@ -773,6 +823,8 @@ describe("Student Shadowing & Speaking Studios Components", () => {
       fireEvent.click(wordBtn);
       expect(screen.getByText("/iː/")).toBeInTheDocument();
       expect(screen.getByText(/Kéo dài nguyên âm/i)).toBeInTheDocument();
+      expect(screen.getByText("Lời khuyên từ AI Coach")).toBeInTheDocument();
+      expect(screen.getByText("Đọc cụm 'memorable beach' 3 lần.")).toBeInTheDocument();
     });
   });
 
@@ -850,6 +902,57 @@ describe("Student Shadowing & Speaking Studios Components", () => {
       expect(toggleBtn).toHaveAttribute("aria-expanded", "true");
       fireEvent.click(toggleBtn);
       expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it("renders AiCoachingCard across ShadowingEvaluationView and IeltsSpeakingReportCard and hides safely when undefined", () => {
+      const { unmount: unmountShadowing } = render(
+        <ShadowingEvaluationView
+          data={buildShadowingEvaluation({
+            aiCoaching: {
+              summary: "Phát âm nguyên âm tốt, cần chú ý âm đuôi từ world.",
+              actionTips: ["Bật rõ âm /d/ ở cuối từ world."],
+              practiceDrill: "Đọc chậm 'Hello world' 3 lần.",
+              generatedBy: "GROQ_AI_COACH",
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText("Lời khuyên từ AI Coach")).toBeInTheDocument();
+      expect(
+        screen.getByText("Phát âm nguyên âm tốt, cần chú ý âm đuôi từ world."),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Bật rõ âm /d/ ở cuối từ world.")).toBeInTheDocument();
+      expect(screen.getByText("Đọc chậm 'Hello world' 3 lần.")).toBeInTheDocument();
+      expect(screen.getByText("Groq AI")).toBeInTheDocument();
+      unmountShadowing();
+
+      // Khi aiCoaching undefined -> không render thẻ AI Coach và không lỗi
+      const { unmount: unmountEmpty } = render(
+        <ShadowingEvaluationView data={buildShadowingEvaluation({ aiCoaching: undefined })} />,
+      );
+      expect(screen.queryByText("Lời khuyên từ AI Coach")).not.toBeInTheDocument();
+      unmountEmpty();
+
+      // IeltsSpeakingReportCard fallback từ phoneticEvaluation.aiCoaching
+      render(
+        <IeltsSpeakingReportCard
+          report={buildIeltsResult({
+            aiCoaching: undefined,
+            phoneticEvaluation: buildShadowingEvaluation({
+              aiCoaching: {
+                summary: "Tốc độ 128 WPM hợp lý, cần nhấn rõ trọng âm.",
+                actionTips: ["Kéo dài nguyên âm /iː/."],
+                practiceDrill: "Luyện cụm 'practice speaking'.",
+                generatedBy: "GEMINI_AI_COACH",
+              },
+            }),
+          })}
+        />,
+      );
+      expect(screen.getByText("Lời khuyên từ AI Coach")).toBeInTheDocument();
+      expect(screen.getByText("Tốc độ 128 WPM hợp lý, cần nhấn rõ trọng âm.")).toBeInTheDocument();
+      expect(screen.getByText("Gemini AI")).toBeInTheDocument();
     });
   });
 

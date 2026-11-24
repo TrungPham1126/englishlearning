@@ -9,6 +9,7 @@ import {
   Rewind,
   BookOpen,
   Headphones,
+  Loader2,
 } from 'lucide-react';
 import type { DialogueSegment } from '@/features/student/types';
 
@@ -132,15 +133,30 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
               <button
                 type="button"
                 onClick={audioUrl ? onTogglePlayAudio : onToggleAiVoice}
-                className={`h-11 w-11 rounded-full flex items-center justify-center font-black transition-transform active:scale-95 shadow-md cursor-pointer shrink-0 ${
+                disabled={isRepairingAudio}
+                className={`h-11 w-11 rounded-full flex items-center justify-center font-black transition-transform active:scale-95 shadow-md cursor-pointer shrink-0 disabled:opacity-70 disabled:cursor-wait ${
                   isPlayingAudio || isPlayingAiVoice
                     ? 'bg-rose-500 text-white hover:bg-rose-600 animate-pulse'
                     : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
                 }`}
-                title={isPlayingAudio || isPlayingAiVoice ? 'Tạm dừng' : 'Phát'}
-                aria-label={isPlayingAudio || isPlayingAiVoice ? 'Tạm dừng' : 'Phát'}
+                title={
+                  isRepairingAudio
+                    ? 'Đang tạo audio...'
+                    : isPlayingAudio || isPlayingAiVoice
+                    ? 'Tạm dừng'
+                    : 'Phát'
+                }
+                aria-label={
+                  isRepairingAudio
+                    ? 'Đang tạo audio'
+                    : isPlayingAudio || isPlayingAiVoice
+                    ? 'Tạm dừng'
+                    : 'Phát'
+                }
               >
-                {isPlayingAudio || isPlayingAiVoice ? (
+                {isRepairingAudio ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : isPlayingAudio || isPlayingAiVoice ? (
                   <Pause size={18} />
                 ) : (
                   <Play size={18} className="ml-0.5" />
@@ -162,7 +178,7 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
             </div>
 
             {/* Thanh trượt kéo tiến trình (Seek bar) và thời gian (00:00 / 00:00) */}
-            {Boolean(audioUrl) && (
+            {Boolean(audioUrl) ? (
               <div className="flex-1 flex items-center gap-3 max-w-xl mx-2 min-w-[140px]">
                 <span className="text-xs font-mono text-blue-200 w-12 text-right shrink-0">
                   {formatTimer(audioCurrentTime)}
@@ -181,7 +197,11 @@ const QuestionContextViewComponent: React.FC<QuestionContextViewProps> = ({
                   {formatTimer(audioDuration)}
                 </span>
               </div>
-            )}
+            ) : isRepairingAudio ? (
+              <div className="flex-1 flex items-center gap-2 text-xs font-semibold text-amber-300 mx-2">
+                <span>Đang tạo audio...</span>
+              </div>
+            ) : null}
 
             {/* Các nút tùy chỉnh: Tốc độ, Âm lượng & Xem Transcript */}
             <div className="flex items-center gap-2 flex-wrap shrink-0">

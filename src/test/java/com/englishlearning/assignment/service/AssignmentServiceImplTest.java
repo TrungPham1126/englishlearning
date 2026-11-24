@@ -762,4 +762,36 @@ class AssignmentServiceImplTest {
 
         verifyNoInteractions(exerciseAudioService);
     }
+
+    @Test
+    @DisplayName("getAssignmentById sắp xếp options theo chuẩn A, B, C, D khi DB trả về thứ tự xáo trộn")
+    void getAssignmentById_sortsQuestionOptionsInCanonicalOrder() {
+        QuestionOption optD = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("D").optionText("Delta").isCorrect(false).build();
+        QuestionOption optB = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("B").optionText("Bravo").isCorrect(true).build();
+        QuestionOption optA = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("A").optionText("Alpha").isCorrect(false).build();
+        QuestionOption optC = QuestionOption.builder().id(UUID.randomUUID()).optionLabel("C").optionText("Charlie").isCorrect(false).build();
+
+        AssignmentQuestion q = AssignmentQuestion.builder()
+                .id(UUID.randomUUID())
+                .orderIndex(1)
+                .questionType(QuestionType.MULTIPLE_CHOICE)
+                .promptText("Pick one")
+                .options(new ArrayList<>(List.of(optD, optB, optA, optC)))
+                .build();
+
+        Assignment assignment = Assignment.builder()
+                .id(assignmentId)
+                .title("Test Ordering")
+                .skillType(SkillType.GRAMMAR)
+                .questions(new ArrayList<>(List.of(q)))
+                .build();
+
+        when(assignmentRepository.findByIdWithQuestions(assignmentId)).thenReturn(Optional.of(assignment));
+
+        Assignment loaded = assignmentService.getAssignmentById(assignmentId);
+        assertThat(loaded.getQuestions()).hasSize(1);
+        assertThat(loaded.getQuestions().get(0).getOptions())
+                .extracting(QuestionOption::getOptionLabel)
+                .containsExactly("A", "B", "C", "D");
+    }
 }

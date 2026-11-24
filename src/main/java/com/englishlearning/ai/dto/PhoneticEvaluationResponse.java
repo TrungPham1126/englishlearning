@@ -1,5 +1,6 @@
 package com.englishlearning.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
@@ -11,6 +12,8 @@ public class PhoneticEvaluationResponse {
     private Integer overallScore; // 0 - 100
     private String feedback;
     private List<WordScore> wordScores;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private AiCoachingAdvice aiCoaching;
 
     @Data
     @Builder

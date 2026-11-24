@@ -1,4 +1,5 @@
 @startuml Hinh_1_9_So_do_hoat_dong_UC_TEA_01_Khoi_tao_bai_tap_thong_minh_AI_Excel_TTS
+skinparam ConditionStyle diamond
 title Hình 1.9: Sơ đồ hoạt động UC Khởi tạo bài tập thông minh AI / Excel / TTS (UC-TEA-01)
 skinparam dpi 200
 skinparam monochrome true

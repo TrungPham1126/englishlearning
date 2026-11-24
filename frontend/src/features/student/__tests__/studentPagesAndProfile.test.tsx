@@ -1306,5 +1306,496 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
       expect(screen.queryByText(/Cần đạt Band/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/Cần đạt ≥ 80 điểm/i)).not.toBeInTheDocument();
     });
+
+    it("AssignmentTakePage giữ nguyên thứ tự đáp án A, B, C, D (trái sang phải, trên xuống dưới) từ lúc làm bài tới khi xem đáp án REVIEW", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const inProgressMcq: AttemptResponse = {
+        attemptId: "att-mcq-order",
+        assignmentId: "asg-mcq-order",
+        assignmentTitle: "Grammar MCQ Ordering",
+        skillType: "GRAMMAR",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 15,
+        isExam: false,
+        questions: [
+          {
+            id: "sa-ord-1",
+            questionId: "q-ord-1",
+            questionType: "MULTIPLE_CHOICE",
+            promptText: "Choose the correct synonym of 'ephemeral'.",
+            maxPoints: 10,
+            options: [
+              { id: "opt-d", optionLabel: "D", optionText: "permanent" },
+              { id: "opt-b", optionLabel: "B", optionText: "short-lived" },
+              { id: "opt-a", optionLabel: "A", optionText: "ancient" },
+              { id: "opt-c", optionLabel: "C", optionText: "transparent" },
+            ],
+          },
+        ],
+      };
+
+      const completedMcq: AttemptResponse = {
+        ...inProgressMcq,
+        status: "COMPLETED",
+        score: 10,
+        questions: [
+          {
+            ...inProgressMcq.questions![0],
+            selectedOptionId: "opt-b",
+            studentAnswer: "short-lived",
+            correctAnswer: "B",
+            isCorrect: true,
+            earnedPoints: 10,
+            options: [
+              { id: "opt-c", optionLabel: "C", optionText: "transparent", isCorrect: false },
+              { id: "opt-a", optionLabel: "A", optionText: "ancient", isCorrect: false },
+              { id: "opt-d", optionLabel: "D", optionText: "permanent", isCorrect: false },
+              { id: "opt-b", optionLabel: "B", optionText: "short-lived", isCorrect: true },
+            ],
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(inProgressMcq);
+      vi.mocked(studentApi.getAttemptDetail)
+        .mockResolvedValueOnce(inProgressMcq)
+        .mockResolvedValueOnce(completedMcq);
+      vi.mocked(studentApi.submitAssignment).mockResolvedValue(completedMcq);
+
+      const { container } = render(
+        <MemoryRouter initialEntries={["/student/assignments/asg-mcq-order/take"]}>
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Bắt đầu/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Choose the correct synonym of 'ephemeral'."),
+        ).toBeInTheDocument();
+      });
+
+      const getOptionOrder = () => {
+        const grid = container.querySelector(
+          "#question-q-ord-1 .grid.grid-cols-1.sm\\:grid-cols-2.grid-flow-row",
+        );
+        expect(grid).toBeTruthy();
+        return Array.from(grid!.querySelectorAll('[role="button"]')).map((el) =>
+          el.textContent?.replace(/\s+/g, " ").trim(),
+        );
+      };
+
+      // Lúc đang làm bài (TESTING): mặc dù API trả D, B, A, C nhưng UI phải hiện A, B, C, D
+      expect(getOptionOrder()).toEqual([
+        "Aancient",
+        "Bshort-lived",
+        "Ctransparent",
+        "Dpermanent",
+      ]);
+
+      // Chọn B (short-lived) và nộp bài
+      fireEvent.click(screen.getByText("short-lived").closest('[role="button"]')!);
+      fireEvent.click(screen.getAllByRole("button", { name: /Nộp bài/i })[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/Đã hoàn thành tất cả câu hỏi\./i)).toBeInTheDocument();
+      });
+
+      const confirmBtns = screen.getAllByRole("button", { name: /^Nộp bài$/i });
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/ĐẠT CHUẨN/i)).toBeInTheDocument();
+      });
+
+      // Khi xem đáp án (REVIEW): API trả C, A, D, B nhưng UI vẫn phải giữ A, B, C, D
+      expect(getOptionOrder()).toEqual([
+        "Aancient",
+        "Bshort-lived Đúng",
+        "Ctransparent",
+        "Dpermanent",
+      ]);
+    });
+
+    it("AssignmentTakePage không hiển thị +0 đ khi làm đúng bài tập có answersPersisted=false (TRUE_FALSE & FILL_IN_BLANK)", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const inProgressAttempt: AttemptResponse = {
+        attemptId: "att-np-1",
+        assignmentId: "asg-np-1",
+        assignmentTitle: "Reading Non-Persisted Review",
+        skillType: "READING",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 30,
+        isExam: false,
+        answersPersisted: false,
+        questions: [
+          {
+            id: "q-np-1",
+            questionId: "q-np-1",
+            questionType: "TRUE_FALSE",
+            skillType: "READING",
+            promptText: "Statement 1 is not mentioned.",
+            maxPoints: 1,
+            options: [
+              { id: "o-t", optionLabel: "TRUE", optionText: "TRUE" },
+              { id: "o-f", optionLabel: "FALSE", optionText: "FALSE" },
+              { id: "o-n", optionLabel: "NOT_GIVEN", optionText: "NOT GIVEN" },
+            ],
+          },
+          {
+            id: "q-np-2",
+            questionId: "q-np-2",
+            questionType: "FILL_IN_BLANK",
+            skillType: "READING",
+            promptText: "She ____ to school.",
+            maxPoints: 1,
+          },
+        ],
+      };
+
+      // Payload thật từ backend khi answersPersisted=false: mỗi câu trả isCorrect=false, earnedPoints=0
+      const completedAttemptNonPersisted: AttemptResponse = {
+        ...inProgressAttempt,
+        status: "COMPLETED",
+        score: 10,
+        answersPersisted: false,
+        questions: [
+          {
+            ...inProgressAttempt.questions![0],
+            correctAnswer: "NOT_GIVEN",
+            explanation: "No detail provided.",
+            isCorrect: false,
+            earnedPoints: 0,
+          },
+          {
+            ...inProgressAttempt.questions![1],
+            correctAnswer: "walks",
+            explanation: "Present simple.",
+            isCorrect: false,
+            earnedPoints: 0,
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(inProgressAttempt);
+      vi.mocked(studentApi.getAttemptDetail)
+        .mockResolvedValueOnce(inProgressAttempt)
+        .mockResolvedValueOnce(completedAttemptNonPersisted);
+      vi.mocked(studentApi.submitAssignment).mockResolvedValue(completedAttemptNonPersisted);
+
+      render(
+        <MemoryRouter initialEntries={["/student/assignments/asg-np-1/take"]}>
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Bắt đầu/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Statement 1 is not mentioned.")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "NOT GIVEN" }));
+      fireEvent.change(screen.getByPlaceholderText("Nhập đáp án..."), {
+        target: { value: "walks" },
+      });
+
+      fireEvent.click(screen.getAllByRole("button", { name: /Nộp bài/i })[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/Đã hoàn thành tất cả câu hỏi\./i)).toBeInTheDocument();
+      });
+      const confirmBtns = screen.getAllByRole("button", { name: /^Nộp bài$/i });
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Đúng 2/2")).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByText("Đúng (+1)")).toHaveLength(2);
+      expect(screen.getAllByText("+1 đ")).toHaveLength(2);
+      expect(screen.queryByText("+0 đ")).not.toBeInTheDocument();
+      expect(screen.queryByText("Đúng (+0)")).not.toBeInTheDocument();
+    });
+
+    it("AssignmentTakePage không xóa mất đáp án cục bộ khi freshDetail trả answersPersisted=undefined/true với studentAnswer null, và khử selectedOptionId không phải UUID cho TRUE_FALSE", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const inProgressAttempt: AttemptResponse = {
+        attemptId: "att-preserve-1",
+        assignmentId: "asg-preserve-1",
+        assignmentTitle: "Mixed Objective Quiz",
+        skillType: "GRAMMAR",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 30,
+        isExam: false,
+        questions: [
+          {
+            id: "q-pres-1",
+            questionId: "q-pres-1",
+            questionType: "MULTIPLE_CHOICE",
+            skillType: "GRAMMAR",
+            promptText: "Choose the closest meaning to sharpen.",
+            maxPoints: 2,
+            options: [
+              { id: "opt-a", optionLabel: "A", optionText: "intensify" },
+              { id: "opt-b", optionLabel: "B", optionText: "reduce" },
+            ],
+          },
+          {
+            id: "q-pres-2",
+            questionId: "q-pres-2",
+            questionType: "TRUE_FALSE",
+            skillType: "GRAMMAR",
+            promptText: "Early farmers cultivated barley.",
+            maxPoints: 2,
+            options: [],
+          },
+        ],
+      };
+
+      // Giả lập backend trả answersPersisted: true (do bài hỗn hợp) nhưng studentAnswer/selectedOptionId của câu trắc nghiệm bị null và isCorrect=false
+      const completedAttemptBlankFields: AttemptResponse = {
+        ...inProgressAttempt,
+        status: "COMPLETED",
+        score: 10,
+        answersPersisted: true,
+        questions: [
+          {
+            ...inProgressAttempt.questions![0],
+            correctAnswer: "intensify",
+            selectedOptionId: undefined,
+            studentAnswer: undefined,
+            isCorrect: false,
+            earnedPoints: 0,
+            options: [
+              { id: "opt-a", optionLabel: "A", optionText: "intensify", isCorrect: true },
+              { id: "opt-b", optionLabel: "B", optionText: "reduce", isCorrect: false },
+            ],
+          },
+          {
+            ...inProgressAttempt.questions![1],
+            correctAnswer: "NOT_GIVEN",
+            selectedOptionId: undefined,
+            studentAnswer: undefined,
+            isCorrect: false,
+            earnedPoints: 0,
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(inProgressAttempt);
+      vi.mocked(studentApi.getAttemptDetail)
+        .mockResolvedValueOnce(inProgressAttempt)
+        .mockResolvedValueOnce(completedAttemptBlankFields);
+      vi.mocked(studentApi.submitAssignment).mockResolvedValue(completedAttemptBlankFields);
+
+      render(
+        <MemoryRouter initialEntries={["/student/assignments/asg-preserve-1/take"]}>
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Bắt đầu/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Choose the closest meaning to sharpen.")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("intensify").closest('[role="button"]')!);
+      fireEvent.click(screen.getByRole("button", { name: "NOT GIVEN" }));
+
+      fireEvent.click(screen.getAllByRole("button", { name: /Nộp bài/i })[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/Đã hoàn thành tất cả câu hỏi\./i)).toBeInTheDocument();
+      });
+      const confirmBtns = screen.getAllByRole("button", { name: /^Nộp bài$/i });
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(studentApi.submitAssignment).toHaveBeenCalledWith(
+          "asg-preserve-1",
+          "att-preserve-1",
+          [
+            {
+              questionId: "q-pres-1",
+              selectedOptionId: "opt-a",
+              textAnswer: undefined,
+              answerText: undefined,
+            },
+            {
+              questionId: "q-pres-2",
+              selectedOptionId: undefined,
+              textAnswer: "NOT GIVEN",
+              answerText: "NOT GIVEN",
+            },
+          ],
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Đúng 2/2")).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByText("Đúng (+2)")).toHaveLength(2);
+      expect(screen.getAllByText("+2 đ")).toHaveLength(2);
+      expect(screen.queryByText("Sai")).not.toBeInTheDocument();
+    });
+
+    it("AssignmentTakePage chỉ hiển thị nút Gợi ý riêng ở câu Điền từ khi đang làm bài và ẩn hoàn toàn sau khi nộp bài", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const inProgressAttempt: AttemptResponse = {
+        attemptId: "att-hint-1",
+        assignmentId: "asg-hint-1",
+        assignmentTitle: "Vocabulary Spelling & Choice",
+        skillType: "VOCABULARY",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 20,
+        isExam: false,
+        questions: [
+          {
+            id: "q-h-fill",
+            questionId: "q-h-fill",
+            questionType: "FILL_IN_BLANK",
+            skillType: "VOCABULARY",
+            promptText: "Đọc định nghĩa (Gợi ý: b______): First meal of the day",
+            hint: "b________ (9 ký tự)",
+            maxPoints: 5,
+          },
+          {
+            id: "q-h-mcq",
+            questionId: "q-h-mcq",
+            questionType: "MULTIPLE_CHOICE",
+            skillType: "VOCABULARY",
+            promptText: "Pick the synonym of swift.",
+            maxPoints: 5,
+            options: [
+              { id: "opt-fast", optionLabel: "A", optionText: "fast" },
+              { id: "opt-slow", optionLabel: "B", optionText: "slow" },
+            ],
+          },
+        ],
+      };
+
+      const completedAttempt: AttemptResponse = {
+        ...inProgressAttempt,
+        status: "COMPLETED",
+        score: 10,
+        answersPersisted: false,
+        questions: [
+          {
+            ...inProgressAttempt.questions![0],
+            correctAnswer: "breakfast",
+            explanation: "breakfast = bữa sáng.",
+            isCorrect: false,
+            earnedPoints: 0,
+          },
+          {
+            ...inProgressAttempt.questions![1],
+            correctAnswer: "fast",
+            isCorrect: false,
+            earnedPoints: 0,
+            options: [
+              { id: "opt-fast", optionLabel: "A", optionText: "fast", isCorrect: true },
+              { id: "opt-slow", optionLabel: "B", optionText: "slow", isCorrect: false },
+            ],
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([]);
+      vi.mocked(studentApi.startAssignment).mockResolvedValue(inProgressAttempt);
+      vi.mocked(studentApi.getAttemptDetail)
+        .mockResolvedValueOnce(inProgressAttempt)
+        .mockResolvedValueOnce(completedAttempt);
+      vi.mocked(studentApi.submitAssignment).mockResolvedValue(completedAttempt);
+
+      render(
+        <MemoryRouter initialEntries={["/student/assignments/asg-hint-1/take"]}>
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Bắt đầu/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Bắt đầu/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/First meal of the day/)).toBeInTheDocument();
+      });
+
+      // Nội tuyến (Gợi ý: b______) trong đề đã được tách gọn khỏi đề câu hỏi
+      expect(screen.queryByText(/\(Gợi ý: b______\)/)).not.toBeInTheDocument();
+
+      // Chỉ có đúng 1 nút Gợi ý (chỉ câu Điền từ, không hiện cho Trắc nghiệm)
+      const hintButtons = screen.getAllByRole("button", { name: /^Gợi ý$/i });
+      expect(hintButtons).toHaveLength(1);
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+      fireEvent.click(hintButtons[0]);
+      expect(screen.getByRole("button", { name: /Ẩn gợi ý/i })).toBeInTheDocument();
+      expect(screen.getByRole("note")).toHaveTextContent("b________ (9 ký tự)");
+
+      // Trả lời và nộp bài
+      fireEvent.change(screen.getByPlaceholderText("Nhập đáp án..."), {
+        target: { value: "breakfast" },
+      });
+      fireEvent.click(screen.getByText("fast").closest('[role="button"]')!);
+      fireEvent.click(screen.getAllByRole("button", { name: /Nộp bài/i })[0]);
+      await waitFor(() => {
+        expect(screen.getByText(/Đã hoàn thành tất cả câu hỏi\./i)).toBeInTheDocument();
+      });
+      const confirmBtns = screen.getAllByRole("button", { name: /^Nộp bài$/i });
+      fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Đúng 2/2")).toBeInTheDocument();
+      });
+
+      // Khi REVIEW: không còn nút Gợi ý hay hộp Gợi ý, chỉ còn Lời giải chính thức
+      expect(screen.queryByRole("button", { name: /Gợi ý|Ẩn gợi ý/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(screen.getByText("breakfast = bữa sáng.")).toBeInTheDocument();
+    });
   });
 });

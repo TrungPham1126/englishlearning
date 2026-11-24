@@ -1,4 +1,9 @@
-"""CLI and importable inference engine for IELTS Writing Task 2 scoring & diagnostics."""
+"""Bộ suy luận (inference) dạng CLI và thư viện import để chấm điểm và chẩn đoán bài IELTS Writing Task 2.
+
+Hỗ trợ tự động chọn mô hình từ `best_manifest.json`, trộn điểm Hybrid giữa Transformer và Baseline
+theo `hybrid_config.json`, đọc siêu dữ liệu + hệ số hiệu chỉnh từ `model_meta.json`, áp dụng luật phạt
+`_apply_rubric_guardrails` và truy xuất lời khuyên giám khảo từ `feedback_bank.joblib`.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +26,7 @@ from train_baseline import (
 
 
 def band_to_cefr(band: float) -> str:
-    """Map IELTS overall band to CEFR level."""
+    """Quy đổi điểm tổng thể (Overall Band) IELTS sang khung trình độ CEFR tương ứng."""
     if band >= 8.5:
         return "C2"
     if band >= 7.0:
@@ -38,8 +43,10 @@ def _build_diagnostics(
     essay: str,
     prompt_tfidf: Any | None = None,
 ) -> dict[str, Any]:
+    """Phân tích chỉ số bề mặt, độ bám sát đề (TF-IDF cosine + từ khóa), tính lặp từ và cờ lỗi ngữ pháp cơ bản."""
     feats = extract_surface_features(prompt, essay)
     cos_sim = 0.0
+    # Nếu có vectorizer từ Baseline thì tính cosine TF-IDF giữa đề và bài; ngược lại dùng độ phủ từ khóa nội dung
     if prompt_tfidf is not None and prompt.strip() and essay.strip():
         cos_sim = float(compute_prompt_essay_cosine(prompt_tfidf, [prompt], [essay])[0])
     else:
@@ -48,6 +55,7 @@ def _build_diagnostics(
     wc = int(round(feats["word_count"]))
     has_prompt = bool(feats["prompt_word_count"] >= 4)
     cov = float(feats["prompt_content_coverage"])
+    # Phát hiện lạc đề dựa trên tổ hợp ngưỡng độ phủ từ khóa đề (cov) và độ tương đồng TF-IDF (cos_sim)
     is_off_topic = bool(
         has_prompt
         and (
@@ -57,12 +65,14 @@ def _build_diagnostics(
             or (cov < 0.08 and cos_sim < 0.025)
         )
     )
+    # Phát hiện bài viết lặp cụm 3 từ, nghèo từ vựng (TTR thấp) hoặc lạm dụng 1 từ khóa quá mức
     is_repetitive = bool(
         (wc >= 40 and feats["repeated_trigram_ratio"] > 0.32)
         or (wc >= 60 and feats["ttr"] < 0.22)
         or (wc >= 40 and feats["top1_content_ratio"] > 0.22)
     )
 
+    # Ghi nhận các cảnh báo lỗi hình thức/ngữ pháp thô để đưa vào phần nhận xét cải thiện
     grammar_flags: list[str] = []
     if feats["lowercase_i_per_100"] > 0.1:
         grammar_flags.append("Lowercase standalone 'i' detected; capitalize pronoun 'I'.")
@@ -97,12 +107,14 @@ def _apply_rubric_guardrails(
     pred: dict[str, float],
     diag: dict[str, Any],
 ) -> tuple[dict[str, float], list[str]]:
-    """Apply IELTS rubric caps for severely short, off-topic, or repetitive inputs."""
+    """Áp dụng các luật trần điểm (guardrails) theo chuẩn IELTS cho bài quá ngắn, lạc đề hoặc lặp từ nặng."""
     out = dict(pred)
     adjustments: list[str] = []
     wc = diag["word_count"]
 
+    # Luật 1: Phạt theo các ngưỡng độ dài IELTS Task 2 (<50 từ, <120 từ, <220 từ)
     if wc < 50:
+        # Bài cực ngắn (<50 từ): khóa trần toàn bộ 5 đầu điểm ở mức 3.5
         cap = 3.5
         for k in TARGETS:
             if out.get(f"{k}_raw", out.get(k, 0.0)) > cap or out.get(k, 0.0) > cap:
@@ -110,6 +122,7 @@ def _apply_rubric_guardrails(
                 out[k] = float(round_to_half_band(cap))
         adjustments.append("Severely under-length (<50 words): band capped at 3.5.")
     elif wc < 120:
+        # Bài quá ngắn (<120 từ): khóa Task Response <= 4.0 và Overall <= 4.5
         tr_cap = 4.0
         ov_cap = 4.5
         if out.get("task_response_raw", out.get("task_response", 0.0)) > tr_cap or out.get("task_response", 0.0) > tr_cap:
@@ -120,6 +133,7 @@ def _apply_rubric_guardrails(
             out["overall_band"] = float(round_to_half_band(ov_cap))
         adjustments.append("Significantly under-length (<120 words): overall capped at 4.5.")
     elif wc < 220:
+        # Dưới chuẩn tối thiểu 250 từ (<220 từ): khóa Task Response <= 5.5 và Overall <= 6.0
         tr_cap = 5.5
         if out.get("task_response_raw", out.get("task_response", 0.0)) > tr_cap or out.get("task_response", 0.0) > tr_cap:
             out["task_response_raw"] = round(tr_cap, 4)
@@ -129,6 +143,7 @@ def _apply_rubric_guardrails(
             out["overall_band"] = 6.0
         adjustments.append("Under IELTS 250-word minimum (<220 words): Task Response capped.")
 
+    # Kích hoạt thêm cờ lạc đề nếu độ tương đồng TF-IDF rất thấp (<0.025) và mô hình tự đánh giá TR <= 3.5
     if (
         not diag["is_off_topic"]
         and diag.get("has_prompt", False)
@@ -137,6 +152,7 @@ def _apply_rubric_guardrails(
     ):
         diag["is_off_topic"] = True
 
+    # Luật 2: Phạt bài lạc đề -> giới hạn Task Response <= 3.5 và Overall <= 4.0
     if diag["is_off_topic"]:
         if out.get("task_response_raw", out.get("task_response", 0.0)) > 3.5 or out.get("task_response", 0.0) > 3.5:
             out["task_response_raw"] = 3.5
@@ -146,6 +162,7 @@ def _apply_rubric_guardrails(
             out["overall_band"] = 4.0
         adjustments.append("Off-topic response detected: Task Response capped at 3.5 and Overall at 4.0.")
 
+    # Luật 3: Phạt bài lặp từ/cụm từ nặng -> giới hạn CC, LR và Overall <= 4.0
     if diag["is_repetitive"]:
         for k in ("coherence_cohesion", "lexical_resource", "overall_band"):
             if out.get(f"{k}_raw", out.get(k, 0.0)) > 4.0 or out.get(k, 0.0) > 4.0:
@@ -163,6 +180,7 @@ def _retrieve_examiner_tips(
     pred_band: float,
     top_k: int = 3,
 ) -> list[str]:
+    """Truy xuất lời khuyên giám khảo từ feedback_bank.joblib hoặc trả về lời khuyên dự phòng theo mức band."""
     tips: list[str] = []
     if feedback_bank:
         vec = feedback_bank["vectorizer"]
@@ -171,11 +189,13 @@ def _retrieve_examiner_tips(
         bank_bands = feedback_bank["bands"]
         bank_tips = feedback_bank["tips"]
 
+        # Biểu diễn (đề + 1200 ký tự đầu bài viết) sang không gian TF-IDF -> SVD chuẩn hóa L2
         q_vec = vec.transform([f"{prompt} {essay[:1200]}"])
         q_emb = svd.transform(q_vec).astype(np.float32)
         q_norm = np.linalg.norm(q_emb) + 1e-8
         q_emb = (q_emb / q_norm).ravel()
 
+        # Tính điểm khớp = cosine similarity trừ phạt lệch band (0.12 * |band_bank - pred_band|)
         cos_scores = bank_emb @ q_emb
         band_penalty = 0.12 * np.abs(bank_bands - pred_band)
         combined = cos_scores - band_penalty
@@ -183,7 +203,7 @@ def _retrieve_examiner_tips(
 
         from train_baseline import _content_tokens
 
-        # Require strong prompt overlap before surfacing prompt-specific retrieved tips
+        # Yêu cầu độ trùng lặp từ khóa đề bài đủ cao trước khi lấy lời khuyên gắn với đề cụ thể
         prompt_tokens = set(_content_tokens(prompt)) if prompt.strip() else set()
         bank_prompts = feedback_bank.get("prompts")
 
@@ -195,12 +215,14 @@ def _retrieve_examiner_tips(
                 continue
             if bank_prompts is None or not prompt_tokens:
                 continue
+            # Kiểm tra hệ số Jaccard >= 0.45 giữa đề bài đầu vào và đề bài mẫu để tránh lấy nhầm chủ đề khác
             bp_tokens = set(_content_tokens(str(bank_prompts[i])))
             jaccard = len(prompt_tokens & bp_tokens) / max(1, len(prompt_tokens | bp_tokens))
             if jaccard < 0.45:
                 continue
             for tip in bank_tips[i]:
                 tl = tip.lower()
+                # Lọc bỏ các câu trích dẫn/tham chiếu ngữ cảnh đặc thù của bài mẫu
                 if '"' in tip or "e.g." in tl or "mentioned above" in tl or "the prompt asks" in tl:
                     continue
                 key = tip.lower()[:60]
@@ -210,7 +232,7 @@ def _retrieve_examiner_tips(
                     if len(tips) >= top_k:
                         return tips
 
-    # Fallback: band-calibrated general IELTS examiner guidance (never wrong-topic)
+    # Dự phòng: Trả về lời khuyên IELTS chuẩn hóa theo khoảng band (không bao giờ sai chủ đề)
     if not tips:
         if pred_band < 5.0:
             tips = [
@@ -244,6 +266,7 @@ def _generate_feedback(
     adjustments: list[str],
     retrieved_tips: list[str],
 ) -> dict[str, Any]:
+    """Tổng hợp nhận xét tiếng Anh (summary, strengths, improvements, retrieved_examiner_tips) cho CLI/infer."""
     overall = scores["overall_band"]
     sub_scores = {k: scores.get(k, overall) for k in SUBCRITERIA_KEYS}
     strongest = max(sub_scores.items(), key=lambda kv: kv[1])
@@ -308,7 +331,7 @@ def _generate_feedback(
 
 
 class WritingScorer:
-    """Unified inference wrapper supporting baseline, transformer, hybrid, and best models."""
+    """Lớp bao suy luận thống nhất hỗ trợ các chế độ baseline, transformer, hybrid và tự động chọn best."""
 
     def __init__(
         self,
@@ -319,6 +342,7 @@ class WritingScorer:
         base_dir = Path(__file__).resolve().parent
         self.model_dir = Path(model_dir) if model_dir else (base_dir / "models")
         self.requested_model_type = model_type
+        # Xác định loại mô hình thực tế (nếu truyền 'best' sẽ đọc best_manifest.json)
         self.active_model_type = self._resolve_model_type(model_type)
 
         self.baseline = None
@@ -329,32 +353,38 @@ class WritingScorer:
         self.feedback_bank: dict[str, Any] | None = None
         self.device_str = device
 
-        # Ensure joblib unpickling finds BaselineScorer regardless of cwd
+        # Đảm bảo joblib unpickle tìm thấy lớp BaselineScorer bất kể thư mục làm việc (cwd) hiện tại
         if str(base_dir) not in sys.path:
             sys.path.insert(0, str(base_dir))
 
+        # Nạp mô hình Baseline (cũng dùng prompt_tfidf của nó để chẩn đoán độ bám sát đề)
         baseline_bundle = self.model_dir / "baseline" / "baseline_bundle.joblib"
         if baseline_bundle.exists() and self.active_model_type in ("baseline", "hybrid"):
             self.baseline = load_baseline_bundle(baseline_bundle)
         elif baseline_bundle.exists():
             self.baseline = load_baseline_bundle(baseline_bundle)
 
+        # Nạp ngân hàng lời khuyên giám khảo (feedback_bank.joblib) nếu đã được tạo
         feedback_path = self.model_dir / "transformer" / "feedback_bank.joblib"
         if feedback_path.exists():
             self.feedback_bank = joblib.load(feedback_path)
 
+        # Nạp trọng số Transformer + head hồi quy nếu chạy chế độ transformer hoặc hybrid
         if self.active_model_type in ("transformer", "hybrid"):
             self._load_transformer()
 
+        # Đọc trọng số pha trộn Transformer/Baseline cho từng tiêu chí từ hybrid_config.json
         if self.active_model_type == "hybrid":
             hyb_path = self.model_dir / "hybrid" / "hybrid_config.json"
             if hyb_path.exists():
                 hyb_cfg = json.loads(hyb_path.read_text(encoding="utf-8"))
                 self.hybrid_weights = hyb_cfg.get("transformer_weights", {})
             else:
+                # Trọng số mặc định (75% Transformer + 25% Baseline) nếu thiếu tệp cấu hình
                 self.hybrid_weights = {t: 0.75 for t in TARGETS}
 
     def _resolve_model_type(self, model_type: str) -> str:
+        """Giải quyết loại mô hình thực thi: ưu tiên đọc best_manifest.json, sau đó dò theo thứ tự hybrid -> transformer -> baseline."""
         if model_type != "best":
             return model_type
         manifest_path = self.model_dir / "best_manifest.json"
@@ -372,6 +402,7 @@ class WritingScorer:
         raise FileNotFoundError(f"No trained models found in {self.model_dir}")
 
     def _load_transformer(self) -> None:
+        """Đọc siêu dữ liệu model_meta.json, khởi tạo tokenizer + backbone DeBERTa và nạp trọng số regressor_head.pt."""
         import torch
         from transformers import AutoConfig, AutoModel, AutoTokenizer
         from train_transformer import IeltsTransformerRegressor
@@ -398,6 +429,7 @@ class WritingScorer:
         self.transformer_model.eval()
 
     def _predict_transformer_batch(self, records: list[dict[str, Any]], batch_size: int) -> list[dict[str, float]]:
+        """Chạy suy luận theo batch với Transformer và áp dụng bộ hiệu chỉnh tuyến tính (calibrators) từ model_meta.json."""
         import torch
         from torch.utils.data import DataLoader
         from train_transformer import (
@@ -423,6 +455,7 @@ class WritingScorer:
             device=self.torch_device,
             use_amp=(self.torch_device.type == "cuda") and bool(self.transformer_meta.get("fp16", False)),
         )
+        # Đọc hệ số hiệu chỉnh (slope, intercept) đã khớp trên tập val để chuẩn hóa đầu ra Transformer
         calibrators = {
             k: (float(v[0]), float(v[1]))
             for k, v in self.transformer_meta.get("calibrators", {}).items()
@@ -436,9 +469,11 @@ class WritingScorer:
         include_feedback: bool = False,
         apply_guardrails: bool = False,
     ) -> list[dict[str, Any]]:
+        """Dự đoán điểm hàng loạt, tùy chọn trộn Hybrid, áp luật phạt guardrails và truy xuất lời khuyên."""
         if not records:
             return []
 
+        # 1. Lấy dự đoán từ Baseline và/hoặc Transformer tùy theo active_model_type
         base_preds = (
             self.baseline.predict_batch(records)
             if (self.baseline is not None and self.active_model_type in ("baseline", "hybrid"))
@@ -450,6 +485,7 @@ class WritingScorer:
             else None
         )
 
+        # 2. Trộn điểm Hybrid theo trọng số từng tiêu chí: w * Transformer + (1 - w) * Baseline
         merged: list[dict[str, float]] = []
         if self.active_model_type == "baseline":
             assert base_preds is not None
@@ -473,11 +509,13 @@ class WritingScorer:
                     row[target] = float(round_to_half_band(val))
                 merged.append(row)
 
+        # 3. Chẩn đoán bề mặt, áp luật phạt _apply_rubric_guardrails và sinh nhận xét nếu được yêu cầu
         prompt_tfidf = self.baseline.prompt_tfidf if self.baseline is not None else None
         results: list[dict[str, Any]] = []
         for rec, pred in zip(records, merged):
             prompt = str(rec.get("prompt") or "")
             essay = str(rec.get("essay") or "")
+            # Khi đánh giá nhanh (evaluate.py), trả thẳng điểm thô/làm tròn mà không dựng diagnostics/feedback
             if not include_feedback and not apply_guardrails:
                 results.append(pred)
                 continue
@@ -523,6 +561,7 @@ class WritingScorer:
         include_feedback: bool = True,
         apply_guardrails: bool = True,
     ) -> dict[str, Any]:
+        """Chấm điểm một cặp (prompt, essay) đơn lẻ kèm tùy chọn sinh phản hồi và áp luật phạt."""
         return self.predict_batch(
             [{"prompt": prompt, "essay": essay}],
             batch_size=1,
@@ -531,10 +570,12 @@ class WritingScorer:
         )[0]
 
     def score(self, prompt: str, essay: str) -> dict[str, Any]:
+        """Bí danh rút gọn gọi `predict(prompt, essay)` với đầy đủ phản hồi và luật phạt."""
         return self.predict(prompt=prompt, essay=essay)
 
 
 def main() -> None:
+    """Điểm vào CLI cho phép chấm một bài luận từ tham số --essay hoặc tệp --essay-file."""
     base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Score an IELTS Writing Task 2 essay.")
     parser.add_argument("--prompt", type=str, default="", help="Essay prompt / topic.")

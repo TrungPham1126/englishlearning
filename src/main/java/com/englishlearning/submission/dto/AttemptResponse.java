@@ -78,6 +78,7 @@ public class AttemptResponse {
         private String correctAnswer;
         private String matchText;
         private String explanation;
+        private String hint;
         private Boolean isCorrect;
         private String evalFeedback;
         private AiEvaluationDetail aiEvaluation;

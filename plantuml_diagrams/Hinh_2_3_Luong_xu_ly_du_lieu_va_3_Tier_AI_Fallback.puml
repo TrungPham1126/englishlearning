@@ -1,50 +1,46 @@
 @startuml Hinh_2_3_Luong_xu_ly_du_lieu_va_3_Tier_AI_Fallback
+skinparam ConditionStyle diamond
 title Hình 2.3: Luồng xử lý dữ liệu và cơ chế dự phòng đa tầng (3-Tier AI Fallback)
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
-
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam ConditionEndStyle hline
 start
-:Client gửi Audio WAV (16kHz PCM) & Câu mẫu tham chiếu;
-:Backend Spring Boot nhận tại AiLabController;
+:Client gửi Audio WAV (16kHz) & Câu mẫu tham chiếu;
+:AiLabController tiếp nhận tại /api/v1/ai/speaking/shadowing-evaluate;
 
-partition "Tầng 1: Python Acoustic Engine (Local Microservice :8000)" {
-    :Gửi tệp WAV sang Python FastAPI qua HTTP POST;
-    :VAD lọc nhiễu nền, kiểm tra ngưỡng SNR >= 12dB;
-    :Wav2Vec2 CTC căn chỉnh mốc thời gian âm vị IPA;
-    :Praat trích xuất Formant F1/F2 và tính khoảng cách Euclid;
-    :Tính GOP (Goodness of Pronunciation) phụ âm và nhịp điệu WPM;
+partition "Tầng 1: Python Phonetics Microservice (:8000)" {
+    :VAD lọc khoảng lặng & kiểm tra nhiễu SNR;
+    :Wav2Vec2 CTC gióng mốc thời gian âm vị IPA;
+    :Praat tính Formant F1/F2 & điểm GOP phụ âm (< 1.0s);
 }
 
-if (Python phản hồi thành công và trễ <= 1.0s?) then (Thành công)
-    :Đánh dấu Engine = "PYTHON_ACOUSTIC_ENGINE";
-    :Nhận mảng mốc thời gian âm vị IPA và phổ Formant;
-else (Lỗi kết nối / Quá thời gian 1.0s)
-    partition "Tầng 2: Secondary Fallback (Groq Whisper + Gemini 2.5 Flash)" {
-        :Gửi âm thanh sang Groq Whisper-large-v3-turbo STT (< 800ms);
-        :Ghép văn bản bóc băng với câu mẫu tham chiếu;
-        :Gửi Prompt sang Google Gemini 2.5 Flash;
-        :Gemini đối chiếu từng từ theo Cambridge Phonetics Rule;
-        :Phát hiện từ đọc sai/bỏ sót và sinh nhận xét tiếng Việt;
+if (Python phản hồi thành công?) then (Có)
+    :Engine = "PYTHON_ACOUSTIC_ENGINE";
+else (Lỗi kết nối / Timeout)
+    partition "Tầng 2: Groq Whisper + Google Gemini 2.5 Flash" {
+        :Groq Whisper-large-v3 bóc băng văn bản STT;
+        :Gemini 2.5 Flash chấm ngữ âm & sinh nhận xét;
     }
-    if (Gemini 2.5 Flash phản hồi thành công?) then (Thành công)
-        :Đánh dấu Engine = "GEMINI_AI_FALLBACK";
-    else (Lỗi HTTP 429 Quota Exceeded / Mạng đứt đoạn)
-        partition "Tầng 3: Tertiary Fallback (Groq LLaMA / OSS 120B)" {
-            :Gửi Prompt sang Groq Chat Completion (JSON mode);
-            :Áp dụng thuật toán đối chiếu khoảng cách Levenshtein;
-            :Đánh dấu Engine = "GROQ_AI_FALLBACK";
+    if (Gemini thành công?) then (Có)
+        :Engine = "GEMINI_AI_FALLBACK";
+    else (Lỗi HTTP 429 Quota / Mạng)
+        partition "Tầng 3: Groq LLaMA 3.3 70B (Dự phòng khẩn cấp)" {
+            :Groq llama-3.3-70b-versatile (JSON Mode);
+            :Engine = "GROQ_AI_FALLBACK";
         }
     endif
 endif
 
-:Lưu kết quả chi tiết vào bảng ai_evaluations (MySQL);
-:Cập nhật điểm kỹ năng Speaking vào bảng student_skill_profiles;
-:Bắn kết quả qua WebSocket STOMP (/topic/student/{userId}/evaluation);
-:Frontend React hiển thị Review Mode (tô màu từ, âm vị IPA, Formant Praat);
+:SpeakingAiCoachingService sinh AiCoachingAdvice (Groq -> fallback Gemini);
+:Lưu ai_evaluations & cập nhật student_skill_profiles (MySQL);
+:Đẩy thông báo WebSocket (/ws) & hiển thị Review Mode & AiCoachingCard;
 stop
 @enduml

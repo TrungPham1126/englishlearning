@@ -44,6 +44,10 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
     const recordingState = useAudioStore((s) => s.recordingState);
     const recordedAudioUrl = useAudioStore((s) => s.recordedAudioUrl);
 
+    const isRecording = recordingState === "recording";
+    const showNativeWave = isPlayingNative;
+    const showLearnerWave = isRecording || isPlayingLearner;
+
     const renderBarsOnCanvas = (
       canvas: HTMLCanvasElement | null,
       peaks: readonly number[],
@@ -76,8 +80,10 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
       }
     };
 
-    // Vẽ và cập nhật tiến trình sóng âm bản xứ (Native Speaker)
+    // Vẽ và cập nhật tiến trình sóng âm bản xứ (Native Speaker) khi đang phát
     useEffect(() => {
+      if (!showNativeWave) return;
+
       const activeColor = "#4f46e5"; // Indigo-600
       const inactiveColor = "#94a3b8"; // Slate-400
 
@@ -103,19 +109,23 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
       );
 
       return () => unsubNative();
-    }, [nativeStaticPeaks]);
+    }, [nativeStaticPeaks, showNativeWave]);
 
     // Vẽ và cập nhật sóng âm học viên trực tiếp ở 60fps qua Zustand subscription
     useEffect(() => {
+      if (!showLearnerWave) return;
+
       const liveColor = "#10b981"; // Emerald-500
       const recordedColor = "#059669"; // Emerald-600
       const idleColor = "#94a3b8"; // Slate-400
 
+      const storeState = useAudioStore.getState();
+      const initialIsRec = storeState.recordingState === "recording";
       renderBarsOnCanvas(
         learnerCanvasRef.current,
-        useAudioStore.getState().liveLearnerPeaks,
-        useAudioStore.getState().learnerProgress,
-        liveColor,
+        storeState.liveLearnerPeaks,
+        initialIsRec ? 1 : storeState.learnerProgress,
+        initialIsRec ? liveColor : recordedColor,
         idleColor,
       );
 
@@ -150,118 +160,130 @@ export const DualWaveformVisualizer = memo<DualWaveformVisualizerProps>(
         unsubPeaks();
         unsubLearnerProgress();
       };
-    }, []);
+    }, [showLearnerWave]);
+
+    if (!showNativeWave && !showLearnerWave) {
+      return null;
+    }
 
     return (
       <section
-        aria-label="Khung hiển thị sóng âm song song giữa người bản xứ và người học"
-        className="w-full grid grid-cols-1 md:grid-cols-2 gap-2.5"
+        aria-label="Khung hiển thị sóng âm giữa người bản xứ và người học"
+        className={`w-full grid gap-2.5 ${
+          showNativeWave && showLearnerWave
+            ? "grid-cols-1 md:grid-cols-2"
+            : "grid-cols-1"
+        }`}
       >
         {/* Sóng âm người bản xứ (Native Speaker Wave) */}
-        <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onTogglePlayNative}
-                aria-label={
-                  isPlayingNative
-                    ? "Tạm dừng âm thanh mẫu"
-                    : "Phát âm thanh mẫu bản xứ"
-                }
-                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-800 hover:bg-blue-600 text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-              >
-                {isPlayingNative ? (
-                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-                )}
-              </button>
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
-                  Native Speaker Wave
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
-                  Sóng âm chuẩn bản xứ
-                </span>
+        {showNativeWave && (
+          <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onTogglePlayNative}
+                  aria-label={
+                    isPlayingNative
+                      ? "Tạm dừng âm thanh mẫu"
+                      : "Phát âm thanh mẫu bản xứ"
+                  }
+                  className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-800 hover:bg-blue-600 text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  {isPlayingNative ? (
+                    <Pause className="w-3.5 h-3.5" aria-hidden="true" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  )}
+                </button>
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
+                    Native Speaker Wave
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
+                    Sóng âm chuẩn bản xứ
+                  </span>
+                </div>
               </div>
+
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30">
+                {isPlayingNative ? "Đang phát..." : "16kHz Neural"}
+              </span>
             </div>
 
-            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-600/15 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-600/30">
-              {isPlayingNative ? "Đang phát..." : "16kHz Neural"}
-            </span>
+            <canvas
+              ref={nativeCanvasRef}
+              width={440}
+              height={36}
+              role="img"
+              aria-label="Biểu đồ sóng âm của giọng mẫu bản xứ"
+              className="w-full h-8 sm:h-9"
+            />
           </div>
-
-          <canvas
-            ref={nativeCanvasRef}
-            width={440}
-            height={36}
-            role="img"
-            aria-label="Biểu đồ sóng âm của giọng mẫu bản xứ"
-            className="w-full h-8 sm:h-9"
-          />
-        </div>
+        )}
 
         {/* Sóng âm học viên (Learner Real-time Wave) */}
-        <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onTogglePlayLearner}
-                disabled={!recordedAudioUrl || recordingState === "recording"}
-                aria-label={
-                  isPlayingLearner
-                    ? "Tạm dừng bản ghi âm của bạn"
-                    : "Nghe lại bản ghi âm của bạn"
-                }
-                className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
-                  !recordedAudioUrl || recordingState === "recording"
-                    ? "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+        {showLearnerWave && (
+          <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onTogglePlayLearner}
+                  disabled={!recordedAudioUrl || recordingState === "recording"}
+                  aria-label={
+                    isPlayingLearner
+                      ? "Tạm dừng bản ghi âm của bạn"
+                      : "Nghe lại bản ghi âm của bạn"
+                  }
+                  className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+                    !recordedAudioUrl || recordingState === "recording"
+                      ? "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                      : "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                  }`}
+                >
+                  {isPlayingLearner ? (
+                    <Pause className="w-3.5 h-3.5" aria-hidden="true" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  )}
+                </button>
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
+                    Learner Wave (Bạn)
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
+                    {recordingState === "recording"
+                      ? "Đang thu trực tiếp 60 FPS"
+                      : recordedAudioUrl
+                        ? "Đã lưu bản thu âm"
+                        : "Chờ tín hiệu Micro"}
+                  </span>
+                </div>
+              </div>
+
+              <span
+                aria-live="polite"
+                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                  recordingState === "recording"
+                    ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30 animate-pulse"
+                    : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
                 }`}
               >
-                {isPlayingLearner ? (
-                  <Pause className="w-3.5 h-3.5" aria-hidden="true" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-                )}
-              </button>
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 block leading-tight">
-                  Learner Wave (Bạn)
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-none">
-                  {recordingState === "recording"
-                    ? "Đang thu trực tiếp 60 FPS"
-                    : recordedAudioUrl
-                      ? "Đã lưu bản thu âm"
-                      : "Chờ tín hiệu Micro"}
-                </span>
-              </div>
+                {recordingState === "recording" ? "● LIVE" : "PCM Stream"}
+              </span>
             </div>
 
-            <span
-              aria-live="polite"
-              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
-                recordingState === "recording"
-                  ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30 animate-pulse"
-                  : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
-              }`}
-            >
-              {recordingState === "recording" ? "● LIVE" : "PCM Stream"}
-            </span>
+            <canvas
+              ref={learnerCanvasRef}
+              width={440}
+              height={36}
+              role="img"
+              aria-label="Biểu đồ sóng âm giọng đọc của bạn"
+              className="w-full h-8 sm:h-9"
+            />
           </div>
-
-          <canvas
-            ref={learnerCanvasRef}
-            width={440}
-            height={36}
-            role="img"
-            aria-label="Biểu đồ sóng âm giọng đọc của bạn"
-            className="w-full h-8 sm:h-9"
-          />
-        </div>
+        )}
       </section>
     );
   },

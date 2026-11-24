@@ -17,6 +17,7 @@ import {
   type AiExamSectionConfig,
   type QuestionBankItem,
 } from "../../api/teacherApi";
+import { sortQuestionOptions } from "@/utils/questionOptions";
 
 export interface ExamOptionDraft {
   optionText: string;
@@ -155,7 +156,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
         explanation: q.explanation || "",
         points: q.points ?? 1,
         options: Array.isArray(q.options)
-          ? q.options.map((opt: any) => ({
+          ? sortQuestionOptions(q.options).map((opt: any) => ({
               optionText: opt.optionText || "",
               matchText: opt.matchText || "",
               isCorrect: Boolean(opt.isCorrect),
@@ -274,7 +275,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
         explanation: q.explanation || "",
         points: q.points ?? 1,
         options: Array.isArray(q.options)
-          ? q.options.map((o) => ({
+          ? sortQuestionOptions(q.options).map((o) => ({
               optionText: o.optionText || "",
               matchText: o.matchText || "",
               isCorrect: Boolean(o.isCorrect),
@@ -315,7 +316,7 @@ export const ExamBuilderModal: React.FC<ExamBuilderModalProps> = ({
       explanation: item.explanation || "",
       points: item.points ?? 1,
       options: Array.isArray(item.options)
-        ? item.options.map((o) => ({
+        ? sortQuestionOptions(item.options).map((o) => ({
             optionText: o.optionText || "",
             matchText: o.matchText || "",
             isCorrect: Boolean(o.isCorrect),

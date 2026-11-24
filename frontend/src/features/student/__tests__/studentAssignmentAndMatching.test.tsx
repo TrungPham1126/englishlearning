@@ -140,11 +140,13 @@ describe("features/student CBT Assignment Components", () => {
       textAnswer: "NOT GIVEN",
     });
 
-    // 3. Fill in blank + Review hint
+    // 3. Fill in blank + Dedicated Hint toggle during TESTING, hidden during REVIEW
+    const onToggleFillHint = vi.fn();
     const fillQ = makeQuestion({
       questionId: "q-fill",
       questionType: "FILL_IN_BLANK",
       promptText: "She ____ to school every day.",
+      hint: "w____ (5 ký tự)",
       correctAnswer: "walks",
       explanation: "Simple present tense.",
     });
@@ -155,12 +157,50 @@ describe("features/student CBT Assignment Components", () => {
         question={fillQ}
         index={2}
         totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={false}
+        onToggleHint={onToggleFillHint}
+        answers={{ "q-fill": { textAnswer: "" } }}
+        onUpdateAnswer={onUpdateAnswer}
+      />,
+    );
+    const hintBtn = screen.getByRole("button", { name: /^Gợi ý$/i });
+    await user.click(hintBtn);
+    expect(onToggleFillHint).toHaveBeenCalledWith("q-fill");
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={fillQ}
+        index={2}
+        totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={true}
+        onToggleHint={onToggleFillHint}
+        answers={{ "q-fill": { textAnswer: "" } }}
+        onUpdateAnswer={onUpdateAnswer}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Ẩn gợi ý/i })).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("w____ (5 ký tự)");
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={fillQ}
+        index={2}
+        totalQuestions={3}
         phase="REVIEW"
+        isHintExpanded={true}
+        onToggleHint={onToggleFillHint}
         answers={{ "q-fill": { textAnswer: "walks" } }}
         onUpdateAnswer={onUpdateAnswer}
       />,
     );
-    expect(screen.getByText(/W\.\.\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gợi ý|Ẩn gợi ý/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByText(/W\.\.\./)).not.toBeInTheDocument();
     expect(screen.getByText("Simple present tense.")).toBeInTheDocument();
   });
 
@@ -1028,5 +1068,461 @@ describe("features/student Matching & AudioRecorder Components", () => {
     unmount();
     expect(revokeSpy).toHaveBeenCalledWith("blob:rec-2");
     expect(trackStopSpy).toHaveBeenCalled();
+  });
+
+  it("QuestionRendererPolymorphic: giữ đúng thứ tự A, B, C, D từ trái sang phải, trên xuống dưới cả khi làm bài và khi xem đáp án (REVIEW)", () => {
+    const testingQuestion = makeQuestion({
+      questionId: "q-order-1",
+      questionType: "MULTIPLE_CHOICE",
+      promptText: "Select the best option.",
+      correctAnswer: "C",
+      options: [
+        { id: "opt-d", optionLabel: "D", optionText: "Option Delta" },
+        { id: "opt-b", optionLabel: "B", optionText: "Option Bravo" },
+        { id: "opt-a", optionLabel: "A", optionText: "Option Alpha" },
+        { id: "opt-c", optionLabel: "C", optionText: "Option Charlie" },
+      ],
+    });
+
+    const { container, rerender } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={testingQuestion}
+        index={0}
+        totalQuestions={1}
+        phase="TESTING"
+        answers={{ "q-order-1": { selectedOptionId: "opt-b" } }}
+      />,
+    );
+
+    const gridTesting = container.querySelector(
+      ".grid.grid-cols-1.sm\\:grid-cols-2.grid-flow-row",
+    );
+    expect(gridTesting).toBeTruthy();
+    const testingButtons = Array.from(
+      gridTesting!.querySelectorAll('[role="button"]'),
+    );
+    expect(testingButtons.map((el) => el.textContent?.trim())).toEqual([
+      "AOption Alpha",
+      "BOption Bravo",
+      "COption Charlie",
+      "DOption Delta",
+    ]);
+
+    // Chuyển sang REVIEW với danh sách options bị backend trả về theo một thứ tự xáo trộn khác [C, A, D, B]
+    const reviewQuestion = makeQuestion({
+      questionId: "q-order-1",
+      questionType: "MULTIPLE_CHOICE",
+      promptText: "Select the best option.",
+      correctAnswer: "C",
+      options: [
+        { id: "opt-c", optionLabel: "C", optionText: "Option Charlie", isCorrect: true },
+        { id: "opt-a", optionLabel: "A", optionText: "Option Alpha", isCorrect: false },
+        { id: "opt-d", optionLabel: "D", optionText: "Option Delta", isCorrect: false },
+        { id: "opt-b", optionLabel: "B", optionText: "Option Bravo", isCorrect: false },
+      ],
+    });
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={reviewQuestion}
+        index={0}
+        totalQuestions={1}
+        phase="REVIEW"
+        answers={{ "q-order-1": { selectedOptionId: "opt-b" } }}
+      />,
+    );
+
+    const gridReview = container.querySelector(
+      ".grid.grid-cols-1.sm\\:grid-cols-2.grid-flow-row",
+    );
+    expect(gridReview).toBeTruthy();
+    const reviewButtons = Array.from(
+      gridReview!.querySelectorAll('[role="button"]'),
+    );
+    expect(reviewButtons.map((el) => el.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "AOption Alpha",
+      "BOption Bravo Đã chọn",
+      "COption Charlie Đúng",
+      "DOption Delta",
+    ]);
+  });
+
+  it("QuestionRendererPolymorphic: khi REVIEW với answersPersisted=false (backend trả isCorrect=false, earnedPoints=0), câu làm đúng phải hiện điểm thật (+2 đ) thay vì +0 đ", () => {
+    const nonPersistedMcq = makeQuestion({
+      questionId: "q-np-mcq",
+      questionType: "MULTIPLE_CHOICE",
+      promptText: "Pick the right choice.",
+      maxPoints: 2,
+      isCorrect: false,
+      earnedPoints: 0,
+      correctAnswer: "B",
+      explanation: "B is correct.",
+      options: [
+        { id: "opt-a", optionLabel: "A", optionText: "Wrong", isCorrect: false },
+        { id: "opt-b", optionLabel: "B", optionText: "Right", isCorrect: true },
+      ],
+    });
+
+    const { rerender } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={nonPersistedMcq}
+        index={0}
+        totalQuestions={3}
+        phase="REVIEW"
+        answers={{ "q-np-mcq": { selectedOptionId: "opt-b" } }}
+      />,
+    );
+
+    expect(screen.getByText("Đúng (+2)")).toBeInTheDocument();
+    expect(screen.getByText("+2 đ")).toBeInTheDocument();
+    expect(screen.queryByText("+0 đ")).not.toBeInTheDocument();
+
+    // TRUE_FALSE với correctAnswer="NOT_GIVEN" và học sinh chọn "NOT GIVEN"
+    const nonPersistedTf = makeQuestion({
+      questionId: "q-np-tf",
+      questionType: "TRUE_FALSE",
+      promptText: "Author lives in Paris.",
+      maxPoints: 2,
+      isCorrect: false,
+      earnedPoints: 0,
+      correctAnswer: "NOT_GIVEN",
+      explanation: "No mention of Paris.",
+    });
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={nonPersistedTf}
+        index={1}
+        totalQuestions={3}
+        phase="REVIEW"
+        answers={{ "q-np-tf": { selectedOptionId: "NOT GIVEN", textAnswer: "NOT GIVEN" } }}
+      />,
+    );
+
+    expect(screen.getByText("Đúng (+2)")).toBeInTheDocument();
+    expect(screen.getByText("+2 đ")).toBeInTheDocument();
+    expect(screen.queryByText("+0 đ")).not.toBeInTheDocument();
+
+    // Câu làm sai phải hiện Sai và +0 đ
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={nonPersistedTf}
+        index={2}
+        totalQuestions={3}
+        phase="REVIEW"
+        answers={{ "q-np-tf": { selectedOptionId: "TRUE", textAnswer: "TRUE" } }}
+      />,
+    );
+
+    expect(screen.getByText("Sai")).toBeInTheDocument();
+    expect(screen.getByText("+0 đ")).toBeInTheDocument();
+  });
+
+  it("WordUnscrambleInteractive: không chèn khoảng trắng trước dấu câu (? . ! ,) và gỡ chip sạch sẽ", async () => {
+    const user = userEvent.setup();
+    const onAnswerChange = vi.fn();
+
+    const { rerender } = render(
+      <WordUnscrambleInteractive
+        promptText="Sắp xếp các từ sau thành câu hoàn chỉnh đúng cấu trúc: How / often / do / you / practice / piano / ?"
+        currentAnswer="How often do you practice piano"
+        onAnswerChange={onAnswerChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "?" }));
+    expect(onAnswerChange).toHaveBeenCalledWith("How often do you practice piano?");
+
+    rerender(
+      <WordUnscrambleInteractive
+        promptText="Sắp xếp các từ sau thành câu hoàn chỉnh đúng cấu trúc: How / often / do / you / practice / piano / ?"
+        currentAnswer="How often do you practice piano?"
+        onAnswerChange={onAnswerChange}
+      />,
+    );
+
+    const removeButtons = screen.getAllByTitle("Chạm để gỡ từ này khỏi câu");
+    expect(removeButtons).toHaveLength(7);
+    await user.click(removeButtons[removeButtons.length - 1]);
+    expect(onAnswerChange).toHaveBeenLastCalledWith("How often do you practice piano");
+  });
+
+  it("QuestionRendererPolymorphic: TRUE_FALSE lưu UUID option khi có options và giữ sáng nút đã chọn lúc REVIEW; MCQ bỏ qua hoa/thường và khoảng trắng thừa", async () => {
+    const user = userEvent.setup();
+    const onUpdateAnswer = vi.fn();
+    const tfTrueUuid = "013296ad-4796-4e5d-bbb2-428d24f028be";
+    const tfNgUuid = "b515b402-ea64-4a13-aadb-4b72134fbee1";
+
+    const tfQuestion = makeQuestion({
+      questionId: "q-tf-uuid",
+      questionType: "TRUE_FALSE",
+      promptText: "Early dogs assisted hunters.",
+      correctAnswer: "TRUE",
+      options: [
+        { id: tfTrueUuid, optionLabel: "A", optionText: "TRUE" },
+        { id: "a4d30837-caaa-4f89-92c4-e0b9ef562f2a", optionLabel: "B", optionText: "FALSE" },
+        { id: tfNgUuid, optionLabel: "C", optionText: "NOT GIVEN" },
+      ],
+    });
+
+    const { rerender } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={tfQuestion}
+        index={0}
+        totalQuestions={2}
+        phase="TESTING"
+        answers={{}}
+        onUpdateAnswer={onUpdateAnswer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "TRUE" }));
+    expect(onUpdateAnswer).toHaveBeenCalledWith("q-tf-uuid", {
+      selectedOptionId: tfTrueUuid,
+      textAnswer: "TRUE",
+    });
+
+    // REVIEW với chỉ selectedOptionId là UUID (studentAns.textAnswer trống) vẫn phải nhận diện đúng đã chọn NOT GIVEN -> báo Sai
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={tfQuestion}
+        index={0}
+        totalQuestions={2}
+        phase="REVIEW"
+        answers={{ "q-tf-uuid": { selectedOptionId: tfNgUuid } }}
+        onUpdateAnswer={onUpdateAnswer}
+      />,
+    );
+
+    const ngBtn = screen.getByRole("button", { name: "NOT GIVEN" });
+    expect(ngBtn.className).toContain("border-rose-500");
+
+    // MCQ với correctAnswer có khoảng trắng / khác hoa thường vẫn hiện Đúng
+    const mcqCaseQuestion = makeQuestion({
+      questionId: "q-mcq-case",
+      questionType: "MULTIPLE_CHOICE",
+      promptText: "Closest meaning to intensify?",
+      correctAnswer: "  INTENSIFY ",
+      options: [
+        { id: "opt-1", optionLabel: "A", optionText: "intensify" },
+        { id: "opt-2", optionLabel: "B", optionText: "alleviate" },
+      ],
+    });
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={mcqCaseQuestion}
+        index={1}
+        totalQuestions={2}
+        phase="REVIEW"
+        answers={{ "q-mcq-case": { selectedOptionId: "opt-1" } }}
+        onUpdateAnswer={onUpdateAnswer}
+      />,
+    );
+
+    expect(screen.getByText("Đúng (+10)")).toBeInTheDocument();
+    expect(screen.getByText("+10 đ")).toBeInTheDocument();
+  });
+
+  it("QuestionRendererPolymorphic: KHÔNG hiện nút Gợi ý với MULTIPLE_CHOICE / TRUE_FALSE và CHỈ hiện cho Sắp xếp từ khi TESTING", async () => {
+    const user = userEvent.setup();
+    const onToggleHint = vi.fn();
+
+    const mcqQ = makeQuestion({
+      questionId: "q-no-hint-mcq",
+      questionType: "MULTIPLE_CHOICE",
+      promptText: "Pick one.",
+      hint: "A",
+      correctAnswer: "A",
+      options: [
+        { id: "opt-a", optionLabel: "A", optionText: "Choice A" },
+        { id: "opt-b", optionLabel: "B", optionText: "Choice B" },
+      ],
+    });
+
+    const { rerender } = render(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={mcqQ}
+        index={0}
+        totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={true}
+        onToggleHint={onToggleHint}
+        answers={{}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Gợi ý|Ẩn gợi ý/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+    const tfQ = makeQuestion({
+      questionId: "q-no-hint-tf",
+      questionType: "TRUE_FALSE",
+      promptText: "The sky is blue.",
+      hint: "TRUE",
+      correctAnswer: "TRUE",
+    });
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={tfQ}
+        index={1}
+        totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={true}
+        onToggleHint={onToggleHint}
+        answers={{}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Gợi ý|Ẩn gợi ý/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+    const unscrambleQ = makeQuestion({
+      questionId: "q-hint-unscramble",
+      questionType: "FILL_IN_BLANK",
+      promptText: "Sắp xếp câu: reads / every / day / she",
+      hint: 'Bắt đầu bằng "she" (4 từ)',
+      correctAnswer: "she reads every day",
+    });
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={unscrambleQ}
+        index={2}
+        totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={false}
+        onToggleHint={onToggleHint}
+        answers={{}}
+      />,
+    );
+    const unscrambleHintBtn = screen.getByRole("button", { name: /^Gợi ý$/i });
+    await user.click(unscrambleHintBtn);
+    expect(onToggleHint).toHaveBeenCalledWith("q-hint-unscramble");
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={unscrambleQ}
+        index={2}
+        totalQuestions={3}
+        phase="TESTING"
+        isHintExpanded={true}
+        onToggleHint={onToggleHint}
+        answers={{}}
+      />,
+    );
+    expect(screen.getByRole("note")).toHaveTextContent('Bắt đầu bằng "she" (4 từ)');
+
+    rerender(
+      <QuestionRendererPolymorphic
+        {...baseHandlers}
+        question={unscrambleQ}
+        index={2}
+        totalQuestions={3}
+        phase="REVIEW"
+        isHintExpanded={true}
+        onToggleHint={onToggleHint}
+        answers={{ "q-hint-unscramble": { textAnswer: "she reads every day" } }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Gợi ý|Ẩn gợi ý/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  it("QuestionContextView: hiển thị số giây, thanh tua -5s/+5s, chọn tốc độ 0.75x-1.5x khi có audioUrl và trạng thái đang tạo audio", async () => {
+    const user = userEvent.setup();
+    const onChangePlaybackRate = vi.fn();
+    const onSkipAudio = vi.fn();
+
+    const { rerender } = render(
+      <QuestionContextView
+        isListening={true}
+        isReading={false}
+        isVocab={false}
+        audioUrl="/uploads/audio/day21_listening_1.wav"
+        listeningScript="Hello from Green Valley Sports Center."
+        phase="TESTING"
+        audioRef={{ current: null }}
+        isPlayingAudio={false}
+        onTogglePlayAudio={vi.fn()}
+        audioCurrentTime={12}
+        audioDuration={65}
+        onSeekAudio={vi.fn()}
+        onSkipAudio={onSkipAudio}
+        playbackRate={1.0}
+        onChangePlaybackRate={onChangePlaybackRate}
+        isMuted={false}
+        onToggleMute={vi.fn()}
+        showListeningScript={false}
+        onToggleListeningScript={vi.fn()}
+        isPlayingAiVoice={false}
+        onToggleAiVoice={vi.fn()}
+        isRepairingAudio={false}
+        onRepairAudio={vi.fn()}
+        fontSizeLevel="normal"
+        passageContainerRef={{ current: null }}
+        readingMobileTab="QUESTIONS"
+        onToggleMobileTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("00:12")).toBeInTheDocument();
+    expect(screen.getByText("01:05")).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: /Tiến trình phát bài nghe/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Tua lùi 5 giây/i }));
+    expect(onSkipAudio).toHaveBeenCalledWith(-5);
+    await user.click(screen.getByRole("button", { name: /Tua tới 5 giây/i }));
+    expect(onSkipAudio).toHaveBeenCalledWith(5);
+
+    await user.click(screen.getByRole("button", { name: "0.75x" }));
+    expect(onChangePlaybackRate).toHaveBeenCalledWith(0.75);
+    await user.click(screen.getByRole("button", { name: "1.5x" }));
+    expect(onChangePlaybackRate).toHaveBeenCalledWith(1.5);
+
+    rerender(
+      <QuestionContextView
+        isListening={true}
+        isReading={false}
+        isVocab={false}
+        audioUrl={null}
+        listeningScript="Hello script"
+        phase="TESTING"
+        audioRef={{ current: null }}
+        isPlayingAudio={false}
+        onTogglePlayAudio={vi.fn()}
+        audioCurrentTime={0}
+        audioDuration={0}
+        onSeekAudio={vi.fn()}
+        onSkipAudio={onSkipAudio}
+        playbackRate={1.0}
+        onChangePlaybackRate={onChangePlaybackRate}
+        isMuted={false}
+        onToggleMute={vi.fn()}
+        showListeningScript={false}
+        onToggleListeningScript={vi.fn()}
+        isPlayingAiVoice={false}
+        onToggleAiVoice={vi.fn()}
+        isRepairingAudio={true}
+        onRepairAudio={vi.fn()}
+        fontSizeLevel="normal"
+        passageContainerRef={{ current: null }}
+        readingMobileTab="QUESTIONS"
+        onToggleMobileTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Đang tạo audio...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Đang tạo audio/i })).toBeDisabled();
   });
 });

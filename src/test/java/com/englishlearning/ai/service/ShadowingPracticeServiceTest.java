@@ -262,4 +262,41 @@ class ShadowingPracticeServiceTest {
         assertThat(studentAnswer.getIsCorrect()).isFalse();
         verifyNoInteractions(analyticsService);
     }
+
+    @Test
+    @DisplayName("practiceShadowing: gắn AiCoachingAdvice từ dữ liệu Python và lưu vào AiEvaluation")
+    void practiceShadowing_attachesAndPersistsAiCoaching() {
+        StudentAnswer studentAnswer = new StudentAnswer();
+        studentAnswer.setId(sampleAnswerId);
+        when(entityManager.find(StudentAnswer.class, sampleAnswerId)).thenReturn(studentAnswer);
+        when(aiEvaluationRepository.findByStudentAnswerId(sampleAnswerId)).thenReturn(Optional.empty());
+
+        com.englishlearning.ai.service.SpeakingAiCoachingService coachingMock =
+                mock(com.englishlearning.ai.service.SpeakingAiCoachingService.class);
+        shadowingPracticeService.setSpeakingAiCoachingService(coachingMock);
+
+        ShadowingEvaluationResponse pythonResp = ShadowingEvaluationResponse.builder()
+                .overallScore(78)
+                .isPassed(false)
+                .evaluatedBy("PYTHON_ACOUSTIC_ENGINE")
+                .build();
+        when(aiEvaluationService.evaluateSpeech(eq(sampleAudio), eq("audio.wav"), eq(sampleReference)))
+                .thenReturn(pythonResp);
+        when(coachingMock.generateShadowingCoaching(eq(pythonResp), eq(sampleReference), eq("SHADOWING")))
+                .thenReturn(com.englishlearning.ai.dto.AiCoachingAdvice.builder()
+                        .summary("Cần luyện nối âm và nhấn trọng âm.")
+                        .actionTips(java.util.List.of("Đọc rõ từ 'practice'."))
+                        .generatedBy("GROQ_AI_COACH")
+                        .build());
+
+        ShadowingEvaluationResponse result = shadowingPracticeService.practiceShadowing(
+                sampleAnswerId, sampleAudio, "audio.wav", sampleReference);
+
+        assertThat(result.getAiCoaching()).isNotNull();
+        assertThat(result.getAiCoaching().getSummary()).contains("nối âm");
+
+        ArgumentCaptor<AiEvaluation> captor = ArgumentCaptor.forClass(AiEvaluation.class);
+        verify(aiEvaluationRepository).save(captor.capture());
+        assertThat(captor.getValue().getSuggestionsJson()).contains("aiCoaching", "GROQ_AI_COACH");
+    }
 }

@@ -1,11 +1,15 @@
 """
-Extract continuous-speech empirical F1/F2 vowel distributions (means, stds, 2x2 covariances)
-from LibriSpeech clean/validation speakers (CC BY 4.0) and update reference_profiles/vowels.json.
+Trích xuất phân phối thực nghiệm tần số formant F1/F2 của nguyên âm trong lời nói liên tục
+từ bộ dữ liệu LibriSpeech clean/validation (CC BY 4.0) và cập nhật file chuẩn khẩu hình:
+    reference_profiles/vowels.json
 
-Supports:
-  - Speaker-disjoint 80/20 split (default: updates vowels.json from 80% train speakers only)
-  - Full dataset aggregation (--all-speakers / --from-cache) over all 2,703 utterances
-  - Multiprocess CPU extraction (--workers N) + per-utterance JSONL cache (--points-cache)
+Cách hoạt động và cơ chế chống rò rỉ dữ liệu:
+  - Đọc LibriSpeech clean/validation và chia tách hoàn toàn theo người nói (speaker-disjoint 80/20):
+    mặc định CHỈ dùng 80% người nói tập train để tính trung bình (`mean`), độ lệch chuẩn (`std`)
+    và ma trận hiệp phương sai 2x2 (`covariance`) xuất vào `reference_profiles/vowels.json` cho 2 giới tính
+    (`en-US-male`, `en-US-female`), giữ 20% người nói còn lại hoàn toàn độc lập cho bước đo kiểm.
+  - Hỗ trợ tổng hợp toàn bộ 2.703 câu (`--all-speakers` / `--from-cache`).
+  - Hỗ trợ chạy đa tiến trình CPU (`--workers N`), lưu cache từng câu ra JSONL (`--points-cache`) và chạy tiếp (`--resume`).
 """
 import argparse
 import concurrent.futures
@@ -32,10 +36,12 @@ from tools.dataset_utils import (  # noqa: E402
     split_by_speaker,
 )
 
+# Ngữ cảnh dùng chung cho từng tiến trình worker để tránh phải nạp lại mô hình nhiều lần
 _WORKER_CTX: Dict[str, Any] = {}
 
 
 def _init_formant_worker(torch_threads: int) -> None:
+    """Khởi tạo môi trường và nạp sẵn các service (aligner, preprocessor, formant_service) một lần cho mỗi worker."""
     os.environ["OMP_NUM_THREADS"] = str(torch_threads)
     os.environ["MKL_NUM_THREADS"] = str(torch_threads)
     import torch
@@ -50,7 +56,7 @@ def _init_formant_worker(torch_threads: int) -> None:
     from app.services.audio_preprocessor import preprocessor
     from app.services.formant_service import formant_service
 
-    # Ensure model is warm once per worker
+    # Nạp sẵn mô hình forced aligner một lần cho mỗi tiến trình worker để tái sử dụng qua nhiều câu
     forced_aligner.model_mgr.load_model()
     _WORKER_CTX["settings"] = settings
     _WORKER_CTX["forced_aligner"] = forced_aligner
@@ -60,6 +66,13 @@ def _init_formant_worker(torch_threads: int) -> None:
 
 
 def _process_formant_item(item: Tuple[int, str, bool, str, dict]) -> Dict[str, Any]:
+    """
+    Trích xuất các cặp tần số (F1, F2) của từng nguyên âm rõ ràng trong một câu LibriSpeech.
+
+    Quy trình: chuẩn hóa âm lượng + lọc thông dải -> căn chỉnh thời gian forced alignment -> trích xuất formant ->
+    chỉ giữ các nguyên âm có thời lượng >= 25 ms và xác suất hậu nghiệm chuẩn >= 0.40 ->
+    lấy trung vị F1/F2 trong cửa sổ ổn định giữa nguyên âm (mid ± 14 ms).
+    """
     orig_idx, speaker_id, is_train, text, audio_dict = item
     if not _WORKER_CTX:
         _init_formant_worker(2)
@@ -73,9 +86,11 @@ def _process_formant_item(item: Tuple[int, str, bool, str, dict]) -> Dict[str, A
     try:
         validate_script(text)
         audio = decode_parquet_audio(audio_dict, target_sr=settings.SAMPLE_RATE)
+        # Bỏ qua các đoạn âm thanh quá ngắn (< 0.5 giây)
         if len(audio) < int(settings.SAMPLE_RATE * 0.5):
             return {"idx": orig_idx, "speaker_id": speaker_id, "is_train": is_train, "ok": False}
 
+        # Chuẩn hóa biên độ đỉnh về 0.95 và lọc thông dải giống hệt luồng tiền xử lý của API chính
         max_val = float(np.max(np.abs(audio)))
         if max_val > 1e-4:
             audio = (audio / max_val) * 0.95
@@ -99,9 +114,11 @@ def _process_formant_item(item: Tuple[int, str, bool, str, dict]) -> Dict[str, A
                     if p_obj.canonical_posterior is not None
                     else p_obj.posterior
                 )
+                # Loại bỏ nguyên âm quá ngắn hoặc phát âm lướt có độ tin cậy căn chỉnh thấp
                 if dur < 0.025 or canon_post < 0.40:
                     continue
 
+                # Lấy mẫu tại vùng tâm ổn định của nguyên âm (±14 ms quanh trung điểm, bước 4 ms) để tránh ảnh hưởng phụ âm kế bên
                 mid = p_obj.start + 0.5 * dur
                 w_start = max(p_obj.start, mid - 0.014)
                 w_end = min(p_obj.end, mid + 0.014)
@@ -111,6 +128,7 @@ def _process_formant_item(item: Tuple[int, str, bool, str, dict]) -> Dict[str, A
                     try:
                         v1 = formants.get_value_at_time(1, curr_t)
                         v2 = formants.get_value_at_time(2, curr_t)
+                        # Ràng buộc ngưỡng vật lý hợp lệ của giọng người trưởng thành (F1: 180..1250 Hz, F2: 500..3200 Hz)
                         if v1 and not np.isnan(v1) and not np.isinf(v1) and 180.0 <= v1 <= 1250.0:
                             f1_vals.append(float(v1))
                         if v2 and not np.isnan(v2) and not np.isinf(v2) and 500.0 <= v2 <= 3200.0:
@@ -145,6 +163,7 @@ def _sample_balanced_by_speaker(
     max_per_speaker: int,
     seed: int = 42,
 ) -> List[Tuple[int, dict]]:
+    """Chọn mẫu cân bằng theo từng người nói (tối đa `max_per_speaker` câu/người; <= 0 là lấy toàn bộ) để tránh thiên lệch theo người nói."""
     if max_per_speaker <= 0:
         return list(rows)
     rng = np.random.default_rng(seed)
@@ -164,6 +183,12 @@ def _sample_balanced_by_speaker(
 
 
 def _robust_stats_2d(points: List[Tuple[float, float]]) -> Tuple[List[float], List[float], List[List[float]], int]:
+    """
+    Tính thống kê 2 chiều (F1, F2) bền vững trước nhiễu ngoại lai bằng phương pháp lọc khoảng tứ phân vị IQR.
+
+    Trả về `(mean, std, ma trận hiệp phương sai 2x2, số mẫu sạch)` và luôn kẹp sàn phương sai tối thiểu
+    (`F1 >= 625.0`, `F2 >= 3600.0`) để ma trận hiệp phương sai khả nghịch ổn định khi tính khoảng cách Mahalanobis.
+    """
     arr = np.asarray(points, dtype=np.float64)
     if len(arr) < 8:
         mean = np.mean(arr, axis=0)
@@ -176,6 +201,7 @@ def _robust_stats_2d(points: List[Tuple[float, float]]) -> Tuple[List[float], Li
             len(arr),
         )
 
+    # Lọc ngoại lai theo quy tắc 1.8 * IQR cho cả trục F1 và F2
     q1_1, q3_1 = np.percentile(arr[:, 0], [25, 75])
     q1_2, q3_2 = np.percentile(arr[:, 1], [25, 75])
     iqr_1 = max(25.0, q3_1 - q1_1)
@@ -193,6 +219,7 @@ def _robust_stats_2d(points: List[Tuple[float, float]]) -> Tuple[List[float], Li
     cov = np.cov(clean, rowvar=False)
     if cov.shape != (2, 2):
         cov = np.diag([np.var(clean[:, 0]), np.var(clean[:, 1])])
+    # Kẹp sàn phương sai (std >= 25 Hz cho F1, >= 60 Hz cho F2) tránh sụp đổ phân phối
     cov[0, 0] = max(625.0, float(cov[0, 0]))
     cov[1, 1] = max(3600.0, float(cov[1, 1]))
     std = np.sqrt(np.diag(cov))
@@ -214,6 +241,12 @@ def _aggregate_and_save(
     min_samples: int,
     elapsed_sec: float,
 ) -> None:
+    """
+    Gom các điểm formant hợp lệ theo giới tính và ký hiệu nguyên âm rồi xuất ra `reference_profiles/vowels.json`.
+
+    Nếu `all_speakers=False`, chỉ tổng hợp từ các bản ghi có `is_train=True` (80% người nói tập train)
+    để bảo đảm tách biệt hoàn toàn với 20% người nói held-out. Đồng thời lưu tóm tắt ra `cache/librispeech_formants_summary.json`.
+    """
     samples: Dict[str, Dict[str, List[Tuple[float, float]]]] = {
         "MALE": defaultdict(list),
         "FEMALE": defaultdict(list),
@@ -222,6 +255,7 @@ def _aggregate_and_save(
     skipped = 0
     used_speakers = set()
     for rec in records:
+        # Chống rò rỉ dữ liệu: bỏ qua tập held-out khi không bật cờ --all-speakers
         if not all_speakers and not rec.get("is_train", True):
             continue
         if not rec.get("ok"):
@@ -255,6 +289,7 @@ def _aggregate_and_save(
     for gender, json_key in bucket_map.items():
         section = vowels_data.get(json_key, {})
         summary["updated"][json_key] = {}
+        # Ánh xạ một số ký hiệu IPA từ aligner sang khóa chuẩn đang lưu trong vowels.json
         alias_to_key = {"ɛ": "e", "ɚ": "ɜː", "ɑ": "ɑː", "ɔ": "ɔː", "i": "iː", "u": "uː"}
         for sym, pts in sorted(samples[gender].items()):
             target_key = sym if sym in section else alias_to_key.get(sym)
@@ -303,11 +338,14 @@ def _aggregate_and_save(
 
 
 def main():
+    """Điểm khởi chạy CLI: phân tích tham số, chia tách người nói LibriSpeech, trích xuất formant và xuất `vowels.json`."""
     parser = argparse.ArgumentParser()
+    # Số câu tối đa mỗi người nói, ngưỡng mẫu tối thiểu mỗi nguyên âm, số worker và số luồng PyTorch
     parser.add_argument("--max-per-speaker", type=int, default=14, help="0 = use ALL utterances per speaker")
     parser.add_argument("--min-samples", type=int, default=20)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--torch-threads", type=int, default=2)
+    # Tùy chọn gộp toàn bộ người nói, cache thêm tập held-out, đọc thẳng từ cache hoặc chạy tiếp từ checkpoint
     parser.add_argument("--all-speakers", action="store_true", help="Include all 40 speakers instead of 80% train split")
     parser.add_argument("--extract-both-splits", action="store_true", help="Cache held-out speaker points too while updating train-only or all")
     parser.add_argument("--points-cache", type=Path, default=ROOT / "cache" / "ls_all_formant_points.jsonl")
@@ -318,6 +356,7 @@ def main():
     args = parser.parse_args()
 
     t0 = time.time()
+    # Chế độ tổng hợp nhanh từ file JSONL cache sẵn có mà không cần giải mã audio lại
     if args.from_cache:
         records = []
         with open(args.points_cache, "r", encoding="utf-8") as f:
@@ -329,6 +368,7 @@ def main():
         _aggregate_and_save(records, all_speakers=args.all_speakers, min_samples=args.min_samples, elapsed_sec=time.time() - t0)
         return
 
+    # Tải LibriSpeech clean/validation và chia 80% người nói train / 20% người nói held-out với seed=42
     all_rows = load_parquet_rows(LIBRISPEECH_VAL)
     train_rows, heldout_rows = split_by_speaker(all_rows, speaker_key="speaker_id", train_frac=0.80, seed=42)
     train_spk_set = {str(r["speaker_id"]) for r in train_rows}
@@ -340,6 +380,7 @@ def main():
     if args.all_speakers or args.extract_both_splits:
         sampled_pairs.extend(_sample_balanced_by_speaker(indexed_heldout, max_per_speaker=args.max_per_speaker, seed=42))
 
+    # Nếu bật --resume, nạp các chỉ số câu đã xử lý để bỏ qua không trích xuất lại
     existing_records: Dict[int, Dict[str, Any]] = {}
     if args.resume and args.points_cache.exists():
         with open(args.points_cache, "r", encoding="utf-8") as f:
@@ -373,6 +414,7 @@ def main():
     ok_now = 0
     skip_now = 0
 
+    # Chạy tuần tự (workers <= 1) hoặc song song đa tiến trình (ProcessPoolExecutor) và ghi dần ra points-cache
     with open(args.points_cache, mode, encoding="utf-8") as fout:
         if args.workers <= 1:
             _init_formant_worker(args.torch_threads)

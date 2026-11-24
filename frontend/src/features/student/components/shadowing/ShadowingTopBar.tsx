@@ -1,18 +1,13 @@
 // src/features/student/components/shadowing/ShadowingTopBar.tsx
 import { memo } from "react";
-import { ArrowLeft, Mic, RotateCcw } from "lucide-react";
+import { ArrowLeft, Mic } from "lucide-react";
 import { useAudioStore } from "@/store/useAudioStore";
-import {
-  usePracticeStore,
-  type ShadowingPracticeMode,
-} from "@/store/usePracticeStore";
 
 export interface ShadowingTopBarProps {
   readonly currentStep?: number;
   readonly totalSteps?: number;
   readonly onBack?: () => void;
   readonly onChangeSpeed: (speed: number) => void;
-  readonly onRepairAudio: () => void;
 }
 
 export const ShadowingTopBar = memo<ShadowingTopBarProps>(
@@ -21,24 +16,14 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
     totalSteps = 1,
     onBack,
     onChangeSpeed,
-    onRepairAudio,
   }) {
     // Selective subscriptions: Không bao giờ re-render khi sóng âm 60fps cập nhật
-    const practiceMode = usePracticeStore((s) => s.practiceMode);
-    const setPracticeMode = usePracticeStore((s) => s.setPracticeMode);
-
     const playbackSpeed = useAudioStore((s) => s.playbackSpeed);
-    const isRepairingNative = useAudioStore((s) => s.isRepairingNative);
-    const isSynthesizingNative = useAudioStore((s) => s.isSynthesizingNative);
 
     const progressPercent =
       totalSteps > 0
         ? Math.min(100, Math.round((currentStep / totalSteps) * 100))
         : 100;
-
-    const handleSelectMode = (mode: ShadowingPracticeMode) => {
-      setPracticeMode(mode);
-    };
 
     return (
       <header
@@ -68,12 +53,12 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
                 Luyện nói
               </h3>
               <span className="text-[10px] font-semibold bg-blue-100 dark:bg-blue-600/20 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-600/30">
-                {practiceMode === "shadowing" ? "Đọc đuổi" : "Đọc đơn"}
+                Đọc đuổi
               </span>
             </div>
           </div>
 
-          {/* Công cụ điều khiển: Chế độ, Tốc độ, Tạo lại mẫu & BẢNG QUY ƯỚC MÀU CHỈ 1 LẦN Ở TRÊN */}
+          {/* Công cụ điều khiển: BẢNG QUY ƯỚC MÀU & Tốc độ phát mẫu */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Chú giải màu phát âm */}
             <div
@@ -111,40 +96,6 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
               </span>
             </div>
 
-            {/* Chuyển đổi chế độ Shadowing / Normal */}
-            <div
-              role="radiogroup"
-              aria-label="Chọn chế độ luyện phát âm"
-              className="inline-flex p-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
-            >
-              <button
-                type="button"
-                role="radio"
-                aria-checked={practiceMode === "shadowing"}
-                onClick={() => handleSelectMode("shadowing")}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-                  practiceMode === "shadowing"
-                    ? "bg-blue-800 text-white shadow-2xs"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                Shadowing
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={practiceMode === "normal"}
-                onClick={() => handleSelectMode("normal")}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-                  practiceMode === "normal"
-                    ? "bg-blue-800 text-white shadow-2xs"
-                    : "text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                Normal
-              </button>
-            </div>
-
             {/* Tốc độ phát mẫu */}
             <div
               role="group"
@@ -168,26 +119,6 @@ export const ShadowingTopBar = memo<ShadowingTopBarProps>(
                 </button>
               ))}
             </div>
-
-            {/* Nút tái tạo Audio Self-healing */}
-            <button
-              type="button"
-              onClick={onRepairAudio}
-              disabled={isRepairingNative || isSynthesizingNative}
-              aria-label="Tạo lại âm thanh mẫu trên máy chủ nếu gặp sự cố"
-              title="Tự sửa lỗi: Tái tạo âm thanh mẫu trên máy chủ"
-              className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-            >
-              <RotateCcw
-                aria-hidden="true"
-                className={`h-3 w-3 ${
-                  isRepairingNative ? "animate-spin text-amber-500" : ""
-                }`}
-              />
-              <span className="hidden sm:inline">
-                {isRepairingNative ? "Đang tạo..." : "Tạo lại"}
-              </span>
-            </button>
           </div>
         </div>
 

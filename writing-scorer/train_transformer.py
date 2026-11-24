@@ -1,11 +1,12 @@
-"""GPU-trained Transformer multi-task regressor for IELTS Writing Task 2 scoring.
+"""Huấn luyện mô hình Transformer đa nhiệm trên GPU (mặc định DeBERTa-v3-small) để chấm điểm IELTS Writing Task 2.
 
-Designed to train cleanly within 4GB VRAM (e.g. NVIDIA GTX 1650) using Adafactor
-or memory-safe AdamW, optional FP16 AMP / activation checkpointing, length-bucketed
-dynamic padding, head+tail truncation to 512 tokens, multi-task supervision
-(overall + TR/CC/LR/GRA sub-criteria), Jackrong CoT confidence + mild tail weighting,
-train-only feedback bank indexing, and validation-only calibration + hybrid blending
-with the TF-IDF/LightGBM baseline.
+Được tối ưu để huấn luyện ổn định trong giới hạn 4GB VRAM (như NVIDIA GTX 1650) bằng cách kết hợp:
+- Trình tối ưu Adafactor hoặc AdamW tiết kiệm bộ nhớ, hỗ trợ FP16 AMP và activation/gradient checkpointing.
+- Chia bucket theo độ dài (length-bucketed dynamic padding) + cắt ghép đầu/đuôi bài luận trong ngưỡng 512 token.
+- Kiến trúc DeBERTa + đầu hồi quy `AttentionMeanPoolHead` giám sát đa nhiệm 5 đầu điểm (Overall + TR/CC/LR/GRA).
+- Trọng số mẫu kết hợp độ tin cậy CoT của Jackrong và tăng nhẹ trọng số cho các band hiếm (tail weighting).
+- Xây dựng chỉ mục lời khuyên `feedback_bank.joblib` chỉ từ tập train, hiệu chỉnh tuyến tính trên tập val,
+  dò trọng số lai `hybrid_config.json` với mô hình Baseline và cập nhật `best_manifest.json`.
 """
 
 from __future__ import annotations
@@ -45,12 +46,14 @@ from evaluate import (
     round_to_half_band,
 )
 
+# Giới hạn kích thước mảnh cấp phát CUDA để giảm phân mảnh VRAM trên GPU bộ nhớ nhỏ (4GB)
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
 
 TARGETS = ("overall_band",) + SUBCRITERIA_KEYS
 
 
 def set_seed(seed: int) -> None:
+    """Cố định seed ngẫu nhiên cho Python, NumPy và PyTorch (CPU + GPU) để tái lập kết quả."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -65,7 +68,7 @@ def encode_prompt_essay_pair(
     max_length: int = 512,
     max_prompt_tokens: int = 96,
 ) -> dict[str, list[int]]:
-    """Encode (prompt, essay) preserving full prompt and head+tail of long essays."""
+    """Mã hóa cặp (prompt, essay): giữ trọn đề bài (tối đa 96 token) và lấy đầu+đuôi (72% + 28%) nếu bài viết vượt giới hạn."""
     prompt_text = f"Topic: {(prompt or '').strip()}"
     essay_text = (essay or "").strip()
 
@@ -84,14 +87,17 @@ def encode_prompt_essay_pair(
         else (tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 2)
     )
 
+    # Dành phần ngân sách còn lại (trừ [CLS] và 2 [SEP]) cho nội dung bài luận
     essay_budget = max(32, max_length - len(prompt_ids) - 3)
     essay_ids = tokenizer.encode(essay_text, add_special_tokens=False)
     if len(essay_ids) > essay_budget:
+        # Giữ 72% phần mở đầu + thân bài và 28% phần kết luận thay vì cắt cụt toàn bộ đoạn cuối
         head_len = int(essay_budget * 0.72)
         tail_len = essay_budget - head_len
         essay_ids = essay_ids[:head_len] + (essay_ids[-tail_len:] if tail_len > 0 else [])
 
     input_ids = [cls_id] + prompt_ids + [sep_id] + essay_ids + [sep_id]
+    # Phân đoạn token_type_ids: 0 cho vùng đề bài, 1 cho vùng bài luận
     token_type_ids = [0] * (len(prompt_ids) + 2) + [1] * (len(essay_ids) + 1)
     attention_mask = [1] * len(input_ids)
     return {
@@ -102,7 +108,7 @@ def encode_prompt_essay_pair(
 
 
 def _compute_sample_weights(records: list[dict[str, Any]]) -> list[float]:
-    """Compute sample confidence + mild tail weights from train records only."""
+    """Tính trọng số mẫu dựa trên độ tin cậy nhãn (Jackrong CoT + độ khớp overall/subcriteria) và cân bằng band hiếm chỉ trên tập train."""
     band_counts = Counter(float(round_to_half_band(float(r["overall_band"]))) for r in records)
     median_count = float(np.median(list(band_counts.values()))) if band_counts else 1.0
 
@@ -111,6 +117,7 @@ def _compute_sample_weights(records: list[dict[str, Any]]) -> list[float]:
         has_reasoning = bool((rec.get("reasoning") or "").strip())
         subs = [rec.get(k) for k in SUBCRITERIA_KEYS]
         overall = rec.get("overall_band")
+        # Ưu tiên mẫu có chuỗi suy luận CoT (x1.15); giảm trọng số (0.70) nếu điểm tổng và trung bình 4 tiêu chí lệch > 1.25
         conf_w = 1.15 if has_reasoning else 1.0
         if overall is not None and all(v is not None for v in subs):
             mean_sub = float(np.mean([float(v) for v in subs]))
@@ -120,17 +127,19 @@ def _compute_sample_weights(records: list[dict[str, Any]]) -> list[float]:
             elif diff > 1.25:
                 conf_w = 0.70
 
+        # Tăng nhẹ trọng số cho các band điểm ít xuất hiện theo lũy thừa êm 0.20, kẹp trong [0.90, 1.55]
         b_key = float(round_to_half_band(float(overall)))
         b_cnt = max(1, band_counts.get(b_key, 1))
         tail_w = float(np.clip((median_count / b_cnt) ** 0.20, 0.90, 1.55))
         raw_weights.append(conf_w * tail_w)
 
+    # Chuẩn hóa để trung bình trọng số xấp xỉ 1.0, giữ ổn định thang gradient
     mean_w = float(np.mean(raw_weights)) if raw_weights else 1.0
     return [w / max(1e-6, mean_w) for w in raw_weights]
 
 
 class IeltsEssayDataset(Dataset):
-    """Tokenized dataset with dynamic padding support."""
+    """Dataset đã tokenize sẵn, gắn mặt nạ nhãn tiêu chí con (`label_mask`) và hỗ trợ padding động."""
 
     def __init__(
         self,
@@ -150,6 +159,7 @@ class IeltsEssayDataset(Dataset):
             )
             labels = []
             mask = []
+            # Đánh dấu mask=0.0 cho các tiêu chí con bị khuyết (ví dụ một số mẫu chillies không ghi đủ 4 sub-criteria)
             for key in TARGETS:
                 val = rec.get(key)
                 if val is None:
@@ -171,7 +181,7 @@ class IeltsEssayDataset(Dataset):
 
 
 class BucketBatchSampler(Sampler[list[int]]):
-    """Length-bucketed batch sampler to minimize padding overhead while keeping stochasticity."""
+    """Bộ gom batch theo nhóm độ dài (length bucketing) để giảm tối đa lượng padding thừa mà vẫn giữ tính ngẫu nhiên."""
 
     def __init__(self, lengths: list[int], batch_size: int, seed: int = 42) -> None:
         self.lengths = lengths
@@ -183,7 +193,7 @@ class BucketBatchSampler(Sampler[list[int]]):
         rng = random.Random(self.seed + self.epoch)
         self.epoch += 1
         indices = list(range(len(self.lengths)))
-        # Add mild jitter to length so batches vary across epochs
+        # Cộng nhiễu nhẹ ±24 token khi sắp xếp độ dài để thành phần mỗi batch thay đổi qua từng epoch
         indices.sort(key=lambda i: self.lengths[i] + rng.randint(-24, 24))
         batches = [
             indices[i : i + self.batch_size]
@@ -197,6 +207,7 @@ class BucketBatchSampler(Sampler[list[int]]):
 
 
 def make_collate_fn(pad_token_id: int, use_token_type_ids: bool = True):
+    """Tạo hàm collate thực hiện dynamic padding theo độ dài câu dài nhất trong từng batch."""
     def collate(batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
         max_len = max(len(x["input_ids"]) for x in batch)
         bs = len(batch)
@@ -226,15 +237,17 @@ def make_collate_fn(pad_token_id: int, use_token_type_ids: bool = True):
 
 
 class AttentionMeanPoolHead(nn.Module):
-    """FP16-safe attention + mean pooling regression head for 5 IELTS targets."""
+    """Đầu hồi quy kết hợp Attention Pooling + Mean Pooling an toàn cho FP16 để dự đoán đồng thời 5 đầu điểm IELTS."""
 
     def __init__(self, hidden_size: int, num_targets: int = 5, dropout: float = 0.15) -> None:
         super().__init__()
+        # Mạng chú ý 2 tầng tính trọng số quan trọng cho từng token trong bài viết
         self.attn_proj = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.Tanh(),
             nn.Linear(hidden_size // 2, 1),
         )
+        # MLP nhận vector ghép [attn_pool, mean_pool] kích thước hidden_size * 2 -> 5 giá trị band
         self.head = nn.Sequential(
             nn.LayerNorm(hidden_size * 2),
             nn.Dropout(dropout),
@@ -243,10 +256,12 @@ class AttentionMeanPoolHead(nn.Module):
             nn.Dropout(dropout * 0.7),
             nn.Linear(256, num_targets),
         )
+        # Khởi tạo bias lớp cuối = 6.0 (gần trung bình thang IELTS) giúp mô hình hội tụ nhanh ngay từ bước đầu
         nn.init.constant_(self.head[-1].bias, 6.0)
 
     def forward(self, last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         mask = attention_mask.unsqueeze(-1).to(last_hidden_state.dtype)
+        # Dùng -1e4 để che token padding trước softmax (tránh tràn underflow/NaN ở FP16)
         scores = self.attn_proj(last_hidden_state).masked_fill(mask == 0, -1e4)
         attn_weights = torch.softmax(scores, dim=1)
         attn_pool = torch.sum(last_hidden_state * attn_weights, dim=1)
@@ -259,7 +274,7 @@ class AttentionMeanPoolHead(nn.Module):
 
 
 class IeltsTransformerRegressor(nn.Module):
-    """Encoder backbone + multi-task IELTS regression head."""
+    """Kiến trúc mô hình gồm backbone DeBERTa và đầu hồi quy đa nhiệm `AttentionMeanPoolHead`."""
 
     def __init__(self, backbone: nn.Module, hidden_size: int, dropout: float = 0.15) -> None:
         super().__init__()
@@ -290,8 +305,9 @@ def compute_multitask_loss(
     label_mask: torch.Tensor,
     sample_weight: torch.Tensor,
 ) -> torch.Tensor:
-    """Weighted SmoothL1 loss across overall + masked sub-criteria + IELTS consistency."""
+    """Hàm mất mát đa nhiệm: SmoothL1 có trọng số/mặt nạ cho Overall + 4 sub-criteria cộng ràng buộc nhất quán IELTS."""
     huber = nn.functional.smooth_l1_loss(preds, labels, reduction="none", beta=0.5)
+    # Ưu tiên overall (1.0) và chia đều cho 4 tiêu chí thành phần (mỗi tiêu chí 0.35)
     target_weights = torch.tensor(
         [1.0, 0.35, 0.35, 0.35, 0.35], device=preds.device, dtype=preds.dtype
     )
@@ -299,6 +315,7 @@ def compute_multitask_loss(
     denom = (label_mask * target_weights.unsqueeze(0) * sample_weight.unsqueeze(1)).sum().clamp(min=1.0)
     reg_loss = masked.sum() / denom
 
+    # Ràng buộc nhất quán: điểm Overall dự đoán phải gần với trung bình cộng 4 tiêu chí con (hệ số 0.12)
     crit_mean = preds[:, 1:].mean(dim=1)
     consistency_loss = nn.functional.mse_loss(preds[:, 0], crit_mean)
     return reg_loss + 0.12 * consistency_loss
@@ -311,6 +328,7 @@ def predict_transformer(
     device: torch.device,
     use_amp: bool,
 ) -> np.ndarray:
+    """Chạy suy luận Transformer theo batch (tắt gradient) trả về mảng điểm thô kích thước (N, 5)."""
     model.eval()
     all_preds: list[np.ndarray] = []
     for batch in loader:
@@ -330,6 +348,7 @@ def _preds_array_to_dicts(
     arr: np.ndarray,
     calibrators: dict[str, tuple[float, float]] | None = None,
 ) -> list[dict[str, float]]:
+    """Chuyển mảng kết quả (N, 5) sang danh sách dict gồm điểm thô (`*_raw`) và điểm làm tròn bước 0.5."""
     out: list[dict[str, float]] = []
     for row in arr:
         d: dict[str, float] = {}
@@ -349,6 +368,7 @@ def _fit_val_calibrators(
     records: list[dict[str, Any]],
     raw_arr: np.ndarray,
 ) -> dict[str, tuple[float, float]]:
+    """Khớp bộ hiệu chỉnh tuyến tính (slope, intercept) trên tập validation cho từng đầu điểm nếu giúp giảm MAE."""
     calibrators: dict[str, tuple[float, float]] = {}
     for idx, target in enumerate(TARGETS):
         pairs = [
@@ -376,7 +396,7 @@ def _fit_val_calibrators(
 
 
 def _extract_concise_tips(feedback: str) -> list[str]:
-    """Extract short, clean actionable bullets from Jackrong examiner feedback."""
+    """Rút trích tối đa 3 gạch đầu dòng lời khuyên ngắn gọn, hữu ích từ phần đánh giá của giám khảo Jackrong."""
     tips: list[str] = []
     in_improvement_section = False
     for line in feedback.splitlines():
@@ -410,7 +430,7 @@ def _extract_concise_tips(feedback: str) -> list[str]:
 
 
 def build_feedback_bank(train_recs: list[dict[str, Any]], out_path: Path, max_entries: int = 2500) -> None:
-    """Build a train-only retrieval index of Jackrong actionable feedback patterns."""
+    """Xây dựng chỉ mục truy xuất lời khuyên (`feedback_bank.joblib`) bằng TF-IDF + SVD 64 chiều chỉ từ tập train."""
     candidates: list[dict[str, Any]] = []
     for rec in train_recs:
         fb = (rec.get("feedback") or "").strip()
@@ -432,6 +452,7 @@ def build_feedback_bank(train_recs: list[dict[str, Any]], out_path: Path, max_en
     if not candidates:
         return
 
+    # Vector hóa (prompt + tips) bằng TF-IDF rồi nén về 64 chiều chuẩn hóa L2 để tra cứu nhanh bằng cosine similarity
     texts = [f"{c['prompt']} " + " ".join(c["tips"]) for c in candidates]
     vec = TfidfVectorizer(max_features=8000, ngram_range=(1, 2), stop_words="english", min_df=2)
     mat = vec.fit_transform(texts)
@@ -459,7 +480,7 @@ def _tune_hybrid_on_val(
     tr_calibrators: dict[str, tuple[float, float]],
     baseline_dir: Path,
 ) -> dict[str, Any] | None:
-    """Fit hybrid blend weights strictly on val.jsonl if baseline exists."""
+    """Dò trọng số lai tối ưu (`transformer_weights`) giữa Transformer và Baseline chỉ trên tập `val.jsonl` nếu có Baseline."""
     bundle_path = baseline_dir / "baseline_bundle.joblib"
     if not bundle_path.exists():
         return None
@@ -474,6 +495,7 @@ def _tune_hybrid_on_val(
     base_val_preds = baseline.predict_batch(val_recs)
     tr_val_dicts = _preds_array_to_dicts(tr_val_arr, tr_calibrators)
 
+    # Tìm kiếm lưới bước 0.05 trong [0.0, 1.0] cho từng đầu điểm để tối thiểu hóa MSE trên tập val
     weights: dict[str, float] = {}
     for target in TARGETS:
         pairs = []
@@ -503,6 +525,7 @@ def _tune_hybrid_on_val(
 
 
 def _enable_activation_ckpt(backbone: nn.Module) -> None:
+    """Bật activation/gradient checkpointing cho backbone nhằm tiết kiệm VRAM khi huấn luyện."""
     if hasattr(backbone, "activation_checkpointing_enable"):
         try:
             backbone.activation_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -516,6 +539,7 @@ def _enable_activation_ckpt(backbone: nn.Module) -> None:
 
 
 def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
+    """Quy trình huấn luyện đầy đủ DeBERTa + AttentionMeanPoolHead, lưu checkpoint tốt nhất, tạo feedback_bank và dò hybrid_config.json."""
     set_seed(args.seed)
     t0 = time.time()
 
@@ -548,7 +572,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
     tokenizer = AutoTokenizer.from_pretrained(args.backbone, use_fast=True)
     config = AutoConfig.from_pretrained(args.backbone)
     config.use_cache = False
-    # Explicitly force float32 weights so GradScaler / Adafactor never hit FP16-weight unscale errors
+    # Ép trọng số backbone ở float32 để GradScaler / Adafactor không gặp lỗi unscale trọng số FP16
     backbone = AutoModel.from_pretrained(args.backbone, config=config, dtype=torch.float32)
 
     if not args.no_grad_ckpt:
@@ -593,6 +617,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
         pin_memory=(device.type == "cuda"),
     )
 
+    # Tách nhóm tham số: áp dụng weight decay cho trọng số ma trận, bỏ weight decay cho bias & LayerNorm; head học nhanh hơn 4 lần backbone
     no_decay = ("bias", "LayerNorm.weight", "LayerNorm.bias")
     optimizer_grouped_parameters = [
         {
@@ -643,6 +668,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
     backbone_save_dir = out_dir / "backbone"
     head_save_path = out_dir / "regressor_head.pt"
 
+    # Vòng lặp huấn luyện qua từng epoch và chọn checkpoint có (QWK - 0.1 * MAE) cao nhất trên tập validation
     for epoch in range(1, args.epochs + 1):
         model.train()
         optimizer.zero_grad(set_to_none=True)
@@ -671,6 +697,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
                 loss = compute_multitask_loss(preds, labels, label_mask, sample_weight)
                 scaled_loss = loss / args.grad_accum
 
+            # Bỏ qua batch nếu loss bị NaN/Inf và dừng hẳn nếu xảy ra quá 25 lần liên tiếp
             if not torch.isfinite(scaled_loss):
                 consecutive_nonfinite += 1
                 optimizer.zero_grad(set_to_none=True)
@@ -686,6 +713,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
             running_loss += float(loss.item())
             n_batches += 1
 
+            # Cộng dồn gradient đủ `grad_accum` bước mới cắt ngưỡng gradient và cập nhật trọng số
             if step % args.grad_accum == 0 or step == total_steps:
                 if use_amp:
                     scaler.unscale_(optimizer)
@@ -716,6 +744,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
         val_rep = evaluate_predictions(val_recs, val_dicts)
         ov = val_rep["overall"]
 
+        # Tiêu chí chọn checkpoint tốt nhất: cân bằng giữa độ đồng thuận QWK và sai số MAE
         sel_score = ov["qwk"] - 0.1 * ov["mae"]
         peak_vram_mb = (
             round(torch.cuda.max_memory_allocated() / (1024 ** 2), 1)
@@ -752,7 +781,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
             torch.save(model.regressor.state_dict(), head_save_path)
             print(f"  -> Saved new best checkpoint (epoch={epoch}, sel_score={sel_score:.4f})", flush=True)
 
-    # Free training state before final evaluation
+    # Giải phóng bộ nhớ optimizer/gradient trước khi nạp lại checkpoint tốt nhất để đánh giá
     del model, optimizer, scheduler, scaler
     if device.type == "cuda":
         torch.cuda.empty_cache()
@@ -768,6 +797,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
     if best_val_arr is None:
         best_val_arr = predict_transformer(best_model, val_loader, device=device, use_amp=use_amp)
 
+    # Khớp hệ số hiệu chỉnh tuyến tính trên val rồi đánh giá cuối cùng trên cả val và test
     calibrators = _fit_val_calibrators(val_recs, best_val_arr)
     test_arr = predict_transformer(best_model, test_loader, device=device, use_amp=use_amp)
 
@@ -809,6 +839,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
     }
     (out_dir / "model_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
+    # Tạo chỉ mục lời khuyên giám khảo từ tập train để dùng khi suy luận
     build_feedback_bank(train_recs, out_dir / "feedback_bank.joblib")
 
     models_root = out_dir.parent
@@ -817,6 +848,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
     best_val_qwk = val_report["overall"]["qwk"]
     best_val_mae = val_report["overall"]["mae"]
 
+    # Nếu đã huấn luyện Baseline trước đó, dò trọng số lai Hybrid trên tập val và lưu hybrid_config.json
     if (baseline_dir / "baseline_bundle.joblib").exists():
         import sys
 
@@ -872,6 +904,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
                 json.dumps(hybrid_payload, indent=2), encoding="utf-8"
             )
 
+            # So sánh 3 ứng viên (baseline, transformer, hybrid) trên tập val để chọn mô hình tốt nhất vào best_manifest.json
             candidates = [
                 ("baseline", base_val_rep["overall"]["qwk"], base_val_rep["overall"]["mae"]),
                 ("transformer", val_report["overall"]["qwk"], val_report["overall"]["mae"]),
@@ -900,6 +933,7 @@ def train_transformer(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> None:
+    """Điểm vào CLI cấu hình siêu tham số và khởi chạy huấn luyện mô hình Transformer."""
     base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Train GPU Transformer IELTS Writing Task 2 scorer.")
     parser.add_argument("--data-dir", type=str, default=str(base_dir / "data"))

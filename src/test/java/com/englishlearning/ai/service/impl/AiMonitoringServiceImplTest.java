@@ -434,4 +434,32 @@ class AiMonitoringServiceImplTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("0 lượt/ngày");
     }
+
+    @Test
+    @DisplayName("getStats: tổng chi phí học viên / tháng không bao giờ nhỏ hơn tổng estimatedCostUsd trên bảng quota")
+    void getStats_studentCostRespectsRecordedQuotaCostsSum() {
+        Student s1 = Student.builder().id(UUID.randomUUID()).build();
+        Student s2 = Student.builder().id(UUID.randomUUID()).build();
+        Student s3 = Student.builder().id(UUID.randomUUID()).build();
+
+        List<StudentAiQuota> quotas = List.of(
+                StudentAiQuota.builder().student(s1).promptTokensUsed(500L).completionTokensUsed(500L).estimatedCostUsd(0.0819).lastResetDate(LocalDate.now()).build(),
+                StudentAiQuota.builder().student(s2).promptTokensUsed(500L).completionTokensUsed(500L).estimatedCostUsd(0.1050).lastResetDate(LocalDate.now()).build(),
+                StudentAiQuota.builder().student(s3).promptTokensUsed(500L).completionTokensUsed(500L).estimatedCostUsd(0.1420).lastResetDate(LocalDate.now()).build()
+        );
+        when(quotaRepository.findAll()).thenReturn(quotas);
+        when(quotaRepository.findByStudentId(s1.getId())).thenReturn(Optional.of(quotas.get(0)));
+        when(quotaRepository.findByStudentId(s2.getId())).thenReturn(Optional.of(quotas.get(1)));
+        when(quotaRepository.findByStudentId(s3.getId())).thenReturn(Optional.of(quotas.get(2)));
+        when(aiEvaluationRepository.findAll()).thenReturn(List.of());
+        when(aiGeneratedExerciseRepository.findAll()).thenReturn(List.of());
+        when(studentRepository.findAll()).thenReturn(List.of(s1, s2, s3));
+        when(teacherRepository.findAll()).thenReturn(List.of());
+
+        AiStatsResponse stats = service.getStats();
+
+        assertThat(stats.getCostBreakdown().getStudentSpeakingCost()).isGreaterThanOrEqualTo(0.3289);
+        assertThat(stats.getMonthlyCostUsd()).isGreaterThanOrEqualTo(0.3289);
+        assertThat(stats.getEstimatedCostUsd()).isGreaterThanOrEqualTo(0.3289);
+    }
 }

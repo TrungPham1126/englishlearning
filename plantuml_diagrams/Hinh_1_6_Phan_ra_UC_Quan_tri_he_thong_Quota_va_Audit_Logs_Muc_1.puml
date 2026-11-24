@@ -1,37 +1,45 @@
 @startuml Hinh_1_6_Phan_ra_UC_Quan_tri_he_thong_Quota_va_Audit_Logs_Muc_1
 title Hình 1.6: Phân rã UC Quản trị hệ thống, Giám sát AI Quota & Nhật ký (Admin) - Mức 1
 left to right direction
-skinparam dpi 200
+skinparam dpi 150
 skinparam monochrome true
 skinparam shadowing false
-skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
-skinparam defaultFontSize 14
-skinparam titleFontSize 16
-skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 15
+skinparam titleFontStyle bold
+skinparam roundcorner 6
+skinparam padding 4
+skinparam packageStyle rectangle
+skinparam nodesep 10
+skinparam ranksep 12
 
 actor "Quản trị viên\n(Admin)" as Admin
-actor "MySQL Database" as DB <<Service>>
 
-rectangle "Phân hệ Quản trị Hệ thống & Giám sát (UC-ADM)" {
-    usecase "UC-ADM-01: Quản lý người dùng\n& Phân quyền (user_roles)" as UC_USERS
-    usecase "UC-ADM-02: Giám sát hạn ngạch Token\n& Chi phí AI (student_ai_quotas)" as UC_QUOTA
-    usecase "UC-ADM-03: Kiểm duyệt & Phê duyệt\nVideo bài giảng HLS" as UC_VIDEO_MOD
-    usecase "UC-ADM-04: Truy vết nhật ký hệ thống\nqua AOP (audit_logs)" as UC_AUDIT
-    usecase "UC-ADM-05: Quản trị kho tài nguyên dùng chung\n(global_resources)" as UC_RESOURCE
-    usecase "UC-ADM-06: Phát thông báo toàn hệ thống\n(System Broadcast)" as UC_BROADCAST
+rectangle "Phân hệ Quản trị hệ thống, Giám sát AI Quota & Nhật ký (Admin)" {
+    usecase "Quản lý người dùng (HV/GV)\n& Phân quyền RBAC" as UC_USERS
+    usecase "Quản lý lớp học &\nBáo cáo thống kê trung tâm" as UC_CLASS
+    usecase "Kiểm duyệt Video HLS &\nKho học liệu chung" as UC_VIDEO
+    usecase "Giám sát AI Quota, Chi phí\n& Nút ngắt Kill-Switch" as UC_QUOTA
+    usecase "Truy vết Audit Logs,\nCSDL/R2 & Phát thông báo" as UC_AUDIT
+
+    usecase "Cấp / Khóa tài khoản &\nThu hồi Refresh Token" as UC_LOCK
+    usecase "Điều phối GV/HV &\nXuất báo cáo Excel (.xlsx)" as UC_STAT
+    usecase "Phát xem trước luồng HLS\n& Phê duyệt (APPROVED/REJECTED)" as UC_PREVIEW
+    usecase "Điều chỉnh hạn ngạch AI\n& Chặn khẩn cấp Cloud AI" as UC_ALLOC
+    usecase "Lọc nhật ký Spring AOP,\nkiểm tra R2 & Broadcast" as UC_FILTER
 }
 
 Admin --> UC_USERS
+Admin --> UC_CLASS
+Admin --> UC_VIDEO
 Admin --> UC_QUOTA
-Admin --> UC_VIDEO_MOD
 Admin --> UC_AUDIT
-Admin --> UC_RESOURCE
-Admin --> UC_BROADCAST
 
-UC_USERS --> DB : Cập nhật users & user_roles
-UC_QUOTA --> DB : Điều chỉnh daily_limit & is_blocked
-UC_VIDEO_MOD --> DB : Cập nhật videos (APPROVED/REJECTED)
-UC_AUDIT --> DB : Ghi nhận audit_logs
-UC_BROADCAST --> DB : Lưu notifications & đẩy WebSocket
+UC_USERS ..> UC_LOCK : <<includes>>
+UC_CLASS ..> UC_STAT : <<includes>>
+UC_VIDEO ..> UC_PREVIEW : <<includes>>
+UC_QUOTA ..> UC_ALLOC : <<includes>>
+UC_AUDIT ..> UC_FILTER : <<includes>>
 @enduml

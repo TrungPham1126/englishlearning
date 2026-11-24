@@ -114,16 +114,45 @@ public class GradingEngineServiceImpl implements GradingEngineService {
         }
 
         if (selectedOptId != null && q.getOptions() != null && !q.getOptions().isEmpty()) {
-            return q.getOptions().stream()
-                    .anyMatch(opt -> opt.getId() != null
-                            && opt.getId().equals(selectedOptId)
-                            && Boolean.TRUE.equals(opt.getIsCorrect()));
+            boolean hasCorrectOptionFlag = q.getOptions().stream()
+                    .anyMatch(opt -> Boolean.TRUE.equals(opt.getIsCorrect()));
+            if (hasCorrectOptionFlag) {
+                return q.getOptions().stream()
+                        .anyMatch(opt -> opt.getId() != null
+                                && opt.getId().equals(selectedOptId)
+                                && Boolean.TRUE.equals(opt.getIsCorrect()));
+            }
+            if (q.getCorrectAnswer() != null && !q.getCorrectAnswer().isBlank()) {
+                Optional<QuestionOption> selectedOpt = q.getOptions().stream()
+                        .filter(opt -> opt.getId() != null && opt.getId().equals(selectedOptId))
+                        .findFirst();
+                if (selectedOpt.isPresent()) {
+                    QuestionOption opt = selectedOpt.get();
+                    String expected = normalizeText(q.getCorrectAnswer());
+                    if ((opt.getOptionText() != null && normalizeText(opt.getOptionText()).equalsIgnoreCase(expected))
+                            || (opt.getOptionLabel() != null && normalizeText(opt.getOptionLabel()).equalsIgnoreCase(expected))) {
+                        return true;
+                    }
+                    if (type == QuestionType.TRUE_FALSE) {
+                        String expectedTf = normalizeTrueFalseText(q.getCorrectAnswer());
+                        if ((opt.getOptionText() != null && normalizeTrueFalseText(opt.getOptionText()).equalsIgnoreCase(expectedTf))
+                                || (opt.getOptionLabel() != null && normalizeTrueFalseText(opt.getOptionLabel()).equalsIgnoreCase(expectedTf))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         if (!studentText.isBlank()) {
             if (q.getCorrectAnswer() != null && !q.getCorrectAnswer().isBlank()) {
                 String expected = normalizeText(q.getCorrectAnswer());
                 if (studentText.equalsIgnoreCase(expected)) {
+                    return true;
+                }
+                if (type == QuestionType.TRUE_FALSE
+                        && normalizeTrueFalseText(studentText).equalsIgnoreCase(normalizeTrueFalseText(q.getCorrectAnswer()))) {
                     return true;
                 }
                 if (type == QuestionType.FILL_IN_BLANK
@@ -142,7 +171,10 @@ public class GradingEngineServiceImpl implements GradingEngineService {
                 return q.getOptions().stream()
                         .anyMatch(opt -> Boolean.TRUE.equals(opt.getIsCorrect())
                                 && ((opt.getOptionText() != null && normalizeText(opt.getOptionText()).equalsIgnoreCase(studentText))
-                                 || (opt.getOptionLabel() != null && normalizeText(opt.getOptionLabel()).equalsIgnoreCase(studentText))));
+                                 || (opt.getOptionLabel() != null && normalizeText(opt.getOptionLabel()).equalsIgnoreCase(studentText))
+                                 || (type == QuestionType.TRUE_FALSE
+                                     && ((opt.getOptionText() != null && normalizeTrueFalseText(opt.getOptionText()).equalsIgnoreCase(normalizeTrueFalseText(studentText)))
+                                      || (opt.getOptionLabel() != null && normalizeTrueFalseText(opt.getOptionLabel()).equalsIgnoreCase(normalizeTrueFalseText(studentText)))))));
             }
         }
 
@@ -151,7 +183,13 @@ public class GradingEngineServiceImpl implements GradingEngineService {
 
     private String normalizeText(String raw) {
         if (raw == null) return "";
-        return Normalizer.normalize(raw.trim(), Normalizer.Form.NFC).replaceAll("\\s+", " ");
+        return Normalizer.normalize(raw.trim(), Normalizer.Form.NFC)
+                .replaceAll("\\s+", " ")
+                .replaceAll("\\s+([.,!?;:])", "$1");
+    }
+
+    private String normalizeTrueFalseText(String raw) {
+        return normalizeText(raw).replace('_', ' ').replaceAll("\\s+", " ");
     }
 
     private boolean isMultiPairMatchingQuestion(AssignmentQuestion q) {

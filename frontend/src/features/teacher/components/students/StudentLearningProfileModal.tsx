@@ -27,6 +27,7 @@ import {
   normalizeAiScoreTo10,
   normalizeScoreTo10,
 } from "@/utils/scoreScale";
+import { sortQuestionOptions } from "@/utils/questionOptions";
 
 export interface StudentProfileData {
   studentId: string;
@@ -1000,8 +1001,14 @@ export const StudentLearningProfileModal: React.FC<
                                   )}
 
                                   {q.options && q.options.length > 0 ? (
-                                    <div className="space-y-1.5">
-                                      {q.options.map((opt: any) => {
+                                    <div
+                                      className={
+                                        String(q.questionType || "").toUpperCase() === "MATCHING"
+                                          ? "space-y-1.5"
+                                          : "grid grid-cols-1 sm:grid-cols-2 grid-flow-row gap-2"
+                                      }
+                                    >
+                                      {sortQuestionOptions(q.options).map((opt: any) => {
                                         const isChosen =
                                           q.selectedOptionId === opt.id ||
                                           q.studentAnswer === opt.id;

@@ -1261,5 +1261,137 @@ describe("Admin Module - adminApi, Components, Modals & Pages", () => {
         expect(assignTeacherSpy).toHaveBeenCalledWith("cls-detail-1", "t-10");
       });
     });
+
+    it("normalizes 0-100 AdminDashboard skill scores to 0-10, labels Video / Audio in ResourceLibraryPage, and includes TOEIC_PREP in ClassroomManagementPage", async () => {
+      vi.spyOn(adminApi, "getDashboardStats").mockResolvedValue({
+        totalUsers: 20,
+        totalTeachers: 3,
+        totalStudents: 15,
+        totalClasses: 2,
+        totalLessons: 10,
+        totalVideos: 4,
+        pendingVideos: 0,
+        totalAssignments: 12,
+        totalSubmissions: 40,
+        pendingGrading: 2,
+        completionRate: 95.0,
+        weeklySubmissionsTrend: [],
+        averageSkillScores: {
+          Listening: 80.0,
+          Speaking: 60.0,
+          Reading: 70.0,
+          Writing: 70.0,
+        },
+        completionDistribution: { high: 50, medium: 25, low: 25 },
+      });
+      vi.spyOn(adminApi, "getClassrooms").mockResolvedValue({
+        content: [
+          {
+            id: "cls-toeic",
+            name: "TOEIC 4 Kỹ Năng",
+            level: "TOEIC_PREP",
+            status: "IN_PROGRESS",
+            maxStudents: 30,
+            currentStudentsCount: 12,
+          },
+        ],
+        totalElements: 1,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize: 100,
+        last: true,
+      });
+      vi.spyOn(adminApi, "getAiUsageStats").mockResolvedValue({
+        totalTokens: 1000,
+        estimatedCostUsd: 0.05,
+        monthlyCostUsd: 0.05,
+        activeUsers: 5,
+        blockedUsers: 0,
+        systemQuotaRemainingPercent: 95,
+        systemKillSwitchActive: false,
+        dailyUsage: [],
+      } as any);
+      vi.spyOn(adminApi, "getDatabaseOverview").mockResolvedValue({
+        totalClassrooms: 2,
+        completedClassrooms: 0,
+        totalEnrolledStudents: 15,
+        totalAssignments: 12,
+        totalExams: 2,
+        totalAttempts: 40,
+        totalStudentAnswers: 200,
+        totalAiEvaluations: 10,
+        totalDailyProgressRecords: 30,
+        totalSubmissionAudioFiles: 5,
+        estimatedSubmissionDataKb: 1024,
+        classrooms: [],
+      });
+      vi.spyOn(adminApi, "getAuditLogs").mockResolvedValue({
+        content: [],
+        totalElements: 0,
+        totalPages: 1,
+        number: 0,
+        size: 5,
+      } as any);
+      vi.spyOn(adminApi, "getR2CostReport").mockResolvedValue({
+        bucketName: "test-bucket",
+        liveConnected: false,
+        totalObjects: 0,
+        totalBytes: 0,
+        totalPayableUsd: 0,
+        totalPayableVnd: 0,
+        freeTierUsagePercent: 0,
+        freeTierRemainingGb: 10,
+        breakdownByCategory: {
+          audioSubmissions: { count: 0, sizeBytes: 0, sizeMb: 0 },
+          lessonVideos: { count: 0, sizeBytes: 0, sizeMb: 0 },
+          avatarsAndDocs: { count: 0, sizeBytes: 0, sizeMb: 0 },
+          otherFiles: { count: 0, sizeBytes: 0, sizeMb: 0 },
+        },
+      } as any);
+
+      const { default: AdminDashboardPage } = await import("../pages/AdminDashboardPage");
+      const dashView = render(
+        <MemoryRouter>
+          <AdminDashboardPage />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/L:\s*8\.0/i)).toBeInTheDocument();
+        expect(screen.getByText(/TB:\s*7\.0 \/ 10/i)).toBeInTheDocument();
+      });
+      dashView.unmount();
+
+      vi.spyOn(adminApi, "getGlobalResources").mockResolvedValue([
+        {
+          id: "res-mp3",
+          name: "TOEIC_Listening_Test.mp3",
+          size: "12.00 MB",
+          usedCount: 1,
+          uploadedAt: "22-11-2026 10:00",
+        },
+      ]);
+      const resView = render(<ResourceLibraryPage />);
+      const videoAudioTab = screen.getByRole("button", { name: /Video \/ Audio/i });
+      fireEvent.click(videoAudioTab);
+      await waitFor(() => {
+        expect(screen.getByText("TOEIC_Listening_Test.mp3")).toBeInTheDocument();
+      });
+      resView.unmount();
+
+      const { default: ClassroomManagementPage } = await import("../pages/ClassroomManagementPage");
+      render(
+        <MemoryRouter>
+          <ClassroomManagementPage />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByText("TOEIC 4 Kỹ Năng")).toBeInTheDocument();
+      });
+      const filterSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+      expect(Array.from(filterSelect.options).map((o) => o.value)).toContain("TOEIC_PREP");
+      fireEvent.change(filterSelect, { target: { value: "TOEIC_PREP" } });
+      expect(screen.getByText("TOEIC 4 Kỹ Năng")).toBeInTheDocument();
+    });
   });
 });
