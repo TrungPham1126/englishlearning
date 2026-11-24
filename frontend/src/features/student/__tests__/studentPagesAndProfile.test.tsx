@@ -1200,5 +1200,111 @@ describe("features/student — VideoPlayer, Profile & Student Pages", () => {
         expect(screen.getByText(/ĐẠT CHUẨN/i)).toBeInTheDocument();
       });
     });
+
+    it("AssignmentTakePage hiển thị đầy đủ cột Bài đọc và toàn bộ câu hỏi khi bài READING có từ khóa 'IELTS' hoặc 'speaking'", async () => {
+      vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+      const rawPassage = [
+        "[READING PASSAGE]",
+        "The intricate relationship between synonyms and antonyms enriches academic writing and everyday speaking alike.",
+        "",
+        "Empirical studies involving 312 IELTS candidates revealed notable gains in lexical flexibility.",
+        "",
+        "[Loại: READING] [Trình độ: C1] [Độ khó: MEDIUM] [Dự kiến: 30p]",
+      ].join("\n");
+
+      const readingAttempt: AttemptResponse = {
+        attemptId: "att-read-987",
+        assignmentId: "987b6bee-f6b0-485c-a571-4629ae3455ae",
+        assignmentTitle: "True / False / NG (C1) - 2026-11-22",
+        assignmentDescription: rawPassage,
+        passage: rawPassage,
+        skillType: "READING",
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        timeLimitMinutes: 30,
+        isExam: false,
+        questions: [
+          {
+            id: "sa-r1",
+            questionId: "q-r1",
+            questionType: "TRUE_FALSE",
+            skillType: "READING",
+            promptText:
+              "The passage asserts that recognizing antonyms is less valuable than recognizing synonyms.",
+            maxPoints: 1,
+            options: [
+              { id: "opt-t1", optionLabel: "TRUE", optionText: "TRUE" },
+              { id: "opt-f1", optionLabel: "FALSE", optionText: "FALSE" },
+              { id: "opt-n1", optionLabel: "NOT_GIVEN", optionText: "NOT GIVEN" },
+            ],
+          },
+          {
+            id: "sa-r2",
+            questionId: "q-r2",
+            questionType: "TRUE_FALSE",
+            skillType: "READING",
+            promptText:
+              "Research cited in the passage indicates that systematic synonym substitution can raise IELTS writing scores by approximately 0.3 bands.",
+            maxPoints: 1,
+            options: [
+              { id: "opt-t2", optionLabel: "TRUE", optionText: "TRUE" },
+              { id: "opt-f2", optionLabel: "FALSE", optionText: "FALSE" },
+              { id: "opt-n2", optionLabel: "NOT_GIVEN", optionText: "NOT GIVEN" },
+            ],
+          },
+        ],
+      };
+
+      vi.mocked(studentApi.getMyAttempts).mockResolvedValue([readingAttempt]);
+      vi.mocked(studentApi.getAttemptDetail).mockResolvedValue(readingAttempt);
+
+      render(
+        <MemoryRouter
+          initialEntries={[
+            "/student/assignments/987b6bee-f6b0-485c-a571-4629ae3455ae/take",
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/student/assignments/:assignmentId/take"
+              element={<AssignmentTakePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            /The intricate relationship between synonyms and antonyms enriches academic writing and everyday speaking alike\./,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      // Cột Bài đọc hiển thị sạch tag metadata
+      expect(screen.getAllByText("Bài đọc").length).toBeGreaterThanOrEqual(1);
+      expect(
+        screen.getByText(
+          /Empirical studies involving 312 IELTS candidates revealed notable gains in lexical flexibility\./,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/\[READING PASSAGE\]/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/\[Loại: READING\]/)).not.toBeInTheDocument();
+
+      // Toàn bộ câu hỏi TRUE/FALSE hiển thị đồng thời (không bị đẩy sang chế độ Writing/Speaking tuần tự 1 câu)
+      expect(
+        screen.getByText(
+          /The passage asserts that recognizing antonyms is less valuable than recognizing synonyms\./,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Research cited in the passage indicates that systematic synonym substitution can raise IELTS writing scores by approximately 0\.3 bands\./,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Cần đạt Band/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Cần đạt ≥ 80 điểm/i)).not.toBeInTheDocument();
+    });
   });
 });

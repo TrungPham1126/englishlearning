@@ -45,7 +45,7 @@ export function useAssignmentTakeSession() {
   const [remainingSeconds, setRemainingSeconds] = useState<number>(45 * 60);
 
   // Reading Passage & UI states
-  const [readingMobileTab, setReadingMobileTab] = useState<'PASSAGE' | 'QUESTIONS'>('QUESTIONS');
+  const [readingMobileTab, setReadingMobileTab] = useState<'PASSAGE' | 'QUESTIONS'>('PASSAGE');
   const [showMobilePalette, setShowMobilePalette] = useState<boolean>(false);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<'normal' | 'large' | 'xlarge'>('normal');
@@ -176,9 +176,10 @@ export function useAssignmentTakeSession() {
 
   // Phân loại dạng bài
   const isReadingTest = useMemo(() => {
-    const skill = String((attempt as any)?.skillType || '').toUpperCase();
+    const skill = String(attempt?.skillType || '').toUpperCase();
+    if (skill === 'LISTENING') return false;
     const title = (attempt?.assignmentTitle || '').toLowerCase();
-    const desc = ((attempt as any)?.assignmentDescription || (attempt as any)?.description || '').toLowerCase();
+    const desc = `${attempt?.passage || ''} ${attempt?.assignmentDescription || ''} ${attempt?.description || ''}`.toLowerCase();
     return (
       skill === 'READING' ||
       title.includes('đọc hiểu') ||
@@ -206,21 +207,30 @@ export function useAssignmentTakeSession() {
   }, [attempt, isVocabTest]);
 
   const isSpeakingTest = useMemo(() => {
-    const skill = String((attempt as any)?.skillType || '').toUpperCase();
+    const skill = String(attempt?.skillType || '').toUpperCase();
+    const hasSpeakingQuestion = questions.some((q) => {
+      const type = String(q.questionType || '').toUpperCase();
+      return type === 'SPEAKING' || type === 'AUDIO_RESPONSE';
+    });
+    if (skill === 'SPEAKING' || hasSpeakingQuestion) return true;
+    if (
+      skill === 'READING' ||
+      skill === 'LISTENING' ||
+      skill === 'WRITING' ||
+      skill === 'VOCABULARY' ||
+      skill === 'GRAMMAR'
+    ) {
+      return false;
+    }
     const title = (attempt?.assignmentTitle || '').toLowerCase();
-    const desc = ((attempt as any)?.assignmentDescription || (attempt as any)?.description || '').toLowerCase();
+    const desc = (attempt?.assignmentDescription || attempt?.description || '').toLowerCase();
     return (
-      skill === 'SPEAKING' ||
       title.includes('nói') ||
       title.includes('speaking') ||
       title.includes('shadow') ||
       title.includes('nhại') ||
       desc.includes('speaking') ||
-      desc.includes('shadowing') ||
-      questions.some((q) => {
-        const type = String(q.questionType || '').toUpperCase();
-        return type === 'SPEAKING' || type === 'AUDIO_RESPONSE';
-      })
+      desc.includes('shadowing')
     );
   }, [attempt, questions]);
 
@@ -246,8 +256,20 @@ export function useAssignmentTakeSession() {
   // Bóc tách bài đọc Reading
   const readingPassageText = useMemo(() => {
     if (!isReadingTest) return null;
-    const desc = attempt?.passage || (attempt as any)?.assignmentDescription || (attempt as any)?.description || '';
-    if (desc && desc.length > 80) return desc;
+    const rawDesc =
+      attempt?.passage ||
+      (attempt as any)?.assignmentDescription ||
+      (attempt as any)?.description ||
+      '';
+    const hasExplicitPassageTag = /\[READING\s+PASSAGE\]/i.test(rawDesc);
+    const cleaned = rawDesc
+      .trim()
+      .replace(/^\s*\[READING\s+PASSAGE\]\s*/i, '')
+      .replace(/\n*\s*\[Loại:[^\n]*$/i, '')
+      .trim();
+    if (cleaned && (hasExplicitPassageTag || cleaned.length > 80)) {
+      return cleaned;
+    }
     return null;
   }, [isReadingTest, attempt]);
 

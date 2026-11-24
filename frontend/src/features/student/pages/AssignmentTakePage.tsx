@@ -27,6 +27,7 @@ import QuestionRendererPolymorphic from '@/features/student/components/assignmen
 import AssignmentFooterNav from '@/features/student/components/assignment/AssignmentFooterNav';
 import SubmitConfirmModal from '@/features/student/components/assignment/SubmitConfirmModal';
 import VocabularyMatchingBoard from '@/features/student/components/VocabularyMatchingBoard';
+import { classifyWritingQuestion } from '@/features/student/components/assignment/WritingScaffoldingStudio';
 
 export default function AssignmentTakePage() {
   const session = useAssignmentTakeSession();
@@ -109,22 +110,51 @@ export default function AssignmentTakePage() {
   const [skippedQuestionIds, setSkippedQuestionIds] = useState<Record<string, boolean>>({});
   const [markedNotPassedQuestionIds, setMarkedNotPassedQuestionIds] = useState<Record<string, boolean>>({});
 
-  const isWritingQuestion = useCallback((q: QuestionResultDetail) => {
-    const t = String(q.questionType || '').toUpperCase();
-    const skill = String(q.skillType || '').toUpperCase();
-    if (skill === 'SPEAKING' || t === 'AUDIO_RESPONSE' || t.includes('SPEAKING')) {
-      return false;
-    }
-    const promptLower = (q.promptText || '').toLowerCase();
-    return (
-      t === 'ESSAY' ||
-      t === 'WRITING' ||
-      t === 'PARAGRAPH' ||
-      promptLower.includes('viết đoạn') ||
-      promptLower.includes('write a paragraph') ||
-      promptLower.includes('ielts')
-    );
-  }, []);
+  const isWritingQuestion = useCallback(
+    (q: QuestionResultDetail) => {
+      const t = String(q.questionType || '').toUpperCase();
+      const skill = String(q.skillType || attempt?.skillType || '').toUpperCase();
+      if (skill === 'SPEAKING' || t === 'AUDIO_RESPONSE' || t.includes('SPEAKING')) {
+        return false;
+      }
+      const hasExplicitWritingType =
+        t === 'ESSAY' ||
+        t === 'WRITING' ||
+        t.startsWith('WRITING_') ||
+        t.includes('PARAGRAPH');
+      if (
+        (skill === 'READING' ||
+          skill === 'LISTENING' ||
+          skill === 'VOCABULARY' ||
+          skill === 'GRAMMAR') &&
+        !hasExplicitWritingType
+      ) {
+        return false;
+      }
+      const promptLower = (q.promptText || '').toLowerCase();
+      const isWordUnscramble =
+        t === 'UNSCRAMBLE' ||
+        t.includes('WORD_ORDER') ||
+        promptLower.includes('sắp xếp') ||
+        promptLower.includes('unscramble');
+
+      return (
+        classifyWritingQuestion({
+          questionType: t,
+          assignmentTitle: attempt?.assignmentTitle,
+          assignmentDescription:
+            attempt?.assignmentDescription || attempt?.description || attempt?.passage,
+          promptText: q.promptText,
+          explanation: q.explanation,
+          mediaUrl: q.mediaUrl,
+          hasOptions: Array.isArray(q.options) && q.options.length > 0,
+          isSpeaking: false,
+          isWordUnscramble,
+        }).kind !== 'NONE'
+      );
+    },
+    [attempt],
+  );
 
   const isSpeakingNonShadowingQuestion = useCallback(
     (q: QuestionResultDetail) => {
